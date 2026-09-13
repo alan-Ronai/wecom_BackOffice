@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyPluginAsync } from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import swagger from '@fastify/swagger';
@@ -15,6 +15,9 @@ import bossPlugin from './plugins/boss.js';
 import { loggerOptions, REQUEST_ID_HEADER } from './plugins/logging.js';
 import health from './routes/health.js';
 import { ErrorEnvelopeSchema } from '@wecom/shared';
+// L2: content modules
+import { registerModules } from './modules/index.js';
+import { EventBus } from './lib/events.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -23,7 +26,12 @@ declare module 'fastify' {
 }
 
 export async function buildApp(
-  opts: { config?: Partial<Config>; pool?: pg.Pool; boss?: boolean } = {},
+  opts: {
+    config?: Partial<Config>;
+    pool?: pg.Pool;
+    boss?: boolean;
+    plugins?: FastifyPluginAsync[];
+  } = {},
 ): Promise<FastifyInstance> {
   const config = loadConfig(opts.config);
   const app = Fastify({
@@ -42,6 +50,19 @@ export async function buildApp(
   // Registration order per L1 plan: logging (constructor, above) -> db -> boss -> swagger -> routes.
   await app.register(dbPlugin, { pool: opts.pool });
   await app.register(bossPlugin, { boss: opts.boss });
+  // L2: content modules — caller-supplied plugins (fake auth in tests, L3's auth in production)
+  // must register before the route scopes so their hooks apply to every module route.
+  for (const p of opts.plugins ?? []) await app.register(p);
+  // L2: content modules — `app.events` (Postgres LISTEN/NOTIFY bus) used by every write path.
+  const events = new EventBus();
+  events.onError = (err) => app.log.error({ err }, 'event bus error');
+  app.decorate('events', events);
+  app.addHook('onReady', async () => {
+    if (config.NODE_ENV !== 'test') await events.start(config.DATABASE_URL);
+  });
+  app.addHook('onClose', async () => {
+    await events.stop();
+  });
   await app.register(swagger, {
     openapi: { info: { title: 'wecom KB API', version: '1.0.0' }, servers: [{ url: '/' }] },
     transform: jsonSchemaTransform,
@@ -60,6 +81,8 @@ export async function buildApp(
   await app.register(
     async (v1) => {
       await v1.register(health);
+      // L2: content modules
+      await registerModules(v1);
     },
     { prefix: '/api/v1' },
   );
