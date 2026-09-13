@@ -4,6 +4,7 @@ import { stripFmt } from '@wecom/shared';
 import { useDocument, useDocuments, useRecordView, useTogglePin } from '../../api/hooks/documents.js';
 import { useAddNote, useBlocks, useFields } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
+import { ApiError } from '../../api/unwrap.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
 import { CATS } from '../../lib/constants.js';
 import { copy } from '../../lib/format.js';
@@ -193,6 +194,15 @@ export function ArticlePage() {
   );
 
   if (docQ.isPending) return <div className="route-loading">טוען…</div>;
+  // Category scope is enforced per document, so "you may not see this" is a distinct outcome
+  // from "this is gone" — telling an agent to check the trash for a document they simply lack
+  // scope for sends them the wrong way.
+  if (docQ.error instanceof ApiError && docQ.error.status === 403)
+    return (
+      <div className="empty">
+        <b>אין לך הרשאה למסמך הזה</b>הקטגוריה מחוץ להרשאות שלך · פנו למנהל הצוות
+      </div>
+    );
   if (!doc)
     return (
       <div className="empty">

@@ -854,6 +854,31 @@ export const audit: AuditEntry[] = [
   },
 ];
 
+/** `GET /admin/system` — the operator diagnostic view (AdminSystemSchema). */
+export const system = {
+  db: true,
+  model: false,
+  modelName: 'qwen2.5:3b-instruct-q4_K_M',
+  queue: 0,
+  queues: { 'connector.run': 0, 'source.process': 0 },
+  backup: { ok: true, latestFile: 'kb-2026-09-12.dump', ageHours: 8 },
+  connectors: [
+    {
+      id: '55555555-5555-4555-8555-55555555c001',
+      name: 'wecom-wordpress',
+      type: 'wordpress',
+      enabled: true,
+      lastStatus: 'ok',
+      lastRunAt: T,
+      conflicts: 0,
+    },
+  ],
+  sources: { pending: 1, error: 0 },
+  suggestions: { pending: 1 },
+  version: '0.1.0',
+  uptimeSec: 600,
+};
+
 export const health = {
   ok: true,
   db: true,
@@ -883,6 +908,7 @@ export const fx = {
   sessions,
   audit,
   health,
+  system,
 };
 
 export type Fixtures = typeof fx;

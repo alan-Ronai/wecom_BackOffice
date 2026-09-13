@@ -11,6 +11,7 @@ import {
 } from '../../api/hooks/documents.js';
 import { useBlocks, useDraft, useFields, useSaveDraft } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
+import { ApiError } from '../../api/unwrap.js';
 import { CATS, CAT_KEYS, PRI, SOURCE_FILES } from '../../lib/constants.js';
 import { ago, download } from '../../lib/format.js';
 import { useHotkeys } from '../../lib/keyboard.js';
@@ -177,18 +178,21 @@ export function EditorPage() {
       });
       targetId = created.id;
     } else {
-      await patch.mutateAsync({
+      // PATCH rotates the document's etag, so the structure save must use the etag the PATCH
+      // *returned* — `published.data.etag` is stale by then, and a stale precondition is a 412.
+      const patched = await patch.mutateAsync({
         title: clean.title,
         description: clean.description,
         category: clean.category,
         wave: clean.wave,
         priority: clean.priority,
       });
-      await saveStructure.mutateAsync({
-        phases: clean.phases,
-        related: clean.related,
-        etag: published.data?.etag,
-      });
+      const etag = patched.etag ?? published.data?.etag;
+      if (!etag) {
+        toast('לא ניתן לשמור: חסר מזהה גרסה (etag) · רעננו ונסו שוב', 'warn');
+        return;
+      }
+      await saveStructure.mutateAsync({ phases: clean.phases, related: clean.related, etag });
     }
     // `targetId` — not `id` — so creating a knowledge item actually publishes the new document
     // instead of POSTing to the literal path segment `new`.
@@ -205,6 +209,17 @@ export function EditorPage() {
   // `status` field and the API publishes no review transition, so nothing was persisted and no
   // reviewer was notified. The control is removed until such a route exists.
 
+  // Without this the editor spins forever when the document query fails — which it now does for
+  // any document outside the user's category scope (403), not just for a genuinely missing one.
+  if (published.isError) {
+    const denied = published.error instanceof ApiError && published.error.status === 403;
+    return (
+      <div className="empty">
+        <b>{denied ? 'אין לך הרשאה לערוך את המסמך הזה' : 'לא ניתן לטעון את המסמך'}</b>
+        {denied ? 'הקטגוריה מחוץ להרשאות שלך · פנו למנהל הצוות' : 'נסו לרענן · אם התקלה חוזרת פנו ל-IT'}
+      </div>
+    );
+  }
   if (!doc) return <div className="route-loading">טוען…</div>;
 
   // The draft envelope reports who else holds a draft on this document; the API already excludes

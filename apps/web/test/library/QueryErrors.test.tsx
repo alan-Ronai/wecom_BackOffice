@@ -4,6 +4,7 @@ import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
 import { PERMISSIONS } from '@wecom/shared';
 import { asDenied, withMe } from '../msw/handlers.js';
+import { D_BROWSING } from '../msw/fixtures.js';
 import { server } from '../msw/server.js';
 
 /**
@@ -28,6 +29,18 @@ describe('a failed primary query is surfaced, not rendered as empty', () => {
     server.use(asDenied('get', '/sources'));
     renderWithProviders(<App />, { route: '/sources' });
     expect(await screen.findByText('לא ניתן לטעון מסמכי מקור')).toBeInTheDocument();
+  });
+
+  it('a category-scoped 403 on a document reads as "no permission", not "deleted"', async () => {
+    server.use(asDenied('get', `/documents/${D_BROWSING}`));
+    renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
+    expect(await screen.findByText('אין לך הרשאה למסמך הזה')).toBeInTheDocument();
+  });
+
+  it('the editor surfaces a scope denial instead of spinning forever', async () => {
+    server.use(asDenied('get', `/documents/${D_BROWSING}`));
+    renderWithProviders(<App />, { route: `/edit/${D_BROWSING}` });
+    expect(await screen.findByText('אין לך הרשאה לערוך את המסמך הזה')).toBeInTheDocument();
   });
 
   it('admin roles', async () => {

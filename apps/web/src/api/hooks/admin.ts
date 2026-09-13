@@ -86,12 +86,18 @@ export const useAudit = (q: AuditQuery = {}) =>
   });
 
 /**
- * `GET /system/health` is the only status endpoint the API publishes. The port also queried
- * `GET /admin/system` (db size, connector health, backup list); that route does not exist in
- * `docs/api/openapi.json` or in `apps/api/src/modules/admin/routes.ts`, so it was removed rather
- * than left to retry in the background behind a permanently blank panel. If the richer status
- * payload is wanted, add the route to the API first — `schema.d.ts` will then publish it here.
+ * The operator's diagnostic view: per-queue depth, backup age, connector health, pipeline
+ * backlog. Requires `system.admin`, so a non-admin gets a 403 the page surfaces rather than
+ * rendering blank rows.
  */
+export const useSystem = () =>
+  useQuery({
+    queryKey: keys.admin.system,
+    queryFn: async () => unwrap(await api.GET('/admin/system')),
+    staleTime: 10_000,
+  });
+
+/** The liveness probe: cheap, unprivileged, and what the container healthcheck hits. */
 export const useHealth = () =>
   useQuery({
     queryKey: keys.health,

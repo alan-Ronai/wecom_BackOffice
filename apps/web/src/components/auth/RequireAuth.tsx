@@ -14,7 +14,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   if (me.isPending) return <div className="route-loading">טוען…</div>;
   if (me.error instanceof ApiError && me.error.status === 401)
-    return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
+    return <Navigate to={`/login?returnTo=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
   if (me.error)
     return (
       <div className="empty">

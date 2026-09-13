@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import {
+  AdminSystemSchema,
   AuditEntrySchema,
   BlockListSchema,
   BlockSchema,
@@ -238,6 +239,12 @@ const cases: Case[] = [
   ['DELETE /admin/sessions/:id', DEL(`${B}/admin/sessions/${fx.sessions[0].id}`), okAudit],
   ['GET /admin/audit', GET(`${B}/admin/audit`), paginated(AuditEntrySchema)],
   ['GET /system/health', GET(`${B}/system/health`), HealthResponseSchema],
+  ['GET /admin/system', GET(`${B}/admin/system`), AdminSystemSchema],
+  [
+    'POST /admin/users',
+    POST(`${B}/admin/users`, { email: 'new@wecom.co.il', password: 'x'.repeat(12), displayName: 'חדש' }),
+    UserSchema.extend({ roles: z.array(UserRoleSchema) }),
+  ],
 
   ['POST /notes/:id/like', POST(`${B}/notes/${fx.notes[0].id}/like`), NoteLikeResponseSchema],
   ['DELETE /notes/:id', DEL(`${B}/notes/${fx.notes[0].id}`), null],
@@ -287,6 +294,40 @@ describe('msw handlers answer the published response envelopes', () => {
     const body = DraftResponseSchema.parse(await saved.json());
     expect(body.payload).toEqual({ title: 'wip' });
     expect(body.otherEditors).toEqual([]);
+  });
+
+  it('requires a current If-Match on a structure save, like the route does', async () => {
+    const doc = await (await fetch(`${B}/documents/${DOC}`)).json();
+    const body = JSON.stringify({ phases: doc.phases });
+    const h = { 'content-type': 'application/json' };
+
+    // 428 without the precondition at all.
+    const missing = await fetch(`${B}/documents/${DOC}/structure`, { method: 'PUT', body, headers: h });
+    expect(missing.status).toBe(428);
+
+    // 412 with a stale one.
+    const stale = await fetch(`${B}/documents/${DOC}/structure`, {
+      method: 'PUT',
+      body,
+      headers: { ...h, 'if-match': 'definitely-stale' },
+    });
+    expect(stale.status).toBe(412);
+
+    // 200 with the current one — and PATCH rotates it, so the old etag stops working.
+    const ok = await fetch(`${B}/documents/${DOC}/structure`, {
+      method: 'PUT',
+      body,
+      headers: { ...h, 'if-match': doc.etag },
+    });
+    expect(ok.status).toBe(200);
+    const patched = await (
+      await fetch(`${B}/documents/${DOC}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title: 'rotated' }),
+        headers: h,
+      })
+    ).json();
+    expect(patched.etag).not.toBe(doc.etag);
   });
 
   it('honours ?types= as a comma-separated list of group names', async () => {

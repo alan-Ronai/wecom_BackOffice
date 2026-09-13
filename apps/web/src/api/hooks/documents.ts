@@ -121,6 +121,14 @@ export const usePublish = () => {
   });
 };
 
+/**
+ * `If-Match` is **required**: the route answers 428 without it, because the etag is the only
+ * thing stopping one editor's structure save from silently clobbering another's. It is therefore
+ * a required mutation variable, so omitting it is a typecheck error rather than a 428 at runtime.
+ *
+ * Pass the etag from the document you actually edited. `PATCH /documents/:id` *rotates* the etag,
+ * so a patch-then-save flow must thread the patched document's etag through — a stale one is a 412.
+ */
 export const useSaveStructure = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
@@ -131,7 +139,7 @@ export const useSaveStructure = (id: string) => {
     }: {
       phases: Document['phases'];
       related?: Document['related'];
-      etag?: string;
+      etag: string;
     }): Promise<Document> =>
       unwrap(
         await api.PUT('/documents/{id}/structure', {

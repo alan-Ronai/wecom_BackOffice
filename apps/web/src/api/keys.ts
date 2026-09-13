@@ -29,5 +29,6 @@ export const keys = {
     groups: ['admin', 'groups'] as const,
     sessions: ['admin', 'sessions'] as const,
     audit: (q: unknown = '*') => ['admin', 'audit', q] as const,
+    system: ['admin', 'system'] as const,
   },
 };

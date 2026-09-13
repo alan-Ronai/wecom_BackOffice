@@ -59,6 +59,8 @@ const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נ�
 /** 204 No Content — an empty body, as the API sends it. */
 const noContent = () => new HttpResponse(null, { status: 204 });
 const AUDIT = 'aaaaaaaa-0000-4000-8000-00000000aud1';
+let etagSeq = 0;
+const nextEtag = () => `e-${++etagSeq}`;
 
 /** The envelope `GET|PUT /documents/:id/draft` returns. */
 const draftEnvelope = (id: string, payload: unknown) => ({
@@ -115,7 +117,8 @@ export const handlers: RequestHandler[] = [
   http.patch(`${B}/documents/:id`, async ({ params, request }) => {
     const d = state.documents.get(String(params.id));
     if (!d) return notFound();
-    const next = { ...d, ...((await request.json()) as object) } as Document;
+    // Rotates the etag, like the route does.
+    const next = { ...d, ...((await request.json()) as object), etag: nextEtag() } as Document;
     state.documents.set(next.id, next);
     return HttpResponse.json(next);
   }),
@@ -123,9 +126,24 @@ export const handlers: RequestHandler[] = [
     state.documents.delete(String(params.id));
     return HttpResponse.json({ auditId: AUDIT, restoreUntil: new Date(Date.now() + 6e8).toISOString() });
   }),
+  // If-Match is required (428) and must be current (412) — the etag is the only thing stopping
+  // one editor's structure save from clobbering another's. PATCH rotates it, so a patch-then-save
+  // flow has to thread the *patched* etag through.
   http.put(`${B}/documents/:id/structure`, async ({ params, request }) => {
-    const d = state.documents.get(String(params.id)) ?? fx.docBrowsing;
-    const next = { ...d, ...((await request.json()) as object), etag: 'e7b' } as Document;
+    const d = state.documents.get(String(params.id));
+    if (!d) return notFound();
+    const ifMatch = request.headers.get('if-match');
+    if (!ifMatch)
+      return HttpResponse.json(
+        { code: 'IF_MATCH_REQUIRED', message: 'נדרשת כותרת If-Match עם ה-etag של המסמך' },
+        { status: 428 },
+      );
+    if (ifMatch !== d.etag)
+      return HttpResponse.json(
+        { code: 'PRECONDITION_FAILED', message: 'המסמך השתנה בינתיים' },
+        { status: 412 },
+      );
+    const next = { ...d, ...((await request.json()) as object), etag: nextEtag() } as Document;
     state.documents.set(next.id, next);
     return HttpResponse.json(next);
   }),
@@ -476,6 +494,24 @@ export const handlers: RequestHandler[] = [
   http.get(`${B}/admin/audit`, () =>
     HttpResponse.json({ items: fx.audit, total: fx.audit.length, page: 1, pageSize: 50 }),
   ),
+  http.get(`${B}/admin/system`, () => HttpResponse.json(fx.system)),
+  http.post(`${B}/admin/users`, async ({ request }) => {
+    const b = (await request.json()) as { email: string; displayName: string };
+    return HttpResponse.json(
+      {
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+        subject: b.email,
+        source: 'local',
+        email: b.email,
+        displayName: b.displayName,
+        initials: b.displayName.slice(0, 1),
+        active: true,
+        lastLoginAt: null,
+        roles: [],
+      },
+      { status: 201 },
+    );
+  }),
   http.get(`${B}/system/health`, () => HttpResponse.json(fx.health)),
 ];
 

@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { DraftBodySchema, DraftListSchema, DraftResponseSchema, IdSchema } from '@wecom/shared';
-import { notFound } from '../../lib/http.js';
 import { withTransaction } from '../../lib/sql.js';
 import { requireUser } from '../../lib/user.js';
 import * as repo from './repo.js';
