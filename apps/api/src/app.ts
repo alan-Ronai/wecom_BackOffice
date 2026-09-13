@@ -11,6 +11,7 @@ import {
 import type pg from 'pg';
 import { loadConfig, type Config } from './config.js';
 import dbPlugin from './plugins/db.js';
+import bossPlugin from './plugins/boss.js';
 import { loggerOptions, REQUEST_ID_HEADER } from './plugins/logging.js';
 import health from './routes/health.js';
 import { ErrorEnvelopeSchema } from '@wecom/shared';
@@ -22,7 +23,7 @@ declare module 'fastify' {
 }
 
 export async function buildApp(
-  opts: { config?: Partial<Config>; pool?: pg.Pool } = {},
+  opts: { config?: Partial<Config>; pool?: pg.Pool; boss?: boolean } = {},
 ): Promise<FastifyInstance> {
   const config = loadConfig(opts.config);
   const app = Fastify({
@@ -38,11 +39,13 @@ export async function buildApp(
   app.decorate('config', config);
   await app.register(cors, { origin: config.PUBLIC_URL, credentials: true });
   await app.register(cookie, { secret: config.SESSION_SECRET });
+  // Registration order per L1 plan: logging (constructor, above) -> db -> boss -> swagger -> routes.
+  await app.register(dbPlugin, { pool: opts.pool });
+  await app.register(bossPlugin, { boss: opts.boss });
   await app.register(swagger, {
     openapi: { info: { title: 'wecom KB API', version: '1.0.0' }, servers: [{ url: '/' }] },
     transform: jsonSchemaTransform,
   });
-  await app.register(dbPlugin, { pool: opts.pool });
   app.setErrorHandler((err, req, reply) => {
     const status = (err as { statusCode?: number }).statusCode ?? 500;
     const body = ErrorEnvelopeSchema.parse({
