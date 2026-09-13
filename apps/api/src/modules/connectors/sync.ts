@@ -198,13 +198,13 @@ export class SyncService {
     if (!doc) throw new Error('document not found');
     const existing = await this.d.repo.linkByDocument(connectorId, documentId);
     if (existing && existing.state === 'conflict') throw new Error('link in conflict; resolve first');
-    const sourceId = existing?.source_id ?? (await this.sourceIdOfDocument(documentId));
+    // No link yet: if the document came from this connector's source, update
+    // that remote item rather than creating a duplicate post.
+    const src = await this.sourceOfDocument(documentId, connectorId);
+    const sourceId = existing?.source_id ?? src.sourceId;
+    const target = existing ? existing.external_id : src.externalId;
     const blocks = await this.d.documents.getBlocksFor(doc);
-    const ref = await conn.push(cfg, existing ? existing.external_id : null, {
-      document: doc,
-      html: '',
-      blocks,
-    });
+    const ref = await conn.push(cfg, target, { document: doc, html: '', blocks });
     await this.d.repo.upsertLink({
       documentId,
       connectorId,
@@ -312,11 +312,15 @@ export class SyncService {
     });
   }
 
-  private async sourceIdOfDocument(documentId: string): Promise<string | null> {
-    const r = await this.d.db.query<{ source_id: string | null }>(
-      'select source_id from documents where id=$1',
-      [documentId],
+  private async sourceOfDocument(
+    documentId: string,
+    connectorId: string,
+  ): Promise<{ sourceId: string | null; externalId: string | null }> {
+    const r = await this.d.db.query<{ source_id: string | null; external_id: string | null }>(
+      'select s.id as source_id, s.external_id from documents d join sources s on s.id=d.source_id and s.connector_id=$2 where d.id=$1',
+      [documentId, connectorId],
     );
-    return r.rows[0]?.source_id ?? null;
+    const row = r.rows[0];
+    return { sourceId: row?.source_id ?? null, externalId: row?.external_id ?? null };
   }
 }
