@@ -461,3 +461,115 @@ export async function saveStructure(
   await recomputeDerived(tx, doc);
   return doc;
 }
+
+// ---------------------------------------------------------------------------
+// Publish / versions / restore
+// ---------------------------------------------------------------------------
+
+/** A document is "partial" when any step has no body at all (no actions, branch, script or block). */
+export const isPartial = (doc: Document, blocks: Map<string, Block>): boolean =>
+  doc.phases
+    .flatMap((p) => p.steps)
+    .some(
+      (s) =>
+        !s.actions.some((a) => a.text.trim()) &&
+        !s.branch &&
+        !s.script &&
+        !(s.blockId && blocks.has(s.blockId)) &&
+        !s.extras,
+    );
+
+export interface PublishOptions {
+  actorId: string | null;
+  label: string;
+  suggestionId?: string | null;
+  markPartial?: boolean;
+  kind?: 'published' | 'restore' | 'system' | 'sync';
+}
+
+/**
+ * Freeze the assembled document into `document_versions` and bump `current_version`.
+ * Cross-lane entry point: L5 (apply-a-suggestion) and L6 (sync) call this inside their transaction.
+ */
+export async function publishDocument(
+  tx: Tx,
+  doc: Document | string,
+  opts: PublishOptions,
+): Promise<{ doc: Document; version: number }> {
+  const id = typeof doc === 'string' ? doc : doc.id;
+  const cur = await tx.query(
+    'select current_version from documents where id=$1 and deleted_at is null for update',
+    [id],
+  );
+  if (!cur.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
+  const before = (await getDocument(tx, id))!;
+  const blocks = await loadBlocksMap(tx);
+  const version = (cur.rows[0].current_version as number) + 1;
+  const status = opts.markPartial || isPartial(before, blocks) ? 'partial' : 'published';
+  await tx.query(
+    'update documents set current_version=$2, status=$3, updated_by=$4, updated_at=now(), etag=gen_random_uuid()::text where id=$1',
+    [id, version, status, opts.actorId],
+  );
+  const published = (await getDocument(tx, id))!;
+  await tx.query(
+    'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id) values ($1,$2,$3,$4,$5,$6,$7)',
+    [
+      id,
+      version,
+      JSON.stringify(published),
+      opts.actorId,
+      opts.label,
+      opts.kind ?? 'published',
+      opts.suggestionId ?? null,
+    ],
+  );
+  return { doc: published, version };
+}
+
+export interface VersionRow {
+  documentId: string;
+  version: number;
+  kind: 'published' | 'restore' | 'system' | 'sync';
+  label: string;
+  authorId: string | null;
+  authorName: string;
+  createdAt: string;
+  suggestionId: string | null;
+}
+
+export async function listVersions(q: Q, id: string): Promise<VersionRow[]> {
+  const r = await q.query(
+    'select v.*, u.display_name from document_versions v left join users u on u.id=v.author_id where v.document_id=$1 order by v.version',
+    [id],
+  );
+  return r.rows.map((v) => ({
+    documentId: v.document_id,
+    version: v.version,
+    kind: v.kind,
+    label: v.label,
+    authorId: v.author_id,
+    authorName: v.display_name ?? 'מערכת',
+    createdAt: iso(v.created_at)!,
+    suggestionId: v.suggestion_id ?? null,
+  }));
+}
+
+export async function getVersion(q: Q, id: string, v: number): Promise<Document | null> {
+  const r = await q.query('select snapshot from document_versions where document_id=$1 and version=$2', [
+    id,
+    v,
+  ]);
+  return r.rowCount ? DocumentSchema.parse(r.rows[0].snapshot) : null;
+}
+
+export async function restoreVersion(tx: Tx, id: string, v: number, userId: string) {
+  const snap = await getVersion(tx, id, v);
+  if (!snap) throw httpError(404, 'NOT_FOUND', 'הגרסה לא נמצאה');
+  await saveStructure(tx, id, { phases: snap.phases, related: snap.related }, userId);
+  const r = await publishDocument(tx, id, {
+    actorId: userId,
+    label: 'שוחזר מגרסה v' + v,
+    kind: 'restore',
+  });
+  return r;
+}
