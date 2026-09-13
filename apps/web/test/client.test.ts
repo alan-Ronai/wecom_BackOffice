@@ -1,10 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { api } from '../src/api/client.js';
+import { api, API_BASE } from '../src/api/client.js';
+import { unwrap, ApiError } from '../src/api/unwrap.js';
+import { server } from './msw/server.js';
+import { asDenied } from './msw/handlers.js';
 
 describe('api client', () => {
-  it('exposes typed GET for health', async () => {
-    // no server: expect a network error, not a type error
-    await expect(api.GET('/system/health')).rejects.toBeTruthy();
-    expect(typeof api.GET).toBe('function');
+  it('calls the same-origin /api/v1 base', async () => {
+    expect(API_BASE.endsWith('/api/v1')).toBe(true);
+    const res = await api.GET('/system/health');
+    expect(unwrap(res).ok).toBe(true);
+  });
+
+  it('turns an error envelope into a typed ApiError', async () => {
+    server.use(asDenied('get', '/documents'));
+    const res = await api.GET('/documents', { params: { query: {} } });
+    expect(() => unwrap(res)).toThrowError(ApiError);
+    try {
+      unwrap(res);
+    } catch (e) {
+      expect((e as ApiError).status).toBe(403);
+      expect((e as ApiError).code).toBe('FORBIDDEN');
+      expect((e as ApiError).message).toBe('אין הרשאה');
+    }
   });
 });

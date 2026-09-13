@@ -9,3 +9,6 @@ apps/web/src/api/schema.d.ts
 .claude/worktrees
 # design review screenshots
 design/review/*.png
+playwright-report
+test-results
+apps/web/e2e/.auth
