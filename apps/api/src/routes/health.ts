@@ -3,6 +3,7 @@ import { HealthResponseSchema, VERSION } from '@wecom/shared';
 import { probeModel, probeQueue } from '../services/probes.js';
 
 const started = Date.now();
+const MODEL_PROBE_MS = 2000;
 export default async function routes(app: FastifyInstance) {
   app.get(
     '/system/health',
@@ -15,11 +16,15 @@ export default async function routes(app: FastifyInstance) {
       } catch {
         db = false;
       }
-      const [m, queue] = await Promise.all([
-        probeModel(app.config.MODEL_URL, app.config.MODEL_NAME),
-        probeQueue(app.boss),
-      ]);
-      const model = m.up && m.hasModel;
+      // L5 decorates app.model; ask the client itself so MODEL_DISABLED reports honestly.
+      // Health must stay fast, so the model answer is capped at 2 s.
+      const probe: Promise<boolean> = app.model
+        ? Promise.race([
+            app.model.available().catch(() => false),
+            new Promise<boolean>((r) => setTimeout(() => r(false), MODEL_PROBE_MS)),
+          ])
+        : probeModel(app.config.MODEL_URL, app.config.MODEL_NAME).then((m) => m.up && m.hasModel);
+      const [model, queue] = await Promise.all([probe, probeQueue(app.boss)]);
       return {
         ok: db && model,
         db,

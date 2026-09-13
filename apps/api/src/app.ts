@@ -19,6 +19,12 @@ import { registerIdentitySyncJob } from './jobs/identity-sync.js'; // L3: identi
 import { loggerOptions, REQUEST_ID_HEADER } from './plugins/logging.js';
 import health from './routes/health.js';
 import { ErrorEnvelopeSchema } from '@wecom/shared';
+// L5: pipeline
+import multipart from '@fastify/multipart';
+import modelPlugin from './plugins/model.js';
+import testUserPlugin, { type TestUserOption } from './plugins/testUser.js';
+import { registerSourcesModule } from './modules/sources/index.js';
+// end L5: pipeline
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -27,7 +33,7 @@ declare module 'fastify' {
 }
 
 export async function buildApp(
-  opts: { config?: Partial<Config>; pool?: pg.Pool; boss?: boolean } = {},
+  opts: { config?: Partial<Config>; pool?: pg.Pool; boss?: boolean; testUser?: TestUserOption } = {},
 ): Promise<FastifyInstance> {
   const config = loadConfig(opts.config);
   const app = Fastify({
@@ -72,6 +78,12 @@ export async function buildApp(
       await registerAuth(v1); // L3: identity
       await v1.register(adminRoutes, { prefix: '/admin' }); // L3: identity
       if (config.NODE_ENV !== 'test') await registerIdentitySyncJob(v1); // L3: identity
+      // L5: pipeline
+      await v1.register(modelPlugin);
+      await v1.register(testUserPlugin, { testUser: opts.testUser });
+      await v1.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } });
+      await registerSourcesModule(v1);
+      // end L5: pipeline
     },
     { prefix: '/api/v1' },
   );
