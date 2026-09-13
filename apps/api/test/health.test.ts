@@ -34,4 +34,18 @@ describe('health', () => {
     expect(body.queue).toBeNull();
     await app.close();
   });
+  it('reports model availability from app.model when the model is disabled', async () => {
+    const app = await buildApp({
+      config: {
+        DATABASE_URL: 'postgres://nobody:none@127.0.0.1:1/none',
+        MODEL_DISABLED: true,
+        NODE_ENV: 'test',
+      },
+      boss: false,
+    });
+    const body = (await app.inject({ method: 'GET', url: '/api/v1/system/health' })).json();
+    expect(body.model).toBe(true);
+    expect(body.queue).toBeNull();
+    await app.close();
+  });
 });
