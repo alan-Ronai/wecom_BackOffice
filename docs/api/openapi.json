@@ -4048,6 +4048,14 @@
             "in": "path",
             "name": "id",
             "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "if-match",
+            "required": false
           }
         ],
         "responses": {
@@ -8385,6 +8393,9 @@
                 }
               }
             }
+          },
+          "204": {
+            "description": "Default Response"
           }
         }
       },
@@ -8587,6 +8598,9 @@
                 }
               }
             }
+          },
+          "204": {
+            "description": "Default Response"
           }
         }
       },
@@ -18020,17 +18034,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "enum": [
-                    "null"
-                  ],
-                  "nullable": true
-                }
-              }
-            }
+            "description": "Default Response"
           },
           "403": {
             "description": "Default Response",

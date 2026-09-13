@@ -23,12 +23,18 @@ export default async function routes(app: FastifyInstance) {
     '/documents/:id/draft',
     {
       config: { requires: ['docs.read'] },
-      schema: { tags: ['drafts'], params: DocParams, response: { 200: DraftResponseSchema } },
+      schema: {
+        tags: ['drafts'],
+        params: DocParams,
+        response: { 200: DraftResponseSchema, 204: z.null() },
+      },
     },
-    async (req) => {
+    // "No draft" is a normal state for any document nobody has edited yet, not an error, so it
+    // answers 204 rather than 404. That keeps the editor's draft query out of an error state.
+    async (req, reply) => {
       const user = requireUser(req);
       const draft = await repo.getDraft(app.db, (req.params as { id: string }).id, user.id);
-      if (!draft) throw notFound('הטיוטה');
+      if (!draft) return reply.code(204).send(null);
       return draft;
     },
   );
@@ -67,13 +73,17 @@ export default async function routes(app: FastifyInstance) {
     '/drafts/new/:draftId',
     {
       config: { requires: ['docs.read'] },
-      schema: { tags: ['drafts'], params: NewParams, response: { 200: DraftResponseSchema } },
+      schema: {
+        tags: ['drafts'],
+        params: NewParams,
+        response: { 200: DraftResponseSchema, 204: z.null() },
+      },
     },
-    async (req) => {
+    async (req, reply) => {
       const user = requireUser(req);
       const key = 'new:' + (req.params as { draftId: string }).draftId;
       const draft = await repo.getDraft(app.db, key, user.id);
-      if (!draft) throw notFound('הטיוטה');
+      if (!draft) return reply.code(204).send(null);
       return draft;
     },
   );
