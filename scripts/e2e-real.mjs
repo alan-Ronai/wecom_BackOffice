@@ -74,7 +74,7 @@ function start(label, cmd, args, opts = {}) {
   pipe(child.stdout, process.stdout);
   pipe(child.stderr, process.stdout);
   child.on('exit', (code, signal) => {
-    if (tornDown || signal === 'SIGTERM') return;
+    if (tornDown || signal === 'SIGKILL' || signal === 'SIGTERM') return;
     // Never let the run continue against a half-dead stack: a dead API plus a stale one still
     // listening is exactly how this gate produces a confusing, wrong failure.
     console.error(`\n✗ [${label}] exited unexpectedly (code ${code}, signal ${signal}) — aborting\n`);
@@ -93,19 +93,33 @@ function teardown() {
     );
     return;
   }
+  killChildren();
+  spawnSync('docker', ['rm', '-f', CONTAINER], { stdio: 'ignore' });
+}
+
+/**
+ * SIGKILL, not SIGTERM.
+ *
+ * The API's SIGTERM handler awaits `app.close()`, which blocks on the open SSE streams (a 1 h
+ * read timeout) — so a polite shutdown left the API alive, holding :3101, and the *next* run's
+ * health check then passed against a zombie wired to a dropped database. There is nothing to
+ * flush in a throwaway test stack, so it is killed outright.
+ *
+ * The negative pid targets the process group: `pnpm --filter … exec tsx` runs the real server as
+ * a grandchild, and signalling only `pnpm` orphans it.
+ */
+function killChildren() {
   for (const { child } of children) {
     try {
-      // Negative pid = the process group, so tsx/vite die with the pnpm wrapper.
-      process.kill(-child.pid, 'SIGTERM');
+      process.kill(-child.pid, 'SIGKILL');
     } catch {
       try {
-        child.kill('SIGTERM');
+        child.kill('SIGKILL');
       } catch {
         /* already gone */
       }
     }
   }
-  spawnSync('docker', ['rm', '-f', CONTAINER], { stdio: 'ignore' });
 }
 
 process.on('exit', teardown);
@@ -283,6 +297,13 @@ async function main() {
   );
 
   console.log('\n✓ e2e:real passed against a real Postgres, a real API and the built SPA.\n');
+
+  // Tear down and exit explicitly. The started children are detached with piped stdio, which
+  // keeps this process's event loop alive forever — so on the success path node never exits on
+  // its own, the `exit` handler never fires, and the stack is left running. That is how a passing
+  // run still leaked an API on :3101 for the next one to trip over.
+  teardown();
+  process.exit(0);
 }
 
 main().catch((e) => {
