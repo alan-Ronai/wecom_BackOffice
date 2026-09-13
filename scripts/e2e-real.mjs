@@ -51,9 +51,16 @@ function run(cmd, args, opts = {}) {
   return r;
 }
 
-/** Starts a long-lived process, prefixing its output so interleaved logs stay readable. */
+/**
+ * Starts a long-lived process, prefixing its output so interleaved logs stay readable.
+ *
+ * `detached: true` puts it in its own process group: `pnpm --filter … exec tsx` spawns the real
+ * server as a *grandchild*, and signalling only `pnpm` orphans it — which is how an earlier run
+ * leaked an API holding port 3101, so a later run's health check passed against a zombie pointing
+ * at a database that no longer existed. Teardown signals the whole group.
+ */
 function start(label, cmd, args, opts = {}) {
-  const child = spawn(cmd, args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], ...opts });
+  const child = spawn(cmd, args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], detached: true, ...opts });
   children.push({ label, child });
   const pipe = (stream, to) => {
     let buf = '';
@@ -67,8 +74,12 @@ function start(label, cmd, args, opts = {}) {
   pipe(child.stdout, process.stdout);
   pipe(child.stderr, process.stdout);
   child.on('exit', (code, signal) => {
-    if (!tornDown && code !== 0 && signal !== 'SIGTERM')
-      console.error(`\n✗ [${label}] exited unexpectedly (code ${code}, signal ${signal})\n`);
+    if (tornDown || signal === 'SIGTERM') return;
+    // Never let the run continue against a half-dead stack: a dead API plus a stale one still
+    // listening is exactly how this gate produces a confusing, wrong failure.
+    console.error(`\n✗ [${label}] exited unexpectedly (code ${code}, signal ${signal}) — aborting\n`);
+    teardown();
+    process.exit(1);
   });
   return child;
 }
@@ -77,14 +88,21 @@ function teardown() {
   if (tornDown) return;
   tornDown = true;
   if (process.env.KEEP_STACK === '1') {
-    console.log(`\nKEEP_STACK=1 — leaving the stack up:\n  db  ${DATABASE_URL}\n  api ${API_URL}\n  web ${WEB_URL}\n`);
+    console.log(
+      `\nKEEP_STACK=1 — leaving the stack up:\n  db  ${DATABASE_URL}\n  api ${API_URL}\n  web ${WEB_URL}\n`,
+    );
     return;
   }
   for (const { child } of children) {
     try {
-      child.kill('SIGTERM');
+      // Negative pid = the process group, so tsx/vite die with the pnpm wrapper.
+      process.kill(-child.pid, 'SIGTERM');
     } catch {
-      /* already gone */
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        /* already gone */
+      }
     }
   }
   spawnSync('docker', ['rm', '-f', CONTAINER], { stdio: 'ignore' });
@@ -122,18 +140,51 @@ const httpOk = (url) => async () => {
   return !!res && res.status < 500;
 };
 
+/**
+ * Refuses to start if anything already holds a port we are about to bind.
+ *
+ * Without this the gate is dangerously misleading: a leftover API on :3101 answers the health
+ * check, so the run proceeds and every spec fails against a server wired to a database that no
+ * longer exists. Better to stop and say so.
+ */
+function assertPortsFree() {
+  const busy = [];
+  for (const [name, port] of [
+    ['api', API_PORT],
+    ['web', WEB_PORT],
+    ['postgres', PG_PORT],
+  ]) {
+    const r = spawnSync('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' });
+    const pids = (r.stdout ?? '').trim().split('\n').filter(Boolean);
+    if (pids.length) busy.push(`  :${port} (${name}) held by pid ${pids.join(', ')}`);
+  }
+  if (busy.length)
+    throw new Error(
+      `ports already in use — a previous run probably leaked a process:\n${busy.join('\n')}\n` +
+        '  kill them (or set E2E_API_PORT / E2E_WEB_PORT / E2E_PG_PORT) and retry',
+    );
+}
+
 /* ── the gate ─────────────────────────────────────────────────────────────── */
 
 async function main() {
   const passthrough = process.argv.slice(2);
 
+  assertPortsFree();
+
   console.log('\n── 1. postgres (pgvector/pgvector:pg16) ──────────────────────');
   spawnSync('docker', ['rm', '-f', CONTAINER], { stdio: 'ignore' });
   run('docker', [
-    'run', '-d', '--name', CONTAINER,
-    '-e', `POSTGRES_PASSWORD=${PG_PASSWORD}`,
-    '-e', 'POSTGRES_DB=postgres',
-    '-p', `${PG_PORT}:5432`,
+    'run',
+    '-d',
+    '--name',
+    CONTAINER,
+    '-e',
+    `POSTGRES_PASSWORD=${PG_PASSWORD}`,
+    '-e',
+    'POSTGRES_DB=postgres',
+    '-p',
+    `${PG_PORT}:5432`,
     'pgvector/pgvector:pg16',
   ]);
   await waitFor(`postgres accepting connections on :${PG_PORT}`, () => {
@@ -149,7 +200,21 @@ async function main() {
   run('pnpm', ['--filter', '@wecom/api', 'migrate'], { env: dbEnv });
   run('pnpm', ['--filter', '@wecom/api', 'seed'], { env: dbEnv });
   // No `--` separator: pnpm forwards these already, and a literal `--` reaches `parseArgs`.
-  run('pnpm', ['--filter', '@wecom/api', 'create-admin', '--email', ADMIN_EMAIL, '--password', ADMIN_PASSWORD, '--name', 'E2E Admin'], { env: dbEnv });
+  run(
+    'pnpm',
+    [
+      '--filter',
+      '@wecom/api',
+      'create-admin',
+      '--email',
+      ADMIN_EMAIL,
+      '--password',
+      ADMIN_PASSWORD,
+      '--name',
+      'E2E Admin',
+    ],
+    { env: dbEnv },
+  );
 
   console.log('\n── 3. api (production-like) ─────────────────────────────────');
   start('api', 'pnpm', ['--filter', '@wecom/api', 'exec', 'tsx', 'src/server.ts'], {
@@ -162,8 +227,13 @@ async function main() {
       AUTH_FALLBACK: 'none',
       SESSION_SECRET: 'e2e-session-secret-at-least-16-chars',
       PUBLIC_URL: WEB_URL,
-      // Requests arrive straight from Playwright here, not through nginx, so there is no
-      // forwarded header to trust. `TRUST_PROXY` is set by deploy/, not by this gate.
+      // Requests arrive straight from Playwright, not through nginx, so there is no forwarded
+      // header to trust — and trusting one here would let a client spoof `req.ip`, which gates
+      // the auth rate limits and the audit/session IP columns. `TRUST_PROXY` defaults to true
+      // under NODE_ENV=production, so it has to be set off explicitly.
+      TRUST_PROXY: 'false',
+      // Production refuses the dev defaults for these two, and there is no Ollama in CI.
+      CONNECTOR_KEY: 'a1'.repeat(32),
       MODEL_DISABLED: 'true',
       MIGRATE_ON_START: 'false',
       BACKUP_DIR: '/tmp/wecom-e2e-backups',
@@ -173,9 +243,14 @@ async function main() {
 
   console.log('\n── 4. web (built dist via vite preview) ─────────────────────');
   run('pnpm', ['--filter', '@wecom/web', 'build']);
-  start('web', 'pnpm', ['--filter', '@wecom/web', 'exec', 'vite', 'preview', '--port', String(WEB_PORT), '--strictPort'], {
-    env: { ...process.env, E2E_API_URL: API_URL },
-  });
+  start(
+    'web',
+    'pnpm',
+    ['--filter', '@wecom/web', 'exec', 'vite', 'preview', '--port', String(WEB_PORT), '--strictPort'],
+    {
+      env: { ...process.env, E2E_API_URL: API_URL },
+    },
+  );
   await waitFor(`web serving at ${WEB_URL}`, httpOk(WEB_URL));
   await waitFor('web proxying /api to the real api', async () => {
     const res = await fetch(`${WEB_URL}/api/v1/system/health`);
@@ -184,15 +259,28 @@ async function main() {
   });
 
   console.log('\n── 5. playwright (no mocks) ─────────────────────────────────\n');
-  run('pnpm', ['--filter', '@wecom/web', 'exec', 'playwright', 'test', '--config', 'playwright.real.config.ts', ...passthrough], {
-    env: {
-      ...process.env,
-      E2E_REAL_BASE_URL: WEB_URL,
-      E2E_ADMIN_EMAIL: ADMIN_EMAIL,
-      E2E_ADMIN_PASSWORD: ADMIN_PASSWORD,
-      ...(process.env.E2E_HEADED === '1' ? { PWDEBUG: '0' } : {}),
+  run(
+    'pnpm',
+    [
+      '--filter',
+      '@wecom/web',
+      'exec',
+      'playwright',
+      'test',
+      '--config',
+      'playwright.real.config.ts',
+      ...passthrough,
+    ],
+    {
+      env: {
+        ...process.env,
+        E2E_REAL_BASE_URL: WEB_URL,
+        E2E_ADMIN_EMAIL: ADMIN_EMAIL,
+        E2E_ADMIN_PASSWORD: ADMIN_PASSWORD,
+        ...(process.env.E2E_HEADED === '1' ? { PWDEBUG: '0' } : {}),
+      },
     },
-  });
+  );
 
   console.log('\n✓ e2e:real passed against a real Postgres, a real API and the built SPA.\n');
 }
