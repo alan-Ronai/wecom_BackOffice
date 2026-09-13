@@ -7,3 +7,6 @@ coverage
 .superpowers
 apps/web/src/api/schema.d.ts
 .claude/worktrees
+playwright-report
+test-results
+apps/web/e2e/.auth
