@@ -1,120 +1,77 @@
 # wecom. מאגר ידע פנימי
 
-פלטפורמת ידע לנציגי שירות ותמיכה של wecom.
+פלטפורמת ידע לנציגי שירות ותמיכה של wecom — ספרייה, מצב שיחה, עורך בלוקים, היסטוריית גרסאות, סל מיחזור ועיבוד שינויים ממסמכי המקור.
 
 ## 📁 מבנה הפרויקט
 
 ```
 wecom-kb/
-├── index.html          ← דף הבית (רשימת כל המסמכים)
-├── shared.css          ← עיצוב משותף לכל הדפים
-├── README.md
-└── docs/
-    ├── browsing-issues.html     ← איטיות / חוסר גלישה
-    ├── churn-retention.html     ← דיבאג נטישה
-    └── [מסמכים עתידיים].html
+├── index.html            ← מעטפת האפליקציה (טוענת את הקבצים למטה)
+├── css/app.css           ← טוקנים (בהיר/כהה), מערכת טיפוגרפיה ו-bidi, כל הרכיבים
+├── js/data.js            ← נתוני בסיס: קטגוריות, מקורות, שדות CRM, בלוקים משותפים, כרטיסים, 2 מסמכים, מסמכי מקור
+├── js/data-docs.js       ← 21 פריטי ידע (נוצר אוטומטית מפריטי ה-PDF הקודמים)
+├── js/core.js            ← מצב + שמירה מקומית, KB.fmt (bidi/CRM), גרסאות, סל מיחזור, ייבוא/ייצוא
+├── js/nav.js             ← ניתוב, לשוניות, היסטוריה, פיצול מסך, קיצורים, Ctrl K, תצוגה מקדימה בריחוף
+├── js/app.js             ← תפריט צד (מלא / מכווץ), רצועת לשוניות, ניתוב תצוגות
+├── js/views-library.js   ← ספרייה, מוצמדים, נצפו לאחרונה, טיוטות, שדות CRM, בלוקים
+├── js/views-article.js   ← מסמך במצב שיחה: מסילת התקדמות, מקלדת, קשרים, הערות, מפת כרטיס, פיצול
+├── js/views-editor.js    ← עורך: ספריית בלוקים, טופס ↔ תצוגה חיה, שמירה אוטומטית, בדיקות לפני פרסום
+├── js/views-history.js   ← היסטוריית גרסאות: ציר זמן, diff זה-לצד-זה, שחזור, blame לכל שלב
+├── js/views-trash.js     ← סל מיחזור: ספירה לאחור, השפעה (קישורים שבורים), שחזור
+├── js/views-sources.js   ← מסמכי מקור (Word/Excel): שינויים במעקב → הצעות → אישור → פרסום
+├── shared.css, docs/     ← דפי המסמכים הסטטיים מהגרסה הקודמת (עדיין עובדים בפני עצמם)
+└── README.md
 ```
 
----
+אין שלב בנייה. פותחים את `index.html` (או מפרסמים ב-GitHub Pages: Settings → Pages → Branch: main).
 
-## 🚀 פרסום ב-GitHub Pages (שלב אחד)
+## 🧭 מה יש באפליקציה
 
-1. צור repository חדש ב-GitHub (לדוגמה: `wecom-knowledge-base`)
-2. העלה את כל הקבצים (drag & drop ב-GitHub.com)
-3. לך ל: **Settings → Pages → Branch: main → Save**
-4. תוך דקה הפלטפורמה תהיה חיה בכתובת:
-   `https://[username].github.io/wecom-knowledge-base/`
+| מסך | איך מגיעים | מה עושים שם |
+|------|-------------|--------------|
+| ספרייה | ראשי · `#/library` · `#/library/intl` | כרטיסים לפי גל / שכיחות, מוצמדים, כרטיס אוטומטי "שדות CRM שמשתנים השבוע", ייבוא/ייצוא JSON |
+| מסמך · מצב שיחה | לחיצה על כרטיס · `#/doc/<id>/<step>` | `↑↓` שלב, `1-3` תוצאה, `N` הערה, `C` העתקת סיכום ל-CRM, `G`+מספר קפיצה, `P` הצמדה |
+| קשרים של שלב | בתוך המסמך | אותו בלוק במסמכים אחרים, שדות CRM, תלויות, § מקור. ריחוף על קישור = תצוגה מקדימה |
+| לשוניות / פיצול | `Alt T` · `Ctrl \` · `Alt ←/→` | כמה מסמכים פתוחים, שני מסמכים זה לצד זה עם גלילה מסונכרנת לפי בלוק משותף |
+| חיפוש | `Ctrl K` | מסמכים, שלבים, שדות CRM, בלוקים, תסריטים ופעולות — `Tab` מחליף סוג תוצאה |
+| עורך | ✏️ ערוך · ✚ פריט ידע חדש · `#/edit/<id>` | גרירת בלוקים, בלוקים משותפים (שינוי אחד = עדכון בכל המסמכים), `/` לפקודה מהירה, JSON, Diff, בדיקות לפני פרסום |
+| גרסאות | 🕓 · `#/history/<id>` | השוואה בין כל שתי גרסאות, מי שינה כל שלב, שחזור (נשמר כגרסה חדשה) |
+| סל מיחזור | `#/trash` | 30 יום עד מחיקה סופית, מה נשבר, שחזור למקור |
+| מסמכי מקור | `#/sources` | עורכים רק את קובץ ה-Word; מנוע כללים מקומי מציע עדכוני כרטיסים; אישור → פרסום לספרייה |
+| מצב כהה / טיפוגרפיה | `Ctrl D` · לחיצה על השם בתחתית התפריט | Plex Hebrew (מוצע) ↔ Rubik (נוכחי), בהיר / כהה / לפי המערכת |
 
----
+`?` מציג את כל הקיצורים.
 
-## ➕ הוספת מסמך חדש
+## ➕ הוספת פריט ידע
 
-### שלב 1 – צור קובץ HTML חדש ב-`docs/`
+1. **מהאפליקציה** — ✚ פריט ידע חדש → העורך. פרסום יוצר כרטיס בספרייה וגרסה v1. הכל נשמר בדפדפן (localStorage).
+2. **מקובץ** — ייבוא JSON / CSV מהספרייה. CSV עם העמודות `title,desc,cat,wave,pri` יוצר כרטיסים; JSON בפורמט הייצוא מוסיף מסמכים מלאים.
+3. **בקוד** — הוסיפו מסמך ל-`KB.SEED.docs` ב-`js/data.js` (או ל-`js/data-docs.js`) וכרטיס ל-`KB.TOPICS` עם `docId`. העלו את `KB.SEED_VERSION` כדי שדפדפנים עם עותק שמור יקבלו את התוכן החדש.
 
-העתק את המבנה הבסיסי:
+### מבנה מסמך
 
-```html
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>[שם המסמך] | wecom. מאגר ידע</title>
-<link rel="stylesheet" href="../shared.css">
-</head>
-<body>
-
-<nav class="topnav">
-  <a href="../index.html" class="topnav-logo">wecom.</a>
-  <div class="topnav-sep"></div>
-  <a href="../index.html" class="topnav-home">ראשי</a>
-  <div class="topnav-sep"></div>
-  <div class="topnav-label">[שם המסמך]</div>
-</nav>
-
-<div class="page-wrap">
-  <main class="article">
-    <div class="article-header">
-      <div class="doc-meta">
-        <span class="badge badge-tech">טכני</span>  <!-- או badge-retain לשימור -->
-        <span class="badge badge-updated">עודכן: [תאריך]</span>
-      </div>
-      <h1 class="article-title">[כותרת]</h1>
-      <p class="article-subtitle">[תיאור קצר]</p>
-    </div>
-    <div class="article-body">
-      <!-- תוכן המסמך כאן -->
-    </div>
-  </main>
-
-  <aside class="sidebar">
-    <!-- תוכן עניינים + מסמכים קשורים -->
-  </aside>
-</div>
-
-</body>
-</html>
+```js
+{
+  id: 'my-doc', title: '...', desc: '...', cat: 'tech', wave: 1, pri: 'hh', src: 'topics',
+  version: 1, updated: '2025-06-12', author: 'ענבר ל.', status: 'published', kind: 'steps',
+  sourceDoc: { id: 'tech-procedures', ref: 'פרק 4' },
+  phases: [{ id: 'p1', label: 'שלב 1 – מסנן', note: 'ללא מעורבות לקוח', steps: [
+    { id: 's1', num: '1', title: 'בדיקת חסימה', source: '§4.1',
+      actions: [{ id: 'a1', text: 'פתח CRM ↗ שדה "גלישה בארץ"' }],           // **מודגש**, [[doc:id]] קישור
+      outcomes: [{ kind: 'ok', text: '✓ תקין – המשך', goto: 's2' }, { kind: 'alert', text: '⚑ חסום' }],
+      branch: { q: 'מה מוצג?', options: [{ kind: 'if', label: 'ניצל 100%', text: '...' }] },
+      script: '"טקסט לנציג"',
+      block: 'sim-refresh'      // שלב שמוטמע מבלוק משותף (KB.BLOCKS)
+    } ] }]
+}
 ```
 
-### שלב 2 – הוסף כרטיס ל-`index.html`
+שמות שדות CRM (מ-`KB.CRM_FIELDS`) מזוהים אוטומטית בטקסט ומוצגים כצ׳יפ עם כיוון קבוע; מזהים לטיניים, מספרים ותאריכים עטופים ב-`<bdi dir="ltr">` לפי כללי ה-bidi.
 
-מצא את הקטגוריה המתאימה והוסף:
+## 🗂 קטגוריות
 
-```html
-<a href="docs/[שם-הקובץ].html" class="doc-card">
-  <div class="dc-icon">📄</div>
-  <div class="dc-title">[שם המסמך]</div>
-  <div class="dc-desc">[תיאור קצר לנציגים]</div>
-  <div class="dc-meta">
-    <span class="badge badge-tech" style="font-size:11px;padding:2px 8px;">טכני</span>
-    <span>[מספר שלבים] שלבים</span>
-    <span class="dc-arrow">←</span>
-  </div>
-</a>
-```
+`sim` · `tech` · `billing` · `plans` · `intl` · `ops` — מוגדרות ב-`KB.CATS` (`js/data.js`). הוספת קטגוריה = שורה אחת שם.
 
----
+## 🔒 נתונים
 
-## 🧩 רכיבים זמינים ב-shared.css
-
-| רכיב | Class | שימוש |
-|------|-------|--------|
-| כרטיס שלב | `.step-card` + `.step-num` + `.step-content` | שלבי תפעול |
-| הסתעפות אם/אז | `.branch-block` + `.branch-option` | החלטות |
-| תוצאות | `.outcome.ok` / `.outcome.next` / `.outcome.alert` | סיום / המשך / שגיאה |
-| תסריט שיחה | `.script-block` | ציטוטים מומלצים לנציג |
-| כרטיס תרחיש | `.scenario-card` | מסמכי שימור |
-| התנגדות/תשובה | `.objection-block` | שאלות לקוח + תגובת נציג |
-| עקרונות | `.principles-box` | סיכום עקרונות |
-
----
-
-## 📋 קטגוריות קיימות
-
-- `badge-tech` (כחול) – תפעולי / טכני
-- `badge-retain` (אדום) – שימור לקוחות
-
-להוספת קטגוריה חדשה – הוסף ב-`shared.css`:
-```css
-.badge-[שם] { background: #[צבע]; color: #[צבע]; }
-```
+הכל רץ בדפדפן ללא שרת. עריכות, הצמדות, הערות, גרסאות וסל המיחזור נשמרים ב-`localStorage` תחת `wecom_kb2_state_v1`. "אפס" בהגדרות מחזיר את תוכן הבסיס. פריטי ידע שנוצרו בגרסה הקודמת של האפליקציה מיובאים אוטומטית בפעם הראשונה.
