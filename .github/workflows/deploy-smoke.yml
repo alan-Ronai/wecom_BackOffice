@@ -1,0 +1,75 @@
+name: deploy-smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/**"
+      - "apps/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deploy-smoke.yml"
+  pull_request:
+    paths:
+      - "deploy/**"
+      - "apps/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deploy-smoke.yml"
+
+jobs:
+  deploy-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: self-signed cert
+        run: |
+          mkdir -p deploy/certs
+          cd deploy/certs && openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 1 -subj "/CN=localhost"
+
+      # The api service declares `env_file: .env` (relative to
+      # deploy/docker-compose.yml); that's distinct from `--env-file`, which
+      # only feeds ${VAR} interpolation in the compose YAML itself. Without
+      # this, `docker compose config` fails with "env file ... not found".
+      - name: materialize deploy/.env for compose
+        run: cp deploy/ci.env deploy/.env
+
+      - name: validate nginx.conf, ollama-pull.sh, INSTALL.md
+        run: |
+          deploy/nginx-check.sh
+          deploy/ollama-pull-check.sh
+          deploy/install-check.sh
+
+      - name: validate compose config
+        run: docker compose --env-file deploy/ci.env -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml config
+
+      - name: backup/restore round trip
+        run: deploy/backup-check.sh
+
+      # apps/api and apps/web are delivered by a separate lane (L2/L4); until
+      # both exist, the api/web image builds and the compose-up smoke fail at
+      # the `COPY apps/...` step. Soft-fail these two steps rather than
+      # blocking merges on work that lands in a later wave — once apps/api
+      # and apps/web exist, watch this job to confirm they turn green and
+      # remove continue-on-error.
+      - name: build images
+        id: build
+        continue-on-error: true
+        run: docker compose --env-file deploy/ci.env -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml build
+
+      - name: up + smoke
+        id: smoke
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        run: |
+          docker compose --env-file deploy/ci.env -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml up -d
+          SMOKE_REQUIRE_MODEL=false deploy/smoke.sh https://localhost:8443
+
+      - name: logs on failure
+        if: always() && steps.build.outcome == 'success'
+        run: docker compose --env-file deploy/ci.env -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml logs || true
+
+      - name: down
+        if: always()
+        run: docker compose --env-file deploy/ci.env -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml down -v || true
