@@ -1,10 +1,13 @@
 import '@testing-library/jest-dom/vitest';
 import { afterAll, afterEach, beforeAll } from 'vitest';
+import { cleanup } from '@testing-library/react';
 import { server } from './msw/server.js';
 import { resetState } from './msw/handlers.js';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
+  // `globals: false` means Testing Library never registers its own auto-cleanup.
+  cleanup();
   server.resetHandlers();
   window.sessionStorage.clear();
   resetState();
