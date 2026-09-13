@@ -3,3 +3,5 @@ docs
 design
 pnpm-lock.yaml
 *.md
+# ported verbatim from legacy/css/app.css — keep byte-identical for visual diffing
+apps/web/src/styles/app.css
