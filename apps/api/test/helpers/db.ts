@@ -8,6 +8,15 @@ export interface TestDb {
   stop: () => Promise<void>;
 }
 
+/** `app.close()` already ends the pool it was handed; ending it twice throws. */
+const endPool = async (pool: pg.Pool) => {
+  try {
+    await pool.end();
+  } catch {
+    /* already ended by the app's onClose hook */
+  }
+};
+
 const migrate = async (url: string) => {
   await runner({
     databaseUrl: url,
@@ -41,7 +50,7 @@ export async function startTestDb(): Promise<TestDb> {
       pool,
       url: dbUrl,
       stop: async () => {
-        await pool.end();
+        await endPool(pool);
         const drop = new pg.Client({ connectionString: external });
         await drop.connect();
         await drop.query(`drop database if exists ${name} with (force)`);
@@ -59,7 +68,7 @@ export async function startTestDb(): Promise<TestDb> {
     pool,
     url,
     stop: async () => {
-      await pool.end();
+      await endPool(pool);
       await container.stop();
     },
   };

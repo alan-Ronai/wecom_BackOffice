@@ -7,6 +7,8 @@ import {
   ListDocumentsQuerySchema,
   ListDocumentsResponseSchema,
   PatchDocumentBodySchema,
+  StructureBodySchema,
+  makeEvent,
 } from '@wecom/shared';
 import { withTransaction } from '../../lib/sql.js';
 import { audit } from '../../lib/audit.js';
@@ -112,6 +114,54 @@ export default async function routes(app: FastifyInstance) {
         });
         return after;
       });
+    },
+  );
+
+  app.put(
+    '/documents/:id/structure',
+    {
+      config: { requires: ['docs.edit'], scope: 'document' },
+      schema: {
+        tags: ['documents'],
+        params: Params,
+        body: StructureBodySchema,
+        response: { 200: DocumentSchema },
+      },
+    },
+    async (req, reply) => {
+      const user = requireUser(req);
+      const { id } = req.params as { id: string };
+      const countSteps = (d: { phases: { steps: unknown[] }[] }) =>
+        d.phases.reduce((a, p) => a + p.steps.length, 0);
+      const doc = await withTransaction(app.db, async (tx) => {
+        const before = await repo.getDocument(tx, id);
+        if (!before) throw notFound('המסמך');
+        if (!hasScope(user, before.category)) throw forbidden();
+        const after = await repo.saveStructure(
+          tx,
+          id,
+          req.body as z.infer<typeof StructureBodySchema>,
+          user.id,
+          req.headers['if-match'] as string | undefined,
+        );
+        await audit(tx, {
+          actorId: user.id,
+          action: 'docs.edit',
+          entityType: 'document',
+          entityId: id,
+          before: { steps: countSteps(before) },
+          after: { steps: countSteps(after) },
+          requestId: req.id,
+          ip: req.ip,
+        });
+        await app.events.publish(
+          tx,
+          makeEvent('document.updated', { documentId: id, actorId: user.id, etag: after.etag }),
+        );
+        return after;
+      });
+      reply.header('etag', doc.etag!);
+      return doc;
     },
   );
 }

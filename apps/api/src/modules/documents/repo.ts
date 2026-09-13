@@ -2,14 +2,21 @@ import type pg from 'pg';
 import {
   DocumentCardSchema,
   DocumentSchema,
+  detectFieldRefs,
+  detectLinks,
+  stepText,
+  type Block,
   type CreateDocumentBody,
+  type DocRef,
   type Document,
   type DocumentCard,
   type ListDocumentsQuery,
   type PatchDocumentBody,
   type Phase,
   type Step,
+  type StructureBody,
 } from '@wecom/shared';
+import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
 
 export type Q = pg.Pool | Tx;
@@ -282,4 +289,175 @@ export async function patchDocument(
     params,
   );
   return (await getDocument(tx, id))!;
+}
+
+// ---------------------------------------------------------------------------
+// Structure save + derived data (field refs, links, search text)
+// ---------------------------------------------------------------------------
+
+export async function loadBlocksMap(q: Q): Promise<Map<string, Block>> {
+  const [b, a, o] = await Promise.all([
+    q.query('select * from blocks where deleted_at is null'),
+    q.query('select * from block_actions order by position'),
+    q.query('select * from block_outcomes order by position'),
+  ]);
+  const m = new Map<string, Block>();
+  for (const r of b.rows)
+    m.set(r.id, {
+      id: r.id,
+      slug: r.slug,
+      title: r.title,
+      kind: r.kind,
+      description: r.description ?? undefined,
+      script: r.script ?? undefined,
+      currentVersion: r.current_version,
+      updatedAt: iso(r.updated_at)!,
+      updatedBy: r.updated_by ?? undefined,
+      actions: a.rows
+        .filter((x) => x.block_id === r.id)
+        .map((x) => ({ id: x.id as string, text: x.text as string })),
+      outcomes: o.rows
+        .filter((x) => x.block_id === r.id)
+        .map((x) => ({ kind: x.kind, text: x.text, goto: x.goto_step_key ?? undefined })),
+    });
+  return m;
+}
+
+export const loadFieldNames = async (q: Q): Promise<string[]> =>
+  (await q.query('select name from crm_fields where deleted_at is null')).rows.map((r) => r.name as string);
+
+export const loadDocRefs = async (q: Q): Promise<DocRef[]> =>
+  (await q.query('select id, title, code from documents where deleted_at is null')).rows.map((r) => ({
+    id: r.id as string,
+    title: r.title as string,
+    code: (r.code as string | null) ?? undefined,
+  }));
+
+/** Recompute `step_field_refs`, `document_links` and `documents.search_text` for one document. */
+export async function recomputeDerived(tx: Tx, doc: Document): Promise<void> {
+  const [blocks, fields, refs] = await Promise.all([
+    loadBlocksMap(tx),
+    loadFieldNames(tx),
+    loadDocRefs(tx),
+  ]);
+  const stepIds = new Map<string, string>(
+    (await tx.query('select id, step_key from steps where document_id=$1', [doc.id])).rows.map((r) => [
+      r.step_key as string,
+      r.id as string,
+    ]),
+  );
+  await tx.query('delete from step_field_refs where step_id in (select id from steps where document_id=$1)', [
+    doc.id,
+  ]);
+  for (const f of detectFieldRefs(doc, fields, blocks)) {
+    const stepId = stepIds.get(f.stepKey);
+    if (!stepId) continue;
+    await tx.query('insert into step_field_refs(step_id, field_name) values ($1,$2) on conflict do nothing', [
+      stepId,
+      f.fieldName,
+    ]);
+  }
+  await tx.query(
+    "delete from document_links where from_document_id=$1 and (origin='detected' or type='related')",
+    [doc.id],
+  );
+  for (const l of detectLinks(doc, refs, blocks))
+    await tx.query(
+      `insert into document_links(from_document_id, from_step_key, to_document_id, to_block_id, to_field_name, to_source_id, type, origin)
+       values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        l.fromDocumentId,
+        l.fromStepKey,
+        l.toDocumentId,
+        l.toBlockId,
+        l.toFieldName,
+        l.toSourceId,
+        l.type,
+        l.origin,
+      ],
+    );
+  const text = doc.phases
+    .flatMap((p) => p.steps.map((s) => stepText(s, s.blockId ? blocks.get(s.blockId) : null)))
+    .join(' \n ');
+  await tx.query('update documents set search_text=$2 where id=$1', [doc.id, text]);
+}
+
+/** Rewrite the whole phase/step tree in one transaction; rotates the etag. */
+export async function saveStructure(
+  tx: Tx,
+  id: string,
+  body: StructureBody,
+  userId: string,
+  ifMatch?: string,
+): Promise<Document> {
+  const cur = await tx.query('select etag, status from documents where id=$1 and deleted_at is null for update', [
+    id,
+  ]);
+  if (!cur.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
+  if (ifMatch && ifMatch !== cur.rows[0].etag)
+    throw httpError(412, 'ETAG_MISMATCH', 'המסמך השתנה בינתיים — טען מחדש ונסה שוב');
+  await tx.query('delete from phases where document_id=$1', [id]); // cascades steps/actions/outcomes/branches
+  let pos = 0;
+  for (const [pi, p] of body.phases.entries()) {
+    const ph = await tx.query(
+      'insert into phases(document_id, position, phase_key, label, note, route) values ($1,$2,$3,$4,$5,$6) returning id',
+      [id, pi, p.id, p.label ?? '', p.note ?? null, p.route ?? null],
+    );
+    for (const s of p.steps) {
+      const st = await tx.query(
+        `insert into steps(phase_id, document_id, position, step_key, num, title, description, hint, tone, block_id, block_refs, script, source_ref, deps, extras)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) returning id`,
+        [
+          ph.rows[0].id,
+          id,
+          pos++,
+          s.key,
+          s.num,
+          s.title,
+          s.description ?? null,
+          s.hint ?? null,
+          s.tone ?? null,
+          s.blockId ?? null,
+          s.blockRefs ?? [],
+          s.script ?? null,
+          s.sourceRef ?? null,
+          s.deps ?? [],
+          s.extras ? JSON.stringify(s.extras) : null,
+        ],
+      );
+      const sid = st.rows[0].id as string;
+      for (const [i, a] of s.actions.entries())
+        await tx.query('insert into step_actions(step_id, position, action_key, text) values ($1,$2,$3,$4)', [
+          sid,
+          i,
+          a.id,
+          a.text,
+        ]);
+      for (const [i, o] of s.outcomes.entries())
+        await tx.query(
+          'insert into step_outcomes(step_id, position, kind, text, goto_step_key) values ($1,$2,$3,$4,$5)',
+          [sid, i, o.kind, o.text, o.goto ?? null],
+        );
+      if (s.branch) {
+        const br = await tx.query('insert into step_branches(step_id, question) values ($1,$2) returning id', [
+          sid,
+          s.branch.q,
+        ]);
+        for (const [i, o] of s.branch.options.entries())
+          await tx.query(
+            'insert into step_branch_options(branch_id, position, kind, label, text, goto_step_key) values ($1,$2,$3,$4,$5,$6)',
+            [br.rows[0].id, i, o.kind, o.label, o.text, o.goto ?? null],
+          );
+      }
+    }
+  }
+  const prev = cur.rows[0].status as string;
+  const status = prev === 'published' || prev === 'partial' ? 'review' : prev;
+  await tx.query(
+    'update documents set related=$2, status=$3, updated_by=$4, updated_at=now(), etag=gen_random_uuid()::text where id=$1',
+    [id, JSON.stringify(body.related ?? []), status, userId],
+  );
+  const doc = (await getDocument(tx, id))!;
+  await recomputeDerived(tx, doc);
+  return doc;
 }
