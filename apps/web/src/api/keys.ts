@@ -11,6 +11,7 @@ export const keys = {
   notes: (id: string) => ['notes', id] as const,
   versions: (id: string) => ['versions', id] as const,
   version: (id: string, v: number) => ['version', id, v] as const,
+  diff: (id: string, from: number, to: number) => ['diff', id, from, to] as const,
   draft: (id: string) => ['draft', id] as const,
   blocks: ['blocks'] as const,
   blockUsage: (id: string) => ['blockUsage', id] as const,

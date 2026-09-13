@@ -11,7 +11,11 @@ COPY apps/web ./apps/web
 COPY docs/api/openapi.json ./docs/api/openapi.json
 RUN pnpm --filter @wecom/shared build \
  && pnpm --filter @wecom/web generate:client \
- && pnpm --filter @wecom/web build
+ && pnpm --filter @wecom/web build \
+ # msw's worker lives in public/ so the dev and test harnesses can register it; Vite copies
+ # public/ wholesale into dist/. Nothing in the bundle references it, but an interception-capable
+ # service worker has no business being reachable in production.
+ && rm -f apps/web/dist/mockServiceWorker.js
 
 # ── runtime ─────────────────────────────────────────────────────────────
 FROM nginx:1.27-alpine

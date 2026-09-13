@@ -2,17 +2,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap } from '../unwrap.js';
-import type { TrashList } from '../types.js';
+import type { TrashRefType } from '../types.js';
 
 export const useTrash = () =>
   useQuery({
     queryKey: keys.trash,
-    queryFn: async (): Promise<TrashList> => unwrap(await api.GET('/trash')),
+    queryFn: async () => unwrap(await api.GET('/trash')),
   });
 
-type Ref = { type: string; id: string };
+/** The API only accepts these four entity kinds in the path. */
+type Ref = { type: TrashRefType; id: string };
 
-const useTrashMutation = <TVars>(fn: (v: TVars) => Promise<unknown>) => {
+const useTrashMutation = <TVars, TData>(fn: (v: TVars) => Promise<TData>) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,

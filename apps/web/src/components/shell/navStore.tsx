@@ -86,45 +86,44 @@ export function NavProvider({ children }: { children: ReactNode }) {
     tick((n) => n + 1);
   }, [loc.pathname]);
 
+  // M6: both pieces of state are derived up front and set separately. Calling `setActiveTab`
+  // from inside the `setTabs` updater made the updater impure, and React 18 StrictMode invokes
+  // updaters twice.
   const openDoc = useCallback(
     (id: string, o: { title?: string; newTab?: boolean; step?: string } = {}) => {
-      setTabs((t) => {
-        const i = t.findIndex((x) => x.docId === id);
-        let next = t.slice();
-        let act = i;
-        if (i < 0) {
-          if (o.newTab || !t.length || !t[activeTab]) {
-            next.push({ docId: id, title: o.title ?? id });
-            act = next.length - 1;
-          } else {
-            next[activeTab] = { docId: id, title: o.title ?? id };
-            act = activeTab;
-          }
-        } else if (o.title) next[i] = { docId: id, title: o.title };
-        if (next.length > MAX_TABS) {
-          next = next.slice(1);
-          act = Math.max(0, act - 1);
+      const i = tabs.findIndex((x) => x.docId === id);
+      let next = tabs.slice();
+      let act = i;
+      if (i < 0) {
+        if (o.newTab || !tabs.length || !tabs[activeTab]) {
+          next.push({ docId: id, title: o.title ?? id });
+          act = next.length - 1;
+        } else {
+          next[activeTab] = { docId: id, title: o.title ?? id };
+          act = activeTab;
         }
-        setActiveTab(Math.max(0, act));
-        return next;
-      });
+      } else if (o.title) next[i] = { docId: id, title: o.title };
+      if (next.length > MAX_TABS) {
+        next = next.slice(1);
+        act = Math.max(0, act - 1);
+      }
+      setTabs(next);
+      setActiveTab(Math.max(0, act));
       nav(`/doc/${id}${o.step ? '/' + o.step : ''}`);
     },
-    [nav, activeTab],
+    [nav, tabs, activeTab],
   );
 
   const closeTab = useCallback(
     (i: number) => {
-      setTabs((t) => {
-        const next = t.filter((_, j) => j !== i);
-        const wasActive = i === activeTab;
-        const act = Math.max(0, Math.min(activeTab >= i ? activeTab - 1 : activeTab, next.length - 1));
-        setActiveTab(act);
-        if (wasActive) nav(next.length ? `/doc/${next[act].docId}` : '/library');
-        return next;
-      });
+      const next = tabs.filter((_, j) => j !== i);
+      const wasActive = i === activeTab;
+      const act = Math.max(0, Math.min(activeTab >= i ? activeTab - 1 : activeTab, next.length - 1));
+      setTabs(next);
+      setActiveTab(act);
+      if (wasActive) nav(next.length ? `/doc/${next[act].docId}` : '/library');
     },
-    [activeTab, nav],
+    [tabs, activeTab, nav],
   );
 
   const toggleSplit = useCallback(

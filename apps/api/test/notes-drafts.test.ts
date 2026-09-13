@@ -92,6 +92,45 @@ run('notes, drafts and preferences', () => {
     ).toBe(204);
   });
 
+  it('answers 204, not 404, when a document has no draft', async () => {
+    const c = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/documents',
+        headers: auth(u),
+        payload: { title: 'no-draft', category: 'tech', wave: 1, priority: 'm', kind: 'steps' },
+      })
+    ).json();
+    const empty = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents/${c.id}/draft`,
+      headers: auth(u),
+    });
+    expect(empty.statusCode).toBe(204);
+    expect(empty.body).toBe('');
+
+    // …and 200 with the envelope once one exists, so the editor can tell the two apart.
+    await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${c.id}/draft`,
+      headers: auth(u),
+      payload: { payload: { title: 'wip' } },
+    });
+    const saved = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents/${c.id}/draft`,
+      headers: auth(u),
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().payload).toEqual({ title: 'wip' });
+
+    // The new-document key behaves the same way.
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/v1/drafts/new/never-saved', headers: auth(u) }))
+        .statusCode,
+    ).toBe(204);
+  });
+
   it('keeps new-document drafts under their own key', async () => {
     const put = await app.inject({
       method: 'PUT',

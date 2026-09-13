@@ -23,7 +23,7 @@ import type {
   Version,
 } from '@wecom/shared';
 import { PERMISSIONS } from '@wecom/shared';
-import type { AdminUser, GroupMap, Session, SystemStatus, TrashItem } from '../../src/api/types.js';
+import type { AdminUser, GroupMap, Session, TrashItem } from '../../src/api/types.js';
 
 export const U1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
 export const U2 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2';
@@ -785,8 +785,22 @@ export const roles: Role[] = [
   },
 ];
 
+// `GET /admin/users` returns users *with* their role grants (`UserRoleSchema` rows — note the
+// `userId`/`grantedBy`/`grantedAt` fields the port's hand-written shape omitted).
 export const users: AdminUser[] = [
-  { ...me.user, roles: [{ roleId: ROLE_LEAD, roleName: 'lead', categoryScope: null }] },
+  {
+    ...me.user,
+    roles: [
+      {
+        userId: U1,
+        roleId: ROLE_LEAD,
+        roleName: 'lead',
+        categoryScope: null,
+        grantedBy: null,
+        grantedAt: T,
+      },
+    ],
+  },
   {
     id: U2,
     subject: 'dana@wecom.co.il',
@@ -796,13 +810,22 @@ export const users: AdminUser[] = [
     initials: 'ד',
     active: true,
     lastLoginAt: T,
-    roles: [{ roleId: ROLE_LEAD, roleName: 'lead', categoryScope: ['ops'] }],
+    roles: [
+      {
+        userId: U2,
+        roleId: ROLE_LEAD,
+        roleName: 'lead',
+        categoryScope: ['ops'],
+        grantedBy: U1,
+        grantedAt: T,
+      },
+    ],
   },
 ];
 
 export const groupsMap: GroupMap[] = [{ idpGroupId: 'g-leads', idpGroupName: 'KB-Leads', roleId: ROLE_LEAD }];
 
-export const sessions: (Session & { userName?: string })[] = [
+export const sessions: Session[] = [
   {
     id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1',
     userId: U1,
@@ -812,7 +835,6 @@ export const sessions: (Session & { userName?: string })[] = [
     lastSeenAt: T,
     expiresAt: T,
     revokedAt: null,
-    userName: 'ענבר ל.',
   },
 ];
 
@@ -832,13 +854,38 @@ export const audit: AuditEntry[] = [
   },
 ];
 
-export const system: SystemStatus = {
+/** `GET /admin/system` — the operator diagnostic view (AdminSystemSchema). */
+export const system = {
+  db: true,
+  model: false,
+  modelName: 'qwen2.5:3b-instruct-q4_K_M',
+  queue: 0,
+  queues: { 'connector.run': 0, 'source.process': 0 },
+  backup: { ok: true, latestFile: 'kb-2026-09-12.dump', ageHours: 8 },
+  connectors: [
+    {
+      id: '55555555-5555-4555-8555-55555555c001',
+      name: 'wecom-wordpress',
+      type: 'wordpress',
+      enabled: true,
+      lastStatus: 'ok',
+      lastRunAt: T,
+      conflicts: 0,
+    },
+  ],
+  sources: { pending: 1, error: 0 },
+  suggestions: { pending: 1 },
+  version: '0.1.0',
+  uptimeSec: 600,
+};
+
+export const health = {
+  ok: true,
   db: true,
   model: false,
   queue: 0,
-  connectors: { wordpress: false },
-  dbSizeMb: 12,
-  backups: [{ name: 'kb-2025-06-12.dump', sizeMb: 8, at: T }],
+  version: '0.1.0',
+  uptimeSec: 10,
 };
 
 export const fx = {
@@ -860,6 +907,7 @@ export const fx = {
   groupsMap,
   sessions,
   audit,
+  health,
   system,
 };
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { useEvents } from '../../src/api/events.js';
+import { useEvents, __resetEventStream } from '../../src/api/events.js';
 import { keys } from '../../src/api/keys.js';
 import { D_BROWSING, SRC_TECH, SUG_1, U1 } from '../msw/fixtures.js';
 
@@ -23,6 +23,8 @@ class FakeES {
 }
 
 const mount = () => {
+  // The connection is a module-level singleton, so drop it between tests.
+  __resetEventStream();
   (globalThis as unknown as { EventSource: unknown }).EventSource = FakeES;
   const qc = new QueryClient();
   const spy = vi.spyOn(qc, 'invalidateQueries');
@@ -61,14 +63,14 @@ describe('useEvents', () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: keys.sources });
   });
 
-  it('invalidates system status and ignores malformed payloads', async () => {
+  it('invalidates health and ignores malformed payloads', async () => {
     const { spy, hook } = mount();
     FakeES.last.emit('system.status', {
       name: 'system.status',
       payload: { db: true, model: false, queue: 2, connectors: {} },
       at: new Date().toISOString(),
     });
-    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: keys.admin.system }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: keys.health }));
     const calls = spy.mock.calls.length;
     FakeES.last.emit('document.published', { nope: true });
     expect(spy.mock.calls.length).toBe(calls);

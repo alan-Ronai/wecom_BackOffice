@@ -20,6 +20,7 @@ import { Fmt } from '../Fmt.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { SuggestionCard } from './SuggestionCard.js';
+import { LoadError } from '../ui/index.js';
 
 /** Port of views-sources.js on the pipeline API: tracked changes plus the review panel. */
 export function SourcesPage() {
@@ -55,6 +56,8 @@ export function SourcesPage() {
   );
 
   const doPublish = async () => {
+    // The route applies the accepted suggestions of one source, so it needs that source's id.
+    if (!current) return;
     const ok = await modal.confirm(
       'פרסום לספרייה',
       `${accepted} הצעות יוחלו על הספרייה ויירשמו כגרסאות חדשות.`,
@@ -62,8 +65,8 @@ export function SourcesPage() {
       'primary',
     );
     if (!ok) return;
-    const res = await publish.mutateAsync(undefined);
-    toast(`פורסמו ${(res as { applied: number }).applied} שינויים`, 'ok');
+    const res = await publish.mutateAsync(current.id);
+    toast(`פורסמו ${res.applied} שינויים`, 'ok');
   };
 
   return (
@@ -141,7 +144,9 @@ export function SourcesPage() {
       </aside>
 
       <div className="src-main">
-        {!current ? (
+        {sources.isError ? (
+          <LoadError what="מסמכי מקור" error={sources.error} />
+        ) : !current ? (
           <div className="empty">אין מסמכי מקור</div>
         ) : (
           <>

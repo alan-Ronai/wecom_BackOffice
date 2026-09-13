@@ -6,6 +6,7 @@ import { Fmt } from '../Fmt.js';
 import { useEntityDialogs } from './dialogs.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
+import { LoadError } from '../ui/index.js';
 
 /** Port of legacy KB.views.blocks. */
 export function BlocksPage() {
@@ -63,6 +64,7 @@ export function BlocksPage() {
               <p>שלב או תסריט שנכתב פעם אחת ומוטמע בכמה מסמכים. עריכה של הבלוק מתעדכנת בכולם.</p>
             </div>
           </div>
+          {blocks.isError ? <LoadError what="בלוקים משותפים" error={blocks.error} /> : null}
           <div className="grid">
             {list.map((b) => (
               <div

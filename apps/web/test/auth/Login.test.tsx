@@ -14,20 +14,40 @@ const unauthenticated = () =>
   );
 
 describe('auth', () => {
-  it('redirects unauthenticated users to /login with the providers and a next param', async () => {
+  it('redirects unauthenticated users to /login with the SSO link and a returnTo param', async () => {
     unauthenticated();
     renderWithProviders(<App />, { route: '/library/intl' });
-    const link = await screen.findByRole('link', { name: 'כניסה עם חשבון wecom' });
-    expect(link).toHaveAttribute('href', '/api/v1/auth/login?next=%2Flibrary%2Fintl');
+    const link = await screen.findByRole('link', { name: 'כניסה עם חשבון Microsoft' });
+    // The route's querystring is `returnTo`, not `next`.
+    expect(link).toHaveAttribute('href', 'http://kb.test/api/v1/auth/login?returnTo=%2Flibrary%2Fintl');
   });
 
-  it('offers the local break-glass form', async () => {
+  it('offers the local break-glass form and posts `email`, not `username`', async () => {
     unauthenticated();
+    let body: unknown;
+    server.use(
+      http.post('/api/v1/auth/local', async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({ ok: true });
+      }),
+    );
     renderWithProviders(<App />, { route: '/library' });
-    expect(await screen.findByLabelText('שם משתמש')).toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText('שם משתמש'), 'admin');
+    expect(await screen.findByLabelText('דוא״ל')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('דוא״ל'), 'admin@wecom.co.il');
     await userEvent.type(screen.getByLabelText('סיסמה'), 'secret');
-    expect(screen.getByRole('button', { name: 'כניסה מקומית' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'כניסה מקומית' }));
+    await waitFor(() => expect(body).toEqual({ email: 'admin@wecom.co.il', password: 'secret' }));
+  });
+
+  it('renders the Palo Alto hint when the server reports that fallback', async () => {
+    unauthenticated();
+    server.use(
+      http.get('/api/v1/auth/providers', () =>
+        HttpResponse.json({ providers: ['entra'], fallback: 'paloalto' }),
+      ),
+    );
+    renderWithProviders(<App />, { route: '/library' });
+    expect(await screen.findByText(/הזדהו מול השער הארגוני/)).toBeInTheDocument();
   });
 
   it('surfaces a server outage instead of the login page', async () => {

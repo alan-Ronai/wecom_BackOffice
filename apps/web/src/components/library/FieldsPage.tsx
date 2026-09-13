@@ -7,6 +7,7 @@ import { Hamburger } from '../shell/MobileDrawer.js';
 import { Html } from '../Fmt.js';
 import { fmtDate } from '../../lib/format.js';
 import { useEntityDialogs } from './dialogs.js';
+import { LoadError } from '../ui/index.js';
 
 /** Port of legacy KB.views.fields. */
 export function FieldsPage() {
@@ -54,6 +55,7 @@ export function FieldsPage() {
               </p>
             </div>
           </div>
+          {fields.isError ? <LoadError what="שדות CRM" error={fields.error} /> : null}
           <div className="grid">
             {groups.map(([label, fs]) =>
               fs.length ? (

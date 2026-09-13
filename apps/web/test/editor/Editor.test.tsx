@@ -54,6 +54,8 @@ describe('<EditorPage>', () => {
     renderWithProviders(<App />, { route: `/edit/${D}` });
     await screen.findByPlaceholderText('שם פריט הידע…');
     await waitFor(() => expect(screen.queryByRole('button', { name: /פרסם/ })).toBeNull());
-    expect(screen.getByRole('button', { name: 'בקש סקירה' })).toBeInTheDocument();
+    // "בקש סקירה" is gone: it PATCHed an empty body and toasted success without persisting.
+    expect(screen.queryByRole('button', { name: 'בקש סקירה' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'ייצוא JSON' })).toBeInTheDocument();
   });
 });

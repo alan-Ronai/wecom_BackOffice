@@ -4,6 +4,7 @@ import { stripFmt } from '@wecom/shared';
 import { useDocument, useDocuments, useRecordView, useTogglePin } from '../../api/hooks/documents.js';
 import { useAddNote, useBlocks, useFields } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
+import { ApiError } from '../../api/unwrap.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
 import { CATS } from '../../lib/constants.js';
 import { copy } from '../../lib/format.js';
@@ -20,6 +21,9 @@ import { Panel } from './Panel.js';
 import { SplitView } from './SplitView.js';
 import { useCall } from './useCall.js';
 import type { FieldInfo } from '../../lib/format.js';
+
+/** Stable empty array so memoised children are not invalidated on every render (M1). */
+const EMPTY_FIELDS: FieldInfo[] = [];
 
 export function ArticlePage() {
   const { id, step: stepParam } = useParams<{ id: string; step?: string }>();
@@ -42,7 +46,8 @@ export function ArticlePage() {
 
   const doc = docQ.data;
   const steps = useMemo(() => resolvedSteps(doc, blocks.data), [doc, blocks.data]);
-  const fields: FieldInfo[] = fieldsQ.data ?? [];
+  // Stable identity: a fresh `[]` on every render busts <Fmt>'s useMemo for every step.
+  const fields: FieldInfo[] = useMemo(() => fieldsQ.data ?? EMPTY_FIELDS, [fieldsQ.data]);
   const docRefs = useMemo(
     () => (cards.data?.items ?? []).map((c) => ({ id: c.id, title: c.title })),
     [cards.data],
@@ -113,6 +118,8 @@ export function ArticlePage() {
       jumpTimer.current = setTimeout(() => commitJump(next), 450);
       return;
     }
+    // Legacy gated outcome selection on 1-3, and the keymap card still advertises 1-3.
+    if (!/^[1-3]$/.test(d)) return;
     if (!callMode || !call.activeKey) return;
     const s = steps.find((x) => x.key === call.activeKey);
     if (!s) return;
@@ -146,9 +153,13 @@ export function ArticlePage() {
       Enter: () => {
         if (jumpBuf != null) commitJump(jumpBuf);
         else if (call.activeKey)
-          document.getElementById(`step-${call.activeKey}`)?.scrollIntoView({ block: 'center' });
+          document
+            .getElementById(`step-${call.activeKey}`)
+            ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       },
       g: () => armJump(),
+      // 1-3 only, matching legacy and the keymap card below. `digit` doubles as the G-jump
+      // buffer, so every digit still feeds a jump while one is armed.
       '0': () => digit('0'),
       '1': () => digit('1'),
       '2': () => digit('2'),
@@ -183,6 +194,15 @@ export function ArticlePage() {
   );
 
   if (docQ.isPending) return <div className="route-loading">טוען…</div>;
+  // Category scope is enforced per document, so "you may not see this" is a distinct outcome
+  // from "this is gone" — telling an agent to check the trash for a document they simply lack
+  // scope for sends them the wrong way.
+  if (docQ.error instanceof ApiError && docQ.error.status === 403)
+    return (
+      <div className="empty">
+        <b>אין לך הרשאה למסמך הזה</b>הקטגוריה מחוץ להרשאות שלך · פנו למנהל הצוות
+      </div>
+    );
   if (!doc)
     return (
       <div className="empty">

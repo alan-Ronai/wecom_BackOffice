@@ -27,6 +27,8 @@ import { annotateBlame, diffDocuments, diffStats } from './diff.js';
 
 const Params = z.object({ id: IdSchema });
 const VersionParams = z.object({ id: IdSchema, v: z.coerce.number().int().min(0) });
+/** Optional optimistic-concurrency precondition on `PUT /documents/:id/structure`. */
+const IfMatchHeaders = z.object({ 'if-match': z.string().optional() });
 
 /**
  * Closes the KB -> remote half of the two-way sync (L6's `pushOnPublish`). Called
@@ -172,6 +174,9 @@ export default async function routes(app: FastifyInstance) {
       schema: {
         tags: ['documents'],
         params: Params,
+        // Optimistic concurrency: the handler compares this against the stored etag, so it has
+        // to be part of the published contract for clients to be able to send it.
+        headers: IfMatchHeaders,
         body: StructureBodySchema,
         response: { 200: DocumentSchema },
       },

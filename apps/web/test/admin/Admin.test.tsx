@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { PERMISSIONS } from '@wecom/shared';
 import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
-import { withMe } from '../msw/handlers.js';
+import { asDenied, withMe } from '../msw/handlers.js';
 import { server } from '../msw/server.js';
 
 const asAdmin = () => server.use(withMe({ roles: ['admin'], permissions: [...PERMISSIONS] }));
@@ -31,12 +31,23 @@ describe('admin', () => {
     expect(await screen.findByText(/טיפול בשיחה/)).toBeInTheDocument();
   });
 
-  it('renders system status', async () => {
+  it('renders the operator diagnostics from /admin/system', async () => {
     asAdmin();
     renderWithProviders(<App />, { route: '/admin/system' });
     expect(await screen.findByText(/מסד נתונים/)).toBeInTheDocument();
-    expect(screen.getByText(/מודל/)).toBeInTheDocument();
-    expect(await screen.findByText('kb-2025-06-12.dump')).toBeInTheDocument();
+    expect(screen.getByText(/תור עבודות/)).toBeInTheDocument();
+    // Fields that only exist on the real AdminSystemSchema payload.
+    expect(await screen.findByText('kb-2026-09-12.dump')).toBeInTheDocument();
+    expect(screen.getByText('qwen2.5:3b-instruct-q4_K_M')).toBeInTheDocument();
+    expect(screen.getByText('wecom-wordpress')).toBeInTheDocument();
+    expect(screen.getByText(/גרסה 0.1.0/)).toBeInTheDocument();
+  });
+
+  it('surfaces a 403 on /admin/system instead of blank rows', async () => {
+    asAdmin();
+    server.use(asDenied('get', '/admin/system'));
+    renderWithProviders(<App />, { route: '/admin/system' });
+    expect(await screen.findByText('לא ניתן לטעון מצב מערכת')).toBeInTheDocument();
   });
 
   it('shows the audit log with a before/after diff', async () => {

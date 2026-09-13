@@ -14,7 +14,7 @@ export function GroupsMapPage() {
   const [entries, setEntries] = useState<GroupMap[]>([]);
 
   useEffect(() => {
-    if (map.data) setEntries(map.data.entries);
+    if (map.data) setEntries(map.data);
   }, [map.data]);
 
   const patch = (i: number, p: Partial<GroupMap>) =>

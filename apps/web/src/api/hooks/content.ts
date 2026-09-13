@@ -11,7 +11,7 @@ import type { DraftEnvelope, UpsertBlockBody, UpsertFieldBody } from '../types.j
 export const useBlocks = () =>
   useQuery({
     queryKey: keys.blocks,
-    queryFn: async (): Promise<Block[]> => unwrap(await api.GET('/blocks')),
+    queryFn: async () => unwrap(await api.GET('/blocks')).items,
     staleTime: 30_000,
   });
 
@@ -19,7 +19,7 @@ export const useBlockUsage = (id: string | undefined) =>
   useQuery({
     queryKey: keys.blockUsage(id ?? ''),
     enabled: !!id,
-    queryFn: async () => unwrap(await api.GET('/blocks/{id}/usage', { params: { path: { id: id! } } })),
+    queryFn: async () => unwrap(await api.GET('/blocks/{id}/usage', { params: { path: { id: id! } } })).items,
   });
 
 export const useUpsertBlock = () => {
@@ -53,7 +53,7 @@ export const useDeleteBlock = () => {
 export const useFields = () =>
   useQuery({
     queryKey: keys.fields,
-    queryFn: async (): Promise<CrmField[]> => unwrap(await api.GET('/fields')),
+    queryFn: async () => unwrap(await api.GET('/fields')).items,
     staleTime: 30_000,
   });
 
@@ -61,7 +61,8 @@ export const useFieldUsage = (name: string | undefined) =>
   useQuery({
     queryKey: keys.fieldUsage(name ?? ''),
     enabled: !!name,
-    queryFn: async () => unwrap(await api.GET('/fields/{name}/usage', { params: { path: { name: name! } } })),
+    queryFn: async () =>
+      unwrap(await api.GET('/fields/{name}/usage', { params: { path: { name: name! } } })).items,
   });
 
 export const useUpsertField = () => {
@@ -77,7 +78,7 @@ export const useUpsertField = () => {
 export const useScripts = () =>
   useQuery({
     queryKey: keys.scripts,
-    queryFn: async () => unwrap(await api.GET('/scripts')),
+    queryFn: async () => unwrap(await api.GET('/scripts')).items,
     staleTime: 30_000,
   });
 
@@ -86,8 +87,8 @@ export const useNotes = (id: string | undefined) =>
   useQuery({
     queryKey: keys.notes(id ?? ''),
     enabled: !!id,
-    queryFn: async (): Promise<Note[]> =>
-      unwrap(await api.GET('/documents/{id}/notes', { params: { path: { id: id! } } })),
+    queryFn: async () =>
+      unwrap(await api.GET('/documents/{id}/notes', { params: { path: { id: id! } } })).items,
   });
 
 export const useAddNote = (id: string) => {
@@ -102,8 +103,11 @@ export const useAddNote = (id: string) => {
 export const useLikeNote = (docId: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (noteId: string): Promise<Note> =>
-      unwrap(await api.POST('/notes/{id}/like', { params: { path: { id: noteId } } })),
+    // Returns only the new counter pair `{ likes, likedByMe }`, not the whole note.
+    mutationFn: async (noteId: string) => ({
+      noteId,
+      ...unwrap(await api.POST('/notes/{id}/like', { params: { path: { id: noteId } } })),
+    }),
     onMutate: async (noteId) => {
       await qc.cancelQueries({ queryKey: keys.notes(docId) });
       const prev = qc.getQueryData<Note[]>(keys.notes(docId));
@@ -115,6 +119,11 @@ export const useLikeNote = (docId: string) => {
       return { prev };
     },
     onError: (_e, _v, ctx) => qc.setQueryData(keys.notes(docId), ctx?.prev),
+    // Reconcile against the authoritative counters the server returned.
+    onSuccess: ({ noteId, likes, likedByMe }) =>
+      qc.setQueryData<Note[]>(keys.notes(docId), (list) =>
+        list?.map((n) => (n.id === noteId ? { ...n, likes, likedByMe } : n)),
+      ),
     onSettled: () => qc.invalidateQueries({ queryKey: keys.notes(docId) }),
   });
 };
@@ -129,6 +138,11 @@ export const useDeleteNote = (docId: string) => {
 };
 
 /* ── drafts ─────────────────────────────────────────────────────────────── */
+/**
+ * A document with no saved draft is a normal state, not an error: `unwrapMaybe` maps both 204
+ * and 404 to `null` so the editor seeds from the published document instead of parking the
+ * query in a permanent error state.
+ */
 export const useDraft = (id: string | undefined) =>
   useQuery({
     queryKey: keys.draft(id ?? ''),
@@ -164,12 +178,22 @@ export function useSaveDraft(id: string, delay = 600) {
     [delay, flush],
   );
 
-  useEffect(
-    () => () => {
+  /**
+   * Never drop buffered keystrokes. On unmount (leaving the editor by Escape, the topbar, or a
+   * route change) the pending payload is written out instead of being thrown away with the timer;
+   * while something is buffered a `beforeunload` handler also flushes on tab close/reload.
+   */
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      if (pending.current) void flush();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
       if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
+      void flush();
+    };
+  }, [flush]);
 
   return { save, flush, saving, lastSavedAt };
 }
