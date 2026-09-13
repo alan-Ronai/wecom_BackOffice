@@ -1,0 +1,66 @@
+name: wecom-kb
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: kb
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: kb
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U kb -d kb"], interval: 5s, timeout: 5s, retries: 20 }
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes: [ollama:/root/.ollama]
+    environment: { OLLAMA_KEEP_ALIVE: 30m, OLLAMA_NUM_PARALLEL: 1, OLLAMA_MAX_LOADED_MODELS: 1 }
+    healthcheck: { test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"], interval: 10s, timeout: 5s, retries: 30 }
+    restart: unless-stopped
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    entrypoint: ["/bin/bash", "/ollama-pull.sh"]
+    environment: { OLLAMA_HOST: "http://ollama:11434", MODEL_NAME: "${MODEL_NAME}" }
+    volumes: ["./ollama-pull.sh:/ollama-pull.sh:ro"]
+    depends_on: { ollama: { condition: service_healthy } }
+    restart: "no"
+
+  api:
+    build: { context: .., dockerfile: deploy/Dockerfile.api }
+    image: wecom-kb-api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://kb:${POSTGRES_PASSWORD}@db:5432/kb
+      MODEL_URL: http://ollama:11434
+    depends_on:
+      db: { condition: service_healthy }
+      ollama: { condition: service_healthy }
+    volumes: [uploads:/data/uploads]
+    restart: unless-stopped
+
+  web:
+    build: { context: .., dockerfile: deploy/Dockerfile.web }
+    image: wecom-kb-web
+    ports: ["${WEB_HTTPS_PORT:-443}:443", "${WEB_HTTP_PORT:-80}:80"]
+    volumes:
+      - ${TLS_CERT_PATH}:/etc/nginx/certs/cert.pem:ro
+      - ${TLS_KEY_PATH}:/etc/nginx/certs/key.pem:ro
+    depends_on: [api]
+    restart: unless-stopped
+
+  backup:
+    build: { context: .., dockerfile: deploy/backup.Dockerfile }
+    image: wecom-kb-backup
+    environment:
+      DATABASE_URL: postgres://kb:${POSTGRES_PASSWORD}@db:5432/kb
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      TZ: Asia/Jerusalem
+    volumes: [./backups:/backups]
+    depends_on: { db: { condition: service_healthy } }
+    restart: unless-stopped
+
+volumes:
+  dbdata: {}
+  ollama: {}
+  uploads: {}
