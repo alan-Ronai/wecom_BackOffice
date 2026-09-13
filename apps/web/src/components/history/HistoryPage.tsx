@@ -1,23 +1,23 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQueries } from '@tanstack/react-query';
-import type { Document } from '@wecom/shared';
-import { api } from '../../api/client.js';
-import { keys } from '../../api/keys.js';
-import { unwrap } from '../../api/unwrap.js';
-import { useDocument, useDocuments, useRestore, useVersions } from '../../api/hooks/documents.js';
+import {
+  useDiff,
+  useDocument,
+  useDocuments,
+  useRestore,
+  useVersion,
+  useVersions,
+} from '../../api/hooks/documents.js';
 import { useBlocks } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
 import { useMe } from '../../api/hooks/me.js';
 import { CATS } from '../../lib/constants.js';
 import { download, fmtDate } from '../../lib/format.js';
-import { blameMap, diffStats, diffSteps } from '../../lib/diffSteps.js';
+import type { Blame } from '../../lib/diffSteps.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { DiffView } from './DiffView.js';
-
-const MAX_SNAPSHOTS = 25;
 
 /** Document picker when no `:id` is in the route (legacy history view). */
 function Picker() {
@@ -98,28 +98,23 @@ export function HistoryPage() {
       ? Number(v)
       : (older[0]?.version ?? null);
 
-  // Snapshots power both the comparison and the blame map; capped so a long history stays cheap.
-  const snapshotVersions = versions.slice(0, MAX_SNAPSHOTS).map((x) => x.version);
-  const snapshots = useQueries({
-    queries: snapshotVersions.map((n) => ({
-      queryKey: keys.version(id ?? '', n),
-      enabled: !!id,
-      queryFn: async (): Promise<Document> =>
-        unwrap(await api.GET('/documents/{id}/versions/{v}', { params: { path: { id: id!, v: n } } })),
-    })),
-  });
-  const snapshotOf = (n: number | null): Document | undefined =>
-    n == null ? undefined : snapshots[snapshotVersions.indexOf(n)]?.data;
+  // One snapshot for the compare pane and one server-computed diff — rather than a fan-out of up
+  // to 25 full document fetches to derive the same stats and blame on the client.
+  const cmpQ = useVersion(id, cmpV ?? undefined);
+  const diffQ = useDiff(id, cmpV, curV);
 
-  const loadedSnapshots = snapshots.map((s) => s.data);
-  const snapshotsReady = loadedSnapshots.filter(Boolean).length;
-  const blame = useMemo(() => {
-    const list = versions
-      .map((x, i) => ({ version: x.version, author: x.authorName, doc: loadedSnapshots[i] }))
-      .filter((x): x is { version: number; author: string; doc: Document } => !!x.doc);
-    return blameMap(list, blocks.data);
-    // `snapshotsReady` stands in for the snapshot array, which is a new reference every render.
-  }, [versions, snapshotsReady, blocks.data]); // eslint-disable-line
+  const blame = useMemo<Record<string, Blame>>(() => {
+    const map: Record<string, Blame> = {};
+    for (const r of diffQ.data?.rows ?? []) {
+      if (!r.blame || !r.newStep) continue;
+      map[r.newStep.key] = {
+        v: r.blame.version,
+        author: r.blame.author,
+        kind: r.kind === 'added' ? 'added' : 'changed',
+      };
+    }
+    return map;
+  }, [diffQ.data]);
 
   if (!id) return <Picker />;
   if (docQ.isPending) return <div className="route-loading">טוען…</div>;
@@ -131,9 +126,8 @@ export function HistoryPage() {
       </div>
     );
 
-  const oldDoc = snapshotOf(cmpV);
-  const rows = oldDoc ? diffSteps(oldDoc, doc, blocks.data) : [];
-  const st = diffStats(rows);
+  const oldDoc = cmpQ.data;
+  const st = diffQ.data?.stats ?? { changed: 0, added: 0, removed: 0 };
   const shown = versions.filter(
     (x) =>
       filter === 'all' ||
@@ -151,7 +145,7 @@ export function HistoryPage() {
     );
     if (!ok) return;
     const next = await restore.mutateAsync(cmpV);
-    toast(`שוחזר מגרסה v${cmpV} כגרסה v${next.currentVersion}`, 'ok');
+    toast(`שוחזר מגרסה v${cmpV} כגרסה v${next.version}`, 'ok');
   };
 
   return (
@@ -190,20 +184,15 @@ export function HistoryPage() {
           {shown.map((x) => {
             const isCur = x.version === curV;
             const isCmp = x.version === cmpV;
-            const prev = versions.find((y) => y.version < x.version);
-            const prevSnap = prev ? snapshotOf(prev.version) : undefined;
-            const mine = isCur ? doc : snapshotOf(x.version);
-            const stats =
-              prevSnap && mine
-                ? (() => {
-                    const s = diffStats(diffSteps(prevSnap, mine, blocks.data));
-                    return [
-                      s.added ? `+${s.added} שלבים` : null,
-                      s.changed ? `~${s.changed} שונו` : null,
-                      s.removed ? `−${s.removed}` : null,
-                    ].filter(Boolean) as string[];
-                  })()
-                : [];
+            // Per-row change counts previously needed a snapshot of every consecutive pair; the
+            // compared version's counts come from the server diff instead.
+            const stats = isCmp
+              ? ([
+                  st.added ? `+${st.added} שלבים` : null,
+                  st.changed ? `~${st.changed} שונו` : null,
+                  st.removed ? `−${st.removed}` : null,
+                ].filter(Boolean) as string[])
+              : [];
             return (
               <div
                 key={x.version}

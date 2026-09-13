@@ -8,7 +8,7 @@
     "typecheck": "pnpm generate:client && tsc -p tsconfig.json --noEmit",
     "test": "pnpm generate:client && vitest run",
     "e2e": "playwright test",
-    "generate:client": "openapi-typescript ../../docs/api/openapi.json -o src/api/schema.d.ts"
+    "generate:client": "openapi-typescript ../../docs/api/openapi.json -o src/api/schema.d.ts && node scripts/strip-api-prefix.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",

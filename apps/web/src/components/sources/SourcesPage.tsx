@@ -55,6 +55,8 @@ export function SourcesPage() {
   );
 
   const doPublish = async () => {
+    // The route applies the accepted suggestions of one source, so it needs that source's id.
+    if (!current) return;
     const ok = await modal.confirm(
       'פרסום לספרייה',
       `${accepted} הצעות יוחלו על הספרייה ויירשמו כגרסאות חדשות.`,
@@ -62,8 +64,8 @@ export function SourcesPage() {
       'primary',
     );
     if (!ok) return;
-    const res = await publish.mutateAsync(undefined);
-    toast(`פורסמו ${(res as { applied: number }).applied} שינויים`, 'ok');
+    const res = await publish.mutateAsync(current.id);
+    toast(`פורסמו ${res.applied} שינויים`, 'ok');
   };
 
   return (

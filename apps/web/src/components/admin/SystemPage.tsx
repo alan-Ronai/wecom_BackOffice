@@ -1,93 +1,60 @@
 import { useEvents } from '../../api/events.js';
-import { useHealth, useSystem } from '../../api/hooks/admin.js';
-import { fmtDate } from '../../lib/format.js';
+import { useHealth } from '../../api/hooks/admin.js';
 
 const dot = (ok: boolean) => (
   <span className={'chip ' + (ok ? 'chip-green' : 'chip-red')}>{ok ? 'תקין' : 'לא זמין'}</span>
 );
 
+/**
+ * Renders exactly what `GET /system/health` publishes. The port also queried `GET /admin/system`
+ * for database size, per-connector health and the backup list; that route does not exist on the
+ * API, so those rows were dropped rather than left permanently blank behind a retrying query.
+ */
 export function SystemPage() {
-  const system = useSystem();
   const health = useHealth();
   const events = useEvents();
-  const s = system.data;
+  const h = health.data;
 
   return (
     <>
       <div className="lib-head">
         <div>
           <h1>
-            מצב מערכת<span>גרסה {health.data?.version ?? '—'}</span>
+            מצב מערכת<span>גרסה {h?.version ?? '—'}</span>
           </h1>
           <p>מצב הרכיבים על השרת הפנימי · מתעדכן גם דרך אירועי system.status.</p>
         </div>
       </div>
+      {health.isError ? (
+        <div className="empty">
+          <b>לא ניתן לקרוא את מצב המערכת</b>
+        </div>
+      ) : null}
       <table className="table">
         <tbody>
           <tr>
             <th>מסד נתונים</th>
-            <td>{dot(!!(s?.db ?? health.data?.db))}</td>
-            <td>{s ? `${s.dbSizeMb} MB` : ''}</td>
+            <td>{dot(!!h?.db)}</td>
           </tr>
           <tr>
             <th>מודל מקומי</th>
-            <td>{dot(!!(s?.model ?? health.data?.model))}</td>
-            <td />
+            <td>{dot(!!h?.model)}</td>
           </tr>
           <tr>
             <th>תור עבודות</th>
-            <td>{s?.queue ?? health.data?.queue ?? 0}</td>
-            <td />
+            <td>{h?.queue ?? 0}</td>
+          </tr>
+          <tr>
+            <th>זמן פעילות</th>
+            <td>{h ? `${Math.round(h.uptimeSec / 60)} דק׳` : '—'}</td>
           </tr>
           <tr>
             <th>עדכונים חיים (SSE)</th>
             <td>{dot(events.connected)}</td>
             <td>{events.last ? events.last.name : ''}</td>
           </tr>
-          {Object.entries(s?.connectors ?? {}).map(([name, ok]) => (
-            <tr key={name}>
-              <th>
-                מחבר{' '}
-                <bdi className="lat" dir="ltr">
-                  {name}
-                </bdi>
-              </th>
-              <td>{dot(ok)}</td>
-              <td />
-            </tr>
-          ))}
         </tbody>
       </table>
-
-      <div className="eyebrow" style={{ margin: '18px 0 8px' }}>
-        גיבויים
-      </div>
-      {s?.backups.length ? (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>קובץ</th>
-              <th>גודל</th>
-              <th>מתי</th>
-            </tr>
-          </thead>
-          <tbody>
-            {s.backups.map((b) => (
-              <tr key={b.name}>
-                <td>
-                  <bdi className="lat" dir="ltr">
-                    {b.name}
-                  </bdi>
-                </td>
-                <td>{b.sizeMb} MB</td>
-                <td>{fmtDate(b.at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <div className="small muted">אין גיבויים עדיין</div>
-      )}
     </>
   );
 }

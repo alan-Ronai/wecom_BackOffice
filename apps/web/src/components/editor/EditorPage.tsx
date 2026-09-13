@@ -28,6 +28,7 @@ import {
   type BasicType,
 } from '../../lib/editorModel.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
+import { usePalette } from '../palette/paletteStore.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { BlockLibrary } from './BlockLibrary.js';
@@ -58,6 +59,7 @@ export function EditorPage() {
   const go = useNavigate();
   const can = useCan();
   const modal = useModal();
+  const palette = usePalette();
   const toast = useToast();
 
   const published = useDocument(isNew ? undefined : id);
@@ -66,7 +68,7 @@ export function EditorPage() {
   const fields = useFields();
   const cards = useDocuments({ sort: 'wave' });
   const autosave = useSaveDraft(id);
-  const publish = usePublish(id);
+  const publish = usePublish();
   const patch = usePatchDocument(id);
   const saveStructure = useSaveStructure(id);
   const create = useCreateDocument();
@@ -74,7 +76,6 @@ export function EditorPage() {
   const [doc, setDoc] = useState<Document | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [reviewRequested, setReviewRequested] = useState(false);
   const seeded = useRef('');
 
   useEffect(() => {
@@ -84,13 +85,16 @@ export function EditorPage() {
       setDoc(addBasic(emptyDoc('tech'), 'step', null, null));
       return;
     }
+    // Both queries must settle first: the document usually wins the race, and seeding from it
+    // early silently discarded a saved draft (and with it the user's unsaved work).
+    if (draft.isPending || published.isPending) return;
     const fromDraft = draft.data?.payload as Document | undefined;
     const base = fromDraft ?? published.data;
     if (!base) return;
     seeded.current = id;
     setDoc(structuredClone(base));
     setSelected(allSteps(base)[0]?.key ?? null);
-  }, [id, isNew, draft.data, published.data]);
+  }, [id, isNew, draft.data, draft.isPending, published.data, published.isPending]);
 
   const update = useCallback(
     (next: Document) => {
@@ -131,7 +135,12 @@ export function EditorPage() {
   );
 
   const leave = useCallback(() => go(isNew ? '/library' : `/doc/${id}`), [go, id, isNew]);
-  useHotkeys({ Escape: () => modal.count === 0 && leave() }, [leave, modal.count]);
+  // `Shell` also binds Escape (palette → drawer → split). Without this guard both handlers fire
+  // and closing the palette inside the editor also navigated away, discarding the draft.
+  useHotkeys(
+    { Escape: () => modal.count === 0 && !palette.state.open && leave() },
+    [leave, modal.count, palette.state.open],
+  );
 
   const doPublish = async () => {
     if (!doc) return;
@@ -180,20 +189,27 @@ export function EditorPage() {
         etag: published.data?.etag,
       });
     }
-    await publish.mutateAsync({ label: label || 'פורסם', markPartial: partial });
-    toast(`פורסם v${nextV} · הכרטיס בספרייה עודכן`, 'ok');
+    // `targetId` — not `id` — so creating a knowledge item actually publishes the new document
+    // instead of POSTing to the literal path segment `new`.
+    const { version } = await publish.mutateAsync({
+      id: targetId,
+      label: label || 'פורסם',
+      markPartial: partial,
+    });
+    toast(`פורסם v${version} · הכרטיס בספרייה עודכן`, 'ok');
     go(`/doc/${targetId}`);
   };
 
-  const requestReview = async () => {
-    if (!isNew) await patch.mutateAsync({});
-    setReviewRequested(true);
-    toast('נשלחה בקשת סקירה למנהלי הצוות · המסמך מסומן "בסקירה"', 'ok');
-  };
+  // "בקש סקירה" used to PATCH an empty body and toast success. `PatchDocumentBodySchema` has no
+  // `status` field and the API publishes no review transition, so nothing was persisted and no
+  // reviewer was notified. The control is removed until such a route exists.
 
   if (!doc) return <div className="route-loading">טוען…</div>;
 
-  const anotherEditor = draft.data?.userId && draft.data.userId !== undefined && draft.data.userName;
+  // The draft envelope reports who else holds a draft on this document; the API already excludes
+  // the current user from the list.
+  const otherEditors = draft.data?.otherEditors ?? [];
+  const anotherEditor = otherEditors.length > 0;
   const nextV = (published.data?.currentVersion ?? 0) + 1;
   const applyBasic = (t: BasicType) => update(addBasic(doc, t, selected, selected));
   const applyShared = (b: Block) => update(addShared(doc, b, null));
@@ -223,13 +239,11 @@ export function EditorPage() {
             onChange={(e) => update({ ...doc, title: e.target.value })}
           />
           <span className="chip chip-amber">
-            {reviewRequested
-              ? 'בסקירה'
-              : published.data
-                ? `טיוטה על v${published.data.currentVersion}`
-                : 'טיוטה'}
+            {published.data ? `טיוטה על v${published.data.currentVersion}` : 'טיוטה'}
           </span>
-          {anotherEditor ? <span className="chip chip-red">עורך אחר עובד על המסמך</span> : null}
+          {anotherEditor ? (
+            <span className="chip chip-red">{otherEditors.map((e) => e.name).join(', ')} עורך/ת במקביל</span>
+          ) : null}
           <span className={'saved' + (dirty ? ' dirty' : '')}>
             <span className="dot" />
             <span>
@@ -242,9 +256,6 @@ export function EditorPage() {
               onClick={() => download(`${doc.title || 'knowledge-item'}.json`, JSON.stringify(doc, null, 2))}
             >
               ייצוא JSON
-            </button>
-            <button className="btn sm" onClick={() => void requestReview()}>
-              בקש סקירה
             </button>
             {can('docs.publish', doc) ? (
               <button className="btn primary sm" onClick={() => void doPublish()}>

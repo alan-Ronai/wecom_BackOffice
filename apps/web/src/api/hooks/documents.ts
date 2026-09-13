@@ -32,7 +32,8 @@ export const useRelated = (id: string | undefined) =>
   useQuery({
     queryKey: keys.related(id ?? ''),
     enabled: !!id,
-    queryFn: async () => unwrap(await api.GET('/documents/{id}/related', { params: { path: { id: id! } } })),
+    queryFn: async () =>
+      unwrap(await api.GET('/documents/{id}/related', { params: { path: { id: id! } } })).items,
   });
 
 export const useLinks = (id: string | undefined) =>
@@ -46,16 +47,33 @@ export const useVersions = (id: string | undefined) =>
   useQuery({
     queryKey: keys.versions(id ?? ''),
     enabled: !!id,
-    queryFn: async (): Promise<Version[]> =>
-      unwrap(await api.GET('/documents/{id}/versions', { params: { path: { id: id! } } })),
+    queryFn: async () =>
+      unwrap(await api.GET('/documents/{id}/versions', { params: { path: { id: id! } } })).items,
   });
 
 export const useVersion = (id: string | undefined, v: number | undefined) =>
   useQuery({
     queryKey: keys.version(id ?? '', v ?? -1),
     enabled: !!id && v != null,
-    queryFn: async (): Promise<Document> =>
+    queryFn: async () =>
       unwrap(await api.GET('/documents/{id}/versions/{v}', { params: { path: { id: id!, v: v! } } })),
+  });
+
+/**
+ * `GET /documents/:id/diff` — the server computes the step-level diff, its stats and the per-step
+ * blame in one query. The history page used to fan out 25 full document snapshots to derive the
+ * same thing client-side, which is expensive on a LAN VM sharing CPU with the model service.
+ */
+export const useDiff = (id: string | undefined, from: number | null, to: number | null) =>
+  useQuery({
+    queryKey: keys.diff(id ?? '', from ?? -1, to ?? -1),
+    enabled: !!id && from != null && to != null,
+    queryFn: async () =>
+      unwrap(
+        await api.GET('/documents/{id}/diff', {
+          params: { path: { id: id! }, query: { from: from!, to: to! } },
+        }),
+      ),
   });
 
 export function useTogglePin() {
@@ -81,13 +99,21 @@ export function useTogglePin() {
   });
 }
 
-export const usePublish = (id: string) => {
+/**
+ * The document id is a *mutation variable*, not a hook argument: the editor's create-then-publish
+ * flow only learns the real id after `POST /documents` returns, and binding the id at hook-call
+ * time made the new-document path publish the literal path segment `new`.
+ *
+ * Returns `{ document, version, auditId }`; the document is unwrapped for callers and also seeded
+ * into the document cache.
+ */
+export const usePublish = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { label: string; markPartial?: boolean }): Promise<Document> =>
+    mutationFn: async ({ id, ...body }: { id: string; label: string; markPartial?: boolean }) =>
       unwrap(await api.POST('/documents/{id}/publish', { params: { path: { id } }, body })),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: keys.doc(id) });
+    onSuccess: (res, { id }) => {
+      qc.setQueryData(keys.doc(id), res.document);
       void qc.invalidateQueries({ queryKey: keys.versions(id) });
       void qc.invalidateQueries(ALL_DOCS);
       qc.removeQueries({ queryKey: keys.draft(id) });
@@ -109,7 +135,7 @@ export const useSaveStructure = (id: string) => {
     }): Promise<Document> =>
       unwrap(
         await api.PUT('/documents/{id}/structure', {
-          params: { path: { id }, header: etag ? { 'If-Match': etag } : {} },
+          params: { path: { id }, header: { 'if-match': etag } },
           body: { phases, related },
         }),
       ),
@@ -129,13 +155,14 @@ export const usePatchDocument = (id: string) => {
   });
 };
 
+/** Also `{ document, version, auditId }` — the restored document is unwrapped and re-cached. */
 export const useRestore = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (v: number): Promise<Document> =>
+    mutationFn: async (v: number) =>
       unwrap(await api.POST('/documents/{id}/restore/{v}', { params: { path: { id, v } } })),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: keys.doc(id) });
+    onSuccess: (res) => {
+      qc.setQueryData(keys.doc(id), res.document);
       void qc.invalidateQueries({ queryKey: keys.versions(id) });
       void qc.invalidateQueries(ALL_DOCS);
     },

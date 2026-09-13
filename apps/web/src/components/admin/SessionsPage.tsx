@@ -37,7 +37,11 @@ export function SessionsPage() {
           <tbody>
             {list.map((s) => (
               <tr key={s.id}>
-                <td>{s.userName ?? s.userId}</td>
+                <td>
+                  <bdi className="lat" dir="ltr">
+                    {s.userId}
+                  </bdi>
+                </td>
                 <td>
                   <bdi className="lat" dir="ltr">
                     {s.ip ?? '—'}

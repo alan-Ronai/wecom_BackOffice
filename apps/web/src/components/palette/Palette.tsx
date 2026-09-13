@@ -11,24 +11,24 @@ import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.
 import { Html } from '../Fmt.js';
 import type { SearchHit } from '../../api/types.js';
 
+/**
+ * Tab cycles these filters, and the key is sent verbatim as `?types=` — so the keys must be the
+ * group names `GET /search` understands (`documents,steps,blocks,fields,scripts,actions`),
+ * not UI-local nicknames. `actions` is resolved locally and never reaches the server.
+ */
 const TYPES: [string, string][] = [
   ['all', 'הכל'],
-  ['doc', 'מסמכים'],
-  ['step', 'שלבים'],
-  ['crm', 'שדות CRM'],
-  ['block', 'בלוקים'],
-  ['script', 'תסריטים'],
-  ['action', 'פעולות'],
+  ['documents', 'מסמכים'],
+  ['steps', 'שלבים'],
+  ['fields', 'שדות CRM'],
+  ['blocks', 'בלוקים'],
+  ['scripts', 'תסריטים'],
+  ['actions', 'פעולות'],
 ];
 
-const GROUP_LABEL: Record<string, string> = {
-  documents: 'מסמכים',
-  steps: 'שלבים',
-  blocks: 'בלוק משותף',
-  fields: 'שדות CRM',
-  scripts: 'תסריטים',
-  actions: 'פעולות',
-};
+const GROUP_LABEL: Record<string, string> = Object.fromEntries(
+  TYPES.filter(([k]) => k !== 'all').map(([k, l]) => [k, l]),
+);
 
 interface LocalAction {
   id: string;
@@ -152,7 +152,7 @@ export function Palette() {
       out.push({ kind: 'group', label: GROUP_LABEL[g.type] ?? g.type });
       for (const hit of g.hits) out.push({ kind: 'hit', hit });
     }
-    if (mode === 'search' && (type === 'all' || type === 'action')) {
+    if (mode === 'search' && (type === 'all' || type === 'actions')) {
       const needle = debounced.trim().toLowerCase();
       const matching = needle
         ? actions.filter((a) => a.title.toLowerCase().includes(needle))
@@ -195,7 +195,7 @@ export function Palette() {
   };
 
   const cycleType = (back: boolean) => {
-    const keys = TYPES.map((t) => t[0]).filter((k) => mode === 'search' || k === 'all' || k === 'doc');
+    const keys = TYPES.map((t) => t[0]).filter((k) => mode === 'search' || k === 'all' || k === 'documents');
     const i = keys.indexOf(type);
     setType(keys[(i + (back ? -1 : 1) + keys.length) % keys.length]);
     setSel(0);
@@ -249,7 +249,7 @@ export function Palette() {
             }}
           />
           <div className="types">
-            {TYPES.filter(([k]) => mode === 'search' || k === 'all' || k === 'doc').map(([k, l]) => (
+            {TYPES.filter(([k]) => mode === 'search' || k === 'all' || k === 'documents').map(([k, l]) => (
               <span
                 key={k}
                 className={k === type ? 'on' : ''}

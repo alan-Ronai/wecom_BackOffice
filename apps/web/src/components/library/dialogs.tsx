@@ -43,7 +43,7 @@ function FieldBody({ name, onOpen }: { name: string; onOpen: (docId: string) => 
               <span className="ic">📄</span>
               <div className="tx">
                 {d.title}
-                <div>v{d.currentVersion}</div>
+                <div>{d.stepKeys.length ? `שלבים ${d.stepKeys.join(', ')}` : '—'}</div>
               </div>
             </a>
           ))
@@ -99,7 +99,7 @@ function BlockBody({ id, onOpen }: { id: string; onOpen: (docId: string, stepKey
             <div className="tx">
               {u.title}
               <div>
-                שלב {u.stepNum} · {u.embedded ? 'מוטמע' : 'מפנה'}
+                שלב {u.stepNum} · {u.mode === 'embedded' ? 'מוטמע' : 'מפנה'}
               </div>
             </div>
           </a>

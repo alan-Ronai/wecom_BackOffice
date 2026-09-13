@@ -1,56 +1,107 @@
 import { useEffect, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { EVENTS, EventSchema, type Event } from '@wecom/shared';
+import { API_BASE } from './client.js';
 import { keys } from './keys.js';
 
 /**
- * Live updates: one EventSource on `/events`, every payload validated with the shared
- * `EventSchema`, then translated into query invalidations. Names come from `EVENTS` only.
+ * Live updates over one SSE connection.
+ *
+ * The events module is registered inside the `/api/v1` scope, so the stream lives at
+ * `<API_BASE>/events` — not `/events`, which 404s. `deploy/nginx.conf` proxies it with the
+ * SSE-safe settings (no buffering, long read timeout).
+ *
+ * The connection is a module-level singleton with a subscriber count: `Shell` and the system page
+ * both call `useEvents()`, and a second `EventSource` would double every invalidation and hold a
+ * second long-lived request open against the API.
  */
-export function useEvents(): { connected: boolean; last?: Event } {
+
+interface StreamState {
+  connected: boolean;
+  last?: Event;
+}
+
+type Listener = (s: StreamState) => void;
+
+let source: EventSource | null = null;
+let subscribers = 0;
+let state: StreamState = { connected: false };
+const listeners = new Set<Listener>();
+
+const publish = (next: StreamState) => {
+  state = next;
+  for (const l of listeners) l(state);
+};
+
+function invalidate(qc: QueryClient, ev: Event): void {
+  if (ev.name.startsWith('document.')) {
+    const id = (ev.payload as { documentId: string }).documentId;
+    void qc.invalidateQueries({ queryKey: keys.doc(id) });
+    void qc.invalidateQueries({ queryKey: ['documents'] });
+    void qc.invalidateQueries({ queryKey: keys.versions(id) });
+    void qc.invalidateQueries({ queryKey: keys.trash });
+  } else if (ev.name.startsWith('suggestion.')) {
+    void qc.invalidateQueries({ queryKey: ['suggestions'] });
+    void qc.invalidateQueries({ queryKey: keys.sources });
+  } else if (ev.name.startsWith('sync.')) {
+    void qc.invalidateQueries({ queryKey: keys.sources });
+  } else if (ev.name === 'system.status' || ev.name === 'job.failed') {
+    void qc.invalidateQueries({ queryKey: keys.health });
+  }
+}
+
+function open(qc: QueryClient): void {
+  const es = new EventSource(`${API_BASE}/events`, { withCredentials: true });
+  source = es;
+  es.addEventListener('open', () => publish({ ...state, connected: true }));
+  es.addEventListener('error', () => publish({ ...state, connected: false }));
+
+  const handle = (raw: MessageEvent) => {
+    let json: unknown;
+    try {
+      json = JSON.parse(raw.data as string);
+    } catch {
+      return;
+    }
+    const parsed = EventSchema.safeParse(json);
+    if (!parsed.success) return;
+    const ev = parsed.data as Event;
+    publish({ ...state, last: ev });
+    invalidate(qc, ev);
+  };
+
+  for (const name of EVENTS) es.addEventListener(name, handle as EventListener);
+}
+
+function close(): void {
+  source?.close();
+  source = null;
+  state = { connected: false };
+}
+
+export function useEvents(): StreamState {
   const qc = useQueryClient();
-  const [connected, setConnected] = useState(false);
-  const [last, setLast] = useState<Event>();
+  const [local, setLocal] = useState<StreamState>(state);
 
   useEffect(() => {
     if (typeof EventSource === 'undefined') return;
-    const es = new EventSource('/events', { withCredentials: true });
-    const onOpen = () => setConnected(true);
-    const onError = () => setConnected(false);
-    es.addEventListener('open', onOpen);
-    es.addEventListener('error', onError);
-
-    const handle = (raw: MessageEvent) => {
-      let json: unknown;
-      try {
-        json = JSON.parse(raw.data as string);
-      } catch {
-        return;
-      }
-      const parsed = EventSchema.safeParse(json);
-      if (!parsed.success) return;
-      const ev = parsed.data as Event;
-      setLast(ev);
-      if (ev.name.startsWith('document.')) {
-        const id = (ev.payload as { documentId: string }).documentId;
-        void qc.invalidateQueries({ queryKey: keys.doc(id) });
-        void qc.invalidateQueries({ queryKey: ['documents'] });
-        void qc.invalidateQueries({ queryKey: keys.versions(id) });
-        void qc.invalidateQueries({ queryKey: keys.trash });
-      } else if (ev.name.startsWith('suggestion.')) {
-        void qc.invalidateQueries({ queryKey: ['suggestions'] });
-        void qc.invalidateQueries({ queryKey: keys.sources });
-      } else if (ev.name.startsWith('sync.')) {
-        void qc.invalidateQueries({ queryKey: keys.sources });
-      } else if (ev.name === 'system.status' || ev.name === 'job.failed') {
-        void qc.invalidateQueries({ queryKey: keys.admin.system });
-        void qc.invalidateQueries({ queryKey: keys.health });
-      }
+    subscribers += 1;
+    if (!source) open(qc);
+    listeners.add(setLocal);
+    setLocal(state);
+    return () => {
+      listeners.delete(setLocal);
+      subscribers -= 1;
+      if (subscribers === 0) close();
     };
-
-    for (const name of EVENTS) es.addEventListener(name, handle as EventListener);
-    return () => es.close();
   }, [qc]);
 
-  return { connected, last };
+  return local;
+}
+
+/** Test seam: drops the shared connection so each test starts from a clean stream. */
+export function __resetEventStream(): void {
+  close();
+  subscribers = 0;
+  listeners.clear();
 }
