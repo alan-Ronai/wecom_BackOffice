@@ -1,0 +1,67 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "wecom KB API",
+    "version": "1.0.0"
+  },
+  "components": {
+    "schemas": {}
+  },
+  "paths": {
+    "/api/v1/system/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "db": {
+                      "type": "boolean"
+                    },
+                    "model": {
+                      "type": "boolean",
+                      "nullable": true
+                    },
+                    "queue": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "uptimeSec": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "db",
+                    "model",
+                    "queue",
+                    "version",
+                    "uptimeSec"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ]
+}
