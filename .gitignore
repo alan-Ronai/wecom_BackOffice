@@ -7,3 +7,5 @@ coverage
 .superpowers
 apps/web/src/api/schema.d.ts
 .claude/worktrees
+# design review screenshots
+design/review/*.png

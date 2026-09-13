@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"><style>body{margin:0;background:#ECEEF1;font-family:'IBM Plex Sans Hebrew',Rubik,system-ui,sans-serif;color:#1F2E3B}a{color:#1F2E3B}a:hover{color:#FF3D00}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}@keyframes wkPulse{0%,100%{opacity:.35}50%{opacity:1}}
+/* shared tokens for turns 3–6 */
+.k-side{background:#1F2E3B;color:#fff;display:flex;flex-direction:column;padding:16px 0}.k-side .logo{padding:0 18px 14px;font-size:22px;font-weight:700;color:#FF3D00;font-family:Rubik,sans-serif}.k-side .sec{padding:6px 18px;font-size:10.5px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.4)}.k-side .nav{display:flex;flex-direction:column;gap:2px;padding:0 10px;font-size:13px}.k-side .nav>div{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;color:rgba(255,255,255,.7)}.k-side .nav>div.on{background:rgba(255,61,0,.16);color:#fff;font-weight:500}.k-side .nav .cnt{margin-inline-start:auto;font-size:11px;color:rgba(255,255,255,.5)}
+.k-top{height:56px;display:flex;align-items:center;gap:10px;padding:0 22px;background:#fff;border-bottom:1px solid #E2E4E6}.k-crumb{font-size:12.5px;color:#6B7280}.k-crumb b{color:#1F2E3B;font-weight:500}.k-actions{margin-inline-start:auto;display:flex;gap:8px}
+.k-btn{white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;border:1px solid #E2E4E6;font-size:12.5px;background:#fff}.k-btn.p{background:#FF3D00;color:#fff;border-color:#FF3D00;font-weight:500}.k-btn.n{background:#1F2E3B;color:#fff;border-color:#1F2E3B}.k-btn.d{color:#C02800;border-color:#FFB596}
+.k-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;background:#F5F5F5;color:#6B7280;white-space:nowrap}.k-chip.red{background:#FFF0EB;color:#C02800}.k-chip.amber{background:#FFF8EE;color:#B86A00}.k-chip.green{background:#EDFAF3;color:#1A7A4A}.k-chip.blue{background:#EBF1FF;color:#1D45B4}.k-chip.navy{background:#1F2E3B;color:#fff}
+.k-eyebrow{font-size:10.5px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:#6B7280}.k-card{background:#fff;border:1px solid #E2E4E6;border-radius:12px;padding:14px 16px}.k-mono{font-family:'IBM Plex Mono',monospace;unicode-bidi:isolate;direction:ltr}.k-crm{unicode-bidi:isolate;direction:ltr;display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;background:#1F2E3B;color:#fff;padding:1px 7px;border-radius:5px}.k-crm.rtl{direction:rtl}
+.k-table{display:grid;gap:0;font-size:12.5px}.k-table>div{display:contents}.k-table>div>span{padding:10px 12px;border-bottom:1px solid #F0F2F4;display:flex;align-items:center;gap:8px;min-width:0}.k-table>div.h>span{font-size:10.5px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:#6B7280;border-bottom:1px solid #E2E4E6}.k-table>div.sel>span{background:#FFF8F5}
+.k-av{width:26px;height:26px;border-radius:50%;background:#1F2E3B;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:600;flex-shrink:0}.k-av.r{background:#FF3D00}.k-av.g{background:#A6ABB0}
+.k-kbd{font-family:'IBM Plex Mono',monospace;font-size:10.5px;background:#F0F2F4;padding:1px 6px;border-radius:4px;color:#6B7280;direction:ltr;unicode-bidi:isolate}
+.k-toggle{width:30px;height:18px;border-radius:9px;background:#C7CBD0;position:relative;flex-shrink:0}.k-toggle.on{background:#FF3D00}.k-toggle::after{content:'';position:absolute;top:2px;right:2px;width:14px;height:14px;border-radius:50%;background:#fff}.k-toggle.on::after{right:auto;left:2px}
+.k-focus{outline:2px solid #FF3D00;outline-offset:2px;border-radius:6px}
+/* turn 5 — dashboards & data */
+.d-tile{background:#fff;border:1px solid #E2E4E6;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.d-row{display:flex;align-items:center;gap:8px;font-size:11.5px}.d-row>span:first-child{width:96px;flex-shrink:0;color:#6B7280}
+.d-bar{flex:1;height:8px;border-radius:4px;background:#F0F2F4;overflow:hidden;min-width:0}.d-bar>i{display:block;height:100%;background:#FF3D00}.d-bar>i.g{background:#1A7A4A}.d-bar>i.a{background:#B86A00}.d-bar>i.b{background:#1D45B4}
+.d-spark{display:flex;align-items:flex-end;gap:3px;height:46px}.d-spark>i{flex:1;background:#FFB596;border-radius:2px 2px 0 0;min-width:0}.d-spark>i.on{background:#FF3D00}
+.d-file{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;font-size:12px;cursor:default}.d-file.on{background:#FFF0EB;font-weight:600}
+</style></helmet>
+<section class="dv-turn" id="t5">
+<div class="dv-thd"><a class="dv-tid" href="#t5">5</a><span class="dv-tname">Connected data — סייר נתונים, גרף קשרים, דף שדה CRM, דף בלוק משותף, דשבורדים</span></div>
+<div class="dv-opts">
+
+<!-- ══════════ 5a ══════════ -->
+<div class="dv-opt" id="5a">
+<div class="dv-olabel"><a class="dv-oid" href="#5a">5a</a>Data explorer — קבצים, מיפוי עמודה→שדה עם זיהוי אוטומטי, הרצה יבשה עם ספירת שינויים</div>
+<div class="dv-card" dir="rtl" style="width:1280px;height:720px;background:#F4F5F7;display:grid;grid-template-columns:250px 1fr 300px">
+  <aside style="background:#fff;border-inline-end:1px solid #E2E4E6;padding:14px 12px;display:flex;flex-direction:column;gap:4px;overflow:hidden">
+    <div class="k-eyebrow" style="padding:0 8px 8px">קבצי נתונים · 5</div>
+    <div class="d-file on"><span>📄</span><span style="flex:1;min-width:0"><bdi class="k-mono">topics.json</bdi><div style="font-size:10.5px;color:#6B7280;font-weight:400">38 שורות · ייבוא לפני יומיים</div></span><span style="color:#1A7A4A">✓</span></div>
+    <div class="d-file"><span>📄</span><span style="flex:1;min-width:0"><bdi class="k-mono">intl-roaming.json</bdi><div style="font-size:10.5px;color:#6B7280">14 שורות</div></span><span style="color:#1A7A4A">✓</span></div>
+    <div class="d-file"><span>📄</span><span style="flex:1;min-width:0"><bdi class="k-mono">crm-fields.json</bdi><div style="font-size:10.5px;color:#B86A00">14 שורות · 3 שינויים</div></span><span style="color:#B86A00">⚠</span></div>
+    <div class="d-file"><span>📄</span><span style="flex:1;min-width:0"><bdi class="k-mono">scripts.json</bdi><div style="font-size:10.5px;color:#6B7280">7 שורות</div></span><span style="color:#1A7A4A">✓</span></div>
+    <div class="d-file"><span>📊</span><span style="flex:1;min-width:0"><bdi class="k-mono">agents-scripts.csv</bdi><div style="font-size:10.5px;color:#C02800">120 שורות · לא ממופה</div></span><span style="color:#C02800">✗</span></div>
+    <div class="d-file" style="border:1px dashed #E2E4E6;margin-top:8px;color:#6B7280;justify-content:center">✚ העלה JSON/CSV</div>
+    <div style="margin-top:auto;font-size:11px;color:#6B7280;line-height:1.5;padding:10px 8px 0;border-top:1px solid #F0F2F4">כל קובץ הוא <bdi class="k-mono">source</bdi> מסוג <bdi class="k-mono">json</bdi>/<bdi class="k-mono">csv</bdi> עם מיפוי סכימה.</div>
+  </aside>
+
+  <div style="display:flex;flex-direction:column;min-width:0">
+    <div class="k-top" style="padding:0 16px">
+      <span class="k-crumb">נתונים <span style="margin:0 6px;color:#C7CBD0">/</span> <b><bdi class="k-mono">topics.json</bdi></b></span>
+      <span class="k-chip blue">JSON</span><span style="font-size:11.5px;color:#6B7280">ייבוא אחרון לפני 2 ימים · 38 שורות</span>
+      <div class="k-actions"><span class="k-btn">⬇ הורד</span><span class="k-btn n">ייבא מחדש</span></div>
+    </div>
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0;overflow:hidden">
+      <div class="k-eyebrow">מיפוי עמודות לשדות הכרטיס</div>
+      <div style="background:#fff;border:1px solid #E2E4E6;border-radius:10px;overflow:hidden">
+        <div class="k-table" style="grid-template-columns:1fr 170px 1fr 120px">
+          <div class="h"><span>עמודה בקובץ</span><span>דוגמה</span><span>שדה בכרטיס</span><span>מצב</span></div>
+          <div><span><bdi class="k-mono">title</bdi></span><span style="color:#6B7280">איטיות גלישה</span><span><span class="k-btn" style="padding:3px 9px;font-size:11.5px">כותרת ▾</span></span><span><span class="k-chip green">✓ ממופה</span></span></div>
+          <div><span><bdi class="k-mono">desc</bdi></span><span style="color:#6B7280">בדיקת מהירות…</span><span><span class="k-btn" style="padding:3px 9px;font-size:11.5px">תיאור ▾</span></span><span><span class="k-chip green">✓ ממופה</span></span></div>
+          <div><span><bdi class="k-mono">cat</bdi></span><span style="color:#6B7280"><bdi class="k-mono">tech</bdi></span><span style="flex-direction:column;align-items:flex-start;gap:3px"><span class="k-btn" style="padding:3px 9px;font-size:11.5px">קטגוריה ▾</span><span style="font-size:10.5px;color:#6B7280">מיפוי ערכים: <bdi class="k-mono">tech</bdi> ← תמיכה טכנית</span></span><span><span class="k-chip green">✓ ממופה</span></span></div>
+          <div><span><bdi class="k-mono">wave</bdi></span><span style="color:#6B7280"><bdi class="k-mono">2</bdi></span><span><span class="k-btn" style="padding:3px 9px;font-size:11.5px">גל ▾</span></span><span><span class="k-chip green">✓ ממופה</span></span></div>
+          <div><span><bdi class="k-mono">pri</bdi></span><span style="color:#6B7280"><bdi class="k-mono">high</bdi></span><span><span class="k-btn" style="padding:3px 9px;font-size:11.5px">שכיחות ▾</span></span><span><span class="k-chip green">✓ ממופה</span></span></div>
+          <div><span><bdi class="k-mono">owner</bdi></span><span style="color:#6B7280">alon@wecom.co.il</span><span><span class="k-btn" style="padding:3px 9px;font-size:11.5px;color:#A6ABB0">— בחר שדה ▾</span></span><span><span class="k-chip amber">⚠ לא ממופה</span></span></div>
+        </div>
+      </div>
+      <div class="k-eyebrow">דוגמת שורה</div>
+      <pre class="k-mono" style="margin:0;background:#1F2E3B;color:#E8ECF0;border-radius:10px;padding:10px 14px;font-size:11px;line-height:1.7;white-space:pre-wrap;overflow:hidden">{ "title": "איטיות גלישה", "desc": "בדיקת מהירות ואז ריענון", "cat": "tech", "wave": 2, "pri": "high", "owner": "alon@wecom.co.il" }</pre>
+    </div>
+  </div>
+
+  <aside style="background:#fff;border-inline-start:1px solid #E2E4E6;padding:16px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+    <div class="k-eyebrow">הרצה יבשה</div>
+    <div style="display:flex;flex-direction:column;gap:7px;font-size:12.5px">
+      <div style="display:flex;justify-content:space-between;padding:8px 10px;border-radius:8px;background:#EDFAF3;border:1px solid #B7E8CE"><span>כרטיסים חדשים</span><b style="color:#1A7A4A">+3</b></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 10px;border-radius:8px;background:#FFF8EE;border:1px solid #F5D8A5"><span>יעודכנו</span><b style="color:#B86A00">~2</b></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 10px;border-radius:8px;background:#FFF0EB;border:1px solid #FFB596"><span>יוסרו (לסל)</span><b style="color:#C02800">−1</b></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 10px;border-radius:8px;border:1px solid #E2E4E6"><span>שגיאות</span><b>0</b></div>
+    </div>
+    <div style="font-size:11.5px;color:#6B7280;line-height:1.6;border-top:1px solid #F0F2F4;padding-top:10px">
+      השורה שתוסר: <b style="color:#1F2E3B">בעיות SMS</b> — לא נמצאה בקובץ. תעבור לסל המיחזור ל-30 יום.
+    </div>
+    <span class="k-btn p" style="justify-content:center;margin-top:auto">החל ייבוא</span>
+    <span class="k-btn" style="justify-content:center">הצג diff מלא</span>
+  </aside>
+</div></div>
+
+<!-- ══════════ 5b ══════════ -->
+<div class="dv-opt" id="5b">
+<div class="dv-olabel"><a class="dv-oid" href="#5b">5b</a>Relationship graph — typed edges, filters, hover peek, "what breaks if I delete this"</div>
+<div class="dv-card" dir="rtl" style="width:1280px;height:760px;display:grid;grid-template-columns:1fr 320px;background:#F4F5F7">
+  <div style="display:flex;flex-direction:column;min-width:0">
+    <div class="k-top"><span class="k-crumb">ספרייה <span style="margin:0 8px;color:#C7CBD0">/</span> <b>גרף קשרים</b></span>
+      <div style="display:flex;gap:6px;margin-inline-start:16px"><span class="k-chip navy">מסמכים 52</span><span class="k-chip">בלוקים 4</span><span class="k-chip">שדות CRM 14</span><span class="k-chip">מקורות 4</span></div>
+      <div class="k-actions"><span class="k-btn" style="min-width:220px;color:#A6ABB0">⌕ מקד לפי שם…</span><span class="k-btn">קטגוריה ▾</span><span class="k-btn">סוג קשר ▾</span><span class="k-btn">ייצוא PNG</span></div></div>
+    <div style="position:relative;flex:1;overflow:hidden;background:radial-gradient(circle at 1px 1px,#E2E4E6 1px,transparent 1px);background-size:22px 22px">
+      <svg viewBox="0 0 960 660" style="position:absolute;inset:0;width:100%;height:100%">
+        <g stroke-width="1.5" fill="none">
+          <line x1="480" y1="330" x2="300" y2="200" stroke="#FF3D00"/><line x1="480" y1="330" x2="660" y2="200" stroke="#FF3D00"/><line x1="480" y1="330" x2="700" y2="440" stroke="#1D45B4" stroke-dasharray="4 3"/><line x1="480" y1="330" x2="260" y2="470" stroke="#1A7A4A"/><line x1="480" y1="330" x2="480" y2="560" stroke="#B86A00" stroke-dasharray="2 3"/><line x1="300" y1="200" x2="660" y2="200" stroke="#FF3D00" opacity=".4"/>
+        </g>
+        <g font-family="IBM Plex Sans Hebrew" font-size="12" text-anchor="middle">
+          <!-- nodes: shape + label placed OUTSIDE the shape so Hebrew never clips -->
+          <circle cx="480" cy="330" r="34" fill="#1F2E3B" stroke="#FF3D00" stroke-width="3"/><text x="480" y="336" fill="#fff" font-size="20">📄</text>
+          <text x="480" y="388" fill="#1F2E3B" font-size="12.5" font-weight="600">איטיות גלישה</text>
+          <text x="480" y="404" fill="#6B7280" font-size="10.5">מסמך · v8 · נבחר</text>
+          <circle cx="300" cy="200" r="26" fill="#fff" stroke="#1F2E3B"/><text x="300" y="207" fill="#1F2E3B" font-size="16">📄</text>
+          <text x="300" y="248" fill="#1F2E3B">אין קליטה</text>
+          <circle cx="660" cy="200" r="26" fill="#fff" stroke="#1F2E3B"/><text x="660" y="207" fill="#1F2E3B" font-size="16">📄</text>
+          <text x="660" y="248" fill="#1F2E3B">אין גלישה בחו"ל</text>
+          <rect x="656" y="420" width="88" height="40" rx="8" fill="#FF3D00"/><text x="700" y="446" fill="#fff" font-size="18">⧉</text>
+          <text x="700" y="482" fill="#C02800">ריענון SIM · בלוק</text>
+          <rect x="212" y="452" width="96" height="32" rx="6" fill="#EBF1FF" stroke="#1D45B4"/><text x="260" y="473" fill="#1D45B4" font-family="IBM Plex Mono" font-size="11">sim block lbl</text>
+          <text x="260" y="504" fill="#1D45B4" font-size="11">שדה CRM</text>
+          <polygon points="480,540 500,560 480,580 460,560" fill="#FFF8EE" stroke="#B86A00"/><text x="480" y="604" fill="#B86A00">§ נהלי תמיכה</text>
+        </g>
+      </svg>
+      <div style="position:absolute;bottom:14px;inset-inline-start:14px;background:#fff;border:1px solid #E2E4E6;border-radius:10px;padding:10px 12px;font-size:11px;display:flex;flex-direction:column;gap:4px">
+        <span><i style="display:inline-block;width:18px;height:2px;background:#FF3D00;vertical-align:middle"></i> קישור / הבא</span><span><i style="display:inline-block;width:18px;height:2px;background:#1D45B4;vertical-align:middle;border-top:1px dashed #1D45B4"></i> אותו בלוק</span><span><i style="display:inline-block;width:18px;height:2px;background:#1A7A4A;vertical-align:middle"></i> אותו שדה CRM</span><span><i style="display:inline-block;width:18px;height:2px;background:#B86A00;vertical-align:middle;border-top:1px dotted #B86A00"></i> נגזר ממקור §</span>
+      </div>
+      <div style="position:absolute;top:34px;inset-inline-start:36px;width:240px;background:#1F2E3B;color:#fff;border-radius:12px;padding:12px 14px;font-size:12px;box-shadow:0 12px 30px rgba(31,46,59,.25)"><div class="k-eyebrow" style="color:#FFB596">ריחוף · אין גלישה בחו"ל</div><div style="font-size:13.5px;font-weight:600;margin-top:4px">חו"ל ונדידה · 8 שלבים · v4</div><div style="color:rgba(255,255,255,.75);margin-top:4px">משתף: ⧉ ריענון SIM (שלב 7) · 2 שדות CRM · נכנס מ־3</div></div>
+    </div>
+  </div>
+  <aside style="background:#fff;border-inline-start:1px solid #E2E4E6;padding:16px 18px;display:flex;flex-direction:column;gap:16px;overflow:hidden">
+    <div><div class="k-eyebrow">נבחר</div><div style="font-size:16px;font-weight:700;margin-top:4px">איטיות גלישה / חוסר גלישה</div><div style="font-size:12px;color:#6B7280">תמיכה טכנית · v8 · 15 שלבים</div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px"><div class="k-card" style="padding:10px 12px"><div class="k-eyebrow">נכנס מ־</div><div style="font-size:18px;font-weight:700">3</div></div><div class="k-card" style="padding:10px 12px"><div class="k-eyebrow">יוצא ל־</div><div style="font-size:18px;font-weight:700">4</div></div></div>
+    <div><div class="k-eyebrow" style="margin-bottom:8px">מה נשבר אם אמחק</div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px">
+        <div style="display:flex;justify-content:space-between;padding:8px 10px;border:1px solid #FFB596;background:#FFF8F5;border-radius:8px"><span>דיבאג נטישה · שלב 2</span><span class="k-chip red">קישור ישבר</span></div>
+        <div style="display:flex;justify-content:space-between;padding:8px 10px;border:1px solid #FFB596;background:#FFF8F5;border-radius:8px"><span>בעיות גלישה ברכב · שלב 3</span><span class="k-chip red">קישור ישבר</span></div>
+        <div style="display:flex;justify-content:space-between;padding:8px 10px;border:1px solid #E2E4E6;border-radius:8px"><span>WordPress · עמוד 214</span><span class="k-chip amber">יישאר ללא מקור</span></div>
+      </div></div>
+    <div><div class="k-eyebrow" style="margin-bottom:8px">קשרים לפי סוג</div><div style="display:flex;flex-wrap:wrap;gap:6px"><span class="k-chip">next 2</span><span class="k-chip">prerequisite 1</span><span class="k-chip">link 4</span><span class="k-chip">shares_block 3</span><span class="k-chip">same_field 6</span><span class="k-chip">derived_from_source 1</span><span class="k-chip">related 3</span></div></div>
+    <div style="margin-top:auto;display:flex;gap:6px"><span class="k-btn p" style="flex:1;justify-content:center">פתח מסמך</span><span class="k-btn">פיצול</span></div>
+  </aside>
+</div></div>
+
+<!-- ══════════ 5c ══════════ -->
+<div class="dv-opt" id="5c">
+<div class="dv-olabel"><a class="dv-oid" href="#5c">5c</a>CRM field page — הגדרה, ציר זמן, טבלת שימוש, "עדכן את כל ההפניות" עם תצוגה מקדימה</div>
+<div class="dv-card" dir="rtl" style="width:1000px;background:#F4F5F7;display:flex;flex-direction:column">
+  <div class="k-top" style="padding:0 16px">
+    <span class="k-crumb">נתונים <span style="margin:0 6px;color:#C7CBD0">/</span> שדות CRM <span style="margin:0 6px;color:#C7CBD0">/</span></span>
+    <span class="k-crm rtl">שירות נדידה</span><span class="k-chip red">שונה שם ל-שירותי נדידה</span>
+    <div class="k-actions"><span class="k-btn">סמן כפג תוקף</span></div>
+  </div>
+  <div style="padding:14px 16px;display:grid;grid-template-columns:1fr 300px;gap:14px">
+    <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+      <div class="k-card" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:12px">
+        <div><div class="k-eyebrow">נתיב</div><div style="margin-top:3px"><bdi class="k-mono" style="font-size:11.5px">CRM ↗ שירותים</bdi></div></div>
+        <div><div class="k-eyebrow">סוג</div><div style="margin-top:3px">בוליאני</div></div>
+        <div><div class="k-eyebrow">בעלים</div><div style="margin-top:3px">IT</div></div>
+        <div><div class="k-eyebrow">עודכן</div><div style="margin-top:3px"><bdi class="k-mono">11.06</bdi></div></div>
+      </div>
+      <div>
+        <div class="k-eyebrow" style="margin-bottom:8px">שימוש במסמכים · 3</div>
+        <div style="background:#fff;border:1px solid #E2E4E6;border-radius:10px;overflow:hidden">
+          <div class="k-table" style="grid-template-columns:1fr 90px 1fr">
+            <div class="h"><span>מסמך</span><span>שלב</span><span>הטקסט שמפנה</span></div>
+            <div><span><b>חו"ל ונדידה — מסלול מסנן</b></span><span><bdi class="k-mono">3</bdi></span><span>ודא ש<span style="background:#FFF8EE;box-shadow:inset 0 0 0 1px #F5D8A5;border-radius:3px;padding:0 3px">שירות נדידה</span> פעיל בכרטיס</span></div>
+            <div><span><b>אין גלישה בחו"ל</b></span><span><bdi class="k-mono">5</bdi></span><span>אם <span style="background:#FFF8EE;box-shadow:inset 0 0 0 1px #F5D8A5;border-radius:3px;padding:0 3px">שירות נדידה</span> כבוי — הפעל</span></div>
+            <div><span><b>חשבונית גבוהה מחו"ל</b></span><span><bdi class="k-mono">2</bdi></span><span>בדוק מתי <span style="background:#FFF8EE;box-shadow:inset 0 0 0 1px #F5D8A5;border-radius:3px;padding:0 3px">שירות נדידה</span> הופעל</span></div>
+          </div>
+        </div>
+      </div>
+      <div style="border:1px solid #FFB596;background:#FFF8F5;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+        <b style="font-size:13px">עדכן את כל ההפניות (3)</b>
+        <div style="font-size:12px;color:#6B7280;line-height:1.6">כל הפניה תשתנה מ-<span class="k-crm rtl">שירות נדידה</span> ל-<span class="k-crm rtl">שירותי נדידה</span>. הפעולה תיצור גרסה חדשה בכל מסמך.</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;background:#fff;border:1px solid #E2E4E6;border-radius:8px;padding:8px 10px">
+          <div>· חו"ל ונדידה — מסלול מסנן <bdi class="k-mono">v6 → v7</bdi></div>
+          <div>· אין גלישה בחו"ל <bdi class="k-mono">v4 → v5</bdi></div>
+          <div>· חשבונית גבוהה מחו"ל <bdi class="k-mono">v2 → v3</bdi></div>
+        </div>
+        <div style="display:flex;gap:8px"><span class="k-btn p">עדכן הכל</span><span class="k-btn">בטל</span></div>
+      </div>
+    </div>
+    <div class="k-card" style="align-self:flex-start;display:flex;flex-direction:column;gap:10px">
+      <div class="k-eyebrow">ציר זמן</div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:12px">
+        <div style="display:flex;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:#1A7A4A;margin-top:5px;flex-shrink:0"></span><span><b>נוצר</b> <bdi class="k-mono" style="color:#6B7280">02.02</bdi><div style="color:#6B7280">יובא מ-<bdi class="k-mono">crm-fields.json</bdi></div></span></div>
+        <div style="display:flex;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:#B86A00;margin-top:5px;flex-shrink:0"></span><span><b>שונה שם</b> <bdi class="k-mono" style="color:#6B7280">11.06</bdi><div style="color:#6B7280">שירות נדידה ← שירותי נדידה</div></span></div>
+        <div style="display:flex;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:#C7CBD0;margin-top:5px;flex-shrink:0"></span><span style="color:#A6ABB0">3 הפניות עדיין על השם הישן</span></div>
+      </div>
+      <div style="border-top:1px solid #F0F2F4;padding-top:10px;font-size:11.5px;color:#6B7280;line-height:1.6">שדה שסומן כפג תוקף מוצג בכתום בכל מסמך ונחסם מהוספה חדשה.</div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ══════════ 5d ══════════ -->
+<div class="dv-opt" id="5d">
+<div class="dv-olabel"><a class="dv-oid" href="#5d">5d</a>Shared block page — פעולות, שימוש מוטמע מול מפנה, גרסאות עם diff, אזור מסוכן</div>
+<div class="dv-card" dir="rtl" style="width:1000px;background:#F4F5F7;display:flex;flex-direction:column">
+  <div class="k-top" style="padding:0 16px">
+    <span style="font-size:15px;font-weight:700">⧉ ריענון SIM</span>
+    <span style="font-size:11.5px;color:#6B7280"><bdi class="k-mono">v3</bdi> · ענבר ל. · <bdi class="k-mono">12.06</bdi></span>
+    <div class="k-actions"><span class="k-btn">ערוך בלוק</span><span class="k-btn n">הצג שימוש בגרף</span></div>
+  </div>
+  <div style="padding:14px 16px;display:grid;grid-template-columns:1fr 320px;gap:14px">
+    <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+      <div>
+        <div class="k-eyebrow" style="margin-bottom:8px">פעולות הבלוק</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;gap:8px;align-items:center;background:#fff;border:1px solid #E2E4E6;border-radius:8px;padding:9px 12px;font-size:13px"><span style="color:#A6ABB0">›</span>בקש מהלקוח לכבות את המכשיר</div>
+          <div style="display:flex;gap:8px;align-items:center;background:#fff;border:1px solid #E2E4E6;border-radius:8px;padding:9px 12px;font-size:13px"><span style="color:#A6ABB0">›</span>הוצא והכנס מחדש את ה-<bdi class="k-mono" style="background:#F0F2F4;padding:1px 6px;border-radius:4px">SIM</bdi></div>
+          <div style="display:flex;gap:8px;align-items:center;background:#fff;border:1px solid #E2E4E6;border-radius:8px;padding:9px 12px;font-size:13px"><span style="color:#A6ABB0">›</span>הדלק את המכשיר <span style="background:#D8F5E5;border-radius:3px;padding:0 3px">ולחכות 90 שניות</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="k-eyebrow" style="margin-bottom:8px">גרסאות</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="k-btn" style="padding:4px 10px"><bdi class="k-mono">v1</bdi></span><span class="k-btn" style="padding:4px 10px"><bdi class="k-mono">v2</bdi></span><span class="k-btn n" style="padding:4px 10px"><bdi class="k-mono">v3</bdi></span>
+          <span style="font-size:11.5px;color:#6B7280;margin-inline-start:8px">השינוי האחרון: <span style="background:#D8F5E5;border-radius:3px;padding:0 3px">+ ולחכות 90 שניות</span></span>
+        </div>
+      </div>
+      <div style="border:1px solid #FFB596;border-radius:10px;padding:12px 14px;background:#FFF8F5;display:flex;flex-direction:column;gap:8px">
+        <b style="font-size:13px;color:#C02800">אזור מסוכן</b>
+        <div style="font-size:11.5px;color:#6B7280;line-height:1.6">ניתוק בכל המסמכים יוצר עותק עצמאי בכל אחד מ-5 המסמכים — עריכה עתידית לא תתפשט יותר.</div>
+        <div style="display:flex;gap:8px"><span class="k-btn d">נתק בכל המסמכים (יוצר עותקים)</span><span class="k-btn d">מחק בלוק</span></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="k-card" style="display:flex;flex-direction:column;gap:8px">
+        <div class="k-eyebrow">מוטמע (3)</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:12px">
+          <div style="display:flex;align-items:center;gap:6px"><span style="flex:1;min-width:0">אין קליטה / אין שירות · שלב <bdi class="k-mono">4</bdi></span><a href="#" style="font-size:11px;color:#FF3D00">פתח</a><a href="#" style="font-size:11px;color:#6B7280">נתק כאן</a></div>
+          <div style="display:flex;align-items:center;gap:6px"><span style="flex:1;min-width:0">אין גלישה בחו"ל · שלב <bdi class="k-mono">7</bdi></span><a href="#" style="font-size:11px;color:#FF3D00">פתח</a><a href="#" style="font-size:11px;color:#6B7280">נתק כאן</a></div>
+          <div style="display:flex;align-items:center;gap:6px"><span style="flex:1;min-width:0">איטיות גלישה · שלב <bdi class="k-mono">11</bdi></span><a href="#" style="font-size:11px;color:#FF3D00">פתח</a><a href="#" style="font-size:11px;color:#6B7280">נתק כאן</a></div>
+        </div>
+      </div>
+      <div class="k-card" style="display:flex;flex-direction:column;gap:8px">
+        <div class="k-eyebrow">מפנה (2)</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:12px">
+          <div style="display:flex;align-items:center;gap:6px"><span style="flex:1;min-width:0">בעיות גלישה ברכב · שלב <bdi class="k-mono">3</bdi></span><a href="#" style="font-size:11px;color:#FF3D00">פתח</a></div>
+          <div style="display:flex;align-items:center;gap:6px"><span style="flex:1;min-width:0">Hotspot לא עובד · שלב <bdi class="k-mono">2</bdi></span><a href="#" style="font-size:11px;color:#FF3D00">פתח</a></div>
+        </div>
+        <div style="font-size:11px;color:#6B7280;line-height:1.6;border-top:1px solid #F0F2F4;padding-top:8px">מוטמע = הטקסט מוצג בתוך המסמך. מפנה = קישור בלבד, נפתח בריחוף.</div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ══════════ 5e ══════════ -->
+<div class="dv-opt" id="5e">
+<div class="dv-olabel"><a class="dv-oid" href="#5e">5e</a>Dashboards — כיסוי, רעננות, שימוש, צינור הצעות, סנכרון · כל אריח עם "פתח רשימה"</div>
+<div class="dv-card" dir="rtl" style="width:1280px;height:760px;background:#F4F5F7;display:flex;flex-direction:column">
+  <div class="k-top">
+    <span class="k-crumb"><b>דשבורדים</b></span>
+    <div style="display:flex;gap:6px;margin-inline-start:14px"><span class="k-chip">7 ימים</span><span class="k-chip navy">30 ימים</span><span class="k-chip">90 ימים</span></div>
+    <div class="k-actions"><span class="k-btn">קטגוריה: הכל ▾</span><span class="k-btn">⬇ ייצוא</span></div>
+  </div>
+  <div style="flex:1;padding:14px 16px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:auto auto;gap:14px;align-content:start;min-height:0">
+
+    <div class="d-tile">
+      <div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:14px">כיסוי</b><span style="font-size:11px;color:#6B7280">52 כרטיסים</span><a href="#" style="margin-inline-start:auto;font-size:11px;color:#FF3D00">פתח רשימה</a></div>
+      <div style="display:flex;gap:14px;align-items:flex-end">
+        <div><div style="font-size:26px;font-weight:700;line-height:1">23</div><div style="font-size:10.5px;color:#6B7280">עם מסמך</div></div>
+        <div><div style="font-size:26px;font-weight:700;line-height:1;color:#B86A00">29</div><div style="font-size:10.5px;color:#6B7280">ללא מסמך</div></div>
+        <div><div style="font-size:26px;font-weight:700;line-height:1;color:#C02800">2</div><div style="font-size:10.5px;color:#6B7280">חלקיים</div></div>
+      </div>
+      <div style="height:12px;border-radius:6px;overflow:hidden;display:flex"><i style="width:44%;background:#1A7A4A"></i><i style="width:4%;background:#C02800"></i><i style="width:52%;background:#E2E4E6"></i></div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div class="d-row"><span>תמיכה טכנית</span><span class="d-bar"><i class="g" style="width:72%"></i></span><b>13/18</b></div>
+        <div class="d-row"><span>חו"ל ונדידה</span><span class="d-bar"><i class="g" style="width:50%"></i></span><b>6/12</b></div>
+        <div class="d-row"><span>שימור</span><span class="d-bar"><i class="g" style="width:25%"></i></span><b>3/12</b></div>
+        <div class="d-row"><span>חיובים</span><span class="d-bar"><i class="g" style="width:10%"></i></span><b>1/10</b></div>
+      </div>
+    </div>
+
+    <div class="d-tile">
+      <div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:14px">רעננות</b><span style="font-size:11px;color:#6B7280">עודכן ב-30 יום</span><a href="#" style="margin-inline-start:auto;font-size:11px;color:#FF3D00">פתח רשימה</a></div>
+      <div style="display:flex;gap:14px;align-items:flex-end"><div><div style="font-size:26px;font-weight:700;line-height:1">61%</div><div style="font-size:10.5px;color:#6B7280">מהמסמכים</div></div><div><div style="font-size:26px;font-weight:700;line-height:1;color:#C02800">4</div><div style="font-size:10.5px;color:#6B7280">מעל 90 יום</div></div></div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div class="d-row"><span>תמיכה טכנית</span><span class="d-bar"><i class="b" style="width:85%"></i></span><b>85%</b></div>
+        <div class="d-row"><span>חו"ל ונדידה</span><span class="d-bar"><i class="b" style="width:66%"></i></span><b>66%</b></div>
+        <div class="d-row"><span>שימור</span><span class="d-bar"><i class="a" style="width:33%"></i></span><b>33%</b></div>
+        <div class="d-row"><span>חיובים</span><span class="d-bar"><i class="a" style="width:20%"></i></span><b>20%</b></div>
+      </div>
+      <div style="font-size:11px;color:#6B7280;border-top:1px solid #F0F2F4;padding-top:8px">הישן ביותר: <b style="color:#1F2E3B">חשבונית גבוהה מחו"ל</b> · 112 יום</div>
+    </div>
+
+    <div class="d-tile">
+      <div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:14px">שימוש</b><span style="font-size:11px;color:#6B7280">צפיות שבועיות</span><a href="#" style="margin-inline-start:auto;font-size:11px;color:#FF3D00">פתח רשימה</a></div>
+      <div class="d-spark">
+        <i style="height:38%"></i><i style="height:45%"></i><i style="height:40%"></i><i style="height:58%"></i><i style="height:52%"></i><i style="height:66%"></i><i style="height:61%"></i><i style="height:74%"></i><i style="height:70%"></i><i style="height:82%"></i><i style="height:90%"></i><i class="on" style="height:100%"></i>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:11.5px">
+        <div class="k-eyebrow">5 המובילים במצב שיחה</div>
+        <div style="display:flex;justify-content:space-between"><span>איטיות גלישה</span><b>412</b></div>
+        <div style="display:flex;justify-content:space-between"><span>אין קליטה / אין שירות</span><b>318</b></div>
+        <div style="display:flex;justify-content:space-between"><span>Hotspot לא עובד</span><b>207</b></div>
+        <div style="display:flex;justify-content:space-between"><span>אין גלישה בחו"ל</span><b>164</b></div>
+        <div style="display:flex;justify-content:space-between"><span>דיבאג נטישה</span><b>121</b></div>
+      </div>
+      <div style="font-size:11.5px;border-top:1px solid #F0F2F4;padding-top:8px">תוצאה נפוצה: <span class="k-chip green">✓ הסתדר 61%</span></div>
+    </div>
+
+    <div class="d-tile">
+      <div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:14px">צינור הצעות</b><span style="font-size:11px;color:#6B7280">30 יום</span><a href="#" style="margin-inline-start:auto;font-size:11px;color:#FF3D00">פתח רשימה</a></div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:12px">
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:74px;color:#6B7280">נוצרו</span><span style="height:22px;border-radius:5px;background:#1F2E3B;width:100%"></span><b style="color:#1F2E3B">14</b></div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:74px;color:#6B7280">אושרו</span><span style="height:22px;border-radius:5px;background:#1A7A4A;width:64%"></span><b style="color:#1A7A4A">9</b></div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:74px;color:#6B7280">נדחו</span><span style="height:22px;border-radius:5px;background:#C02800;width:21%"></span><b style="color:#C02800">3</b></div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:74px;color:#6B7280">ממתינות</span><span style="height:22px;border-radius:5px;background:#B86A00;width:14%"></span><b style="color:#B86A00">2</b></div>
+      </div>
+      <div style="font-size:11.5px;border-top:1px solid #F0F2F4;padding-top:8px;display:flex;justify-content:space-between"><span style="color:#6B7280">זמן ממוצע לסקירה</span><b>1.4 ימים</b></div>
+      <div style="font-size:11.5px;color:#6B7280">לפי מקור: נהלי תמיכה 8 · חו"ל 4 · WordPress 2</div>
+    </div>
+
+    <div class="d-tile">
+      <div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:14px">סנכרון</b><span style="font-size:11px;color:#6B7280">WordPress</span><a href="#4d" style="margin-inline-start:auto;font-size:11px;color:#FF3D00">פתח רשימה</a></div>
+      <div style="display:flex;gap:14px;align-items:flex-end"><div><div style="font-size:26px;font-weight:700;line-height:1">38</div><div style="font-size:10.5px;color:#6B7280">קישורים</div></div><div><div style="font-size:26px;font-weight:700;line-height:1;color:#1A7A4A">33</div><div style="font-size:10.5px;color:#6B7280">זהים</div></div><div><div style="font-size:26px;font-weight:700;line-height:1;color:#C02800">1</div><div style="font-size:10.5px;color:#6B7280">קונפליקט</div></div></div>
+      <div class="k-eyebrow">ריצות ב-14 הימים האחרונים</div>
+      <div class="d-spark" style="height:34px"><i style="height:60%"></i><i style="height:80%"></i><i style="height:55%"></i><i style="height:70%"></i><i style="height:100%"></i><i style="height:45%"></i><i style="height:65%"></i><i style="height:75%"></i><i style="height:50%"></i><i style="height:85%"></i><i style="height:60%"></i><i style="height:90%"></i><i style="height:70%"></i><i class="on" style="height:95%"></i></div>
+      <div style="font-size:11.5px;color:#6B7280;border-top:1px solid #F0F2F4;padding-top:8px">מסמכים ללא קישור: <b style="color:#1F2E3B">14</b></div>
+    </div>
+
+    <div class="d-tile" style="background:#1F2E3B;border-color:#1F2E3B;color:#fff">
+      <div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:14px">מה דורש תשומת לב</b><a href="#" style="margin-inline-start:auto;font-size:11px;color:#FFB596">פתח הכל</a></div>
+      <div style="display:flex;flex-direction:column;gap:7px;font-size:12px">
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.07);border-radius:8px;padding:8px 10px"><span class="k-chip red">1</span><span style="flex:1;min-width:0">קונפליקט סנכרון · איטיות גלישה §8</span></div>
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.07);border-radius:8px;padding:8px 10px"><span class="k-chip amber">3</span><span style="flex:1;min-width:0">שדות CRM ששונה שמם ולא עודכנו</span></div>
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.07);border-radius:8px;padding:8px 10px"><span class="k-chip amber">2</span><span style="flex:1;min-width:0">הצעות ממתינות מעל 3 ימים</span></div>
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.07);border-radius:8px;padding:8px 10px"><span class="k-chip">4</span><span style="flex:1;min-width:0">מסמכים שלא עודכנו מעל 90 יום</span></div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+</div>
+<p class="dv-next">Try next: turn 6 — QOL על המסכים הקיימים: ספרייה, מסמך, עורך, התראות, נגישות, מובייל, כהה (6a–6h).</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = {};
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
