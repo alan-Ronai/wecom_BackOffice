@@ -276,12 +276,24 @@ const PATCH_COLUMNS: Record<string, string> = {
   sourceRef: 'source_ref',
 };
 
+/**
+ * `ifMatch` is honoured when the caller sends it (412 on conflict), like
+ * `saveStructure`. The row lock + `rowCount` assertion also stop a patch of a
+ * concurrently-deleted document from 500ing on `getDocument(...)!` returning null.
+ */
 export async function patchDocument(
   tx: Tx,
   id: string,
   body: PatchDocumentBody,
   userId: string,
+  ifMatch?: string,
 ): Promise<Document> {
+  const cur = await tx.query('select etag from documents where id=$1 and deleted_at is null for update', [
+    id,
+  ]);
+  if (!cur.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
+  if (ifMatch && ifMatch !== cur.rows[0].etag)
+    throw httpError(412, 'ETAG_MISMATCH', 'המסמך השתנה בינתיים — טען מחדש ונסה שוב');
   const sets: string[] = [];
   const params: unknown[] = [];
   for (const [key, col] of Object.entries(PATCH_COLUMNS)) {
@@ -292,12 +304,13 @@ export async function patchDocument(
     }
   }
   params.push(userId, id);
-  await tx.query(
+  const r = await tx.query(
     `update documents set ${sets.length ? sets.join(', ') + ',' : ''} updated_by = $${params.length - 1},
        updated_at = now(), etag = gen_random_uuid()::text
      where id = $${params.length} and deleted_at is null`,
     params,
   );
+  if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
   return (await getDocument(tx, id))!;
 }
 

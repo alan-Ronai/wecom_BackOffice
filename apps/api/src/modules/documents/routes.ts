@@ -20,7 +20,7 @@ import {
 } from '@wecom/shared';
 import { withTransaction } from '../../lib/sql.js';
 import { audit } from '../../lib/audit.js';
-import { forbidden, notFound } from '../../lib/http.js';
+import { forbidden, httpError, notFound } from '../../lib/http.js';
 import { hasScope, requireUser } from '../../lib/user.js';
 import * as repo from './repo.js';
 import { annotateBlame, diffDocuments, diffStats } from './diff.js';
@@ -143,7 +143,13 @@ export default async function routes(app: FastifyInstance) {
         if (!before) throw notFound('המסמך');
         if (!hasScope(user, before.category) || (body.category && !hasScope(user, body.category)))
           throw forbidden();
-        const after = await repo.patchDocument(tx, id, body, user.id);
+        const after = await repo.patchDocument(
+          tx,
+          id,
+          body,
+          user.id,
+          req.headers['if-match'] as string | undefined,
+        );
         await audit(tx, {
           actorId: user.id,
           action: 'docs.edit',
@@ -173,6 +179,11 @@ export default async function routes(app: FastifyInstance) {
     async (req, reply) => {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
+      // The etag exists precisely so a structure save cannot silently clobber a
+      // concurrent editor; making it optional made that guarantee opt-in.
+      const ifMatch = req.headers['if-match'] as string | undefined;
+      if (!ifMatch)
+        throw httpError(428, 'IF_MATCH_REQUIRED', 'נדרשת כותרת If-Match עם ה-etag של המסמך');
       const countSteps = (d: { phases: { steps: unknown[] }[] }) =>
         d.phases.reduce((a, p) => a + p.steps.length, 0);
       const doc = await withTransaction(app.db, async (tx) => {
@@ -184,7 +195,7 @@ export default async function routes(app: FastifyInstance) {
           id,
           req.body as z.infer<typeof StructureBodySchema>,
           user.id,
-          req.headers['if-match'] as string | undefined,
+          ifMatch,
         );
         await audit(tx, {
           actorId: user.id,
