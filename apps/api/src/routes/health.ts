@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { HealthResponseSchema } from '@wecom/shared';
-import { VERSION } from '@wecom/shared';
+import { HealthResponseSchema, VERSION } from '@wecom/shared';
+import { probeModel, probeQueue } from '../services/probes.js';
+
 const started = Date.now();
 export default async function routes(app: FastifyInstance) {
   app.get(
@@ -14,11 +15,16 @@ export default async function routes(app: FastifyInstance) {
       } catch {
         db = false;
       }
+      const [m, queue] = await Promise.all([
+        probeModel(app.config.MODEL_URL, app.config.MODEL_NAME),
+        probeQueue(app.boss),
+      ]);
+      const model = m.up && m.hasModel;
       return {
-        ok: db,
+        ok: db && model,
         db,
-        model: null,
-        queue: null,
+        model,
+        queue,
         version: VERSION,
         uptimeSec: Math.round((Date.now() - started) / 1000),
       };

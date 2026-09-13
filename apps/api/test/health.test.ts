@@ -24,4 +24,14 @@ describe('health', () => {
     expect(res.json().paths['/api/v1/system/health']).toBeDefined();
     await app.close();
   });
+  it('reports model=false and queue=null when nothing is reachable', async () => {
+    const app = await buildApp({
+      config: { DATABASE_URL: 'postgres://nobody:none@127.0.0.1:1/none', MODEL_URL: 'http://127.0.0.1:1' },
+      boss: false,
+    });
+    const body = (await app.inject({ method: 'GET', url: '/api/v1/system/health' })).json();
+    expect(body.model).toBe(false);
+    expect(body.queue).toBeNull();
+    await app.close();
+  });
 });
