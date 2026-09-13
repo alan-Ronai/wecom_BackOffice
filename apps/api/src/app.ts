@@ -11,6 +11,7 @@ import {
 import type pg from 'pg';
 import { loadConfig, type Config } from './config.js';
 import dbPlugin from './plugins/db.js';
+import { loggerOptions, REQUEST_ID_HEADER } from './plugins/logging.js';
 import health from './routes/health.js';
 import { ErrorEnvelopeSchema } from '@wecom/shared';
 
@@ -25,9 +26,13 @@ export async function buildApp(
 ): Promise<FastifyInstance> {
   const config = loadConfig(opts.config);
   const app = Fastify({
-    logger: config.NODE_ENV !== 'test',
+    logger: loggerOptions(config),
+    requestIdHeader: REQUEST_ID_HEADER,
     genReqId: () => crypto.randomUUID(),
   }).withTypeProvider<ZodTypeProvider>();
+  app.addHook('onSend', async (req, reply) => {
+    reply.header(REQUEST_ID_HEADER, req.id);
+  });
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   app.decorate('config', config);
