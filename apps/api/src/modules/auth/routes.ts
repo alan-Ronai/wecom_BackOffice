@@ -71,12 +71,13 @@ export default async function authRoutes(instance: FastifyInstance) {
       const unsigned = raw ? req.unsignCookie(raw) : null;
       if (!unsigned || !unsigned.valid || !unsigned.value)
         throw new HttpError(401, 'UNAUTHENTICATED', 'תהליך הכניסה פג תוקף, נסה שוב');
-      const st = JSON.parse(unsigned.value) as {
-        state: string;
-        codeVerifier: string;
-        nonce: string;
-        returnTo: string;
-      };
+      // A truncated-but-validly-signed cookie must be the intended 401, not a 500.
+      let st: { state: string; codeVerifier: string; nonce: string; returnTo: string };
+      try {
+        st = JSON.parse(unsigned.value) as typeof st;
+      } catch {
+        throw new HttpError(401, 'UNAUTHENTICATED', 'תהליך הכניסה פג תוקף, נסה שוב');
+      }
       const current = new URL(req.url, app.config.OIDC_REDIRECT_URI);
       let result;
       try {
@@ -187,6 +188,8 @@ export default async function authRoutes(instance: FastifyInstance) {
         [u.id],
       )
     ).rows[0];
+    // The session's user row can have been hard-deleted between requests.
+    if (!row) throw new HttpError(401, 'UNAUTHENTICATED', 'המשתמש אינו קיים עוד');
     const resolved = await resolvePermissions(app.db, u.id);
     return MeSchema.parse({
       user: {

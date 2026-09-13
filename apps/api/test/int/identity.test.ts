@@ -15,8 +15,11 @@ run('IdentityService', () => {
     await db.stop();
   });
 
-  it('computes initials', () => {
-    expect(initials('ענבר ל.')).toBe('ע');
+  it('computes two-character initials', () => {
+    // `users.initials` is max 2 and the avatar chip renders two; it used to return one.
+    expect(initials('ענבר ל.')).toBe('על');
+    expect(initials('Dana Rose')).toBe('DR');
+    expect(initials('דנה')).toBe('דנ');
     expect(initials('')).toBe('?');
   });
 

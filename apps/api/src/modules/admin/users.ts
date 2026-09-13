@@ -37,8 +37,8 @@ export default async function userRoutes(instance: FastifyInstance) {
       const total = (await app.db.query<{ n: string }>(`select count(*) as n from users u ${where}`, params))
         .rows[0].n;
       const rows = await app.db.query(
-        `select u.* from users u ${where} order by u.display_name limit ${pageSize} offset ${(page - 1) * pageSize}`,
-        params,
+        `select u.* from users u ${where} order by u.display_name limit $${params.length + 1} offset $${params.length + 2}`,
+        [...params, pageSize, (page - 1) * pageSize],
       );
       const ids = rows.rows.map((u) => u.id);
       const roles = await app.db.query(

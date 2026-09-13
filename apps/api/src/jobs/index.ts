@@ -37,7 +37,13 @@ export async function startJobs(app: FastifyInstance): Promise<void> {
   await boss.work(QUEUES.trashPurge, async () => {
     try {
       const n = await purgeExpired(app.db, app.config.TRASH_DAYS);
-      app.log.info({ n }, 'trash purged');
+      // Nothing else ever deletes sessions, so the table (and /admin/sessions) grew
+      // without bound. Keep a week of history past expiry/revocation for the audit view.
+      const s = await app.db.query(
+        `delete from sessions where (expires_at < now() - interval '7 days')
+           or (revoked_at is not null and revoked_at < now() - interval '7 days')`,
+      );
+      app.log.info({ n, sessions: s.rowCount }, 'trash purged');
     } catch (err) {
       await reportFailure(app, QUEUES.trashPurge, err);
       throw err;

@@ -206,6 +206,7 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
       if (!row) return reply.status(404).send(notFound(req, 'מחבר לא נמצא'));
       const res = await registry.get(row.type).testConnection(repo.config(row) as never);
       await repo.setRun(row.id, res.ok ? 'test-ok' : 'test-failed', { lastTest: res });
+      await audit(req, 'connectors.test', 'connector', row.id, null, res);
       return reply.send(res);
     },
   );
@@ -227,6 +228,8 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
         connectorId: row.id,
         actorId: userOf(req)?.id ?? null,
       });
+      // A run writes to the remote system, so it is at least as audit-worthy as a patch.
+      await audit(req, 'connectors.run', 'connector', row.id, null, { jobId });
       return reply.status(202).send({ jobId });
     },
   );

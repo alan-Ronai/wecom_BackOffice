@@ -242,28 +242,45 @@ export async function listCards(
   };
 }
 
+/** `slugify` ends in 5 random base-36 chars against a unique constraint: retry rather than 500. */
+const SLUG_ATTEMPTS = 5;
+
 export async function insertDocument(
   tx: Tx,
   body: CreateDocumentBody,
   userId: string | null,
 ): Promise<Document> {
-  const r = await tx.query(
-    `insert into documents(slug, title, description, category, wave, priority, kind, status, topic_id, created_by, updated_by)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) returning id`,
-    [
-      body.slug ?? slugify(body.title),
-      body.title,
-      body.description ?? '',
-      body.category,
-      body.wave,
-      body.priority,
-      body.kind,
-      'draft',
-      body.topicId ?? null,
-      userId,
-    ],
-  );
-  return (await getDocument(tx, r.rows[0].id as string))!;
+  const values = (slug: string) => [
+    slug,
+    body.title,
+    body.description ?? '',
+    body.category,
+    body.wave,
+    body.priority,
+    body.kind,
+    'draft',
+    body.topicId ?? null,
+    userId,
+  ];
+  const sql = `insert into documents(slug, title, description, category, wave, priority, kind, status, topic_id, created_by, updated_by)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) returning id`;
+  for (let attempt = 0; ; attempt++) {
+    // A caller-supplied slug is their choice, so a collision there is a real 409.
+    const slug = body.slug ?? slugify(body.title);
+    try {
+      await tx.query('savepoint insert_document');
+      const r = await tx.query(sql, values(slug));
+      await tx.query('release savepoint insert_document');
+      return (await getDocument(tx, r.rows[0].id as string))!;
+    } catch (e) {
+      await tx.query('rollback to savepoint insert_document');
+      const unique = (e as { code?: string }).code === '23505';
+      if (!unique) throw e;
+      if (body.slug) throw httpError(409, 'SLUG_TAKEN', 'המזהה (slug) כבר בשימוש');
+      if (attempt >= SLUG_ATTEMPTS - 1)
+        throw httpError(409, 'SLUG_TAKEN', 'לא הצלחנו להקצות מזהה ייחודי, נסה שוב');
+    }
+  }
 }
 
 const PATCH_COLUMNS: Record<string, string> = {

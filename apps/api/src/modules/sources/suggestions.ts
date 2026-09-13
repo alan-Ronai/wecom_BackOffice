@@ -400,7 +400,9 @@ export class SuggestionService {
       await client.query(
         `update source_revisions set accepted=true
          where source_id=$1
-           and id in (select source_revision_id from suggestions where status in ('applied','rejected'))
+           and id in (select g.source_revision_id from suggestions g
+                        join source_revisions sr2 on sr2.id=g.source_revision_id
+                        where sr2.source_id=$1 and g.status in ('applied','rejected'))
            and not exists (select 1 from suggestions g2 where g2.source_revision_id=source_revisions.id and g2.status='pending')`,
         [sourceId],
       );

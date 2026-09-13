@@ -1,8 +1,12 @@
 import type pg from 'pg';
+import { withTransaction } from '../../lib/sql.js';
 
+/** Two characters, matching `users.initials` (max 2) and what the avatar chip renders. */
 export const initials = (name: string): string => {
-  const t = name.trim();
-  return t ? t[0] : '?';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2);
+  return (parts[0][0] ?? '') + (parts[1][0] ?? '');
 };
 
 export type UpsertInput = {
@@ -18,42 +22,52 @@ export class IdentityService {
     private invalidate: (userId: string) => void,
   ) {}
 
+  /**
+   * One transaction, and the insert is an upsert on `(subject, source)`: this is a
+   * read-then-write across four statements, and two concurrent first logins used to
+   * race on that unique index.
+   */
   async upsertUser(input: UpsertInput): Promise<{ id: string; created: boolean }> {
     const email = input.email ? input.email.toLowerCase() : null;
-    const bySubject = await this.db.query<{ id: string }>(
-      `select id from users where subject=$1 and source=$2`,
-      [input.subject, input.source],
-    );
-    let id = bySubject.rows[0]?.id;
-    let created = false;
-    if (!id && email) {
-      // merge: same source, or a VPN-identified (paloalto) row being upgraded to an Entra identity
-      const byEmail = await this.db.query<{ id: string }>(
-        `select id from users where lower(email)=$1 and (source=$2 or (source='paloalto' and $2='entra')) order by created_at limit 1`,
-        [email, input.source],
+    return withTransaction(this.db, async (tx) => {
+      const bySubject = await tx.query<{ id: string }>(
+        `select id from users where subject=$1 and source=$2 for update`,
+        [input.subject, input.source],
       );
-      id = byEmail.rows[0]?.id;
-      if (id)
-        await this.db.query(`update users set subject=$2, source=$3 where id=$1`, [
-          id,
-          input.subject,
-          input.source,
-        ]);
-    }
-    if (!id) {
-      const r = await this.db.query<{ id: string }>(
-        `insert into users(subject, source, email, display_name, initials, last_login_at) values ($1,$2,$3,$4,$5,now()) returning id`,
-        [input.subject, input.source, email, input.displayName, initials(input.displayName)],
-      );
-      id = r.rows[0].id;
-      created = true;
-    } else {
-      await this.db.query(
-        `update users set email=coalesce($2,email), display_name=$3, initials=$4, last_login_at=now(), updated_at=now() where id=$1`,
-        [id, email, input.displayName, initials(input.displayName)],
-      );
-    }
-    return { id, created };
+      let id = bySubject.rows[0]?.id;
+      let created = false;
+      if (!id && email) {
+        // merge: same source, or a VPN-identified (paloalto) row being upgraded to an Entra identity
+        const byEmail = await tx.query<{ id: string }>(
+          `select id from users where lower(email)=$1 and (source=$2 or (source='paloalto' and $2='entra')) order by created_at limit 1 for update`,
+          [email, input.source],
+        );
+        id = byEmail.rows[0]?.id;
+        if (id)
+          await tx.query(`update users set subject=$2, source=$3 where id=$1`, [
+            id,
+            input.subject,
+            input.source,
+          ]);
+      }
+      if (!id) {
+        const r = await tx.query<{ id: string }>(
+          `insert into users(subject, source, email, display_name, initials, last_login_at)
+           values ($1,$2,$3,$4,$5,now())
+           on conflict (subject, source) do update set last_login_at=now()
+           returning id, (xmax = 0) as inserted`,
+          [input.subject, input.source, email, input.displayName, initials(input.displayName)],
+        );
+        id = r.rows[0].id;
+        created = (r.rows[0] as { inserted?: boolean }).inserted !== false;
+      } else {
+        await tx.query(
+          `update users set email=coalesce($2,email), display_name=$3, initials=$4, last_login_at=now(), updated_at=now() where id=$1`,
+          [id, email, input.displayName, initials(input.displayName)],
+        );
+      }
+      return { id, created };
+    });
   }
 
   async applyGroupMap(userId: string, groupIds: string[]): Promise<{ added: string[]; removed: string[] }> {
