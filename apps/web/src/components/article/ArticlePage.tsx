@@ -21,6 +21,9 @@ import { SplitView } from './SplitView.js';
 import { useCall } from './useCall.js';
 import type { FieldInfo } from '../../lib/format.js';
 
+/** Stable empty array so memoised children are not invalidated on every render (M1). */
+const EMPTY_FIELDS: FieldInfo[] = [];
+
 export function ArticlePage() {
   const { id, step: stepParam } = useParams<{ id: string; step?: string }>();
   const go = useNavigate();
@@ -42,7 +45,8 @@ export function ArticlePage() {
 
   const doc = docQ.data;
   const steps = useMemo(() => resolvedSteps(doc, blocks.data), [doc, blocks.data]);
-  const fields: FieldInfo[] = fieldsQ.data ?? [];
+  // Stable identity: a fresh `[]` on every render busts <Fmt>'s useMemo for every step.
+  const fields: FieldInfo[] = useMemo(() => fieldsQ.data ?? EMPTY_FIELDS, [fieldsQ.data]);
   const docRefs = useMemo(
     () => (cards.data?.items ?? []).map((c) => ({ id: c.id, title: c.title })),
     [cards.data],
@@ -113,6 +117,8 @@ export function ArticlePage() {
       jumpTimer.current = setTimeout(() => commitJump(next), 450);
       return;
     }
+    // Legacy gated outcome selection on 1-3, and the keymap card still advertises 1-3.
+    if (!/^[1-3]$/.test(d)) return;
     if (!callMode || !call.activeKey) return;
     const s = steps.find((x) => x.key === call.activeKey);
     if (!s) return;
@@ -146,9 +152,13 @@ export function ArticlePage() {
       Enter: () => {
         if (jumpBuf != null) commitJump(jumpBuf);
         else if (call.activeKey)
-          document.getElementById(`step-${call.activeKey}`)?.scrollIntoView({ block: 'center' });
+          document
+            .getElementById(`step-${call.activeKey}`)
+            ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       },
       g: () => armJump(),
+      // 1-3 only, matching legacy and the keymap card below. `digit` doubles as the G-jump
+      // buffer, so every digit still feeds a jump while one is armed.
       '0': () => digit('0'),
       '1': () => digit('1'),
       '2': () => digit('2'),

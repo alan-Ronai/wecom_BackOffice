@@ -20,6 +20,7 @@ import { Fmt } from '../Fmt.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { SuggestionCard } from './SuggestionCard.js';
+import { LoadError } from '../ui/index.js';
 
 /** Port of views-sources.js on the pipeline API: tracked changes plus the review panel. */
 export function SourcesPage() {
@@ -143,7 +144,9 @@ export function SourcesPage() {
       </aside>
 
       <div className="src-main">
-        {!current ? (
+        {sources.isError ? (
+          <LoadError what="מסמכי מקור" error={sources.error} />
+        ) : !current ? (
           <div className="empty">אין מסמכי מקור</div>
         ) : (
           <>

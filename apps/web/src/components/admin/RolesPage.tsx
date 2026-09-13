@@ -3,6 +3,7 @@ import { useDeleteRole, useRoles, useUpsertRole } from '../../api/hooks/admin.js
 import { useCan } from '../../api/hooks/me.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
+import { LoadError } from '../ui/index.js';
 
 /** Permission matrix: PERMISSIONS × roles, with the admin role's locked cells disabled. */
 export function RolesPage() {
@@ -24,6 +25,7 @@ export function RolesPage() {
 
   return (
     <>
+      {roles.isError ? <LoadError what="תפקידים" error={roles.error} /> : null}
       <div className="lib-head">
         <div>
           <h1>

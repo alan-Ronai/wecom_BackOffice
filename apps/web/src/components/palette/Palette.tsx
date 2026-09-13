@@ -303,7 +303,7 @@ export function Palette() {
               const h = row.hit;
               return (
                 <div
-                  key={h.id}
+                  key={`${h.type}:${h.id}`}
                   className={'ri' + (isOn ? ' on' : '')}
                   role="button"
                   tabIndex={0}
