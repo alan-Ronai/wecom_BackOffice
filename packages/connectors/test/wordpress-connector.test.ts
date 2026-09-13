@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { WordPressConnector, WpConfigSchema } from '../src/index.js';
+import { WordPressConnector, WpConfigSchema, contentHash, htmlToParagraphs } from '../src/index.js';
+import type { Document, Block } from '@wecom/shared';
 import { startWpStub, type WpStub } from './helpers/wpStub.js';
+import { docFixture } from './helpers/docFixture.js';
 
 let stub: WpStub;
 beforeAll(async () => {
@@ -92,5 +94,27 @@ describe('fetch', () => {
   it('rejects malformed ids and missing posts', async () => {
     await expect(new WordPressConnector().fetch(cfg(), 'bad')).rejects.toThrow(/externalId/);
     await expect(new WordPressConnector().fetch(cfg(), 'posts:999')).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('push', () => {
+  const content = () => ({
+    document: { ...(JSON.parse(JSON.stringify(docFixture)) as Document), title: 'מסמך חדש' },
+    html: '',
+    blocks: [] as Block[],
+  });
+  it('creates a new post when externalId is null', async () => {
+    const ref = await new WordPressConnector().push(cfg(), null, content());
+    expect(ref.externalId).toMatch(/^posts:\d+$/);
+    const put = stub.puts[stub.puts.length - 1];
+    expect(put).toMatchObject({ type: 'posts', id: null });
+    expect((put.body as { title: string }).title).toBe('מסמך חדש');
+    expect((put.body as { content: string }).content).toContain('<h3 data-kb-step=');
+    expect(ref.hash).toBe(contentHash(htmlToParagraphs((put.body as { content: string }).content)));
+  });
+  it('updates an existing post', async () => {
+    const ref = await new WordPressConnector().push(cfg(), 'posts:7', { ...content(), html: '<p>ידני</p>' });
+    expect(ref.externalId).toBe('posts:7');
+    expect(stub.posts.get('posts:7')?.content.rendered).toBe('<p>ידני</p>');
   });
 });

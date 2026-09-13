@@ -8,8 +8,9 @@ import type {
   SourceContent,
 } from '../contract.js';
 import { WpConfigSchema, type WpConfig } from './config.js';
-import { WpClient } from './client.js';
+import { WpClient, type WpPost } from './client.js';
 import { contentHash, htmlToParagraphs, normalizeText } from './html.js';
+import { renderWpHtml } from '../render/wpHtml.js';
 
 export class WordPressConnector implements Connector<WpConfig> {
   configSchema = WpConfigSchema;
@@ -87,8 +88,29 @@ export class WordPressConnector implements Connector<WpConfig> {
     };
   }
 
-  async push(_cfg: WpConfig, _externalId: string | null, _content: LibraryContent): Promise<RemoteRef> {
-    throw new Error('not implemented');
+  async push(cfg: WpConfig, externalId: string | null, content: LibraryContent): Promise<RemoteRef> {
+    const html = content.html && content.html.trim() ? content.html : renderWpHtml(content);
+    const client = this.client(cfg);
+    let type: string;
+    let post: WpPost;
+    if (externalId) {
+      const parsed = WordPressConnector.parseExternalId(externalId);
+      type = parsed.type;
+      post = await client.updatePost(type, parsed.id, { title: content.document.title, content: html });
+    } else {
+      type = cfg.postTypes[0];
+      post = await client.createPost(type, {
+        title: content.document.title,
+        content: html,
+        status: 'publish',
+      });
+    }
+    return {
+      externalId: `${type}:${post.id}`,
+      url: post.link,
+      hash: contentHash(htmlToParagraphs(html)),
+      updatedAt: post.modified_gmt + 'Z',
+    };
   }
 
   async parseWebhook(
