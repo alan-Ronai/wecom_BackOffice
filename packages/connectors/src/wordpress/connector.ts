@@ -11,6 +11,7 @@ import { WpConfigSchema, type WpConfig } from './config.js';
 import { WpClient, type WpPost } from './client.js';
 import { contentHash, htmlToParagraphs, normalizeText } from './html.js';
 import { renderWpHtml } from '../render/wpHtml.js';
+import { verifySignature, WebhookBodySchema } from './webhook.js';
 
 export class WordPressConnector implements Connector<WpConfig> {
   configSchema = WpConfigSchema;
@@ -113,11 +114,22 @@ export class WordPressConnector implements Connector<WpConfig> {
     };
   }
 
+  /** `body` carries the raw request text so the HMAC can be checked byte for byte. */
   async parseWebhook(
-    _cfg: WpConfig,
-    _headers: Record<string, string>,
-    _body: unknown,
+    cfg: WpConfig,
+    headers: Record<string, string>,
+    body: unknown,
   ): Promise<RemoteChange[]> {
-    throw new Error('not implemented');
+    const raw = (body as { raw?: string })?.raw ?? '';
+    const sig = headers['x-kb-signature'] ?? headers['X-KB-Signature'];
+    if (!verifySignature(cfg.webhookSecret, raw, sig)) throw new Error('invalid signature');
+    const b = WebhookBodySchema.parse(JSON.parse(raw));
+    return [
+      {
+        externalId: `${b.post_type}:${b.post_id}`,
+        kind: b.event === 'delete_post' ? 'deleted' : 'updated',
+        at: b.modified_gmt.endsWith('Z') ? b.modified_gmt : b.modified_gmt + 'Z',
+      },
+    ];
   }
 }
