@@ -17,10 +17,15 @@ run('pg-boss plugin', () => {
     await app.ready();
     expect(app.boss).not.toBeNull();
     const got: string[] = [];
-    await app.boss!.work(QUEUES.trashPurge, async (jobs) => {
+    // A dedicated queue: the catalogue queues (QUEUES.*) have real workers registered by
+    // other modules, which would consume the job before this test's worker sees it.
+    const queue = 'test.roundtrip';
+    expect(Object.values(QUEUES)).not.toContain(queue);
+    await app.boss!.createQueue(queue);
+    await app.boss!.work(queue, async (jobs) => {
       for (const j of jobs) got.push((j.data as { x: string }).x);
     });
-    await app.boss!.send(QUEUES.trashPurge, { x: 'hello' });
+    await app.boss!.send(queue, { x: 'hello' });
     // pg-boss's default pollingInterval is 2000ms; wait comfortably past one
     // poll cycle instead of the plan's 1500ms, which was flaky against that default.
     await new Promise((r) => setTimeout(r, 3000));
