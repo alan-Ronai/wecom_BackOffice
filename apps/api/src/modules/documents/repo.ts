@@ -562,6 +562,100 @@ export async function getVersion(q: Q, id: string, v: number): Promise<Document 
   return r.rowCount ? DocumentSchema.parse(r.rows[0].snapshot) : null;
 }
 
+// ---------------------------------------------------------------------------
+// Soft delete, pins, views, links, related
+// ---------------------------------------------------------------------------
+
+export async function softDelete(tx: Tx, id: string, userId: string): Promise<void> {
+  const r = await tx.query(
+    'update documents set deleted_at=now(), deleted_by=$2 where id=$1 and deleted_at is null returning id',
+    [id, userId],
+  );
+  if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
+  await tx.query('delete from pins where document_id=$1', [id]);
+}
+
+export const setPin = async (q: Q, userId: string, id: string, on: boolean): Promise<void> => {
+  if (on)
+    await q.query('insert into pins(user_id, document_id) values ($1,$2) on conflict do nothing', [
+      userId,
+      id,
+    ]);
+  else await q.query('delete from pins where user_id=$1 and document_id=$2', [userId, id]);
+};
+
+export const recordView = async (q: Q, userId: string, id: string): Promise<void> => {
+  await q.query(
+    'insert into recent_views(user_id, document_id) values ($1,$2) on conflict (user_id, document_id) do update set viewed_at=now(), count=recent_views.count+1',
+    [userId, id],
+  );
+};
+
+const mapLink = (r: Record<string, unknown>) => ({
+  fromDocumentId: r.from_document_id as string,
+  fromStepKey: (r.from_step_key as string | null) ?? null,
+  toDocumentId: (r.to_document_id as string | null) ?? null,
+  toBlockId: (r.to_block_id as string | null) ?? null,
+  toFieldName: (r.to_field_name as string | null) ?? null,
+  toSourceId: (r.to_source_id as string | null) ?? null,
+  type: r.type as string,
+  origin: r.origin as string,
+});
+
+export async function linksFor(q: Q, id: string) {
+  const [out, incoming] = await Promise.all([
+    q.query('select * from document_links where from_document_id=$1', [id]),
+    q.query(
+      'select l.* from document_links l join documents d on d.id=l.from_document_id where l.to_document_id=$1 and d.deleted_at is null',
+      [id],
+    ),
+  ]);
+  return { out: out.rows.map(mapLink), in: incoming.rows.map(mapLink) };
+}
+
+/** Explicit related + linked docs + docs sharing a block + docs sharing ≥2 CRM fields (max 6). */
+export async function relatedFor(q: Q, doc: Document) {
+  const out = new Map<string, string>();
+  for (const r of doc.related) out.set(r.documentId, r.why);
+  for (const l of (
+    await q.query(
+      'select distinct to_document_id id from document_links where from_document_id=$1 and to_document_id is not null',
+      [doc.id],
+    )
+  ).rows)
+    if (!out.has(l.id)) out.set(l.id, 'מקושר מהמסמך');
+  for (const r of (
+    await q.query(
+      `select distinct d.id, b.title from steps s join blocks b on b.id=s.block_id join documents d on d.id=s.document_id
+       where s.block_id in (select block_id from steps where document_id=$1 and block_id is not null)
+         and d.id<>$1 and d.deleted_at is null`,
+      [doc.id],
+    )
+  ).rows)
+    if (!out.has(r.id)) out.set(r.id, 'בלוק משותף: ' + r.title);
+  for (const r of (
+    await q.query(
+      `select s2.document_id id, count(distinct f2.field_name) n
+       from step_field_refs f1 join steps s1 on s1.id=f1.step_id
+       join step_field_refs f2 on f2.field_name=f1.field_name join steps s2 on s2.id=f2.step_id
+       where s1.document_id=$1 and s2.document_id<>$1 group by 1 having count(distinct f2.field_name)>=2`,
+      [doc.id],
+    )
+  ).rows)
+    if (!out.has(r.id)) out.set(r.id, 'משתף ' + r.n + ' שדות CRM');
+  const ids = [...out.keys()].slice(0, 6);
+  if (!ids.length) return [];
+  const docs = await q.query('select id, title, category from documents where id = any($1) and deleted_at is null', [
+    ids,
+  ]);
+  return docs.rows.map((d) => ({
+    documentId: d.id as string,
+    title: d.title as string,
+    category: d.category as string,
+    why: out.get(d.id)!,
+  }));
+}
+
 export async function restoreVersion(tx: Tx, id: string, v: number, userId: string) {
   const snap = await getVersion(tx, id, v);
   if (!snap) throw httpError(404, 'NOT_FOUND', 'הגרסה לא נמצאה');

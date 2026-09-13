@@ -2,9 +2,12 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   CreateDocumentBodySchema,
+  DeleteResponseSchema,
   DiffQuerySchema,
   DiffResponseSchema,
   DocumentSchema,
+  LinksResponseSchema,
+  RelatedResponseSchema,
   IdSchema,
   ListDocumentsQuerySchema,
   ListDocumentsResponseSchema,
@@ -309,6 +312,107 @@ export default async function routes(app: FastifyInstance) {
         );
         return { document: doc, version, auditId };
       });
+    },
+  );
+
+  app.delete(
+    '/documents/:id',
+    {
+      config: { requires: ['docs.delete'], scope: 'document' },
+      schema: { tags: ['documents'], params: Params, response: { 200: DeleteResponseSchema } },
+    },
+    async (req) => {
+      const user = requireUser(req);
+      const { id } = req.params as { id: string };
+      return withTransaction(app.db, async (tx) => {
+        const before = await repo.getDocument(tx, id);
+        if (!before) throw notFound('המסמך');
+        if (!hasScope(user, before.category)) throw forbidden();
+        await repo.softDelete(tx, id, user.id);
+        const restoreUntil = new Date(Date.now() + app.config.TRASH_DAYS * 86400_000).toISOString();
+        const auditId = await audit(tx, {
+          actorId: user.id,
+          action: 'docs.delete',
+          entityType: 'document',
+          entityId: id,
+          before: { title: before.title, status: before.status },
+          after: null,
+          requestId: req.id,
+          ip: req.ip,
+        });
+        await app.events.publish(
+          tx,
+          makeEvent('document.deleted', {
+            documentId: id,
+            actorId: user.id,
+            restoredUntil: restoreUntil,
+          }),
+        );
+        return { auditId, restoreUntil };
+      });
+    },
+  );
+
+  app.post(
+    '/documents/:id/pin',
+    { config: { requires: ['docs.read'] }, schema: { tags: ['documents'], params: Params } },
+    async (req, reply) => {
+      const user = requireUser(req);
+      const { id } = req.params as { id: string };
+      if (!(await repo.getDocument(app.db, id))) throw notFound('המסמך');
+      await repo.setPin(app.db, user.id, id, true);
+      reply.code(204);
+      return null;
+    },
+  );
+
+  app.delete(
+    '/documents/:id/pin',
+    { config: { requires: ['docs.read'] }, schema: { tags: ['documents'], params: Params } },
+    async (req, reply) => {
+      const user = requireUser(req);
+      await repo.setPin(app.db, user.id, (req.params as { id: string }).id, false);
+      reply.code(204);
+      return null;
+    },
+  );
+
+  app.post(
+    '/documents/:id/view',
+    { config: { requires: ['docs.read'] }, schema: { tags: ['documents'], params: Params } },
+    async (req, reply) => {
+      const user = requireUser(req);
+      const { id } = req.params as { id: string };
+      if (!(await repo.getDocument(app.db, id))) throw notFound('המסמך');
+      await repo.recordView(app.db, user.id, id);
+      reply.code(204);
+      return null;
+    },
+  );
+
+  app.get(
+    '/documents/:id/links',
+    {
+      config: { requires: ['docs.read'] },
+      schema: { tags: ['documents'], params: Params, response: { 200: LinksResponseSchema } },
+    },
+    async (req) => {
+      requireUser(req);
+      return repo.linksFor(app.db, (req.params as { id: string }).id);
+    },
+  );
+
+  app.get(
+    '/documents/:id/related',
+    {
+      config: { requires: ['docs.read'] },
+      schema: { tags: ['documents'], params: Params, response: { 200: RelatedResponseSchema } },
+    },
+    async (req) => {
+      requireUser(req);
+      const doc = await repo.getDocument(app.db, (req.params as { id: string }).id);
+      if (!doc) throw notFound('המסמך');
+      return { items: await repo.relatedFor(app.db, doc) };
     },
   );
 }
