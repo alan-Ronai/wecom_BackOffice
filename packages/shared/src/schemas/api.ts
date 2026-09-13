@@ -12,14 +12,19 @@ import {
 import {
   ActionSchema,
   BlockSchema,
+  CrmFieldSchema,
   CrmFieldStatusSchema,
   DocumentCardSchema,
+  DocumentLinkSchema,
   DocumentSchema,
+  NoteSchema,
   OutcomeSchema,
   PhaseSchema,
+  ScriptSchema,
+  VersionSchema,
 } from './content.js';
 import { SuggestionPayloadSchema } from './pipeline.js';
-import { PermissionSchema } from './identity.js';
+import { PermissionSchema, PreferencesSchema } from './identity.js';
 
 const bool = z.union([z.boolean(), z.enum(['true', 'false']).transform((v) => v === 'true')]);
 
@@ -187,3 +192,123 @@ export const AuditQuerySchema = PaginationQuerySchema.extend({
   from: IsoDateSchema.optional(),
   to: IsoDateSchema.optional(),
 });
+
+// ---------------------------------------------------------------------------
+// L2 (API core) additive request/response contracts. Additive only, per ADR 0001.
+// ---------------------------------------------------------------------------
+
+export type ListDocumentsQuery = z.infer<typeof ListDocumentsQuerySchema>;
+export type CreateDocumentBody = z.infer<typeof CreateDocumentBodySchema>;
+export type PatchDocumentBody = z.infer<typeof PatchDocumentBodySchema>;
+export type StructureBody = z.infer<typeof StructureBodySchema>;
+export type PublishBody = z.infer<typeof PublishBodySchema>;
+export type DiffQuery = z.infer<typeof DiffQuerySchema>;
+export type RelatedDoc = z.infer<typeof RelatedDocSchema>;
+export type SearchQuery = z.infer<typeof SearchQuerySchema>;
+export type SearchHit = z.infer<typeof SearchHitSchema>;
+export type SearchResponse = z.infer<typeof SearchResponseSchema>;
+export type TrashItem = z.infer<typeof TrashItemSchema>;
+export type CreateNoteBody = z.infer<typeof CreateNoteBodySchema>;
+export type DraftBody = z.infer<typeof DraftBodySchema>;
+export type UpsertBlockBody = z.infer<typeof UpsertBlockBodySchema>;
+export type UpsertFieldBody = z.infer<typeof UpsertFieldBodySchema>;
+export type UpsertScriptBody = z.infer<typeof UpsertScriptBodySchema>;
+
+/** Side-by-side step diff (`GET /documents/:id/diff`). */
+export const DiffSideSchema = z.object({
+  key: z.string(),
+  num: z.string(),
+  titleHtml: z.string(),
+  lines: z.array(z.string()),
+});
+export const DiffRowSchema = z.object({
+  kind: z.enum(['same', 'changed', 'added', 'removed']),
+  oldStep: DiffSideSchema.nullable(),
+  newStep: DiffSideSchema.nullable(),
+  blame: z.object({ version: z.number().int(), author: z.string() }).optional(),
+});
+export const DiffResponseSchema = z.object({
+  from: z.number().int(),
+  to: z.number().int(),
+  rows: z.array(DiffRowSchema),
+  stats: z.object({
+    changed: z.number().int(),
+    added: z.number().int(),
+    removed: z.number().int(),
+  }),
+});
+export type DiffSide = z.infer<typeof DiffSideSchema>;
+export type DiffRow = z.infer<typeof DiffRowSchema>;
+export type DiffResponse = z.infer<typeof DiffResponseSchema>;
+
+export const VersionListSchema = z.object({ items: z.array(VersionSchema) });
+export const PublishResponseSchema = z.object({
+  document: DocumentSchema,
+  version: z.number().int(),
+  auditId: z.string(),
+});
+export const DeleteResponseSchema = z.object({ auditId: z.string(), restoreUntil: IsoDateSchema });
+export const LinksResponseSchema = z.object({
+  out: z.array(DocumentLinkSchema),
+  in: z.array(DocumentLinkSchema),
+});
+export const RelatedResponseSchema = z.object({ items: z.array(RelatedDocSchema) });
+
+export const BlockListSchema = z.object({ items: z.array(BlockSchema) });
+export const BlockUsageSchema = z.object({
+  items: z.array(
+    z.object({
+      documentId: IdSchema,
+      title: z.string(),
+      stepKey: z.string(),
+      stepNum: z.string(),
+      mode: z.enum(['embedded', 'reference']),
+    }),
+  ),
+});
+export const BlockVersionListSchema = z.object({
+  items: z.array(
+    z.object({
+      version: z.number().int(),
+      label: z.string(),
+      authorName: z.string(),
+      createdAt: IsoDateSchema,
+    }),
+  ),
+});
+
+export const FieldListSchema = z.object({
+  items: z.array(CrmFieldSchema.extend({ usedIn: z.number().int() })),
+});
+export const FieldUsageSchema = z.object({
+  items: z.array(z.object({ documentId: IdSchema, title: z.string(), stepKeys: z.array(z.string()) })),
+});
+export const ScriptListSchema = z.object({
+  items: z.array(
+    ScriptSchema.extend({ usedIn: z.array(z.object({ documentId: IdSchema, title: z.string() })) }),
+  ),
+});
+
+export const NoteListSchema = z.object({ items: z.array(NoteSchema) });
+export const NoteLikeResponseSchema = z.object({
+  likes: z.number().int().nonnegative(),
+  likedByMe: z.boolean(),
+});
+export const DraftResponseSchema = z.object({
+  draftKey: z.string(),
+  documentId: IdSchema.nullable(),
+  payload: z.record(z.unknown()),
+  updatedAt: IsoDateSchema,
+  otherEditors: z.array(z.object({ userId: IdSchema, name: z.string(), updatedAt: IsoDateSchema })),
+});
+export const DraftListSchema = z.object({
+  items: z.array(
+    z.object({
+      draftKey: z.string(),
+      documentId: IdSchema.nullable(),
+      title: z.string(),
+      updatedAt: IsoDateSchema,
+    }),
+  ),
+});
+export const PreferencesPutSchema = PreferencesSchema.partial();
