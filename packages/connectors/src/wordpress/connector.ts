@@ -61,8 +61,30 @@ export class WordPressConnector implements Connector<WpConfig> {
     return out;
   }
 
-  async fetch(_cfg: WpConfig, _externalId: string): Promise<SourceContent> {
-    throw new Error('not implemented');
+  static parseExternalId(externalId: string): { type: string; id: number } {
+    const m = /^(\w+):(\d+)$/.exec(externalId);
+    if (!m) throw new Error('invalid externalId: ' + externalId);
+    return { type: m[1], id: Number(m[2]) };
+  }
+
+  async fetch(cfg: WpConfig, externalId: string): Promise<SourceContent> {
+    const { type, id } = WordPressConnector.parseExternalId(externalId);
+    const p = await this.client(cfg).getPost(type, id);
+    const paragraphs = htmlToParagraphs(p.content.rendered);
+    return {
+      title: normalizeText(p.title.rendered),
+      paragraphs,
+      raw: p.content.rendered,
+      hash: contentHash(paragraphs),
+      meta: {
+        type,
+        id,
+        link: p.link,
+        status: p.status,
+        modifiedAt: p.modified_gmt + 'Z',
+        categories: p.categories ?? [],
+      },
+    };
   }
 
   async push(_cfg: WpConfig, _externalId: string | null, _content: LibraryContent): Promise<RemoteRef> {

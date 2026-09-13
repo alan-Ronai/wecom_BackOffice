@@ -78,3 +78,19 @@ describe('listRemote', () => {
     expect(recent.length).toBe(30);
   });
 });
+
+describe('fetch', () => {
+  it('returns normalized paragraphs, raw html, hash and meta', async () => {
+    const c = new WordPressConnector();
+    const s = await c.fetch(cfg(), 'posts:7');
+    expect(s.title).toBe('איטיות גלישה');
+    expect(s.paragraphs.map((p) => p.ref)).toEqual(['h2-1', 'h2-1.p-1']);
+    expect(s.raw).toContain('<h2>');
+    expect(s.hash).toBe((await c.listRemote(cfg()))[0].hash);
+    expect(s.meta).toMatchObject({ type: 'posts', id: 7, link: 'http://wp/7', status: 'publish' });
+  });
+  it('rejects malformed ids and missing posts', async () => {
+    await expect(new WordPressConnector().fetch(cfg(), 'bad')).rejects.toThrow(/externalId/);
+    await expect(new WordPressConnector().fetch(cfg(), 'posts:999')).rejects.toMatchObject({ status: 404 });
+  });
+});
