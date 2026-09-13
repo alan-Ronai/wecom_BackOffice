@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"><style>body{margin:0;background:#ECEEF1;font-family:'IBM Plex Sans Hebrew',Rubik,system-ui,sans-serif;color:#1F2E3B}a{color:#1F2E3B}a:hover{color:#FF3D00}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}@keyframes wkPulse{0%,100%{opacity:.35}50%{opacity:1}}
+/* shared tokens for turns 3–6 */
+.k-side{background:#1F2E3B;color:#fff;display:flex;flex-direction:column;padding:16px 0}.k-side .logo{padding:0 18px 14px;font-size:22px;font-weight:700;color:#FF3D00;font-family:Rubik,sans-serif}.k-side .sec{padding:6px 18px;font-size:10.5px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.4)}.k-side .nav{display:flex;flex-direction:column;gap:2px;padding:0 10px;font-size:13px}.k-side .nav>div{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;color:rgba(255,255,255,.7)}.k-side .nav>div.on{background:rgba(255,61,0,.16);color:#fff;font-weight:500}.k-side .nav .cnt{margin-inline-start:auto;font-size:11px;color:rgba(255,255,255,.5)}
+.k-top{height:56px;display:flex;align-items:center;gap:10px;padding:0 22px;background:#fff;border-bottom:1px solid #E2E4E6}.k-crumb{font-size:12.5px;color:#6B7280}.k-crumb b{color:#1F2E3B;font-weight:500}.k-actions{margin-inline-start:auto;display:flex;gap:8px}
+.k-btn{white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;border:1px solid #E2E4E6;font-size:12.5px;background:#fff}.k-btn.p{background:#FF3D00;color:#fff;border-color:#FF3D00;font-weight:500}.k-btn.n{background:#1F2E3B;color:#fff;border-color:#1F2E3B}.k-btn.d{color:#C02800;border-color:#FFB596}
+.k-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;background:#F5F5F5;color:#6B7280;white-space:nowrap}.k-chip.red{background:#FFF0EB;color:#C02800}.k-chip.amber{background:#FFF8EE;color:#B86A00}.k-chip.green{background:#EDFAF3;color:#1A7A4A}.k-chip.blue{background:#EBF1FF;color:#1D45B4}.k-chip.navy{background:#1F2E3B;color:#fff}
+.k-eyebrow{font-size:10.5px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:#6B7280}.k-card{background:#fff;border:1px solid #E2E4E6;border-radius:12px;padding:14px 16px}.k-mono{font-family:'IBM Plex Mono',monospace;unicode-bidi:isolate;direction:ltr}.k-crm{unicode-bidi:isolate;direction:ltr;display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;background:#1F2E3B;color:#fff;padding:1px 7px;border-radius:5px}.k-crm.rtl{direction:rtl}
+.k-table{display:grid;gap:0;font-size:12.5px}.k-table>div{display:contents}.k-table>div>span{padding:10px 12px;border-bottom:1px solid #F0F2F4;display:flex;align-items:center;gap:8px;min-width:0}.k-table>div.h>span{font-size:10.5px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:#6B7280;border-bottom:1px solid #E2E4E6}.k-table>div.sel>span{background:#FFF8F5}
+.k-av{width:26px;height:26px;border-radius:50%;background:#1F2E3B;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:600;flex-shrink:0}.k-av.r{background:#FF3D00}.k-av.g{background:#A6ABB0}
+.k-kbd{font-family:'IBM Plex Mono',monospace;font-size:10.5px;background:#F0F2F4;padding:1px 6px;border-radius:4px;color:#6B7280;direction:ltr;unicode-bidi:isolate}
+.k-toggle{width:30px;height:18px;border-radius:9px;background:#C7CBD0;position:relative;flex-shrink:0}.k-toggle.on{background:#FF3D00}.k-toggle::after{content:'';position:absolute;top:2px;right:2px;width:14px;height:14px;border-radius:50%;background:#fff}.k-toggle.on::after{right:auto;left:2px}
+.k-focus{outline:2px solid #FF3D00;outline-offset:2px;border-radius:6px}
+/* turn 4 — connectors */
+.c-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}.c-dot.ok{background:#1A7A4A}.c-dot.warn{background:#B86A00}.c-dot.err{background:#C02800}.c-dot.idle{background:#A6ABB0}
+.c-bar{height:6px;border-radius:3px;background:#F0F2F4;overflow:hidden;flex:1;min-width:0}.c-bar>i{display:block;height:100%;background:#FF3D00}
+.c-col{background:#fff;border:1px solid #E2E4E6;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.c-ins{background:#D8F5E5;border-radius:3px}.c-del{background:#FFE0E0;text-decoration:line-through;border-radius:3px}
+</style></helmet>
+<section class="dv-turn" id="t4">
+<div class="dv-thd"><a class="dv-tid" href="#t4">4</a><span class="dv-tname">Connectors &amp; sync — מרשם מחברים, אשף WordPress, תור סנכרון, דו"ח התאמה, מיזוג קונפליקט</span></div>
+<div class="dv-opts">
+
+<!-- ══════════ 4a ══════════ -->
+<div class="dv-opt" id="4a">
+<div class="dv-olabel"><a class="dv-oid" href="#4a">4a</a>Registry — נקודת בריאות, ריצה אחרונה/הבאה, יכולות read/write/webhooks/identity, בדיקת חיבור</div>
+<div class="dv-card" dir="rtl" style="width:1280px;height:640px;display:grid;grid-template-columns:210px 1fr;background:#F4F5F7">
+  <div class="k-side">
+    <div class="logo">wecom.</div>
+    <div class="sec">ניווט</div>
+    <div class="nav">
+      <div>📚 ספרייה<span class="cnt">52</span></div>
+      <div>📄 מקורות<span class="cnt">4</span></div>
+      <div class="on">🔌 מחברים<span class="cnt">4</span></div>
+      <div>⟳ תור סנכרון<span class="cnt">6</span></div>
+    </div>
+    <div class="sec">ניהול</div>
+    <div class="nav"><div>👥 משתמשים</div><div>🛡 תפקידים</div><div>🧾 יומן ביקורת</div><div>⚙️ מערכת</div></div>
+  </div>
+  <div style="display:flex;flex-direction:column;min-width:0">
+    <div class="k-top"><span class="k-crumb">ניהול <span style="margin:0 6px;color:#C7CBD0">/</span> <b>מחברים</b></span><div class="k-actions"><span class="k-btn">בדוק את כולם</span><span class="k-btn p">✚ מחבר</span></div></div>
+    <div style="padding:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-content:start">
+
+      <div class="c-col">
+        <div style="display:flex;align-items:center;gap:8px"><span class="c-dot ok"></span><b style="font-size:13.5px;flex:1;min-width:0">WordPress</b><span class="k-chip green">תקין</span></div>
+        <bdi class="k-mono" style="font-size:11px;color:#6B7280">help.wecom.co.il</bdi>
+        <div style="font-size:11.5px;color:#6B7280">ריצה אחרונה לפני 14 דק׳ · הבאה בעוד 46 דק׳</div>
+        <div style="display:flex;gap:6px;font-size:14px" title="יכולות">📥 📤 🔔</div>
+        <div style="font-size:11.5px;line-height:1.7">38 קישורים · <span style="color:#B86A00">2 ממתינים לסקירה</span> · <span style="color:#C02800">1 קונפליקט</span></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto"><span class="k-btn" style="padding:4px 9px;font-size:11.5px">הרץ עכשיו</span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">בדוק חיבור</span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">הגדרות</span></div>
+      </div>
+
+      <div class="c-col">
+        <div style="display:flex;align-items:center;gap:8px"><span class="c-dot ok"></span><b style="font-size:13.5px;flex:1;min-width:0">תיקיית Word</b><span class="k-chip green">תקין</span></div>
+        <bdi class="k-mono" style="font-size:11px;color:#6B7280">\\fs01\kb\procedures</bdi>
+        <div style="font-size:11.5px;color:#6B7280">צופה בתיקייה · 4 קבצים · אחרון לפני 3 שעות</div>
+        <div style="display:flex;gap:6px;font-size:14px">📥</div>
+        <div style="font-size:11.5px;line-height:1.7">4 מסמכי מקור · 5 הצעות פתוחות</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto"><span class="k-btn" style="padding:4px 9px;font-size:11.5px">סרוק עכשיו</span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">בדוק חיבור</span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">הגדרות</span></div>
+      </div>
+
+      <div class="c-col">
+        <div style="display:flex;align-items:center;gap:8px"><span class="c-dot warn"></span><b style="font-size:13.5px;flex:1;min-width:0"><bdi class="k-mono">crm-fields.xlsx</bdi></b><span class="k-chip amber">דורש טיפול</span></div>
+        <bdi class="k-mono" style="font-size:11px;color:#6B7280">\\fs01\kb\crm\crm-fields.xlsx</bdi>
+        <div style="font-size:11.5px;color:#B86A00">3 שינויים לא מעובדים · מאז 11.06 09:30</div>
+        <div style="display:flex;gap:6px;font-size:14px">📥</div>
+        <div style="font-size:11.5px;line-height:1.7">14 שדות CRM · 1 שדה שונה שם</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto"><span class="k-btn p" style="padding:4px 9px;font-size:11.5px">עבד עכשיו</span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">הגדרות</span></div>
+      </div>
+
+      <div class="c-col">
+        <div style="display:flex;align-items:center;gap:8px"><span class="c-dot idle"></span><b style="font-size:13.5px;flex:1;min-width:0">JSON סטטי</b><span class="k-chip">מקור מקומי</span></div>
+        <bdi class="k-mono" style="font-size:11px;color:#6B7280">topics.json</bdi>
+        <div style="font-size:11.5px;color:#6B7280">ללא תזמון · יובא ידנית לפני יומיים</div>
+        <div style="display:flex;gap:6px;font-size:14px">📥</div>
+        <div style="font-size:11.5px;line-height:1.7">38 שורות · ממופה במלואו</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto"><span class="k-btn" style="padding:4px 9px;font-size:11.5px">ייבא מחדש</span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">הגדרות</span></div>
+      </div>
+
+      <div class="c-col" style="border-style:dashed;background:transparent;grid-column:span 2">
+        <div style="font-size:13px;font-weight:600;color:#6B7280">✚ הוסף מחבר</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="k-btn">WordPress</span><span class="k-btn">תיקייה ברשת</span>
+          <span class="k-btn" style="color:#A6ABB0">SharePoint — בקרוב</span><span class="k-btn" style="color:#A6ABB0">Google Drive — בקרוב</span>
+        </div>
+        <div style="font-size:11.5px;color:#6B7280;line-height:1.6">כל מחבר מצהיר על יכולותיו: <bdi class="k-mono">read</bdi> · <bdi class="k-mono">write</bdi> · <bdi class="k-mono">webhooks</bdi> · <bdi class="k-mono">identity</bdi>. המסך מציג רק פעולות שהיכולת תומכת בהן.</div>
+      </div>
+    </div>
+    <div style="margin-top:auto;padding:9px 16px;background:#fff;border-top:1px solid #E2E4E6;font-size:11.5px;color:#6B7280;display:flex;gap:14px;align-items:center">
+      <span><span class="c-dot ok" style="display:inline-block;vertical-align:middle"></span> תקין</span><span><span class="c-dot warn" style="display:inline-block;vertical-align:middle"></span> דורש טיפול</span><span><span class="c-dot err" style="display:inline-block;vertical-align:middle"></span> שגיאה</span><span><span class="c-dot idle" style="display:inline-block;vertical-align:middle"></span> ללא תזמון</span>
+      <span style="margin-inline-start:auto">📥 קריאה · 📤 כתיבה · 🔔 webhook · 🪪 זהות</span>
+    </div>
+  </div>
+</div></div>
+
+<!-- ══════════ 4b ══════════ -->
+<div class="dv-opt" id="4b">
+<div class="dv-olabel"><a class="dv-oid" href="#4b">4b</a>WordPress wizard — 4 steps, test connection, live preview of what will be imported</div>
+<div class="dv-card" dir="rtl" style="width:960px;box-sizing:border-box;background:#F4F5F7;padding:22px;display:grid;grid-template-columns:220px 1fr;gap:16px">
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <div class="k-eyebrow" style="margin-bottom:6px">מחבר חדש · WordPress</div>
+    <sc-for list="{{ wizard }}" as="w" hint-placeholder-count="4">
+      <div style="display:flex;gap:10px;align-items:center;padding:9px 12px;border-radius:8px;background:{{ w.bg }};color:{{ w.color }};font-size:12.5px;font-weight:{{ w.weight }}"><span style="width:20px;height:20px;border-radius:50%;background:{{ w.dot }};color:#fff;display:grid;place-items:center;font-size:10px">{{ w.mark }}</span>{{ w.label }}</div>
+    </sc-for>
+    <div style="margin-top:auto;font-size:11px;color:#6B7280;line-height:1.5">ההגדרות נשמרות מוצפנות בשרת. סיסמת האפליקציה לא נשמרת בדפדפן.</div>
+  </div>
+  <div class="k-card" style="display:flex;flex-direction:column;gap:14px;min-height:460px">
+    <div style="display:flex;align-items:center;gap:10px"><span style="font-size:16px;font-weight:600">שלב 1 · כתובת ואימות</span><span class="k-chip amber">טרם נבדק</span></div>
+    <label style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:#6B7280">כתובת האתר<input value="https://help.wecom.co.il" style="padding:9px 10px;border:1px solid #E2E4E6;border-radius:8px;font:inherit;direction:ltr;font-family:'IBM Plex Mono',monospace"></label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:#6B7280">משתמש WordPress<input value="kb-sync" style="padding:9px 10px;border:1px solid #E2E4E6;border-radius:8px;font:inherit;direction:ltr"></label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:#6B7280">סיסמת אפליקציה<input type="password" value="xxxx xxxx xxxx xxxx" style="padding:9px 10px;border:1px solid #E2E4E6;border-radius:8px;font:inherit;direction:ltr"></label>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center"><span onClick="{{ test }}" class="k-btn n">בדוק חיבור</span>
+      <sc-if value="{{ tested }}" hint-placeholder-val="{{ true }}"><span class="k-chip green">✓ מחובר · WordPress <bdi class="k-mono">6.6</bdi> · REST API פתוח · 38 עמודים, 12 פוסטים</span></sc-if>
+    </div>
+    <div style="border:1px dashed #E2E4E6;border-radius:10px;padding:12px 14px;font-size:12px;color:#6B7280;line-height:1.6"><b style="color:#1F2E3B">יכולות שזוהו</b> · קריאה ✓ · כתיבה ✓ (הרשאת עורך) · webhook: מומלץ להתקין את התוסף <bdi class="k-mono">wecom-kb-hook</bdi> · זהות: לא</div>
+    <div style="margin-top:auto;display:flex;gap:8px;justify-content:flex-end"><span class="k-btn">ביטול</span><span class="k-btn p">המשך למה לייבא ←</span></div>
+  </div>
+</div></div>
+
+<!-- ══════════ 4c ══════════ -->
+<div class="dv-opt" id="4c">
+<div class="dv-olabel"><a class="dv-oid" href="#4c">4c</a>Sync queue — מצב לכל פריט, סרגל התקדמות, נסה שוב, "ממתין לסקירה" עם קישור עמוק</div>
+<div class="dv-card" dir="rtl" style="width:1000px;background:#F4F5F7;display:flex;flex-direction:column">
+  <div class="k-top" style="padding:0 16px"><span class="k-crumb"><b>תור סנכרון</b> · 6 פריטים</span><div class="k-actions"><span class="k-btn d">⏸ עצור הכל</span></div></div>
+  <div style="display:flex;gap:6px;padding:10px 16px;background:#fff;border-bottom:1px solid #F0F2F4">
+    <span class="k-chip navy">הכל 6</span><span class="k-chip blue">מייבא 2</span><span class="k-chip green">דוחף 2</span><span class="k-chip red">שגיאה 1</span><span class="k-chip">ממתין 1</span>
+  </div>
+  <div style="background:#fff">
+    <div class="k-table" style="grid-template-columns:34px 1fr 150px 210px 150px">
+      <div class="h"><span></span><span>פריט</span><span>כיוון</span><span>התקדמות</span><span>פעולה</span></div>
+      <div class="sel"><span>⟳</span><span style="flex-direction:column;align-items:flex-start;gap:2px"><b>איטיות גלישה</b><span style="font-size:11px;color:#6B7280">WordPress · <bdi class="k-mono">/page/214</bdi></span></span><span><span class="k-chip blue">📥 ייבוא</span></span><span style="flex-direction:column;align-items:stretch;gap:4px"><span style="font-size:11px;color:#6B7280">מעבד פסקאות 12/19</span><span class="c-bar"><i style="width:62%"></i></span></span><span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">עצור</span></span></div>
+      <div><span style="color:#1A7A4A">✓</span><span style="flex-direction:column;align-items:flex-start;gap:2px"><b>אין קליטה / אין שירות</b><span style="font-size:11px;color:#6B7280">WordPress · <bdi class="k-mono">/page/187</bdi></span></span><span><span class="k-chip blue">📥 ייבוא</span></span><span style="font-size:11.5px;color:#6B7280">הושלם · 4 הצעות נוצרו</span><span><a href="#" style="font-size:11.5px;color:#FF3D00;text-decoration:underline">ממתין לסקירה (4)</a></span></div>
+      <div><span style="color:#C02800">✕</span><span style="flex-direction:column;align-items:flex-start;gap:2px"><b>חו"ל ונדידה — מסלול מסנן</b><span style="font-size:11px;color:#C02800">401 — סיסמת האפליקציה פגה</span></span><span><span class="k-chip green">📤 דחיפה</span></span><span style="font-size:11.5px;color:#6B7280">נעצר אחרי 2 ניסיונות</span><span style="gap:6px"><span class="k-btn" style="padding:4px 9px;font-size:11.5px">נסה שוב</span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">הגדרות</span></span></div>
+      <div><span>⟳</span><span style="flex-direction:column;align-items:flex-start;gap:2px"><b>Hotspot לא עובד</b><span style="font-size:11px;color:#6B7280">הספרייה <bdi class="k-mono">v5</bdi> → WordPress</span></span><span><span class="k-chip green">📤 דחיפה</span></span><span style="flex-direction:column;align-items:stretch;gap:4px"><span style="font-size:11px;color:#6B7280">מעלה מדיה 3/5</span><span class="c-bar"><i style="width:38%"></i></span></span><span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">עצור</span></span></div>
+      <div><span style="color:#1A7A4A">✓</span><span style="flex-direction:column;align-items:flex-start;gap:2px"><b>ריענון SIM (בלוק משותף)</b><span style="font-size:11px;color:#6B7280">הספרייה <bdi class="k-mono">v3</bdi> → WordPress</span></span><span><span class="k-chip green">📤 דחיפה</span></span><span style="font-size:11.5px;color:#6B7280">הושלם לפני 6 דק׳</span><span><a href="#" style="font-size:11.5px;color:#6B7280;text-decoration:underline">פתח ב-WordPress ↗</a></span></div>
+      <div><span style="color:#A6ABB0">◷</span><span style="flex-direction:column;align-items:flex-start;gap:2px"><b>נהלי תמיכה טכנית.docx</b><span style="font-size:11px;color:#6B7280">תיקיית Word · <bdi class="k-mono">rev 12</bdi></span></span><span><span class="k-chip blue">📥 ייבוא</span></span><span style="font-size:11.5px;color:#6B7280">ממתין בתור · מקום 1</span><span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">הקדם</span></span></div>
+    </div>
+  </div>
+  <div style="padding:10px 16px;background:#fff;border-top:1px solid #E2E4E6;font-size:12px;color:#6B7280;display:flex;gap:14px;align-items:center">
+    <span>הצעות מוכנות לסקירה: <b style="color:#1F2E3B">5</b> · <a href="#" style="color:#FF3D00;text-decoration:underline">פתח מסמכי מקור</a></span>
+    <span style="margin-inline-start:auto">מצבים: <bdi class="k-mono">synced</bdi> · <bdi class="k-mono">pending</bdi> · <bdi class="k-mono">processing</bdi> · <bdi class="k-mono">error</bdi></span>
+  </div>
+</div></div>
+
+<!-- ══════════ 4d ══════════ -->
+<div class="dv-opt" id="4d">
+<div class="dv-olabel"><a class="dv-oid" href="#4d">4d</a>Parity report — hash/זמן לכל צד, pill מצב, מסמכים ללא קישור</div>
+<div class="dv-card" dir="rtl" style="width:1100px;background:#F4F5F7;display:flex;flex-direction:column">
+  <div class="k-top" style="padding:0 16px"><span class="k-crumb">תור סנכרון <span style="margin:0 6px;color:#C7CBD0">/</span> <b>דו"ח התאמה</b></span>
+    <div style="display:flex;gap:6px;margin-inline-start:14px"><span class="k-chip navy">38 קישורים</span><span class="k-chip green">33 זהים</span><span class="k-chip amber">3 ממתינים</span><span class="k-chip blue">1 דחיפה</span><span class="k-chip red">1 קונפליקט</span></div>
+    <div class="k-actions"><span class="k-btn">⬇ ייצוא</span><span class="k-btn n">סנכרן הכל</span></div></div>
+  <div style="background:#fff">
+    <div class="k-table" style="grid-template-columns:1fr 170px 170px 150px 130px">
+      <div class="h"><span>מסמך</span><span>WordPress</span><span>הספרייה</span><span>מצב</span><span>פעולה</span></div>
+      <div><span><b>איטיות גלישה</b></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">a91c4f2</bdi><span style="font-size:10.5px;color:#6B7280">12.06 09:12</span></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">v8</bdi><span style="font-size:10.5px;color:#6B7280">12.06 12:48</span></span><span><span class="k-chip red">קונפליקט</span></span><span><a href="#4e" class="k-btn d" style="padding:4px 9px;font-size:11.5px">פתור</a></span></div>
+      <div><span><b>אין קליטה / אין שירות</b></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">7d02be9</bdi><span style="font-size:10.5px;color:#6B7280">12.06 08:40</span></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">v4</bdi><span style="font-size:10.5px;color:#6B7280">10.06 15:02</span></span><span><span class="k-chip amber">ממתין לייבוא</span></span><span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">סנכרן</span></span></div>
+      <div><span><b>Hotspot לא עובד</b></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">33e1a07</bdi><span style="font-size:10.5px;color:#6B7280">09.06 11:20</span></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">v5</bdi><span style="font-size:10.5px;color:#6B7280">12.06 10:55</span></span><span><span class="k-chip blue">ממתין לדחיפה</span></span><span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">סנכרן</span></span></div>
+      <div><span><b>חו"ל ונדידה — מסלול מסנן</b></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">c4480ff</bdi><span style="font-size:10.5px;color:#6B7280">11.06 14:03</span></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">v6</bdi><span style="font-size:10.5px;color:#6B7280">11.06 14:03</span></span><span><span class="k-chip green">זהה</span></span><span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">פתח</span></span></div>
+      <div><span><b>לא מצליח להוציא/לקבל שיחות</b></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">8b17c3d</bdi><span style="font-size:10.5px;color:#6B7280">08.06 16:31</span></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">v3</bdi><span style="font-size:10.5px;color:#6B7280">08.06 16:31</span></span><span><span class="k-chip green">זהה</span></span><span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">פתח</span></span></div>
+      <div><span><b>דיבאג נטישה</b></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">1fa90c6</bdi><span style="font-size:10.5px;color:#6B7280">07.06 09:05</span></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">v2</bdi><span style="font-size:10.5px;color:#6B7280">07.06 09:05</span></span><span><span class="k-chip green">זהה</span></span><span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">פתח</span></span></div>
+      <div><span><b>בעיות גלישה ברכב</b></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">6cc21ba</bdi><span style="font-size:10.5px;color:#6B7280">12.06 07:58</span></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">v3</bdi><span style="font-size:10.5px;color:#6B7280">05.06 12:10</span></span><span><span class="k-chip amber">ממתין לייבוא</span></span><span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">סנכרן</span></span></div>
+      <div><span><b>ריענון SIM (בלוק משותף)</b></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">92f70de</bdi><span style="font-size:10.5px;color:#6B7280">12.06 13:04</span></span><span style="flex-direction:column;align-items:flex-start;gap:1px"><bdi class="k-mono" style="font-size:10.5px">v3</bdi><span style="font-size:10.5px;color:#6B7280">12.06 13:04</span></span><span><span class="k-chip green">זהה</span></span><span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">פתח</span></span></div>
+    </div>
+  </div>
+  <div style="padding:10px 16px;background:#fff;border-top:1px solid #E2E4E6;font-size:12px;color:#6B7280;display:flex;gap:14px;align-items:center">
+    <span>מסמכים ללא קישור: <b style="color:#1F2E3B">14</b> · <a href="#" style="color:#FF3D00;text-decoration:underline">קשר עכשיו</a></span>
+    <span style="margin-inline-start:auto">מוצגים 8 מתוך 38 · <span class="k-btn" style="padding:3px 9px">הצג הכל</span></span>
+  </div>
+</div></div>
+
+<!-- ══════════ 4e ══════════ -->
+<div class="dv-opt" id="4e">
+<div class="dv-olabel"><a class="dv-oid" href="#4e">4e</a>Three-way merge — בסיס · WordPress · הספרייה, "קח מ…" לכל פסקה, תוצאה ניתנת לעריכה</div>
+<div class="dv-card" dir="rtl" style="width:1280px;height:760px;background:#F4F5F7;display:flex;flex-direction:column">
+  <div class="k-top" style="height:auto;padding:12px 20px;align-items:flex-start;flex-direction:column;gap:4px">
+    <div style="display:flex;width:100%;align-items:center;gap:10px">
+      <span class="k-chip red">קונפליקט</span><b style="font-size:14.5px">איטיות גלישה §8</b>
+      <div class="k-actions"><span class="k-btn">היסטוריית סנכרון</span></div>
+    </div>
+    <div style="font-size:11.5px;color:#6B7280">שני הצדדים השתנו מאז הסנכרון האחרון (<bdi class="k-mono">12.06 12:48</bdi>) · מזהה קונפליקט <bdi class="k-mono">cf_2a71</bdi></div>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr 300px;gap:12px;padding:14px 16px;min-height:0">
+
+    <div class="c-col">
+      <div style="display:flex;align-items:center;gap:6px"><span class="k-chip">בסיס (<bdi class="k-mono">v7</bdi>)</span></div>
+      <div style="font-size:12.5px;line-height:1.75;color:#6B7280;background:#F8F9FB;border-radius:8px;padding:10px 12px">
+        בקש מהלקוח להריץ בדיקת מהירות. אם התוצאה מתחת ל-5 מגה, המשך לשלב 9 (ריענון גלישה מהצד שלנו).
+      </div>
+      <div class="k-eyebrow">הקשר · זהה בשני הצדדים</div>
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column;gap:6px;font-size:11.5px;color:#A6ABB0;line-height:1.6">
+        <div style="border-inline-start:2px solid #E2E4E6;padding-inline-start:8px">§7 — ודא שהלקוח לא במצב חיסכון בסוללה.</div>
+        <div style="border-inline-start:2px solid #E2E4E6;padding-inline-start:8px">§9 — בצע ריענון גלישה מהצד שלנו והמתן.</div>
+        <div style="border-inline-start:2px solid #E2E4E6;padding-inline-start:8px">§10 — אם לא נפתר, פתח תקלה לרשת.</div>
+      </div>
+      <div style="font-size:11px;color:#A6ABB0;border-top:1px solid #F0F2F4;padding-top:8px">הגרסה שממנה שני הצדדים התפצלו</div>
+    </div>
+
+    <div class="c-col" style="border-color:#F5D8A5">
+      <div style="display:flex;align-items:center;gap:6px"><span class="k-chip amber">WordPress</span><span style="font-size:11px;color:#6B7280">עודכן 09:12 · אלון</span></div>
+      <div style="font-size:12.5px;line-height:1.75;background:#FFF8EE;border-radius:8px;padding:10px 12px">
+        בקש מהלקוח להריץ בדיקת מהירות <span class="c-ins">כשהוא מנותק מ-Wi-Fi</span>. אם התוצאה מתחת ל-<span class="c-del">5</span><span class="c-ins">6</span> מגה, המשך לשלב 9 (ריענון גלישה מהצד שלנו).
+      </div>
+      <div style="display:flex;gap:6px"><span class="k-btn" style="padding:4px 9px;font-size:11.5px">קח מ-WordPress</span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">התעלם</span></div>
+      <div class="k-eyebrow">שינויים בצד זה</div>
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column;gap:5px;font-size:11.5px;line-height:1.6">
+        <div><span class="k-chip amber">הוספה</span> "כשהוא מנותק מ-Wi-Fi"</div>
+        <div><span class="k-chip amber">שינוי</span> סף <bdi class="k-mono">5 → 6</bdi></div>
+      </div>
+      <div style="font-size:11px;color:#6B7280;border-top:1px solid #F0F2F4;padding-top:8px">נערך ב-WordPress · <bdi class="k-mono">rev 41</bdi> · אלון ר.</div>
+    </div>
+
+    <div class="c-col" style="border-color:#FFB596">
+      <div style="display:flex;align-items:center;gap:6px"><span class="k-chip red">הספרייה</span><span style="font-size:11px;color:#6B7280"><bdi class="k-mono">v8</bdi> · ענבר</span></div>
+      <div style="font-size:12.5px;line-height:1.75;background:#FFF0EB;border-radius:8px;padding:10px 12px">
+        בקש מהלקוח להריץ בדיקת מהירות. אם התוצאה מתחת ל-<span class="c-del">5</span><span class="c-ins">6</span> מגה, המשך לשלב 9 (ריענון גלישה מהצד שלנו) <span class="c-ins">ולחכות 90 שניות</span>.
+      </div>
+      <div style="display:flex;gap:6px"><span class="k-btn" style="padding:4px 9px;font-size:11.5px">קח מהספרייה</span><span class="k-btn" style="padding:4px 9px;font-size:11.5px">התעלם</span></div>
+      <div class="k-eyebrow">שינויים בצד זה</div>
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column;gap:5px;font-size:11.5px;line-height:1.6">
+        <div><span class="k-chip red">הוספה</span> "ולחכות 90 שניות"</div>
+        <div><span class="k-chip red">שינוי</span> סף <bdi class="k-mono">5 → 6</bdi> <span style="color:#1A7A4A">· זהה לצד השני</span></div>
+      </div>
+      <div style="font-size:11px;color:#6B7280;border-top:1px solid #F0F2F4;padding-top:8px">נערך בספרייה · <bdi class="k-mono">v8</bdi> · ענבר ל.</div>
+    </div>
+
+    <div class="c-col" style="background:#1F2E3B;border-color:#1F2E3B;color:#fff">
+      <div class="k-eyebrow" style="color:#FFB596">תוצאה ממוזגת</div>
+      <textarea style="flex:1;min-height:0;resize:none;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);border-radius:8px;color:#fff;font:inherit;font-size:12.5px;line-height:1.75;padding:10px 12px">בקש מהלקוח להריץ בדיקת מהירות כשהוא מנותק מ-Wi-Fi. אם התוצאה מתחת ל-6 מגה, המשך לשלב 9 (ריענון גלישה מהצד שלנו) ולחכות 90 שניות.</textarea>
+      <div style="font-size:11px;color:rgba(255,255,255,.6);line-height:1.5">שולב אוטומטית: 3 שינויים · ניתן לעריכה לפני פרסום</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;padding:12px 20px;background:#fff;border-top:1px solid #E2E4E6">
+    <span style="font-size:11.5px;color:#6B7280">פסקה 1 מתוך 1 · שאר המסמך זהה בשני הצדדים</span>
+    <div style="margin-inline-start:auto;display:flex;gap:8px"><span class="k-btn d">השאר בהמתנה</span><span class="k-btn n">שמור כטיוטה</span><span class="k-btn p">פרסם לשני הצדדים (v9 + עדכון WP)</span></div>
+  </div>
+</div></div>
+
+</div>
+<p class="dv-next">Try next: turn 5 — נתונים מחוברים: סייר נתונים, גרף, שדות ובלוקים, דשבורדים (5a–5e).</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { tested: true };
+  renderVals() {
+    const step = (n, label, on) => ({
+      mark: on ? String(n) : String(n),
+      label,
+      bg: on ? '#FFF0EB' : 'transparent',
+      color: on ? '#C02800' : '#6B7280',
+      weight: on ? '600' : '400',
+      dot: on ? '#FF3D00' : '#C7CBD0'
+    });
+    return {
+      tested: this.state.tested,
+      test: () => this.setState({ tested: true }),
+      wizard: [
+        step(1, 'כתובת ואימות', true),
+        step(2, 'מה לייבא', false),
+        step(3, 'מיפוי לכרטיסים', false),
+        step(4, 'תזמון ו-webhook', false)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
