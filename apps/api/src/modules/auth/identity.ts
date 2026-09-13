@@ -75,10 +75,10 @@ export class IdentityService {
     const removed: string[] = [];
     for (const w of wanted.rows)
       if (!currentIds.has(w.role_id)) {
-        await this.db.query(`insert into user_roles(user_id, role_id) values ($1,$2) on conflict do nothing`, [
-          userId,
-          w.role_id,
-        ]);
+        await this.db.query(
+          `insert into user_roles(user_id, role_id) values ($1,$2) on conflict do nothing`,
+          [userId, w.role_id],
+        );
         added.push(w.name);
       }
     for (const c of current.rows)

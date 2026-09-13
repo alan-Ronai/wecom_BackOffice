@@ -43,8 +43,7 @@ export default async function authRoutes(instance: FastifyInstance) {
       schema: { tags: ['auth'], querystring: z.object({ returnTo: z.string().optional() }) },
     },
     async (req, reply) => {
-      if (!app.oidc)
-        throw new HttpError(503, 'PROVIDER_UNAVAILABLE', 'כניסה עם חשבון Microsoft אינה מוגדרת');
+      if (!app.oidc) throw new HttpError(503, 'PROVIDER_UNAVAILABLE', 'כניסה עם חשבון Microsoft אינה מוגדרת');
       const start = await app.oidc.startLogin();
       reply.setCookie(
         OIDC_COOKIE,
@@ -67,8 +66,7 @@ export default async function authRoutes(instance: FastifyInstance) {
       schema: { tags: ['auth'], hide: true },
     },
     async (req, reply) => {
-      if (!app.oidc)
-        throw new HttpError(503, 'PROVIDER_UNAVAILABLE', 'כניסה עם חשבון Microsoft אינה מוגדרת');
+      if (!app.oidc) throw new HttpError(503, 'PROVIDER_UNAVAILABLE', 'כניסה עם חשבון Microsoft אינה מוגדרת');
       const raw = req.cookies[OIDC_COOKIE];
       const unsigned = raw ? req.unsignCookie(raw) : null;
       if (!unsigned || !unsigned.valid || !unsigned.value)

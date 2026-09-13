@@ -31,9 +31,8 @@ export default async function userRoutes(instance: FastifyInstance) {
       const { q, page, pageSize } = req.query;
       const where = q ? `where (u.display_name ilike $1 or u.email ilike $1)` : '';
       const params: unknown[] = q ? [`%${q}%`] : [];
-      const total = (
-        await app.db.query<{ n: string }>(`select count(*) as n from users u ${where}`, params)
-      ).rows[0].n;
+      const total = (await app.db.query<{ n: string }>(`select count(*) as n from users u ${where}`, params))
+        .rows[0].n;
       const rows = await app.db.query(
         `select u.* from users u ${where} order by u.display_name limit ${pageSize} offset ${(page - 1) * pageSize}`,
         params,
@@ -100,9 +99,10 @@ export default async function userRoutes(instance: FastifyInstance) {
             req.body.active,
           ]);
           if (!req.body.active)
-            await client.query(`update sessions set revoked_at=now() where user_id=$1 and revoked_at is null`, [
-              id,
-            ]);
+            await client.query(
+              `update sessions set revoked_at=now() where user_id=$1 and revoked_at is null`,
+              [id],
+            );
         }
         if (req.body.roles) {
           await client.query(`delete from user_roles where user_id=$1`, [id]);

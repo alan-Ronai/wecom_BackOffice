@@ -22,7 +22,9 @@ describe('paloalto helpers', () => {
         '<response status="success"><result><entry><ip>10.1.2.3</ip><user>WECOM\\inbar</user></entry></result></response>',
       ),
     ).toBe('WECOM\\inbar');
-    expect(parseUserIdXml('<response status="success"><result><entry></entry></result></response>')).toBeNull();
+    expect(
+      parseUserIdXml('<response status="success"><result><entry></entry></result></response>'),
+    ).toBeNull();
     expect(parseUserIdXml('garbage')).toBeNull();
   });
 });

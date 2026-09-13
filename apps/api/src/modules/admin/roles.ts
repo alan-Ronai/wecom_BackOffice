@@ -115,11 +115,10 @@ export default async function roleRoutes(instance: FastifyInstance) {
       const client = await app.db.connect();
       try {
         await client.query('begin');
-        await client.query(`update roles set name=coalesce($2,name), description=coalesce($3,description) where id=$1`, [
-          before.id,
-          req.body.name ?? null,
-          req.body.description ?? null,
-        ]);
+        await client.query(
+          `update roles set name=coalesce($2,name), description=coalesce($3,description) where id=$1`,
+          [before.id, req.body.name ?? null, req.body.description ?? null],
+        );
         if (req.body.permissions) {
           await client.query(`delete from role_permissions where role_id=$1`, [before.id]);
           for (const p of req.body.permissions)

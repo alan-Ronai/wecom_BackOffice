@@ -19,7 +19,10 @@ export async function createAdmin(
   let created = false;
   if (existing) {
     id = existing.id;
-    await db.query(`update users set password_hash=$2, active=true, updated_at=now() where id=$1`, [id, hash]);
+    await db.query(`update users set password_hash=$2, active=true, updated_at=now() where id=$1`, [
+      id,
+      hash,
+    ]);
   } else {
     id = (
       await db.query<{ id: string }>(
