@@ -57,7 +57,11 @@ export async function publishBlock(
   return { block: updated, version };
 }
 
-export async function createBlock(tx: Tx, body: UpsertBlockBody, userId: string): Promise<Block> {
+export async function createBlock(
+  tx: Tx,
+  body: UpsertBlockBody,
+  userId: string | null,
+): Promise<Block> {
   const r = await tx.query(
     `insert into blocks(slug, title, kind, description, script, current_version, created_by, updated_by)
      values ($1,$2,$3,$4,$5,0,$6,$6) returning id`,
@@ -98,7 +102,7 @@ export async function updateBlock(
   tx: Tx,
   id: string,
   body: UpsertBlockBody,
-  userId: string,
+  userId: string | null,
 ): Promise<{ block: Block; affected: string[] }> {
   const cur = await tx.query('select id from blocks where id=$1 and deleted_at is null for update', [id]);
   if (!cur.rowCount) throw httpError(404, 'NOT_FOUND', 'הבלוק לא נמצא');

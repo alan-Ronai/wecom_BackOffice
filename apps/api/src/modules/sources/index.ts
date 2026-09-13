@@ -7,12 +7,18 @@ import { resolveContentApi } from './content-api.js';
 import { registerPipelineJobs, type PipelineDeps } from '../../jobs/pipeline.js';
 import sourcesRoutes from './routes.js';
 
-/** `app.events` is decorated by L2; until then nothing listens and events are dropped. */
-const eventSink = (app: FastifyInstance): EventSink =>
-  (app as unknown as { events?: EventSink }).events ?? { publish: () => undefined };
+/**
+ * L2's `app.events` bus. Required, not optional: a missing bus used to degrade to a
+ * silent no-op, which is exactly the unwired-seam failure mode this lane shipped with.
+ */
+const eventSink = (app: FastifyInstance): EventSink => {
+  const bus = (app as unknown as { events?: EventSink }).events;
+  if (!bus) throw new Error('app.events is not decorated — register the event bus before the sources module');
+  return bus;
+};
 
 export async function registerSourcesModule(app: FastifyInstance): Promise<PipelineDeps> {
-  const content = await resolveContentApi();
+  const content = resolveContentApi();
   const revisions = new SourceRevisionService(app.db, {
     send: async (name, data, opts) => (app.boss ? app.boss.send(name, data, opts ?? {}) : null),
   });

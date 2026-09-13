@@ -235,7 +235,11 @@ export async function listCards(
   };
 }
 
-export async function insertDocument(tx: Tx, body: CreateDocumentBody, userId: string): Promise<Document> {
+export async function insertDocument(
+  tx: Tx,
+  body: CreateDocumentBody,
+  userId: string | null,
+): Promise<Document> {
   const r = await tx.query(
     `insert into documents(slug, title, description, category, wave, priority, kind, status, topic_id, created_by, updated_by)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) returning id`,
@@ -382,7 +386,7 @@ export async function saveStructure(
   tx: Tx,
   id: string,
   body: StructureBody,
-  userId: string,
+  userId: string | null,
   ifMatch?: string,
 ): Promise<Document> {
   const cur = await tx.query(
@@ -491,7 +495,7 @@ export async function publishDocument(
   tx: Tx,
   doc: Document | string,
   opts: PublishOptions,
-): Promise<{ doc: Document; version: number }> {
+): Promise<{ doc: Document; version: number; versionId: string }> {
   const id = typeof doc === 'string' ? doc : doc.id;
   const cur = await tx.query(
     'select current_version from documents where id=$1 and deleted_at is null for update',
@@ -507,8 +511,8 @@ export async function publishDocument(
     [id, version, status, opts.actorId],
   );
   const published = (await getDocument(tx, id))!;
-  await tx.query(
-    'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id) values ($1,$2,$3,$4,$5,$6,$7)',
+  const inserted = await tx.query(
+    'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id) values ($1,$2,$3,$4,$5,$6,$7) returning id',
     [
       id,
       version,
@@ -519,7 +523,7 @@ export async function publishDocument(
       opts.suggestionId ?? null,
     ],
   );
-  return { doc: published, version };
+  return { doc: published, version, versionId: inserted.rows[0].id as string };
 }
 
 export interface VersionRow {

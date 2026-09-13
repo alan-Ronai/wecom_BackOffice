@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import { contentAdapter } from './content-adapter.js';
 import type { z } from 'zod';
 import type {
   Block,
@@ -12,10 +13,9 @@ export type ContentClient = pg.PoolClient | pg.Pool;
 
 /**
  * The slice of L2's content module this lane consumes. L2 owns the implementation
- * (`src/modules/content/{documents,blocks,fields}.ts` re-exported from
- * `src/modules/content/index.ts`); L5 only ever programs against this interface so the
- * two lanes can land independently. The DB-backed test double lives in
- * `test/helpers/l5/stubs.ts` and satisfies the same type.
+ * (`modules/documents/publish.ts`, `modules/blocks/publish.ts` and the repos);
+ * `content-adapter.ts` binds this interface onto it statically. The DB-backed test
+ * double lives in `test/helpers/l5/stubs.ts` and satisfies the same type.
  */
 export interface ContentApi {
   getDocument(client: ContentClient, id: string): Promise<Document | null>;
@@ -50,49 +50,20 @@ export interface ContentApi {
   ): Promise<CrmField>;
 }
 
-const unavailable = (): never => {
-  throw Object.assign(new Error('מודול התוכן אינו זמין'), {
-    statusCode: 503,
-    code: 'CONTENT_UNAVAILABLE',
-  });
-};
-
-/**
- * Used until L2's content module lands: every call fails loudly with 503 instead of
- * breaking app start-up (buildApp must stay usable for the other lanes and for `pnpm openapi`).
- */
-export const unavailableContent: ContentApi = {
-  getDocument: unavailable,
-  publishDocument: unavailable,
-  createDocument: unavailable,
-  listDocumentRefs: unavailable,
-  getBlock: unavailable,
-  publishBlock: unavailable,
-  listBlocks: unavailable,
-  listFields: unavailable,
-  upsertField: unavailable,
-};
-
 let override: ContentApi | null = null;
 
 /**
- * Test-only injection point (`test/helpers/l5/stubs.ts`). Product code never calls this;
- * once L2's `modules/content/index.ts` exists `resolveContentApi()` picks it up on its own.
+ * Unit-test injection point (`test/helpers/l5/stubs.ts`). Product code never calls it;
+ * `resolveContentApi()` returns L2's real adapter unless a test has installed a double.
  */
 export function setContentApi(api: ContentApi | null): void {
   override = api;
 }
 
-/** L2-owned module path, resolved at runtime so this lane can land before L2. */
-const CONTENT_MODULE = '../content/index.js';
-
-export async function resolveContentApi(): Promise<ContentApi> {
-  if (override) return override;
-  try {
-    const mod = (await import(/* @vite-ignore */ CONTENT_MODULE)) as Partial<ContentApi>;
-    if (typeof mod.publishDocument === 'function') return mod as ContentApi;
-  } catch {
-    /* L2 has not landed yet */
-  }
-  return unavailableContent;
+/**
+ * The content module L5 runs against. Statically bound to L2 — there is no silent
+ * fallback: if the adapter stops satisfying `ContentApi` the build fails.
+ */
+export function resolveContentApi(): ContentApi {
+  return override ?? contentAdapter;
 }
