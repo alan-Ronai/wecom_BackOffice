@@ -34,10 +34,16 @@ const allWords = (cols: string[], ws: string[], params: unknown[]): string =>
 const anyWord = (cols: string[], ws: string[], params: unknown[]): string =>
   ws.map((w) => wordClause(cols, w, params)).join(' or ');
 
+/**
+ * `categoryScopes` is the caller's `user_roles.category_scope` union (null = every
+ * category) and narrows the two document-bearing groups. Blocks, CRM fields and
+ * scripts are catalogue-wide and carry no category, so they are not narrowed.
+ */
 export async function search(
   q: Q,
   query: SearchQuery,
   model: ModelClient | null = null,
+  categoryScopes: readonly string[] | null = null,
 ): Promise<SearchResponse> {
   const started = Date.now();
   const text = query.q.trim();
@@ -49,6 +55,12 @@ export async function search(
   if (!text) return { groups: [], total: 0, tookMs: Date.now() - started, files: 0 };
   const ws = words(text);
   const files = new Set<string>();
+  /** Appends `and d.category = any($n)` when the caller is category-scoped. */
+  const scopeTerm = (params: unknown[]): string => {
+    if (!categoryScopes) return '';
+    params.push([...categoryScopes]);
+    return ` and d.category = any($${params.length})`;
+  };
 
   // steps -------------------------------------------------------------------
   const stepHits: SearchHit[] = [];
@@ -65,6 +77,7 @@ export async function search(
       ws,
       params,
     );
+    const stepScope = scopeTerm(params);
     params.push(limit);
     const r = await q.query(
       `select s.document_id, d.title doc_title, d.category, s.step_key, s.num, s.title, p.label phase_label,
@@ -72,7 +85,7 @@ export async function search(
               (select a.text from step_actions a where a.step_id=s.id order by a.position limit 1) first_action
        from steps s join documents d on d.id=s.document_id join phases p on p.id=s.phase_id
        left join blocks b on b.id=s.block_id
-       where d.deleted_at is null and (${cond})
+       where d.deleted_at is null and (${cond})${stepScope}
        order by d.title, s.position limit $${params.length}`,
       params,
     );
@@ -108,11 +121,12 @@ export async function search(
   if (want('documents')) {
     const params: unknown[] = [text];
     const cond = allWords(['d.title', "coalesce(d.description,'')", "coalesce(d.code,'')"], ws, params);
+    const docScope = scopeTerm(params);
     params.push(limit);
     const r = await q.query(
       `select d.id, d.title, d.description, d.category, d.current_version,
               ts_rank(d.search_vector, plainto_tsquery('simple', $1)) + similarity(d.title, $1) score
-       from documents d where d.deleted_at is null and (${cond})
+       from documents d where d.deleted_at is null and (${cond})${docScope}
        order by score desc, d.title limit $${params.length}`,
       params,
     );

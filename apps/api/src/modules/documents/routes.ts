@@ -74,7 +74,7 @@ export default async function routes(app: FastifyInstance) {
     async (req) => {
       const user = requireUser(req);
       const q = req.query as z.infer<typeof ListDocumentsQuerySchema>;
-      const { items, total } = await repo.listCards(app.db, q, user.id);
+      const { items, total } = await repo.listCards(app.db, q, user.id, user.categoryScopes);
       return { items, total, page: q.page, pageSize: q.pageSize };
     },
   );
@@ -82,7 +82,7 @@ export default async function routes(app: FastifyInstance) {
   app.get(
     '/documents/:id',
     {
-      config: { requires: ['docs.read'] },
+      config: { requires: ['docs.read'], scope: 'document' },
       schema: { tags: ['documents'], params: Params, response: { 200: DocumentSchema } },
     },
     async (req, reply) => {
@@ -255,7 +255,7 @@ export default async function routes(app: FastifyInstance) {
   app.get(
     '/documents/:id/versions',
     {
-      config: { requires: ['docs.read'] },
+      config: { requires: ['docs.read'], scope: 'document' },
       schema: { tags: ['documents'], params: Params, response: { 200: VersionListSchema } },
     },
     async (req) => {
@@ -267,7 +267,7 @@ export default async function routes(app: FastifyInstance) {
   app.get(
     '/documents/:id/versions/:v',
     {
-      config: { requires: ['docs.read'] },
+      config: { requires: ['docs.read'], scope: 'document' },
       schema: { tags: ['documents'], params: VersionParams, response: { 200: DocumentSchema } },
     },
     async (req) => {
@@ -282,7 +282,7 @@ export default async function routes(app: FastifyInstance) {
   app.get(
     '/documents/:id/diff',
     {
-      config: { requires: ['docs.read'] },
+      config: { requires: ['docs.read'], scope: 'document' },
       schema: {
         tags: ['documents'],
         params: Params,
@@ -391,7 +391,7 @@ export default async function routes(app: FastifyInstance) {
 
   app.post(
     '/documents/:id/pin',
-    { config: { requires: ['docs.read'] }, schema: { tags: ['documents'], params: Params } },
+    { config: { requires: ['docs.read'], scope: 'document' }, schema: { tags: ['documents'], params: Params } },
     async (req, reply) => {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
@@ -404,7 +404,7 @@ export default async function routes(app: FastifyInstance) {
 
   app.delete(
     '/documents/:id/pin',
-    { config: { requires: ['docs.read'] }, schema: { tags: ['documents'], params: Params } },
+    { config: { requires: ['docs.read'], scope: 'document' }, schema: { tags: ['documents'], params: Params } },
     async (req, reply) => {
       const user = requireUser(req);
       await repo.setPin(app.db, user.id, (req.params as { id: string }).id, false);
@@ -415,7 +415,7 @@ export default async function routes(app: FastifyInstance) {
 
   app.post(
     '/documents/:id/view',
-    { config: { requires: ['docs.read'] }, schema: { tags: ['documents'], params: Params } },
+    { config: { requires: ['docs.read'], scope: 'document' }, schema: { tags: ['documents'], params: Params } },
     async (req, reply) => {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
@@ -429,7 +429,7 @@ export default async function routes(app: FastifyInstance) {
   app.get(
     '/documents/:id/links',
     {
-      config: { requires: ['docs.read'] },
+      config: { requires: ['docs.read'], scope: 'document' },
       schema: { tags: ['documents'], params: Params, response: { 200: LinksResponseSchema } },
     },
     async (req) => {
@@ -441,7 +441,7 @@ export default async function routes(app: FastifyInstance) {
   app.get(
     '/documents/:id/related',
     {
-      config: { requires: ['docs.read'] },
+      config: { requires: ['docs.read'], scope: 'document' },
       schema: { tags: ['documents'], params: Params, response: { 200: RelatedResponseSchema } },
     },
     async (req) => {

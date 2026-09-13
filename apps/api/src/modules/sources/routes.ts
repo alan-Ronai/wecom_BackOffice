@@ -21,6 +21,12 @@ const actorId = (req: { user?: { id: string } | null }): string => {
   return req.user.id;
 };
 
+/**
+ * The pipeline writes documents, blocks and CRM fields on a reviewer's behalf, so
+ * every decision on the way there has to be reconstructible. `app.audit` is L3's
+ * wrapper (its own transaction); `publishAccepted` audits inside the apply
+ * transaction itself so the row rolls back with the change.
+ */
 export default function sourcesRoutes(deps: PipelineDeps) {
   return async function routes(instance: FastifyInstance) {
     const app = instance.withTypeProvider<ZodTypeProvider>();
@@ -74,6 +80,13 @@ export default function sourcesRoutes(deps: PipelineDeps) {
             )
           ).id;
         const r = await deps.revisions.ingest(sid, content, actorId(req), file.buffer);
+        await app.audit(req, 'sources.upload', 'source', sid, null, {
+          filename: file.filename,
+          kind: content.kind,
+          revisionId: r.revisionId,
+          duplicate: r.duplicate,
+          paragraphs: content.paragraphs.length,
+        });
         return {
           sourceId: sid,
           revisionId: r.revisionId,
@@ -100,6 +113,7 @@ export default function sourcesRoutes(deps: PipelineDeps) {
         const revisionId = await deps.revisions.latestRevisionId(req.params.id);
         if (!revisionId) throw err(404, 'NOT_FOUND', 'אין גרסאות למקור זה');
         const res = await processRevision(deps, app.model, revisionId);
+        await app.audit(req, 'sources.process', 'source', req.params.id, null, { revisionId, ...res });
         return { revisionId, ...res };
       },
     );
@@ -154,7 +168,19 @@ export default function sourcesRoutes(deps: PipelineDeps) {
           },
           config: { requires: ['suggestions.review'] },
         },
-        async (req) => deps.suggestions.decide(req.params.id, status, actorId(req)),
+        async (req) => {
+          const before = await deps.suggestions.get(req.params.id);
+          const s = await deps.suggestions.decide(req.params.id, status, actorId(req));
+          await app.audit(
+            req,
+            'suggestions.review',
+            'suggestion',
+            s.id,
+            { status: before.status },
+            { status: s.status, type: s.type, targetDocumentId: s.targetDocumentId },
+          );
+          return s;
+        },
       );
 
     app.put(
@@ -170,7 +196,17 @@ export default function sourcesRoutes(deps: PipelineDeps) {
       },
       async (req) => {
         if (!req.body.editedPayload) throw err(400, 'VALIDATION', 'חסר editedPayload');
-        return deps.suggestions.edit(req.params.id, req.body.editedPayload, actorId(req));
+        const before = await deps.suggestions.get(req.params.id);
+        const s = await deps.suggestions.edit(req.params.id, req.body.editedPayload, actorId(req));
+        await app.audit(
+          req,
+          'suggestions.edit',
+          'suggestion',
+          s.id,
+          { payload: before.editedPayload ?? before.payload },
+          { payload: s.editedPayload },
+        );
+        return s;
       },
     );
 
@@ -186,7 +222,11 @@ export default function sourcesRoutes(deps: PipelineDeps) {
         },
         config: { requires: ['suggestions.apply'] },
       },
-      async (req) => deps.suggestions.publishAccepted(req.body.sourceId, actorId(req)),
+      async (req) =>
+        deps.suggestions.publishAccepted(req.body.sourceId, actorId(req), {
+          requestId: req.id,
+          ip: req.ip,
+        }),
     );
   };
 }

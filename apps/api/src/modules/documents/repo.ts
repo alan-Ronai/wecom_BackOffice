@@ -154,10 +154,16 @@ export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Doc
 export const getDocument = async (q: Q, id: string): Promise<Document | null> =>
   (await assembleMany(q, [id])).get(id) ?? null;
 
+/**
+ * `categoryScopes` is the caller's `user_roles.category_scope` union (null = every
+ * category). Route-level `config.scope` only guards `/documents/:id`; without the
+ * same term here a scoped user could list every document in every category.
+ */
 export async function listCards(
   q: Q,
   query: ListDocumentsQuery,
   userId: string,
+  categoryScopes: readonly string[] | null = null,
 ): Promise<{ items: DocumentCard[]; total: number }> {
   const params: unknown[] = [userId];
   const p = (v: unknown) => {
@@ -165,6 +171,7 @@ export async function listCards(
     return '$' + params.length;
   };
   const where: string[] = ['d.deleted_at is null'];
+  if (categoryScopes) where.push(`d.category = any(${p([...categoryScopes])})`);
   if (query.category) where.push(`d.category = ${p(query.category)}`);
   if (query.wave) where.push(`d.wave = ${p(query.wave)}`);
   if (query.priority) where.push(`d.priority = ${p(query.priority)}`);
