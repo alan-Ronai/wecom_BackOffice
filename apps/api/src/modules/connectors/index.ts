@@ -4,6 +4,7 @@ import { ConnectorsRepo } from './repo.js';
 import { buildRegistry } from './registry.js';
 import { SyncService, type DocumentsService, type EventBus, type SourceRevisionService } from './sync.js';
 import routes from './routes.js';
+import { bossAdapter, registerConnectorJobs } from './jobs.js';
 import {
   documentsOf,
   eventsOf,
@@ -67,9 +68,25 @@ export default fp(async (app: FastifyInstance, opts: ConnectorsModuleOptions = {
     opts.enqueue ??
     (async (name, data) => (app.boss ? ((await app.boss.send(name, data as object)) ?? '') : ''));
   app.decorate('connectors', { repo, registry, sync });
+
+  let refresh: (() => Promise<void>) | undefined;
+  if (app.boss) {
+    try {
+      refresh = await registerConnectorJobs(bossAdapter(app.boss), {
+        repo,
+        registry,
+        sync,
+        events: opts.events ?? eventsOf(app),
+        log: app.log,
+      });
+    } catch (err) {
+      app.log.warn({ err }, 'could not register connector jobs');
+    }
+  }
+
   await app.register(async (scope) => {
     // L3 owns `app.audit` and `req.user`; keep the shim only until it lands.
     if (!app.hasDecorator('audit')) await authShim(scope);
-    await scope.register(routes, { repo, registry, sync, enqueue });
+    await scope.register(routes, { repo, registry, sync, enqueue, refresh });
   });
 });
