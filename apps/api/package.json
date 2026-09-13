@@ -11,7 +11,8 @@
     "test:int": "RUN_INTEGRATION=1 vitest run",
     "migrate": "node-pg-migrate -m migrations -j js --ignore-pattern package.json up",
     "migrate:down": "node-pg-migrate -m migrations -j js --ignore-pattern package.json down",
-    "openapi": "tsx src/openapi.ts"
+    "openapi": "tsx src/openapi.ts",
+    "create-admin": "tsx src/cli/create-admin.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^10.0.1",
