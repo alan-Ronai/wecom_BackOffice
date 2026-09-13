@@ -14,7 +14,7 @@ export interface SourceRevisionService {
     content: SourceContent,
     actorId: string | null,
     raw?: Buffer,
-  ): Promise<{ revisionId: string; changed: boolean }>;
+  ): Promise<{ revisionId: string }>;
 }
 
 /** L2 owns the real implementation; L6 depends only on this shape. */

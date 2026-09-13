@@ -125,7 +125,7 @@ export function memoryRevisions(): SourceRevisionService & {
     calls,
     ingest: async (sourceId, content) => {
       calls.push({ sourceId, content });
-      return { revisionId: 'mem-' + calls.length, changed: true };
+      return { revisionId: 'mem-' + calls.length };
     },
   };
 }

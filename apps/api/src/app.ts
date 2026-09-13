@@ -83,10 +83,10 @@ export async function buildApp(
       await v1.register(modelPlugin);
       await v1.register(testUserPlugin, { testUser: opts.testUser });
       await v1.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } });
-      await registerSourcesModule(v1);
+      const pipeline = await registerSourcesModule(v1);
       // end L5: pipeline
       // L6: connectors
-      await v1.register(connectorsModule);
+      await v1.register(connectorsModule, { revisions: pipeline.revisions });
     },
     { prefix: '/api/v1' },
   );
