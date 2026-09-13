@@ -52,3 +52,29 @@ describe('WordPressConnector basics', () => {
     expect(r.message).toMatch(/חיבור/);
   });
 });
+
+describe('listRemote', () => {
+  it('walks all pages of every post type and filters by since', async () => {
+    for (let i = 1; i <= 150; i++)
+      stub.posts.set('pages:' + i, {
+        id: i,
+        title: { rendered: 'עמוד ' + i },
+        content: { rendered: '<p>תוכן ' + i + '</p>' },
+        modified_gmt: i > 120 ? '2025-07-01T00:00:00' : '2025-05-01T00:00:00',
+        link: 'http://wp/p' + i,
+        status: 'publish',
+      });
+    const c = new WordPressConnector();
+    const all = await c.listRemote({ ...cfg(), postTypes: ['posts', 'pages'] });
+    expect(all.length).toBe(151);
+    expect(all[0]).toMatchObject({
+      externalId: 'posts:7',
+      kind: 'posts',
+      updatedAt: '2025-06-12T10:00:00Z',
+      url: 'http://wp/7',
+    });
+    expect(all[0].hash).toMatch(/^[a-f0-9]{64}$/);
+    const recent = await c.listRemote({ ...cfg(), postTypes: ['pages'] }, '2025-06-01T00:00:00Z');
+    expect(recent.length).toBe(30);
+  });
+});

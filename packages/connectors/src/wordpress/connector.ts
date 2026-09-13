@@ -9,6 +9,7 @@ import type {
 } from '../contract.js';
 import { WpConfigSchema, type WpConfig } from './config.js';
 import { WpClient } from './client.js';
+import { contentHash, htmlToParagraphs, normalizeText } from './html.js';
 
 export class WordPressConnector implements Connector<WpConfig> {
   configSchema = WpConfigSchema;
@@ -35,8 +36,29 @@ export class WordPressConnector implements Connector<WpConfig> {
     }
   }
 
-  async listRemote(_cfg: WpConfig, _since?: string): Promise<RemoteItem[]> {
-    throw new Error('not implemented');
+  async listRemote(cfg: WpConfig, since?: string): Promise<RemoteItem[]> {
+    const client = this.client(cfg);
+    const out: RemoteItem[] = [];
+    for (const type of cfg.postTypes) {
+      for (let page = 1; ; page++) {
+        const { items, totalPages } = await client.listPosts(type, {
+          modifiedAfter: since?.replace(/Z$/, ''),
+          page,
+          perPage: 100,
+        });
+        for (const p of items)
+          out.push({
+            externalId: `${type}:${p.id}`,
+            title: normalizeText(p.title.rendered),
+            hash: contentHash(htmlToParagraphs(p.content.rendered)),
+            updatedAt: p.modified_gmt + 'Z',
+            kind: type,
+            url: p.link,
+          });
+        if (page >= totalPages) break;
+      }
+    }
+    return out;
   }
 
   async fetch(_cfg: WpConfig, _externalId: string): Promise<SourceContent> {
