@@ -1,13 +1,7 @@
 import type { Block, CrmField, Document } from '@wecom/shared';
 import type { Tx } from '../../lib/sql.js';
 import { publishDocument } from '../documents/publish.js';
-import {
-  getDocument,
-  insertDocument,
-  loadDocRefs,
-  saveStructure,
-  type Q,
-} from '../documents/repo.js';
+import { getDocument, insertDocument, loadDocRefs, saveStructure, type Q } from '../documents/repo.js';
 import { getBlock, listBlocks, updateBlock } from '../blocks/repo.js';
 import { listFields, upsertField } from '../fields/repo.js';
 import type { ContentApi } from './content-api.js';
@@ -55,8 +49,7 @@ export const contentAdapter: ContentApi = {
         'update documents set source_id=coalesce($2, source_id), source_ref=coalesce($3, source_ref) where id=$1',
         [created.id, input.sourceId ?? null, input.sourceRef ?? null],
       );
-    if (input.phases?.length)
-      await saveStructure(tx(client), created.id, { phases: input.phases }, actorId);
+    if (input.phases?.length) await saveStructure(tx(client), created.id, { phases: input.phases }, actorId);
     return (await getDocument(client, created.id)) as Document;
   },
 

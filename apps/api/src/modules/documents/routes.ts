@@ -182,8 +182,7 @@ export default async function routes(app: FastifyInstance) {
       // The etag exists precisely so a structure save cannot silently clobber a
       // concurrent editor; making it optional made that guarantee opt-in.
       const ifMatch = req.headers['if-match'] as string | undefined;
-      if (!ifMatch)
-        throw httpError(428, 'IF_MATCH_REQUIRED', 'נדרשת כותרת If-Match עם ה-etag של המסמך');
+      if (!ifMatch) throw httpError(428, 'IF_MATCH_REQUIRED', 'נדרשת כותרת If-Match עם ה-etag של המסמך');
       const countSteps = (d: { phases: { steps: unknown[] }[] }) =>
         d.phases.reduce((a, p) => a + p.steps.length, 0);
       const doc = await withTransaction(app.db, async (tx) => {
@@ -402,7 +401,10 @@ export default async function routes(app: FastifyInstance) {
 
   app.post(
     '/documents/:id/pin',
-    { config: { requires: ['docs.read'], scope: 'document' }, schema: { tags: ['documents'], params: Params } },
+    {
+      config: { requires: ['docs.read'], scope: 'document' },
+      schema: { tags: ['documents'], params: Params },
+    },
     async (req, reply) => {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
@@ -415,7 +417,10 @@ export default async function routes(app: FastifyInstance) {
 
   app.delete(
     '/documents/:id/pin',
-    { config: { requires: ['docs.read'], scope: 'document' }, schema: { tags: ['documents'], params: Params } },
+    {
+      config: { requires: ['docs.read'], scope: 'document' },
+      schema: { tags: ['documents'], params: Params },
+    },
     async (req, reply) => {
       const user = requireUser(req);
       await repo.setPin(app.db, user.id, (req.params as { id: string }).id, false);
@@ -426,7 +431,10 @@ export default async function routes(app: FastifyInstance) {
 
   app.post(
     '/documents/:id/view',
-    { config: { requires: ['docs.read'], scope: 'document' }, schema: { tags: ['documents'], params: Params } },
+    {
+      config: { requires: ['docs.read'], scope: 'document' },
+      schema: { tags: ['documents'], params: Params },
+    },
     async (req, reply) => {
       const user = requireUser(req);
       const { id } = req.params as { id: string };

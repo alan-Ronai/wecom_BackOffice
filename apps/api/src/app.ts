@@ -100,8 +100,13 @@ export async function buildApp(
     if (status === 500) req.log.error(err);
     reply.status(status).send(body);
   });
+  // `connectorsModule` decorates the /api/v1 scope it is registered in; mirror the
+  // services onto the root so jobs, the CLI and tests can reach them the way L2's
+  // publish hook does (it sees them through the scope's prototype chain).
+  let v1Scope: FastifyInstance | undefined;
   await app.register(
     async (v1) => {
+      v1Scope = v1;
       await v1.register(health);
       await registerAuth(v1); // L3: identity
       await v1.register(adminRoutes, { prefix: '/admin' }); // L3: identity
@@ -133,6 +138,7 @@ export async function buildApp(
     },
     { prefix: '/api/v1' },
   );
+  if (v1Scope?.hasDecorator('connectors')) app.decorate('connectors', v1Scope.connectors);
   app.get('/api/docs/json', { schema: { hide: true } }, async () => app.swagger());
   return app;
 }

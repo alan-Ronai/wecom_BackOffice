@@ -54,7 +54,10 @@ export default async function routes(app: FastifyInstance) {
 
   app.delete(
     '/documents/:id/draft',
-    { config: { requires: ['docs.edit'], scope: 'document' }, schema: { tags: ['drafts'], params: DocParams } },
+    {
+      config: { requires: ['docs.edit'], scope: 'document' },
+      schema: { tags: ['drafts'], params: DocParams },
+    },
     async (req, reply) => {
       const user = requireUser(req);
       await withTransaction(app.db, (tx) => repo.deleteDraft(tx, (req.params as { id: string }).id, user.id));

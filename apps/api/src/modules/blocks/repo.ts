@@ -57,11 +57,7 @@ export async function publishBlock(
   return { block: updated, version };
 }
 
-export async function createBlock(
-  tx: Tx,
-  body: UpsertBlockBody,
-  userId: string | null,
-): Promise<Block> {
+export async function createBlock(tx: Tx, body: UpsertBlockBody, userId: string | null): Promise<Block> {
   const r = await tx.query(
     `insert into blocks(slug, title, kind, description, script, current_version, created_by, updated_by)
      values ($1,$2,$3,$4,$5,0,$6,$6) returning id`,

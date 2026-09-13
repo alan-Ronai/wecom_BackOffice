@@ -54,11 +54,7 @@ export async function documentsMentioning(q: Q, name: string): Promise<string[]>
   return r.rows.map((x) => x.id as string);
 }
 
-export async function upsertField(
-  tx: Tx,
-  body: UpsertFieldBody,
-  _userId: string | null,
-): Promise<CrmField> {
+export async function upsertField(tx: Tx, body: UpsertFieldBody, _userId: string | null): Promise<CrmField> {
   await tx.query(
     `insert into crm_fields(name, status, renamed_to, path, note) values ($1,$2,$3,$4,$5)
      on conflict (name) do update set status=excluded.status, renamed_to=excluded.renamed_to,

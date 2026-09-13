@@ -97,8 +97,7 @@ export default async function userRoutes(instance: FastifyInstance) {
           `select id from users where subject=$1 and source='local'`,
           [subject],
         );
-        if (existing.rowCount)
-          throw new HttpError(409, 'USER_EXISTS', 'משתמש מקומי עם כתובת זו כבר קיים');
+        if (existing.rowCount) throw new HttpError(409, 'USER_EXISTS', 'משתמש מקומי עם כתובת זו כבר קיים');
         const created = await client.query(
           `insert into users(subject, source, email, display_name, initials, password_hash)
            values ($1,'local',$1,$2,$3,$4) returning *`,

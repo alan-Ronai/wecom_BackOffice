@@ -547,6 +547,186 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 3
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 12
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "roleId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "categoryScope": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "sim",
+                              "tech",
+                              "billing",
+                              "plans",
+                              "intl",
+                              "ops"
+                            ]
+                          },
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "roleId",
+                        "categoryScope"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "subject": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "entra",
+                        "paloalto",
+                        "local"
+                      ]
+                    },
+                    "email": {
+                      "type": "string",
+                      "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+                      "nullable": true
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "initials": {
+                      "type": "string",
+                      "maxLength": 2
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "lastLoginAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "roleId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "roleName": {
+                            "type": "string"
+                          },
+                          "categoryScope": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "sim",
+                                "tech",
+                                "billing",
+                                "plans",
+                                "intl",
+                                "ops"
+                              ]
+                            },
+                            "nullable": true
+                          },
+                          "grantedBy": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "grantedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "roleId",
+                          "roleName",
+                          "categoryScope",
+                          "grantedBy",
+                          "grantedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "subject",
+                    "source",
+                    "email",
+                    "displayName",
+                    "initials",
+                    "active",
+                    "lastLoginAt",
+                    "roles"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/admin/users/{id}": {
@@ -1440,6 +1620,159 @@
                     "total",
                     "page",
                     "pageSize"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/system": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "db": {
+                      "type": "boolean"
+                    },
+                    "model": {
+                      "type": "boolean"
+                    },
+                    "modelName": {
+                      "type": "string"
+                    },
+                    "queue": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "queues": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer"
+                      }
+                    },
+                    "backup": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "latestFile": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "ageHours": {
+                          "type": "number",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "ok",
+                        "latestFile",
+                        "ageHours"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "connectors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "lastStatus": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastRunAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "conflicts": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "type",
+                          "enabled",
+                          "lastStatus",
+                          "lastRunAt",
+                          "conflicts"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "sources": {
+                      "type": "object",
+                      "properties": {
+                        "pending": {
+                          "type": "integer"
+                        },
+                        "error": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "pending",
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "suggestions": {
+                      "type": "object",
+                      "properties": {
+                        "pending": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "pending"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "uptimeSec": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "db",
+                    "model",
+                    "modelName",
+                    "queue",
+                    "queues",
+                    "backup",
+                    "connectors",
+                    "sources",
+                    "suggestions",
+                    "version",
+                    "uptimeSec"
                   ],
                   "additionalProperties": false
                 }
