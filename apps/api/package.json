@@ -9,8 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:int": "RUN_INTEGRATION=1 vitest run",
-    "migrate": "node-pg-migrate -m migrations -j js up",
-    "migrate:down": "node-pg-migrate -m migrations -j js down",
+    "migrate": "node-pg-migrate -m migrations -j js --ignore-pattern package.json up",
+    "migrate:down": "node-pg-migrate -m migrations -j js --ignore-pattern package.json down",
     "openapi": "tsx src/openapi.ts"
   },
   "dependencies": {
