@@ -4,5 +4,7 @@ export * from './wordpress/config.js';
 export * from './wordpress/client.js';
 export * from './wordpress/html.js';
 export * from './wordpress/webhook.js';
+export * from './json/config.js';
+export * from './json/connector.js';
 export * from './render/wpHtml.js';
 export * from './wordpress/connector.js';
