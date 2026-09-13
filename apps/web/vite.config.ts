@@ -12,6 +12,8 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Pinned so the same-origin API base is deterministic and never reaches a real dev server.
+    environmentOptions: { jsdom: { url: 'http://kb.test/' } },
     setupFiles: ['test/setup.ts'],
     include: ['test/**/*.test.ts?(x)'],
     globals: false,
