@@ -177,6 +177,43 @@ export const AdminUserPatchSchema = z.object({
     .array(z.object({ roleId: IdSchema, categoryScope: z.array(CategorySchema).nullable() }))
     .optional(),
 });
+/** Stage-1 §4 `POST /admin/users`: create (or reset) the local, non-federated login. */
+export const AdminUserCreateSchema = z.object({
+  email: z.string().min(3),
+  password: z.string().min(12),
+  displayName: z.string().min(1).max(80).optional(),
+  roles: z
+    .array(z.object({ roleId: IdSchema, categoryScope: z.array(CategorySchema).nullable() }))
+    .optional(),
+});
+/** Stage-1 §4 `GET /admin/system`: the operator's single "is anything wrong" view. */
+export const AdminSystemSchema = z.object({
+  db: z.boolean(),
+  model: z.boolean(),
+  modelName: z.string(),
+  queue: z.number().int().nullable(),
+  queues: z.record(z.number().int()),
+  backup: z.object({
+    ok: z.boolean(),
+    latestFile: z.string().nullable(),
+    ageHours: z.number().nullable(),
+  }),
+  connectors: z.array(
+    z.object({
+      id: IdSchema,
+      name: z.string(),
+      type: z.string(),
+      enabled: z.boolean(),
+      lastStatus: z.string().nullable(),
+      lastRunAt: IsoDateSchema.nullable(),
+      conflicts: z.number().int(),
+    }),
+  ),
+  sources: z.object({ pending: z.number().int(), error: z.number().int() }),
+  suggestions: z.object({ pending: z.number().int() }),
+  version: z.string(),
+  uptimeSec: z.number(),
+});
 export const RoleUpsertSchema = z.object({
   name: z.string().min(1).max(40),
   description: z.string().default(''),

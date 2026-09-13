@@ -4,6 +4,7 @@ import roles from './roles.js';
 import groupsMap from './groups-map.js';
 import sessions from './sessions.js';
 import auditR from './audit.js';
+import system from './system.js';
 
 export default async function adminRoutes(app: FastifyInstance) {
   await app.register(users);
@@ -11,4 +12,5 @@ export default async function adminRoutes(app: FastifyInstance) {
   await app.register(groupsMap);
   await app.register(sessions);
   await app.register(auditR);
+  await app.register(system);
 }

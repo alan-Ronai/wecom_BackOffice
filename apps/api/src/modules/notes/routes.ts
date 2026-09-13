@@ -20,7 +20,7 @@ export default async function routes(app: FastifyInstance) {
   app.get(
     '/documents/:id/notes',
     {
-      config: { requires: ['docs.read'] },
+      config: { requires: ['docs.read'], scope: 'document' },
       schema: { tags: ['notes'], params: DocParams, response: { 200: NoteListSchema } },
     },
     async (req) => {
@@ -32,7 +32,7 @@ export default async function routes(app: FastifyInstance) {
   app.post(
     '/documents/:id/notes',
     {
-      config: { requires: ['notes.write'] },
+      config: { requires: ['notes.write'], scope: 'document' },
       schema: {
         tags: ['notes'],
         params: DocParams,

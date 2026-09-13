@@ -37,7 +37,7 @@ run('fields and scripts', () => {
     await app.inject({
       method: 'PUT',
       url: `/api/v1/documents/${c.id}/structure`,
-      headers: auth(u),
+      headers: { ...auth(u), 'if-match': c.etag },
       payload: {
         phases: [
           {

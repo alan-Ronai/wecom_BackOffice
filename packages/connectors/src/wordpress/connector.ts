@@ -11,13 +11,23 @@ import { WpConfigSchema, type WpConfig } from './config.js';
 import { WpClient, type WpPost } from './client.js';
 import { contentHash, htmlToParagraphs, normalizeText } from './html.js';
 import { renderWpHtml } from '../render/wpHtml.js';
-import { verifySignature, WebhookBodySchema } from './webhook.js';
+import { assertFresh, verifySignature, WebhookBodySchema } from './webhook.js';
+import { assertAllowedHost, type ConnectorGuards } from '../guards.js';
 
 export class WordPressConnector implements Connector<WpConfig> {
   configSchema = WpConfigSchema;
-  constructor(private fetchImpl: typeof fetch = fetch) {}
+  /**
+   * `guards.hostAllowlist` limits where `cfg.baseUrl` may point. Without it every
+   * authenticated call is an SSRF primitive against anything the API container
+   * can reach; link-local metadata is refused either way.
+   */
+  constructor(
+    private fetchImpl: typeof fetch = fetch,
+    private guards: ConnectorGuards = {},
+  ) {}
 
   protected client(cfg: WpConfig): WpClient {
+    assertAllowedHost(cfg.baseUrl, this.guards.hostAllowlist);
     return new WpClient(cfg, this.fetchImpl);
   }
 
@@ -120,6 +130,7 @@ export class WordPressConnector implements Connector<WpConfig> {
     const sig = headers['x-kb-signature'] ?? headers['X-KB-Signature'];
     if (!verifySignature(cfg.webhookSecret, raw, sig)) throw new Error('invalid signature');
     const b = WebhookBodySchema.parse(JSON.parse(raw));
+    assertFresh(b.sent_at);
     return [
       {
         externalId: `${b.post_type}:${b.post_id}`,

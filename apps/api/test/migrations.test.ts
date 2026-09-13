@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import pg from 'pg';
 import { runner } from 'node-pg-migrate';
+import { DEFAULT_ROLES, PERMISSIONS } from '@wecom/shared';
 
 const run = process.env.RUN_INTEGRATION === '1' ? describe : describe.skip;
 run('migrations', () => {
@@ -68,21 +69,36 @@ run('migrations', () => {
     ])
       expect(names, t).toContain(t);
   });
-  it('seeds permissions and default roles', async () => {
-    expect((await pool.query('select count(*)::int as n from permissions')).rows[0].n).toBe(19);
-    expect((await pool.query('select name from roles order by name')).rows.map((r) => r.name)).toEqual([
-      'admin',
-      'agent',
-      'editor',
-      'lead',
-    ]);
+  it('seeds permissions and default roles that match packages/shared', async () => {
+    // `PERMISSIONS`/`DEFAULT_ROLES` are duplicated verbatim in 0002_identity.js;
+    // nothing asserted they agree, so a permission added on one side was silent.
+    expect((await pool.query('select count(*)::int as n from permissions')).rows[0].n).toBe(
+      PERMISSIONS.length,
+    );
+    expect((await pool.query('select name from permissions order by name')).rows.map((r) => r.name)).toEqual(
+      [...PERMISSIONS].sort(),
+    );
+    expect((await pool.query('select name from roles order by name')).rows.map((r) => r.name)).toEqual(
+      Object.keys(DEFAULT_ROLES).sort(),
+    );
+    for (const [name, perms] of Object.entries(DEFAULT_ROLES)) {
+      const r = await pool.query(
+        `select rp.permission from role_permissions rp join roles r on r.id=rp.role_id
+           where r.name=$1 order by rp.permission`,
+        [name],
+      );
+      expect(
+        r.rows.map((x) => x.permission),
+        name,
+      ).toEqual([...perms].sort());
+    }
   });
   it('rolls back cleanly', async () => {
     await runner({
       databaseUrl: c.getConnectionUri(),
       dir: 'migrations',
       direction: 'down',
-      count: 8,
+      count: 9,
       migrationsTable: 'pgmigrations',
       ignorePattern: 'package\\.json',
       log: () => undefined,

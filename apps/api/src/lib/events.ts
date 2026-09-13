@@ -4,6 +4,8 @@ import { EventSchema, type Event } from '@wecom/shared';
 import type { Tx } from './sql.js';
 
 const CHANNEL = 'kb_events';
+/** Postgres' hard NOTIFY payload limit. */
+const MAX_NOTIFY_BYTES = 7800;
 
 /**
  * Cross-instance event bus over Postgres LISTEN/NOTIFY. Publishing happens inside the caller's
@@ -67,7 +69,14 @@ export class EventBus {
 
   /** Publish inside a transaction: NOTIFY is only delivered when that transaction commits. */
   async publish(tx: Tx, event: Event): Promise<void> {
-    await tx.query('select pg_notify($1, $2)', [CHANNEL, JSON.stringify(event)]);
+    const payload = JSON.stringify(event);
+    // pg_notify's payload limit is 8000 bytes and exceeding it aborts the caller's
+    // transaction — an otherwise-successful write must not fail because of an event.
+    if (Buffer.byteLength(payload, 'utf8') > MAX_NOTIFY_BYTES) {
+      this.onError?.(new Error(`event ${event.name} payload exceeds ${MAX_NOTIFY_BYTES} bytes; dropped`));
+      return;
+    }
+    await tx.query('select pg_notify($1, $2)', [CHANNEL, payload]);
   }
 
   subscribe(fn: (e: Event) => void): () => void {

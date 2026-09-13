@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   CreateDocumentBodySchema,
@@ -20,13 +20,45 @@ import {
 } from '@wecom/shared';
 import { withTransaction } from '../../lib/sql.js';
 import { audit } from '../../lib/audit.js';
-import { forbidden, notFound } from '../../lib/http.js';
+import { forbidden, httpError, notFound } from '../../lib/http.js';
 import { hasScope, requireUser } from '../../lib/user.js';
 import * as repo from './repo.js';
 import { annotateBlame, diffDocuments, diffStats } from './diff.js';
 
 const Params = z.object({ id: IdSchema });
 const VersionParams = z.object({ id: IdSchema, v: z.coerce.number().int().min(0) });
+
+/**
+ * Closes the KB -> remote half of the two-way sync (L6's `pushOnPublish`). Called
+ * *after* the publish transaction commits, so a WordPress outage can never roll
+ * back a local publish: a failure is logged and emitted as `job.failed` instead of
+ * failing the response. Links in `conflict` are skipped by `pushOnPublish` itself.
+ */
+async function pushOnPublish(
+  app: FastifyInstance,
+  req: FastifyRequest,
+  documentId: string,
+  actorId: string,
+): Promise<void> {
+  const sync = app.connectors?.sync;
+  if (!sync) return;
+  try {
+    const refs = await sync.pushOnPublish(documentId, actorId);
+    if (refs.length) req.log.info({ documentId, pushed: refs.length }, 'push-on-publish');
+  } catch (err) {
+    req.log.error({ err, documentId }, 'push-on-publish failed');
+    await withTransaction(app.db, (tx) =>
+      app.events.publish(
+        tx,
+        makeEvent('job.failed', {
+          jobName: 'sync.pushOnPublish',
+          jobId: documentId,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      ),
+    );
+  }
+}
 
 export default async function routes(app: FastifyInstance) {
   app.get(
@@ -42,7 +74,7 @@ export default async function routes(app: FastifyInstance) {
     async (req) => {
       const user = requireUser(req);
       const q = req.query as z.infer<typeof ListDocumentsQuerySchema>;
-      const { items, total } = await repo.listCards(app.db, q, user.id);
+      const { items, total } = await repo.listCards(app.db, q, user.id, user.categoryScopes);
       return { items, total, page: q.page, pageSize: q.pageSize };
     },
   );
@@ -50,7 +82,7 @@ export default async function routes(app: FastifyInstance) {
   app.get(
     '/documents/:id',
     {
-      config: { requires: ['docs.read'] },
+      config: { requires: ['docs.read'], scope: 'document' },
       schema: { tags: ['documents'], params: Params, response: { 200: DocumentSchema } },
     },
     async (req, reply) => {
@@ -111,7 +143,13 @@ export default async function routes(app: FastifyInstance) {
         if (!before) throw notFound('המסמך');
         if (!hasScope(user, before.category) || (body.category && !hasScope(user, body.category)))
           throw forbidden();
-        const after = await repo.patchDocument(tx, id, body, user.id);
+        const after = await repo.patchDocument(
+          tx,
+          id,
+          body,
+          user.id,
+          req.headers['if-match'] as string | undefined,
+        );
         await audit(tx, {
           actorId: user.id,
           action: 'docs.edit',
@@ -141,6 +179,10 @@ export default async function routes(app: FastifyInstance) {
     async (req, reply) => {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
+      // The etag exists precisely so a structure save cannot silently clobber a
+      // concurrent editor; making it optional made that guarantee opt-in.
+      const ifMatch = req.headers['if-match'] as string | undefined;
+      if (!ifMatch) throw httpError(428, 'IF_MATCH_REQUIRED', 'נדרשת כותרת If-Match עם ה-etag של המסמך');
       const countSteps = (d: { phases: { steps: unknown[] }[] }) =>
         d.phases.reduce((a, p) => a + p.steps.length, 0);
       const doc = await withTransaction(app.db, async (tx) => {
@@ -152,7 +194,7 @@ export default async function routes(app: FastifyInstance) {
           id,
           req.body as z.infer<typeof StructureBodySchema>,
           user.id,
-          req.headers['if-match'] as string | undefined,
+          ifMatch,
         );
         await audit(tx, {
           actorId: user.id,
@@ -190,7 +232,7 @@ export default async function routes(app: FastifyInstance) {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
       const body = req.body as z.infer<typeof PublishBodySchema>;
-      return withTransaction(app.db, async (tx) => {
+      const result = await withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
         if (!hasScope(user, before.category)) throw forbidden();
@@ -215,13 +257,15 @@ export default async function routes(app: FastifyInstance) {
         );
         return { document: doc, version, auditId };
       });
+      await pushOnPublish(app, req, id, user.id);
+      return result;
     },
   );
 
   app.get(
     '/documents/:id/versions',
     {
-      config: { requires: ['docs.read'] },
+      config: { requires: ['docs.read'], scope: 'document' },
       schema: { tags: ['documents'], params: Params, response: { 200: VersionListSchema } },
     },
     async (req) => {
@@ -233,7 +277,7 @@ export default async function routes(app: FastifyInstance) {
   app.get(
     '/documents/:id/versions/:v',
     {
-      config: { requires: ['docs.read'] },
+      config: { requires: ['docs.read'], scope: 'document' },
       schema: { tags: ['documents'], params: VersionParams, response: { 200: DocumentSchema } },
     },
     async (req) => {
@@ -248,7 +292,7 @@ export default async function routes(app: FastifyInstance) {
   app.get(
     '/documents/:id/diff',
     {
-      config: { requires: ['docs.read'] },
+      config: { requires: ['docs.read'], scope: 'document' },
       schema: {
         tags: ['documents'],
         params: Params,
@@ -291,7 +335,7 @@ export default async function routes(app: FastifyInstance) {
     async (req) => {
       const user = requireUser(req);
       const { id, v } = req.params as { id: string; v: number };
-      return withTransaction(app.db, async (tx) => {
+      const result = await withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
         if (!hasScope(user, before.category)) throw forbidden();
@@ -312,6 +356,8 @@ export default async function routes(app: FastifyInstance) {
         );
         return { document: doc, version, auditId };
       });
+      await pushOnPublish(app, req, id, user.id);
+      return result;
     },
   );
 
@@ -355,7 +401,10 @@ export default async function routes(app: FastifyInstance) {
 
   app.post(
     '/documents/:id/pin',
-    { config: { requires: ['docs.read'] }, schema: { tags: ['documents'], params: Params } },
+    {
+      config: { requires: ['docs.read'], scope: 'document' },
+      schema: { tags: ['documents'], params: Params },
+    },
     async (req, reply) => {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
@@ -368,7 +417,10 @@ export default async function routes(app: FastifyInstance) {
 
   app.delete(
     '/documents/:id/pin',
-    { config: { requires: ['docs.read'] }, schema: { tags: ['documents'], params: Params } },
+    {
+      config: { requires: ['docs.read'], scope: 'document' },
+      schema: { tags: ['documents'], params: Params },
+    },
     async (req, reply) => {
       const user = requireUser(req);
       await repo.setPin(app.db, user.id, (req.params as { id: string }).id, false);
@@ -379,7 +431,10 @@ export default async function routes(app: FastifyInstance) {
 
   app.post(
     '/documents/:id/view',
-    { config: { requires: ['docs.read'] }, schema: { tags: ['documents'], params: Params } },
+    {
+      config: { requires: ['docs.read'], scope: 'document' },
+      schema: { tags: ['documents'], params: Params },
+    },
     async (req, reply) => {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
@@ -393,7 +448,7 @@ export default async function routes(app: FastifyInstance) {
   app.get(
     '/documents/:id/links',
     {
-      config: { requires: ['docs.read'] },
+      config: { requires: ['docs.read'], scope: 'document' },
       schema: { tags: ['documents'], params: Params, response: { 200: LinksResponseSchema } },
     },
     async (req) => {
@@ -405,7 +460,7 @@ export default async function routes(app: FastifyInstance) {
   app.get(
     '/documents/:id/related',
     {
-      config: { requires: ['docs.read'] },
+      config: { requires: ['docs.read'], scope: 'document' },
       schema: { tags: ['documents'], params: Params, response: { 200: RelatedResponseSchema } },
     },
     async (req) => {

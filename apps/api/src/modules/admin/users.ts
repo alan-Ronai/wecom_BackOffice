@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
+  AdminUserCreateSchema,
   AdminUserPatchSchema,
   PaginationQuerySchema,
   UserRoleSchema,
@@ -10,6 +11,8 @@ import {
 } from '@wecom/shared';
 import { HttpError, notFound } from '../../lib/errors.js';
 import { audit } from '../../lib/audit.js';
+import { hashPassword } from '../auth/local.js';
+import { initials as initialsOf } from '../auth/identity.js';
 
 const UserWithRoles = UserSchema.extend({ roles: z.array(UserRoleSchema) });
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
@@ -34,8 +37,8 @@ export default async function userRoutes(instance: FastifyInstance) {
       const total = (await app.db.query<{ n: string }>(`select count(*) as n from users u ${where}`, params))
         .rows[0].n;
       const rows = await app.db.query(
-        `select u.* from users u ${where} order by u.display_name limit ${pageSize} offset ${(page - 1) * pageSize}`,
-        params,
+        `select u.* from users u ${where} order by u.display_name limit $${params.length + 1} offset $${params.length + 2}`,
+        [...params, pageSize, (page - 1) * pageSize],
       );
       const ids = rows.rows.map((u) => u.id);
       const roles = await app.db.query(
@@ -64,6 +67,90 @@ export default async function userRoutes(instance: FastifyInstance) {
           })),
       }));
       return { items, total: Number(total), page, pageSize };
+    },
+  );
+
+  /**
+   * Stage-1 §4. Creating a local (non-federated) user was previously only possible
+   * through the `create-admin` CLI, so an operator could not add a break-glass or
+   * service account from the admin UI at all.
+   */
+  app.post(
+    '/users',
+    {
+      config: { requires: ['users.manage'] },
+      schema: {
+        tags: ['admin'],
+        body: AdminUserCreateSchema,
+        response: { 201: UserWithRoles },
+      },
+    },
+    async (req, reply) => {
+      const { email, password, displayName, roles } = req.body;
+      const subject = email.toLowerCase();
+      const name = displayName ?? subject.split('@')[0];
+      const hash = await hashPassword(password);
+      const client = await app.db.connect();
+      try {
+        await client.query('begin');
+        const existing = await client.query<{ id: string }>(
+          `select id from users where subject=$1 and source='local'`,
+          [subject],
+        );
+        if (existing.rowCount) throw new HttpError(409, 'USER_EXISTS', 'משתמש מקומי עם כתובת זו כבר קיים');
+        const created = await client.query(
+          `insert into users(subject, source, email, display_name, initials, password_hash)
+           values ($1,'local',$1,$2,$3,$4) returning *`,
+          [subject, name, initialsOf(name), hash],
+        );
+        const user = created.rows[0];
+        for (const r of roles ?? [])
+          await client.query(
+            `insert into user_roles(user_id, role_id, category_scope, granted_by) values ($1,$2,$3,$4)`,
+            [user.id, r.roleId, r.categoryScope, req.user!.id],
+          );
+        await audit(client, {
+          actorId: req.user!.id,
+          action: 'admin.user.create',
+          entityType: 'user',
+          entityId: user.id as string,
+          before: null,
+          // Never the password or its hash.
+          after: { subject, displayName: name, roles: (roles ?? []).map((r) => r.roleId) },
+          requestId: req.id,
+          ip: req.ip,
+        });
+        const granted = await client.query(
+          `select ur.user_id, ur.role_id, r.name, ur.category_scope, ur.granted_by, ur.granted_at
+             from user_roles ur join roles r on r.id=ur.role_id where ur.user_id=$1 order by r.name`,
+          [user.id],
+        );
+        await client.query('commit');
+        reply.code(201);
+        return {
+          id: user.id,
+          subject: user.subject,
+          source: user.source,
+          email: user.email,
+          displayName: user.display_name,
+          initials: user.initials,
+          active: user.active,
+          lastLoginAt: iso(user.last_login_at),
+          roles: granted.rows.map((r) => ({
+            userId: r.user_id,
+            roleId: r.role_id,
+            roleName: r.name,
+            categoryScope: r.category_scope,
+            grantedBy: r.granted_by,
+            grantedAt: new Date(r.granted_at).toISOString(),
+          })),
+        };
+      } catch (e) {
+        await client.query('rollback');
+        throw e;
+      } finally {
+        client.release();
+      }
     },
   );
 

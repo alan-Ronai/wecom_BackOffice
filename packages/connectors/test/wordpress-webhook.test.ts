@@ -8,12 +8,15 @@ const cfg = WpConfigSchema.parse({
   postTypes: ['posts'],
   webhookSecret: 'topsecret1',
 });
-const raw = JSON.stringify({
-  event: 'save_post',
-  post_type: 'posts',
-  post_id: 7,
-  modified_gmt: '2025-06-12T10:00:00',
-});
+const rawWith = (sentAt: string) =>
+  JSON.stringify({
+    event: 'save_post',
+    post_type: 'posts',
+    post_id: 7,
+    modified_gmt: '2025-06-12T10:00:00',
+    sent_at: sentAt,
+  });
+const raw = rawWith(new Date().toISOString());
 
 describe('webhook', () => {
   it('signs and verifies', () => {
@@ -35,5 +38,27 @@ describe('webhook', () => {
     await expect(
       new WordPressConnector().parseWebhook(cfg, { 'x-kb-signature': 'nope' }, { raw }),
     ).rejects.toThrow(/invalid signature/);
+  });
+  it('rejects a correctly-signed replay of an old request', async () => {
+    // The capture is genuine — body and signature both valid — but stale, so a
+    // recorded request can no longer be resent forever to force repeated syncs.
+    const old = rawWith(new Date(Date.now() - 30 * 60_000).toISOString());
+    await expect(
+      new WordPressConnector().parseWebhook(
+        cfg,
+        { 'x-kb-signature': signBody('topsecret1', old) },
+        { raw: old },
+      ),
+    ).rejects.toThrow(/stale webhook/);
+  });
+  it('rejects an unparseable sent_at', async () => {
+    const bad = rawWith('not-a-date');
+    await expect(
+      new WordPressConnector().parseWebhook(
+        cfg,
+        { 'x-kb-signature': signBody('topsecret1', bad) },
+        { raw: bad },
+      ),
+    ).rejects.toThrow(/sent_at/);
   });
 });

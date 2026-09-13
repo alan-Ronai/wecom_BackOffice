@@ -10,6 +10,7 @@ import type {
   SourceContent,
 } from '../contract.js';
 import { JsonConfigSchema, type JsonConfig } from './config.js';
+import { resolveWithin, type ConnectorGuards } from '../guards.js';
 
 type Row = Record<string, unknown>;
 const hash = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
@@ -41,6 +42,9 @@ export function parseCsv(text: string): Row[] {
 export class JsonFileConnector implements Connector<JsonConfig> {
   configSchema = JsonConfigSchema;
 
+  /** `guards.fileRoot` confines `cfg.path`; without it the connector is unrestricted. */
+  constructor(private guards: ConnectorGuards = {}) {}
+
   describe(): ConnectorInfo {
     return {
       id: 'json',
@@ -50,7 +54,8 @@ export class JsonFileConnector implements Connector<JsonConfig> {
   }
 
   private async rows(cfg: JsonConfig): Promise<Row[]> {
-    const text = cfg.inline ?? (await readFile(cfg.path as string, 'utf8'));
+    const text =
+      cfg.inline ?? (await readFile(resolveWithin(this.guards.fileRoot, cfg.path as string), 'utf8'));
     if (cfg.format === 'csv') return parseCsv(text);
     const j = JSON.parse(text) as unknown;
     const arr = Array.isArray(j)

@@ -206,6 +206,7 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
       if (!row) return reply.status(404).send(notFound(req, 'מחבר לא נמצא'));
       const res = await registry.get(row.type).testConnection(repo.config(row) as never);
       await repo.setRun(row.id, res.ok ? 'test-ok' : 'test-failed', { lastTest: res });
+      await audit(req, 'connectors.test', 'connector', row.id, null, res);
       return reply.send(res);
     },
   );
@@ -227,6 +228,8 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
         connectorId: row.id,
         actorId: userOf(req)?.id ?? null,
       });
+      // A run writes to the remote system, so it is at least as audit-worthy as a patch.
+      await audit(req, 'connectors.run', 'connector', row.id, null, { jobId });
       return reply.status(202).send({ jobId });
     },
   );
@@ -244,10 +247,13 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
   );
 
   // Webhook: raw body, signature verified by the connector, no session required.
+  // Public and unauthenticated until the HMAC is checked — and each call costs a
+  // connector lookup plus an AES-GCM decrypt before that — so it carries its own
+  // per-IP limit. A real WordPress sends one request per post save.
   app.post(
     '/connectors/:id/webhook',
     {
-      config: { public: true },
+      config: { public: true, rateLimit: { max: 60, timeWindow: '1 minute' } },
       schema: {
         tags: ['connectors'],
         params,

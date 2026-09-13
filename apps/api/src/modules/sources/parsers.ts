@@ -46,7 +46,16 @@ export async function parseUpload(
   if (ext === 'txt' || ext === 'md')
     return { ...parseText(filename, buffer.toString('utf8'), { allNew: true }), kind: 'text' };
   if (ext === 'json') {
-    const j = JSON.parse(buffer.toString('utf8')) as unknown;
+    let j: unknown;
+    try {
+      j = JSON.parse(buffer.toString('utf8')) as unknown;
+    } catch (e) {
+      // An unparseable upload is the client's mistake, not a 500 with a stack trace.
+      throw Object.assign(new Error('invalid JSON: ' + (e as Error).message), {
+        statusCode: 400,
+        code: 'UNSUPPORTED_FILE',
+      });
+    }
     const rows = Array.isArray(j)
       ? j
       : ((j as { docs?: unknown[]; topics?: unknown[] }).docs ?? (j as { topics?: unknown[] }).topics ?? []);

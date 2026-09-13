@@ -156,6 +156,50 @@ run('documents', () => {
     });
     expect(stale.statusCode).toBe(412);
     expect(stale.json().code).toBe('ETAG_MISMATCH');
+    // Optimistic concurrency is no longer opt-in: omitting If-Match used to
+    // silently clobber a concurrent editor.
+    const noHeader = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${c.id}/structure`,
+      headers: auth(u),
+      payload: minimalStructure,
+    });
+    expect(noHeader.statusCode).toBe(428);
+    expect(noHeader.json().code).toBe('IF_MATCH_REQUIRED');
+  });
+
+  it('PATCH honours If-Match and 404s on a deleted document', async () => {
+    const c = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/documents',
+        headers: auth(u),
+        payload: { title: 'מקביליות', category: 'tech', wave: 1, priority: 'm', kind: 'steps' },
+      })
+    ).json();
+    const stale = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${c.id}`,
+      headers: { ...auth(u), 'if-match': 'not-the-etag' },
+      payload: { title: 'לא יקרה' },
+    });
+    expect(stale.statusCode).toBe(412);
+    const ok = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${c.id}`,
+      headers: { ...auth(u), 'if-match': c.etag },
+      payload: { title: 'יקרה' },
+    });
+    expect(ok.statusCode).toBe(200);
+    // A patch of a concurrently-deleted document used to 500 on getDocument(...)!
+    await db.pool.query('update documents set deleted_at=now() where id=$1', [c.id]);
+    const gone = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${c.id}`,
+      headers: auth(u),
+      payload: { title: 'אחרי מחיקה' },
+    });
+    expect(gone.statusCode).toBe(404);
   });
 
   it('publishes a version, diffs, restores', async () => {
@@ -170,7 +214,7 @@ run('documents', () => {
     await app.inject({
       method: 'PUT',
       url: `/api/v1/documents/${c.id}/structure`,
-      headers: auth(u),
+      headers: { ...auth(u), 'if-match': c.etag },
       payload: minimalStructure,
     });
     const p1 = await app.inject({
@@ -188,7 +232,7 @@ run('documents', () => {
     await app.inject({
       method: 'PUT',
       url: `/api/v1/documents/${c.id}/structure`,
-      headers: auth(u),
+      headers: { ...auth(u), 'if-match': p1.json().document.etag },
       payload: s2,
     });
     expect(
@@ -238,7 +282,7 @@ run('documents', () => {
     await app.inject({
       method: 'PUT',
       url: `/api/v1/documents/${c.id}/structure`,
-      headers: auth(u),
+      headers: { ...auth(u), 'if-match': c.etag },
       payload: { phases: [{ id: 'p1', label: '', steps: [{ key: 's1', num: '1', title: 'ריק' }] }] },
     });
     expect(

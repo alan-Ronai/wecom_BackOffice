@@ -9,6 +9,7 @@ import {
   type SuggestionPayload,
 } from '@wecom/shared';
 import type { ProposedSuggestion } from '@wecom/model';
+import { audit } from '../../lib/audit.js';
 import type { ContentApi, ContentClient } from './content-api.js';
 
 type Status = Suggestion['status'];
@@ -19,6 +20,20 @@ type Status = Suggestion['status'];
  */
 export interface EventSink {
   publish(tx: ContentClient, event: Event): void | Promise<void>;
+}
+
+/**
+ * L6's `SyncService.afterSuggestionsApplied`: the only path that creates a
+ * `sync_links` row for a remote item imported as a new card. Supplied by `app.ts`
+ * once both modules are registered (L5 must not import L6), and invoked after the
+ * apply transaction commits so a remote outage cannot roll the apply back.
+ */
+export type AppliedHook = (sourceId: string, documentId: string, version: number) => Promise<void>;
+
+/** Request provenance for the audit rows this service writes. */
+export interface AuditMeta {
+  requestId?: string | null;
+  ip?: string | null;
 }
 
 const row = (r: Record<string, unknown>): Suggestion => ({
@@ -67,39 +82,61 @@ export class SuggestionService {
     private readonly events: EventSink,
   ) {}
 
+  private afterApplied: AppliedHook | null = null;
+
+  /** Wired in `app.ts` after the connectors module is registered. */
+  setAfterApplied(fn: AppliedHook | null): void {
+    this.afterApplied = fn;
+  }
+
+  /**
+   * `EventBus.publish` NOTIFYs inside the caller's transaction so subscribers only
+   * ever see committed writes; publishing on the pool fired the event even when the
+   * insert later failed. Both write paths therefore open one transaction.
+   */
   async createFromProposals(revisionId: string, items: ProposedSuggestion[]): Promise<Suggestion[]> {
     const out: Suggestion[] = [];
     const srcRow = await this.pool.query(`select source_id from source_revisions where id=$1`, [revisionId]);
     if (!srcRow.rowCount) throw httpErr(404, 'NOT_FOUND', 'גרסת המקור לא נמצאה');
-    for (const it of items) {
-      SuggestionPayloadSchema.parse(it.payload);
-      const r = await this.pool.query(
-        `insert into suggestions(source_revision_id, anchor, type, title, target_document_id, target_step_key, target_block_id, payload, confidence, rationale)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *`,
-        [
-          revisionId,
-          it.anchor,
-          it.type,
-          it.title,
-          it.targetDocumentId,
-          it.targetStepKey,
-          it.targetBlockId,
-          JSON.stringify(it.payload),
-          clamp01(it.confidence),
-          it.rationale,
-        ],
-      );
-      const s = row(r.rows[0]);
-      out.push(s);
-      await this.events.publish(
-        this.pool,
-        makeEvent('suggestion.created', {
-          suggestionId: s.id,
-          sourceId: srcRow.rows[0].source_id as string,
-          targetDocumentId: s.targetDocumentId,
-          type: s.type,
-        }),
-      );
+    for (const it of items) SuggestionPayloadSchema.parse(it.payload);
+    const client = await this.pool.connect();
+    try {
+      await client.query('begin');
+      for (const it of items) {
+        const r = await client.query(
+          `insert into suggestions(source_revision_id, anchor, type, title, target_document_id, target_step_key, target_block_id, payload, confidence, rationale)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *`,
+          [
+            revisionId,
+            it.anchor,
+            it.type,
+            it.title,
+            it.targetDocumentId,
+            it.targetStepKey,
+            it.targetBlockId,
+            JSON.stringify(it.payload),
+            clamp01(it.confidence),
+            it.rationale,
+          ],
+        );
+        const s = row(r.rows[0]);
+        out.push(s);
+        await this.events.publish(
+          client,
+          makeEvent('suggestion.created', {
+            suggestionId: s.id,
+            sourceId: srcRow.rows[0].source_id as string,
+            targetDocumentId: s.targetDocumentId,
+            type: s.type,
+          }),
+        );
+      }
+      await client.query('commit');
+    } catch (e) {
+      await client.query('rollback');
+      throw e;
+    } finally {
+      client.release();
     }
     return out;
   }
@@ -147,17 +184,27 @@ export class SuggestionService {
   ): Promise<Suggestion> {
     const cur = await this.get(id);
     if (cur.status === 'applied') throw httpErr(409, 'ALREADY_APPLIED', 'ההצעה כבר יושמה');
-    const r = await this.pool.query(
-      `update suggestions set status=$2, decided_by=$3, decided_at=case when $2='pending' then null else now() end
-       where id=$1 returning *`,
-      [id, status, status === 'pending' ? null : actorId],
-    );
-    const s = row(r.rows[0]);
-    await this.events.publish(
-      this.pool,
-      makeEvent('suggestion.decided', { suggestionId: id, status, actorId }),
-    );
-    return s;
+    const client = await this.pool.connect();
+    try {
+      await client.query('begin');
+      const r = await client.query(
+        `update suggestions set status=$2, decided_by=$3, decided_at=case when $2='pending' then null else now() end
+         where id=$1 returning *`,
+        [id, status, status === 'pending' ? null : actorId],
+      );
+      const s = row(r.rows[0]);
+      await this.events.publish(
+        client,
+        makeEvent('suggestion.decided', { suggestionId: id, status, actorId }),
+      );
+      await client.query('commit');
+      return s;
+    } catch (e) {
+      await client.query('rollback');
+      throw e;
+    } finally {
+      client.release();
+    }
   }
 
   async edit(id: string, editedPayload: SuggestionPayload, actorId: string): Promise<Suggestion> {
@@ -305,7 +352,11 @@ export class SuggestionService {
    * Applies every accepted suggestion of a source in one transaction, marks the source
    * synced and its revision accepted, then publishes the document.published events.
    */
-  async publishAccepted(sourceId: string, actorId: string): Promise<{ applied: number; versions: string[] }> {
+  async publishAccepted(
+    sourceId: string,
+    actorId: string,
+    meta: AuditMeta = {},
+  ): Promise<{ applied: number; versions: string[] }> {
     const client = await this.pool.connect();
     const versions: string[] = [];
     const published: { documentId: string; version: number }[] = [];
@@ -326,6 +377,17 @@ export class SuggestionService {
           s.id,
           res.versionId,
         ]);
+        // Inside the transaction, so a rolled-back apply leaves no audit row.
+        await audit(client, {
+          actorId,
+          action: 'suggestions.apply',
+          entityType: 'suggestion',
+          entityId: s.id,
+          before: { status: s.status, type: s.type, targetDocumentId: s.targetDocumentId },
+          after: { status: 'applied', versionId: res.versionId, edited: !!s.editedPayload },
+          requestId: meta.requestId ?? null,
+          ip: meta.ip ?? null,
+        });
         applied++;
         if (res.versionId) {
           versions.push(res.versionId);
@@ -338,7 +400,9 @@ export class SuggestionService {
       await client.query(
         `update source_revisions set accepted=true
          where source_id=$1
-           and id in (select source_revision_id from suggestions where status in ('applied','rejected'))
+           and id in (select g.source_revision_id from suggestions g
+                        join source_revisions sr2 on sr2.id=g.source_revision_id
+                        where sr2.source_id=$1 and g.status in ('applied','rejected'))
            and not exists (select 1 from suggestions g2 where g2.source_revision_id=source_revisions.id and g2.status='pending')`,
         [sourceId],
       );
@@ -346,6 +410,16 @@ export class SuggestionService {
         `update sources set sync_state='synced', last_synced_at=now(), updated_by=$2 where id=$1`,
         [sourceId, actorId],
       );
+      await audit(client, {
+        actorId,
+        action: 'sources.publish',
+        entityType: 'source',
+        entityId: sourceId,
+        before: null,
+        after: { applied, versions },
+        requestId: meta.requestId ?? null,
+        ip: meta.ip ?? null,
+      });
       await client.query('commit');
     } catch (e) {
       await client.query('rollback');
@@ -353,11 +427,14 @@ export class SuggestionService {
     } finally {
       client.release();
     }
-    for (const p of published)
+    for (const p of published) {
       await this.events.publish(
         this.pool,
         makeEvent('document.published', { documentId: p.documentId, version: p.version, actorId }),
       );
+      // Closes the remote -> KB half of the two-way sync loop.
+      if (this.afterApplied) await this.afterApplied(sourceId, p.documentId, p.version);
+    }
     return { applied, versions };
   }
 }

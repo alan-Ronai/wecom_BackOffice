@@ -192,8 +192,42 @@ export const contentHash = (paragraphs: Paragraph[]): string =>
     .update(JSON.stringify(paragraphs.map((p) => [p.ref, p.runs.map((r) => [r.t, !!r.add, !!r.del])])))
     .digest('hex');
 
+/**
+ * Upload accepts 25 MB and the job worker runs at concurrency 1, so an unbounded
+ * inflate is a single-file denial of service: a zip bomb exhausts the container's
+ * memory and stalls the whole pipeline behind it. Reject on the declared
+ * uncompressed sizes before anything is actually inflated.
+ */
+export const MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024;
+
+interface ZipEntryData {
+  uncompressedSize?: number;
+}
+
+function assertInflateSize(zip: JSZip): void {
+  let total = 0;
+  for (const entry of Object.values(zip.files)) {
+    if (entry.dir) continue;
+    total += (entry as unknown as { _data?: ZipEntryData })._data?.uncompressedSize ?? 0;
+  }
+  if (total > MAX_UNCOMPRESSED_BYTES)
+    throw Object.assign(new Error('docx expands to ' + total + ' bytes'), {
+      statusCode: 400,
+      code: 'FILE_TOO_LARGE',
+    });
+}
+
 export async function parseDocx(buffer: Buffer): Promise<SourceContent> {
-  const zip = await JSZip.loadAsync(buffer);
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(buffer);
+  } catch {
+    throw Object.assign(new Error('not a docx: unreadable zip container'), {
+      statusCode: 400,
+      code: 'UNSUPPORTED_FILE',
+    });
+  }
+  assertInflateSize(zip);
   const docXml = await zip.file('word/document.xml')?.async('string');
   if (!docXml)
     throw Object.assign(new Error('not a docx: word/document.xml missing'), {

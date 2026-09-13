@@ -44,6 +44,58 @@ run('admin routes', () => {
     expect(r.json().total).toBe(1);
     expect(r.json().items[0].roles[0].roleName).toBe('editor');
   });
+  it('creates a local user with roles (stage-1 §4 POST /admin/users)', async () => {
+    const roleId = (await db.pool.query("select id from roles where name='editor'")).rows[0].id;
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/users',
+      headers: admin,
+      payload: {
+        email: 'Break.Glass@wecom.co.il',
+        password: 'a-long-enough-password',
+        displayName: 'גיבוי חירום',
+        roles: [{ roleId, categoryScope: null }],
+      },
+    });
+    expect(r.statusCode).toBe(201);
+    expect(r.json()).toMatchObject({ source: 'local', subject: 'break.glass@wecom.co.il', active: true });
+    expect(r.json().roles[0].roleName).toBe('editor');
+    // The password is hashed and never echoed back or audited.
+    const row = await db.pool.query('select password_hash from users where id=$1', [r.json().id]);
+    expect(row.rows[0].password_hash).toMatch(/^\$argon2/);
+    expect(JSON.stringify(r.json())).not.toContain('a-long-enough-password');
+    const logged = await db.pool.query(
+      `select after from audit_log where entity_id=$1 and action='admin.user.create'`,
+      [r.json().id],
+    );
+    expect(JSON.stringify(logged.rows[0].after)).not.toContain('password');
+    // Same address twice is a conflict, not a duplicate login.
+    const again = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/users',
+      headers: admin,
+      payload: { email: 'break.glass@wecom.co.il', password: 'a-long-enough-password' },
+    });
+    expect(again.statusCode).toBe(409);
+    expect(again.json().code).toBe('USER_EXISTS');
+  });
+
+  it('reports system health (stage-1 §4 GET /admin/system)', async () => {
+    const r = await app.inject({ method: 'GET', url: '/api/v1/admin/system', headers: admin });
+    expect(r.statusCode).toBe(200);
+    const body = r.json();
+    expect(body.db).toBe(true);
+    expect(body.connectors).toEqual([]);
+    expect(body.sources).toEqual({ pending: 0, error: 0 });
+    expect(body.suggestions).toEqual({ pending: 0 });
+    // No backup directory in a test container: reported, not thrown.
+    expect(body.backup).toMatchObject({ ok: false, latestFile: null });
+    expect(typeof body.version).toBe('string');
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/v1/admin/system', headers: editor })).statusCode,
+    ).toBe(403);
+  });
+
   it('replaces roles with a category scope and writes audit', async () => {
     const leadId = (await db.pool.query(`select id from roles where name='lead'`)).rows[0].id;
     const r = await app.inject({

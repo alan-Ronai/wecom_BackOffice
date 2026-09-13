@@ -154,10 +154,16 @@ export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Doc
 export const getDocument = async (q: Q, id: string): Promise<Document | null> =>
   (await assembleMany(q, [id])).get(id) ?? null;
 
+/**
+ * `categoryScopes` is the caller's `user_roles.category_scope` union (null = every
+ * category). Route-level `config.scope` only guards `/documents/:id`; without the
+ * same term here a scoped user could list every document in every category.
+ */
 export async function listCards(
   q: Q,
   query: ListDocumentsQuery,
   userId: string,
+  categoryScopes: readonly string[] | null = null,
 ): Promise<{ items: DocumentCard[]; total: number }> {
   const params: unknown[] = [userId];
   const p = (v: unknown) => {
@@ -165,6 +171,7 @@ export async function listCards(
     return '$' + params.length;
   };
   const where: string[] = ['d.deleted_at is null'];
+  if (categoryScopes) where.push(`d.category = any(${p([...categoryScopes])})`);
   if (query.category) where.push(`d.category = ${p(query.category)}`);
   if (query.wave) where.push(`d.wave = ${p(query.wave)}`);
   if (query.priority) where.push(`d.priority = ${p(query.priority)}`);
@@ -235,24 +242,45 @@ export async function listCards(
   };
 }
 
-export async function insertDocument(tx: Tx, body: CreateDocumentBody, userId: string): Promise<Document> {
-  const r = await tx.query(
-    `insert into documents(slug, title, description, category, wave, priority, kind, status, topic_id, created_by, updated_by)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) returning id`,
-    [
-      body.slug ?? slugify(body.title),
-      body.title,
-      body.description ?? '',
-      body.category,
-      body.wave,
-      body.priority,
-      body.kind,
-      'draft',
-      body.topicId ?? null,
-      userId,
-    ],
-  );
-  return (await getDocument(tx, r.rows[0].id as string))!;
+/** `slugify` ends in 5 random base-36 chars against a unique constraint: retry rather than 500. */
+const SLUG_ATTEMPTS = 5;
+
+export async function insertDocument(
+  tx: Tx,
+  body: CreateDocumentBody,
+  userId: string | null,
+): Promise<Document> {
+  const values = (slug: string) => [
+    slug,
+    body.title,
+    body.description ?? '',
+    body.category,
+    body.wave,
+    body.priority,
+    body.kind,
+    'draft',
+    body.topicId ?? null,
+    userId,
+  ];
+  const sql = `insert into documents(slug, title, description, category, wave, priority, kind, status, topic_id, created_by, updated_by)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) returning id`;
+  for (let attempt = 0; ; attempt++) {
+    // A caller-supplied slug is their choice, so a collision there is a real 409.
+    const slug = body.slug ?? slugify(body.title);
+    try {
+      await tx.query('savepoint insert_document');
+      const r = await tx.query(sql, values(slug));
+      await tx.query('release savepoint insert_document');
+      return (await getDocument(tx, r.rows[0].id as string))!;
+    } catch (e) {
+      await tx.query('rollback to savepoint insert_document');
+      const unique = (e as { code?: string }).code === '23505';
+      if (!unique) throw e;
+      if (body.slug) throw httpError(409, 'SLUG_TAKEN', 'המזהה (slug) כבר בשימוש');
+      if (attempt >= SLUG_ATTEMPTS - 1)
+        throw httpError(409, 'SLUG_TAKEN', 'לא הצלחנו להקצות מזהה ייחודי, נסה שוב');
+    }
+  }
 }
 
 const PATCH_COLUMNS: Record<string, string> = {
@@ -265,12 +293,24 @@ const PATCH_COLUMNS: Record<string, string> = {
   sourceRef: 'source_ref',
 };
 
+/**
+ * `ifMatch` is honoured when the caller sends it (412 on conflict), like
+ * `saveStructure`. The row lock + `rowCount` assertion also stop a patch of a
+ * concurrently-deleted document from 500ing on `getDocument(...)!` returning null.
+ */
 export async function patchDocument(
   tx: Tx,
   id: string,
   body: PatchDocumentBody,
   userId: string,
+  ifMatch?: string,
 ): Promise<Document> {
+  const cur = await tx.query('select etag from documents where id=$1 and deleted_at is null for update', [
+    id,
+  ]);
+  if (!cur.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
+  if (ifMatch && ifMatch !== cur.rows[0].etag)
+    throw httpError(412, 'ETAG_MISMATCH', 'המסמך השתנה בינתיים — טען מחדש ונסה שוב');
   const sets: string[] = [];
   const params: unknown[] = [];
   for (const [key, col] of Object.entries(PATCH_COLUMNS)) {
@@ -281,12 +321,13 @@ export async function patchDocument(
     }
   }
   params.push(userId, id);
-  await tx.query(
+  const r = await tx.query(
     `update documents set ${sets.length ? sets.join(', ') + ',' : ''} updated_by = $${params.length - 1},
        updated_at = now(), etag = gen_random_uuid()::text
      where id = $${params.length} and deleted_at is null`,
     params,
   );
+  if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
   return (await getDocument(tx, id))!;
 }
 
@@ -382,7 +423,7 @@ export async function saveStructure(
   tx: Tx,
   id: string,
   body: StructureBody,
-  userId: string,
+  userId: string | null,
   ifMatch?: string,
 ): Promise<Document> {
   const cur = await tx.query(
@@ -491,7 +532,7 @@ export async function publishDocument(
   tx: Tx,
   doc: Document | string,
   opts: PublishOptions,
-): Promise<{ doc: Document; version: number }> {
+): Promise<{ doc: Document; version: number; versionId: string }> {
   const id = typeof doc === 'string' ? doc : doc.id;
   const cur = await tx.query(
     'select current_version from documents where id=$1 and deleted_at is null for update',
@@ -507,8 +548,8 @@ export async function publishDocument(
     [id, version, status, opts.actorId],
   );
   const published = (await getDocument(tx, id))!;
-  await tx.query(
-    'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id) values ($1,$2,$3,$4,$5,$6,$7)',
+  const inserted = await tx.query(
+    'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id) values ($1,$2,$3,$4,$5,$6,$7) returning id',
     [
       id,
       version,
@@ -519,7 +560,7 @@ export async function publishDocument(
       opts.suggestionId ?? null,
     ],
   );
-  return { doc: published, version };
+  return { doc: published, version, versionId: inserted.rows[0].id as string };
 }
 
 export interface VersionRow {

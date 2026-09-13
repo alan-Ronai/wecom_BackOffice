@@ -46,7 +46,7 @@ run('trash', () => {
     await app.inject({
       method: 'PUT',
       url: `/api/v1/documents/${b.id}/structure`,
-      headers: auth(u),
+      headers: { ...auth(u), 'if-match': b.etag },
       payload: {
         phases: [
           {
