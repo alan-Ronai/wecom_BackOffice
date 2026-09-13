@@ -1,0 +1,87 @@
+[
+  {
+    "name": "גלישה בארץ",
+    "status": "ok",
+    "path": "CRM ↗ פרטי קו",
+    "updatedAt": "2025-06-10T12:00:00.000Z"
+  },
+  {
+    "name": "השימושים שלי",
+    "status": "ok",
+    "path": "אזור אישי",
+    "updatedAt": "2025-05-28T12:00:00.000Z"
+  },
+  {
+    "name": "sim block lbl",
+    "status": "ok",
+    "path": "CRM ↗ מצב עריכה",
+    "updatedAt": "2025-06-10T12:00:00.000Z"
+  },
+  {
+    "name": "sim allow lbl",
+    "status": "ok",
+    "path": "CRM ↗ מצב עריכה",
+    "updatedAt": "2025-06-11T12:00:00.000Z"
+  },
+  {
+    "name": "APN",
+    "status": "ok",
+    "path": "מכשיר ↗ שמות נקודות גישה",
+    "updatedAt": "2025-04-02T12:00:00.000Z"
+  },
+  {
+    "name": "שירות נדידה",
+    "status": "renamed",
+    "renamedTo": "שירותי נדידה",
+    "path": "CRM ↗ שירותים",
+    "updatedAt": "2025-06-11T12:00:00.000Z"
+  },
+  {
+    "name": "נדידת נתונים",
+    "status": "ok",
+    "path": "מכשיר ↗ רשת סלולרית",
+    "updatedAt": "2025-05-15T12:00:00.000Z"
+  },
+  {
+    "name": "סוג SIM",
+    "status": "ok",
+    "path": "CRM ↗ פרטי קו",
+    "updatedAt": "2025-03-20T12:00:00.000Z"
+  },
+  {
+    "name": "חבילת חו\"ל",
+    "status": "ok",
+    "path": "CRM ↗ חבילות",
+    "updatedAt": "2025-05-15T12:00:00.000Z"
+  },
+  {
+    "name": "VoLTE",
+    "status": "ok",
+    "path": "CRM ↗ שירותים",
+    "updatedAt": "2025-02-11T12:00:00.000Z"
+  },
+  {
+    "name": "Wi-Fi Calling",
+    "status": "ok",
+    "path": "CRM ↗ שירותים",
+    "updatedAt": "2025-02-11T12:00:00.000Z"
+  },
+  {
+    "name": "חסימת גלישה בחו\"ל",
+    "status": "new",
+    "path": "CRM ↗ שירותים",
+    "updatedAt": "2025-06-12T12:00:00.000Z"
+  },
+  {
+    "name": "סטטוס קו",
+    "status": "ok",
+    "path": "CRM ↗ פרטי קו",
+    "updatedAt": "2025-01-30T12:00:00.000Z"
+  },
+  {
+    "name": "ריענון SIM",
+    "status": "new",
+    "path": "CRM ↗ פעולות (כפתור חדש)",
+    "updatedAt": "2025-06-12T12:00:00.000Z"
+  }
+]

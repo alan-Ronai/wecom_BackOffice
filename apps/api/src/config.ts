@@ -22,6 +22,7 @@ export const ConfigSchema = z.object({
   MODEL_DISABLED: z.coerce.boolean().default(false),
   WATCH_DIR: z.string().optional(),
   BACKUP_DIR: z.string().default('/backups'),
+  TRASH_DAYS: z.coerce.number().int().min(1).default(30), // L2: soft-delete retention window
 });
 export type Config = z.infer<typeof ConfigSchema>;
 export const loadConfig = (over: Partial<Config> = {}): Config =>

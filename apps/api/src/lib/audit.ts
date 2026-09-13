@@ -1,4 +1,5 @@
 import type { Tx } from './sql.js';
+
 export interface AuditInput {
   actorId: string | null;
   action: string;
@@ -9,19 +10,17 @@ export interface AuditInput {
   requestId: string | null;
   ip: string | null;
 }
+
+/**
+ * Low-level audit writer (L2-owned contract). Always called inside the transaction that performs
+ * the change, so a rolled-back write leaves no audit row. L3 decorates the convenience wrapper
+ * `app.audit(req, action, entityType, entityId, before, after)` on top of this.
+ */
 export async function audit(tx: Tx, a: AuditInput): Promise<string> {
+  const json = (v: unknown) => (v === undefined || v === null ? null : JSON.stringify(v));
   const r = await tx.query(
     'insert into audit_log(actor_id, action, entity_type, entity_id, before, after, request_id, ip) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id',
-    [
-      a.actorId,
-      a.action,
-      a.entityType,
-      a.entityId,
-      a.before === undefined ? null : JSON.stringify(a.before),
-      a.after === undefined ? null : JSON.stringify(a.after),
-      a.requestId,
-      a.ip,
-    ],
+    [a.actorId, a.action, a.entityType, a.entityId, json(a.before), json(a.after), a.requestId, a.ip],
   );
   return r.rows[0].id as string;
 }

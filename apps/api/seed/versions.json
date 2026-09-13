@@ -1,0 +1,2318 @@
+[
+  {
+    "slug": "browsing",
+    "version": 3,
+    "label": "שוחזר מסל מיחזור",
+    "kind": "system",
+    "author": "מערכת",
+    "at": "2025-04-14T07:00:00.000Z",
+    "snapshot": {
+      "id": "de69b623-0360-4191-85c4-c842016ba86b",
+      "slug": "browsing",
+      "code": "T-01",
+      "title": "איטיות גלישה / חוסר גלישה",
+      "description": "נוהל דיבאג מלא – משלב מסנן ראשוני עד טיפול עמוק במסלולי מקום ספציפי / בכל מקום",
+      "category": "tech",
+      "wave": 1,
+      "priority": "hh",
+      "kind": "steps",
+      "status": "published",
+      "currentVersion": 3,
+      "sourceId": null,
+      "sourceRef": "פרק 4",
+      "phases": [
+        {
+          "id": "p1",
+          "label": "שלב 1 – מסנן",
+          "note": "ללא מעורבות לקוח",
+          "steps": [
+            {
+              "key": "s1",
+              "num": "1",
+              "title": "בדיקת חסימת גלישה בארץ",
+              "blockRefs": [],
+              "sourceRef": "§4.1",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "פתח CRM ↗ שדה **\"גלישה בארץ\"**"
+                },
+                {
+                  "id": "a2",
+                  "text": "אם **\"חסום\"** → כנס לאזור האישי ↗ ביצוע פעולות ↗ גלישה ותוכן → הדלק את המתג"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ לא חסום – המשך לשלב 2",
+                  "goto": "s2"
+                },
+                {
+                  "kind": "alert",
+                  "text": "⚑ חסום – הפעל מתג גלישה"
+                }
+              ]
+            },
+            {
+              "key": "s2",
+              "num": "2",
+              "title": "בדיקת סיום חבילת גלישה",
+              "blockRefs": [],
+              "sourceRef": "§4.2",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "אזור אישי ↗ **\"השימושים שלי\"**"
+                }
+              ],
+              "outcomes": [],
+              "branch": {
+                "q": "מה מוצג?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "ניצל 100%",
+                    "text": "הסבר ללקוח שהחבילה הסתיימה. הצע חבילה חדשה ↗ \"רכישת נפח מתחדש\". אם ירצה להפסיק חידוש חודשי – לעלות לקו."
+                  },
+                  {
+                    "kind": "then",
+                    "label": "חבילה פעילה",
+                    "text": "המשך לשלב 3",
+                    "goto": "s3"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s3",
+              "num": "3",
+              "title": "בדיקות במכשיר הלקוח",
+              "blockId": "60b15e82-eb1a-4ea9-8fbd-4814ccd74bc0",
+              "blockRefs": [],
+              "sourceRef": "§4.3",
+              "deps": [],
+              "actions": [],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום השיחה"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – המשך לשלב 2 (מברר)",
+                  "goto": "s4"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "p2",
+          "label": "שלב 2 – מברר",
+          "steps": [
+            {
+              "key": "s4",
+              "num": "4",
+              "title": "סיווג סוג התקלה",
+              "blockRefs": [],
+              "script": "\"אתה לא גולש בכלל, או שהגלישה איטית?\"\n\"זה קורה בכל מקום או רק במקום מסוים?\"",
+              "sourceRef": "§4.4",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "לאיזה מסלול?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מקום ספציפי",
+                    "text": "→ **מסלול 1** (שלב 1א)",
+                    "goto": "s4a"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "בכל מקום",
+                    "text": "→ **מסלול 2** (שלב 5)",
+                    "goto": "s5"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "r1",
+          "label": "מסלול 1 – מקום ספציפי",
+          "route": "1",
+          "steps": [
+            {
+              "key": "s4a",
+              "num": "1א",
+              "title": "אימות המיקום",
+              "description": "בירור: מחסן / ממ\"ד / חדר תת-קרקעי / חדר ספציפי?",
+              "blockRefs": [],
+              "sourceRef": "§4.5",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "סוג מיקום?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מיקום נקודתי",
+                    "text": "הסבר על כיסוי רשת → סיום שיחה"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "אחר",
+                    "text": "המשך לבדיקת אנטנות",
+                    "goto": "s4b"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s4b",
+              "num": "1ב",
+              "title": "בדיקת אנטנות בסביבה",
+              "blockRefs": [],
+              "sourceRef": "§4.6",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "מצב אנטנות?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "אין אנטנות",
+                    "text": "תסריט פריסת רשת → הורדת לקוח מהקו"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "יש אנטנות",
+                    "text": "בדוק אם עוד לקוחות מדווחים: אם כן → פתח טופס רדיו + GNETRUCK (עדכון עד 3 שעות). אם לא → עבור למסלול 2 מסעיף 2.",
+                    "goto": "s6"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "r2",
+          "label": "מסלול 2 – בכל מקום",
+          "route": "2",
+          "steps": [
+            {
+              "key": "s5",
+              "num": "5",
+              "title": "בדיקת CRM – Prepaid / הונאה",
+              "blockRefs": [],
+              "sourceRef": "§4.7",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "מצב הלקוח?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "נוייד Prepaid / הונאה",
+                    "text": "פתח פנייה ל-IT → המתן לעדכון → חזור ללקוח"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "תקין",
+                    "text": "המשך לבדיקת סימון רשת",
+                    "goto": "s6"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s6",
+              "num": "6",
+              "title": "בדיקת סימון רשת",
+              "blockRefs": [],
+              "script": "\"איזה סימון מופיע ליד פסי הקליטה? (H+ / 3G / LTE / 5G)\"",
+              "sourceRef": "§4.8",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "סימון שמוצג?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "3G / H+ בלבד",
+                    "text": "הנחה לשנות הגדרת רשת → **4G/5G אוטומטי**. הסתדר? סיום. אחרת: המשך."
+                  },
+                  {
+                    "kind": "then",
+                    "label": "5G / 4G / LTE",
+                    "text": "המשך לבדיקת APN",
+                    "goto": "s7"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s7",
+              "num": "7",
+              "title": "בדיקת APN",
+              "blockRefs": [],
+              "sourceRef": "§4.9",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "ודא שה-APN מוגדר ל-**WE**"
+                },
+                {
+                  "id": "a2",
+                  "text": "אם לא מוגדר → הגדר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – שלב 8",
+                  "goto": "s8"
+                }
+              ]
+            },
+            {
+              "key": "s8",
+              "num": "8",
+              "title": "בדיקת מהירות גלישה",
+              "hint": "רק אם מדובר באיטיות",
+              "blockRefs": [],
+              "sourceRef": "§4.10",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "בקש מהלקוח להריץ **Speedtest**"
+                }
+              ],
+              "outcomes": [],
+              "branch": {
+                "q": "תוצאה?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מעל 6 מגה",
+                    "text": "עדכן לקוח – תקין → סיום שיחה"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "מתחת ל-6 מגה",
+                    "text": "המשך לריענון גלישה",
+                    "goto": "s9"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s9",
+              "num": "9",
+              "title": "ריענון גלישה במערכת",
+              "blockRefs": [],
+              "sourceRef": "§4.11",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "לחץ על מתג **\"גלישה בארץ\"** ← כבה ← הפעל מחדש"
+                },
+                {
+                  "id": "a2",
+                  "text": "בקש מלקוח לאתחל מכשיר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – איפוס הגדרות רשת",
+                  "goto": "s10"
+                }
+              ]
+            },
+            {
+              "key": "s10",
+              "num": "10",
+              "title": "איפוס הגדרות רשת",
+              "blockId": "995a570f-0ce6-4eea-87e5-6d280436127e",
+              "blockRefs": [],
+              "sourceRef": "§4.12",
+              "deps": ["s7"],
+              "actions": [],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – ריענון SIM",
+                  "goto": "s11"
+                }
+              ]
+            },
+            {
+              "key": "s11",
+              "num": "11",
+              "title": "ריענון SIM",
+              "blockId": "5b2730fc-42ea-4807-84e1-fe1af41b0542",
+              "blockRefs": [],
+              "sourceRef": "§4.13",
+              "deps": ["s7"],
+              "actions": [],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – SIM במכשיר אחר",
+                  "goto": "s12"
+                }
+              ]
+            },
+            {
+              "key": "s12",
+              "num": "12",
+              "title": "SIM במכשיר אחר",
+              "blockRefs": [],
+              "sourceRef": "§4.14",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "תוצאה?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "עבד במכשיר אחר",
+                    "text": "בעיה במכשיר → הפנה למעבדה → הורד מהקו"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "לא עבד",
+                    "text": "יתכן ה-SIM פגום → החלפת SIM / eSIM",
+                    "goto": "s13"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s13",
+              "num": "13",
+              "title": "החלפת SIM / eSIM",
+              "tone": "alert",
+              "blockRefs": [],
+              "sourceRef": "§4.15",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "**eSIM** – עדיפות ראשונה: בצע בדיגיטל"
+                },
+                {
+                  "id": "a2",
+                  "text": "**SIM פיזי** – שלח ללקוח להום סנטר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "alert",
+                  "text": "⚑ לא הסתדר – פנייה למומחי תמיכה"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "related": [
+        {
+          "documentId": "acdc0fa7-b72a-4b75-8c00-40893f2a91bf",
+          "why": "מוזכר בשלב 13 · משתף 2 שדות"
+        },
+        {
+          "documentId": "ba744440-a357-43b3-83e0-03c2fabe7ebc",
+          "why": "4 שלבים זהים (ריענון SIM)"
+        },
+        {
+          "documentId": "68347add-1dd7-43e5-8519-aac95e92dcb1",
+          "why": "מסלול מקביל · APN, ריענון SIM"
+        }
+      ],
+      "createdAt": "2025-06-12T12:00:00.000Z",
+      "updatedAt": "2025-06-12T12:00:00.000Z"
+    }
+  },
+  {
+    "slug": "browsing",
+    "version": 4,
+    "label": "ניסוח מחדש של שלב 1–3",
+    "kind": "published",
+    "author": "ענבר ל.",
+    "at": "2025-05-02T06:30:00.000Z",
+    "snapshot": {
+      "id": "de69b623-0360-4191-85c4-c842016ba86b",
+      "slug": "browsing",
+      "code": "T-01",
+      "title": "איטיות גלישה / חוסר גלישה",
+      "description": "נוהל דיבאג מלא – משלב מסנן ראשוני עד טיפול עמוק במסלולי מקום ספציפי / בכל מקום",
+      "category": "tech",
+      "wave": 1,
+      "priority": "hh",
+      "kind": "steps",
+      "status": "published",
+      "currentVersion": 4,
+      "sourceId": null,
+      "sourceRef": "פרק 4",
+      "phases": [
+        {
+          "id": "p1",
+          "label": "שלב 1 – מסנן",
+          "note": "ללא מעורבות לקוח",
+          "steps": [
+            {
+              "key": "s1",
+              "num": "1",
+              "title": "בדיקת חסימת גלישה בארץ",
+              "blockRefs": [],
+              "sourceRef": "§4.1",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "פתח CRM ↗ שדה **\"גלישה בארץ\"**"
+                },
+                {
+                  "id": "a2",
+                  "text": "אם **\"חסום\"** → כנס לאזור האישי ↗ ביצוע פעולות ↗ גלישה ותוכן → הדלק את המתג"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ לא חסום – המשך לשלב 2",
+                  "goto": "s2"
+                },
+                {
+                  "kind": "alert",
+                  "text": "⚑ חסום – הפעל מתג גלישה"
+                }
+              ]
+            },
+            {
+              "key": "s2",
+              "num": "2",
+              "title": "בדיקת סיום חבילת גלישה",
+              "blockRefs": [],
+              "sourceRef": "§4.2",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "אזור אישי ↗ **\"השימושים שלי\"**"
+                }
+              ],
+              "outcomes": [],
+              "branch": {
+                "q": "מה מוצג?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "ניצל 100%",
+                    "text": "הסבר ללקוח שהחבילה הסתיימה. הצע חבילה חדשה ↗ \"רכישת נפח מתחדש\". אם ירצה להפסיק חידוש חודשי – לעלות לקו."
+                  },
+                  {
+                    "kind": "then",
+                    "label": "חבילה פעילה",
+                    "text": "המשך לשלב 3",
+                    "goto": "s3"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s3",
+              "num": "3",
+              "title": "בדיקות במכשיר הלקוח",
+              "blockId": "60b15e82-eb1a-4ea9-8fbd-4814ccd74bc0",
+              "blockRefs": [],
+              "sourceRef": "§4.3",
+              "deps": [],
+              "actions": [],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום השיחה"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – המשך לשלב 2 (מברר)",
+                  "goto": "s4"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "p2",
+          "label": "שלב 2 – מברר",
+          "steps": [
+            {
+              "key": "s4",
+              "num": "4",
+              "title": "סיווג סוג התקלה",
+              "blockRefs": [],
+              "script": "\"אתה לא גולש בכלל, או שהגלישה איטית?\"\n\"זה קורה בכל מקום או רק במקום מסוים?\"",
+              "sourceRef": "§4.4",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "לאיזה מסלול?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מקום ספציפי",
+                    "text": "→ **מסלול 1** (שלב 1א)",
+                    "goto": "s4a"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "בכל מקום",
+                    "text": "→ **מסלול 2** (שלב 5)",
+                    "goto": "s5"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "r1",
+          "label": "מסלול 1 – מקום ספציפי",
+          "route": "1",
+          "steps": [
+            {
+              "key": "s4a",
+              "num": "1א",
+              "title": "אימות המיקום",
+              "description": "בירור: מחסן / ממ\"ד / חדר תת-קרקעי / חדר ספציפי?",
+              "blockRefs": [],
+              "sourceRef": "§4.5",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "סוג מיקום?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מיקום נקודתי",
+                    "text": "הסבר על כיסוי רשת → סיום שיחה"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "אחר",
+                    "text": "המשך לבדיקת אנטנות",
+                    "goto": "s4b"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s4b",
+              "num": "1ב",
+              "title": "בדיקת אנטנות בסביבה",
+              "blockRefs": [],
+              "sourceRef": "§4.6",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "מצב אנטנות?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "אין אנטנות",
+                    "text": "תסריט פריסת רשת → הורדת לקוח מהקו"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "יש אנטנות",
+                    "text": "בדוק אם עוד לקוחות מדווחים: אם כן → פתח טופס רדיו + GNETRUCK (עדכון עד 3 שעות). אם לא → עבור למסלול 2 מסעיף 2.",
+                    "goto": "s6"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "r2",
+          "label": "מסלול 2 – בכל מקום",
+          "route": "2",
+          "steps": [
+            {
+              "key": "s5",
+              "num": "5",
+              "title": "בדיקת CRM – Prepaid / הונאה",
+              "blockRefs": [],
+              "sourceRef": "§4.7",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "מצב הלקוח?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "נוייד Prepaid / הונאה",
+                    "text": "פתח פנייה ל-IT → המתן לעדכון → חזור ללקוח"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "תקין",
+                    "text": "המשך לבדיקת סימון רשת",
+                    "goto": "s6"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s6",
+              "num": "6",
+              "title": "בדיקת סימון רשת",
+              "blockRefs": [],
+              "script": "\"איזה סימון מופיע ליד פסי הקליטה? (H+ / 3G / LTE / 5G)\"",
+              "sourceRef": "§4.8",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "סימון שמוצג?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "3G / H+ בלבד",
+                    "text": "הנחה לשנות הגדרת רשת → **4G/5G אוטומטי**. הסתדר? סיום. אחרת: המשך."
+                  },
+                  {
+                    "kind": "then",
+                    "label": "5G / 4G / LTE",
+                    "text": "המשך לבדיקת APN",
+                    "goto": "s7"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s7",
+              "num": "7",
+              "title": "בדיקת APN",
+              "blockRefs": [],
+              "sourceRef": "§4.9",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "ודא שה-APN מוגדר ל-**WE**"
+                },
+                {
+                  "id": "a2",
+                  "text": "אם לא מוגדר → הגדר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – שלב 8",
+                  "goto": "s8"
+                }
+              ]
+            },
+            {
+              "key": "s8",
+              "num": "8",
+              "title": "בדיקת מהירות גלישה",
+              "hint": "רק אם מדובר באיטיות",
+              "blockRefs": [],
+              "sourceRef": "§4.10",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "בקש מהלקוח להריץ **Speedtest**"
+                }
+              ],
+              "outcomes": [],
+              "branch": {
+                "q": "תוצאה?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מעל 6 מגה",
+                    "text": "עדכן לקוח – תקין → סיום שיחה"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "מתחת ל-6 מגה",
+                    "text": "המשך לריענון גלישה",
+                    "goto": "s9"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s9",
+              "num": "9",
+              "title": "ריענון גלישה במערכת",
+              "blockRefs": [],
+              "sourceRef": "§4.11",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "לחץ על מתג **\"גלישה בארץ\"** ← כבה ← הפעל מחדש"
+                },
+                {
+                  "id": "a2",
+                  "text": "בקש מלקוח לאתחל מכשיר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – איפוס הגדרות רשת",
+                  "goto": "s10"
+                }
+              ]
+            },
+            {
+              "key": "s10",
+              "num": "10",
+              "title": "איפוס הגדרות רשת",
+              "blockId": "995a570f-0ce6-4eea-87e5-6d280436127e",
+              "blockRefs": [],
+              "sourceRef": "§4.12",
+              "deps": ["s7"],
+              "actions": [],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – ריענון SIM",
+                  "goto": "s11"
+                }
+              ]
+            },
+            {
+              "key": "s11",
+              "num": "11",
+              "title": "ריענון SIM",
+              "blockId": "5b2730fc-42ea-4807-84e1-fe1af41b0542",
+              "blockRefs": [],
+              "sourceRef": "§4.13",
+              "deps": ["s7"],
+              "actions": [],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – SIM במכשיר אחר",
+                  "goto": "s12"
+                }
+              ]
+            },
+            {
+              "key": "s12",
+              "num": "12",
+              "title": "SIM במכשיר אחר",
+              "blockRefs": [],
+              "sourceRef": "§4.14",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "תוצאה?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "עבד במכשיר אחר",
+                    "text": "בעיה במכשיר → הפנה למעבדה → הורד מהקו"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "לא עבד",
+                    "text": "יתכן ה-SIM פגום → החלפת SIM / eSIM",
+                    "goto": "s13"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s13",
+              "num": "13",
+              "title": "החלפת SIM / eSIM",
+              "tone": "alert",
+              "blockRefs": [],
+              "sourceRef": "§4.15",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "**eSIM** – עדיפות ראשונה: בצע בדיגיטל"
+                },
+                {
+                  "id": "a2",
+                  "text": "**SIM פיזי** – שלח ללקוח להום סנטר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "alert",
+                  "text": "⚑ לא הסתדר – פנייה למומחי תמיכה"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "related": [
+        {
+          "documentId": "acdc0fa7-b72a-4b75-8c00-40893f2a91bf",
+          "why": "מוזכר בשלב 13 · משתף 2 שדות"
+        },
+        {
+          "documentId": "ba744440-a357-43b3-83e0-03c2fabe7ebc",
+          "why": "4 שלבים זהים (ריענון SIM)"
+        },
+        {
+          "documentId": "68347add-1dd7-43e5-8519-aac95e92dcb1",
+          "why": "מסלול מקביל · APN, ריענון SIM"
+        }
+      ],
+      "createdAt": "2025-06-12T12:00:00.000Z",
+      "updatedAt": "2025-06-12T12:00:00.000Z"
+    }
+  },
+  {
+    "slug": "browsing",
+    "version": 5,
+    "label": "מיזוג \"ריענון SIM\" לבלוק משותף",
+    "kind": "published",
+    "author": "ענבר ל.",
+    "at": "2025-05-20T11:10:00.000Z",
+    "snapshot": {
+      "id": "de69b623-0360-4191-85c4-c842016ba86b",
+      "slug": "browsing",
+      "code": "T-01",
+      "title": "איטיות גלישה / חוסר גלישה",
+      "description": "נוהל דיבאג מלא – משלב מסנן ראשוני עד טיפול עמוק במסלולי מקום ספציפי / בכל מקום",
+      "category": "tech",
+      "wave": 1,
+      "priority": "hh",
+      "kind": "steps",
+      "status": "published",
+      "currentVersion": 5,
+      "sourceId": null,
+      "sourceRef": "פרק 4",
+      "phases": [
+        {
+          "id": "p1",
+          "label": "שלב 1 – מסנן",
+          "note": "ללא מעורבות לקוח",
+          "steps": [
+            {
+              "key": "s1",
+              "num": "1",
+              "title": "בדיקת חסימת גלישה בארץ",
+              "blockRefs": [],
+              "sourceRef": "§4.1",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "פתח CRM ↗ שדה **\"גלישה בארץ\"**"
+                },
+                {
+                  "id": "a2",
+                  "text": "אם **\"חסום\"** → כנס לאזור האישי ↗ ביצוע פעולות ↗ גלישה ותוכן → הדלק את המתג"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ לא חסום – המשך לשלב 2",
+                  "goto": "s2"
+                },
+                {
+                  "kind": "alert",
+                  "text": "⚑ חסום – הפעל מתג גלישה"
+                }
+              ]
+            },
+            {
+              "key": "s2",
+              "num": "2",
+              "title": "בדיקת סיום חבילת גלישה",
+              "blockRefs": [],
+              "sourceRef": "§4.2",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "אזור אישי ↗ **\"השימושים שלי\"**"
+                }
+              ],
+              "outcomes": [],
+              "branch": {
+                "q": "מה מוצג?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "ניצל 100%",
+                    "text": "הסבר ללקוח שהחבילה הסתיימה. הצע חבילה חדשה ↗ \"רכישת נפח מתחדש\". אם ירצה להפסיק חידוש חודשי – לעלות לקו."
+                  },
+                  {
+                    "kind": "then",
+                    "label": "חבילה פעילה",
+                    "text": "המשך לשלב 3",
+                    "goto": "s3"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s3",
+              "num": "3",
+              "title": "בדיקות במכשיר הלקוח",
+              "blockId": "60b15e82-eb1a-4ea9-8fbd-4814ccd74bc0",
+              "blockRefs": [],
+              "sourceRef": "§4.3",
+              "deps": [],
+              "actions": [],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום השיחה"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – המשך לשלב 2 (מברר)",
+                  "goto": "s4"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "p2",
+          "label": "שלב 2 – מברר",
+          "steps": [
+            {
+              "key": "s4",
+              "num": "4",
+              "title": "סיווג סוג התקלה",
+              "blockRefs": [],
+              "script": "\"אתה לא גולש בכלל, או שהגלישה איטית?\"\n\"זה קורה בכל מקום או רק במקום מסוים?\"",
+              "sourceRef": "§4.4",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "לאיזה מסלול?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מקום ספציפי",
+                    "text": "→ **מסלול 1** (שלב 1א)",
+                    "goto": "s4a"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "בכל מקום",
+                    "text": "→ **מסלול 2** (שלב 5)",
+                    "goto": "s5"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "r1",
+          "label": "מסלול 1 – מקום ספציפי",
+          "route": "1",
+          "steps": [
+            {
+              "key": "s4a",
+              "num": "1א",
+              "title": "אימות המיקום",
+              "description": "בירור: מחסן / ממ\"ד / חדר תת-קרקעי / חדר ספציפי?",
+              "blockRefs": [],
+              "sourceRef": "§4.5",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "סוג מיקום?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מיקום נקודתי",
+                    "text": "הסבר על כיסוי רשת → סיום שיחה"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "אחר",
+                    "text": "המשך לבדיקת אנטנות",
+                    "goto": "s4b"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s4b",
+              "num": "1ב",
+              "title": "בדיקת אנטנות בסביבה",
+              "blockRefs": [],
+              "sourceRef": "§4.6",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "מצב אנטנות?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "אין אנטנות",
+                    "text": "תסריט פריסת רשת → הורדת לקוח מהקו"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "יש אנטנות",
+                    "text": "בדוק אם עוד לקוחות מדווחים: אם כן → פתח טופס רדיו + GNETRUCK (עדכון עד 3 שעות). אם לא → עבור למסלול 2 מסעיף 2.",
+                    "goto": "s6"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "r2",
+          "label": "מסלול 2 – בכל מקום",
+          "route": "2",
+          "steps": [
+            {
+              "key": "s5",
+              "num": "5",
+              "title": "בדיקת CRM – Prepaid / הונאה",
+              "blockRefs": [],
+              "sourceRef": "§4.7",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "מצב הלקוח?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "נוייד Prepaid / הונאה",
+                    "text": "פתח פנייה ל-IT → המתן לעדכון → חזור ללקוח"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "תקין",
+                    "text": "המשך לבדיקת סימון רשת",
+                    "goto": "s6"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s6",
+              "num": "6",
+              "title": "בדיקת סימון רשת",
+              "blockRefs": [],
+              "script": "\"איזה סימון מופיע ליד פסי הקליטה? (H+ / 3G / LTE / 5G)\"",
+              "sourceRef": "§4.8",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "סימון שמוצג?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "3G / H+ בלבד",
+                    "text": "הנחה לשנות הגדרת רשת → **4G/5G אוטומטי**. הסתדר? סיום. אחרת: המשך."
+                  },
+                  {
+                    "kind": "then",
+                    "label": "5G / 4G / LTE",
+                    "text": "המשך לבדיקת APN",
+                    "goto": "s7"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s7",
+              "num": "7",
+              "title": "בדיקת APN",
+              "blockRefs": [],
+              "sourceRef": "§4.9",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "ודא שה-APN מוגדר ל-**WE**"
+                },
+                {
+                  "id": "a2",
+                  "text": "אם לא מוגדר → הגדר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – שלב 8",
+                  "goto": "s8"
+                }
+              ]
+            },
+            {
+              "key": "s8",
+              "num": "8",
+              "title": "בדיקת מהירות גלישה",
+              "hint": "רק אם מדובר באיטיות",
+              "blockRefs": [],
+              "sourceRef": "§4.10",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "בקש מהלקוח להריץ **Speedtest**"
+                }
+              ],
+              "outcomes": [],
+              "branch": {
+                "q": "תוצאה?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מעל 5 מגה",
+                    "text": "עדכן לקוח – תקין → סיום שיחה"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "מתחת ל-5 מגה",
+                    "text": "המשך לריענון גלישה",
+                    "goto": "s9"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s9",
+              "num": "9",
+              "title": "ריענון גלישה במערכת",
+              "blockRefs": [],
+              "sourceRef": "§4.11",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "לחץ על מתג **\"גלישה בארץ\"** ← כבה ← הפעל מחדש"
+                },
+                {
+                  "id": "a2",
+                  "text": "בקש מלקוח לאתחל מכשיר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – איפוס הגדרות רשת",
+                  "goto": "s10"
+                }
+              ]
+            },
+            {
+              "key": "s10",
+              "num": "10",
+              "title": "איפוס הגדרות רשת",
+              "blockId": "995a570f-0ce6-4eea-87e5-6d280436127e",
+              "blockRefs": [],
+              "sourceRef": "§4.12",
+              "deps": ["s7"],
+              "actions": [],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – ריענון SIM",
+                  "goto": "s11"
+                }
+              ]
+            },
+            {
+              "key": "s11",
+              "num": "11",
+              "title": "ריענון SIM",
+              "blockRefs": [],
+              "sourceRef": "§4.13",
+              "deps": ["s7"],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "CRM ← מצב עריכה על המספר ← sim block lbl ← שמור"
+                },
+                {
+                  "id": "a2",
+                  "text": "שוב עריכה ← sim allow lbl ← שמור"
+                },
+                {
+                  "id": "a3",
+                  "text": "בקש מלקוח לאתחל מכשיר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – SIM במכשיר אחר",
+                  "goto": "s12"
+                }
+              ]
+            },
+            {
+              "key": "s12",
+              "num": "12",
+              "title": "SIM במכשיר אחר",
+              "blockRefs": [],
+              "sourceRef": "§4.14",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "תוצאה?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "עבד במכשיר אחר",
+                    "text": "בעיה במכשיר → הפנה למעבדה → הורד מהקו"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "לא עבד",
+                    "text": "יתכן ה-SIM פגום → החלפת SIM / eSIM",
+                    "goto": "s13"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "related": [
+        {
+          "documentId": "acdc0fa7-b72a-4b75-8c00-40893f2a91bf",
+          "why": "מוזכר בשלב 13 · משתף 2 שדות"
+        },
+        {
+          "documentId": "ba744440-a357-43b3-83e0-03c2fabe7ebc",
+          "why": "4 שלבים זהים (ריענון SIM)"
+        },
+        {
+          "documentId": "68347add-1dd7-43e5-8519-aac95e92dcb1",
+          "why": "מסלול מקביל · APN, ריענון SIM"
+        }
+      ],
+      "createdAt": "2025-06-12T12:00:00.000Z",
+      "updatedAt": "2025-06-12T12:00:00.000Z"
+    }
+  },
+  {
+    "slug": "browsing",
+    "version": 6,
+    "label": "שינוי סף Speedtest 5→6 מגה",
+    "kind": "published",
+    "author": "אלון ר.",
+    "at": "2025-06-03T08:45:00.000Z",
+    "snapshot": {
+      "id": "de69b623-0360-4191-85c4-c842016ba86b",
+      "slug": "browsing",
+      "code": "T-01",
+      "title": "איטיות גלישה / חוסר גלישה",
+      "description": "נוהל דיבאג מלא – משלב מסנן ראשוני עד טיפול עמוק במסלולי מקום ספציפי / בכל מקום",
+      "category": "tech",
+      "wave": 1,
+      "priority": "hh",
+      "kind": "steps",
+      "status": "published",
+      "currentVersion": 6,
+      "sourceId": null,
+      "sourceRef": "פרק 4",
+      "phases": [
+        {
+          "id": "p1",
+          "label": "שלב 1 – מסנן",
+          "note": "ללא מעורבות לקוח",
+          "steps": [
+            {
+              "key": "s1",
+              "num": "1",
+              "title": "בדיקת חסימת גלישה בארץ",
+              "blockRefs": [],
+              "sourceRef": "§4.1",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "פתח CRM ↗ שדה **\"גלישה בארץ\"**"
+                },
+                {
+                  "id": "a2",
+                  "text": "אם **\"חסום\"** → כנס לאזור האישי ↗ ביצוע פעולות ↗ גלישה ותוכן → הדלק את המתג"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ לא חסום – המשך לשלב 2",
+                  "goto": "s2"
+                },
+                {
+                  "kind": "alert",
+                  "text": "⚑ חסום – הפעל מתג גלישה"
+                }
+              ]
+            },
+            {
+              "key": "s2",
+              "num": "2",
+              "title": "בדיקת סיום חבילת גלישה",
+              "blockRefs": [],
+              "sourceRef": "§4.2",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "אזור אישי ↗ **\"השימושים שלי\"**"
+                }
+              ],
+              "outcomes": [],
+              "branch": {
+                "q": "מה מוצג?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "ניצל 100%",
+                    "text": "הסבר ללקוח שהחבילה הסתיימה. הצע חבילה חדשה ↗ \"רכישת נפח מתחדש\". אם ירצה להפסיק חידוש חודשי – לעלות לקו."
+                  },
+                  {
+                    "kind": "then",
+                    "label": "חבילה פעילה",
+                    "text": "המשך לשלב 3",
+                    "goto": "s3"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s3",
+              "num": "3",
+              "title": "בדיקות במכשיר הלקוח",
+              "blockId": "60b15e82-eb1a-4ea9-8fbd-4814ccd74bc0",
+              "blockRefs": [],
+              "sourceRef": "§4.3",
+              "deps": [],
+              "actions": [],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום השיחה"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – המשך לשלב 2 (מברר)",
+                  "goto": "s4"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "p2",
+          "label": "שלב 2 – מברר",
+          "steps": [
+            {
+              "key": "s4",
+              "num": "4",
+              "title": "סיווג סוג התקלה",
+              "blockRefs": [],
+              "script": "\"אתה לא גולש בכלל, או שהגלישה איטית?\"\n\"זה קורה בכל מקום או רק במקום מסוים?\"",
+              "sourceRef": "§4.4",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "לאיזה מסלול?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מקום ספציפי",
+                    "text": "→ **מסלול 1** (שלב 1א)",
+                    "goto": "s4a"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "בכל מקום",
+                    "text": "→ **מסלול 2** (שלב 5)",
+                    "goto": "s5"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "r1",
+          "label": "מסלול 1 – מקום ספציפי",
+          "route": "1",
+          "steps": [
+            {
+              "key": "s4a",
+              "num": "1א",
+              "title": "אימות המיקום",
+              "description": "בירור: מחסן / ממ\"ד / חדר תת-קרקעי / חדר ספציפי?",
+              "blockRefs": [],
+              "sourceRef": "§4.5",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "סוג מיקום?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מיקום נקודתי",
+                    "text": "הסבר על כיסוי רשת → סיום שיחה"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "אחר",
+                    "text": "המשך לבדיקת אנטנות",
+                    "goto": "s4b"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s4b",
+              "num": "1ב",
+              "title": "בדיקת אנטנות בסביבה",
+              "blockRefs": [],
+              "sourceRef": "§4.6",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "מצב אנטנות?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "אין אנטנות",
+                    "text": "תסריט פריסת רשת → הורדת לקוח מהקו"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "יש אנטנות",
+                    "text": "בדוק אם עוד לקוחות מדווחים: אם כן → פתח טופס רדיו + GNETRUCK (עדכון עד 3 שעות). אם לא → עבור למסלול 2 מסעיף 2.",
+                    "goto": "s6"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "r2",
+          "label": "מסלול 2 – בכל מקום",
+          "route": "2",
+          "steps": [
+            {
+              "key": "s5",
+              "num": "5",
+              "title": "בדיקת CRM – Prepaid / הונאה",
+              "blockRefs": [],
+              "sourceRef": "§4.7",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "מצב הלקוח?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "נוייד Prepaid / הונאה",
+                    "text": "פתח פנייה ל-IT → המתן לעדכון → חזור ללקוח"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "תקין",
+                    "text": "המשך לבדיקת סימון רשת",
+                    "goto": "s6"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s6",
+              "num": "6",
+              "title": "בדיקת סימון רשת",
+              "blockRefs": [],
+              "script": "\"איזה סימון מופיע ליד פסי הקליטה? (H+ / 3G / LTE / 5G)\"",
+              "sourceRef": "§4.8",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "סימון שמוצג?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "3G / H+ בלבד",
+                    "text": "הנחה לשנות הגדרת רשת → **4G/5G אוטומטי**. הסתדר? סיום. אחרת: המשך."
+                  },
+                  {
+                    "kind": "then",
+                    "label": "5G / 4G / LTE",
+                    "text": "המשך לבדיקת APN",
+                    "goto": "s7"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s7",
+              "num": "7",
+              "title": "בדיקת APN",
+              "blockRefs": [],
+              "sourceRef": "§4.9",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "ודא שה-APN מוגדר ל-**WE**"
+                },
+                {
+                  "id": "a2",
+                  "text": "אם לא מוגדר → הגדר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – שלב 8",
+                  "goto": "s8"
+                }
+              ]
+            },
+            {
+              "key": "s8",
+              "num": "8",
+              "title": "בדיקת מהירות גלישה",
+              "hint": "רק אם מדובר באיטיות",
+              "blockRefs": [],
+              "sourceRef": "§4.10",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "בקש מהלקוח להריץ **Speedtest**"
+                }
+              ],
+              "outcomes": [],
+              "branch": {
+                "q": "תוצאה?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מעל 6 מגה",
+                    "text": "עדכן לקוח – תקין → סיום שיחה"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "מתחת ל-6 מגה",
+                    "text": "המשך לריענון גלישה",
+                    "goto": "s9"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s9",
+              "num": "9",
+              "title": "ריענון גלישה במערכת",
+              "blockRefs": [],
+              "sourceRef": "§4.11",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "לחץ על מתג **\"גלישה בארץ\"** ← כבה ← הפעל מחדש"
+                },
+                {
+                  "id": "a2",
+                  "text": "בקש מלקוח לאתחל מכשיר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – איפוס הגדרות רשת",
+                  "goto": "s10"
+                }
+              ]
+            },
+            {
+              "key": "s10",
+              "num": "10",
+              "title": "איפוס הגדרות רשת",
+              "blockId": "995a570f-0ce6-4eea-87e5-6d280436127e",
+              "blockRefs": [],
+              "sourceRef": "§4.12",
+              "deps": ["s7"],
+              "actions": [],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – ריענון SIM",
+                  "goto": "s11"
+                }
+              ]
+            },
+            {
+              "key": "s11",
+              "num": "11",
+              "title": "ריענון SIM",
+              "blockRefs": [],
+              "sourceRef": "§4.13",
+              "deps": ["s7"],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "CRM ← מצב עריכה על המספר ← sim block lbl ← שמור"
+                },
+                {
+                  "id": "a2",
+                  "text": "שוב עריכה ← sim allow lbl ← שמור"
+                },
+                {
+                  "id": "a3",
+                  "text": "בקש מלקוח לאתחל מכשיר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – SIM במכשיר אחר",
+                  "goto": "s12"
+                }
+              ]
+            },
+            {
+              "key": "s12",
+              "num": "12",
+              "title": "SIM במכשיר אחר",
+              "blockRefs": [],
+              "sourceRef": "§4.14",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "תוצאה?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "עבד במכשיר אחר",
+                    "text": "בעיה במכשיר → הפנה למעבדה → הורד מהקו"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "לא עבד",
+                    "text": "יתכן ה-SIM פגום → החלפת SIM / eSIM",
+                    "goto": "s13"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "related": [
+        {
+          "documentId": "acdc0fa7-b72a-4b75-8c00-40893f2a91bf",
+          "why": "מוזכר בשלב 13 · משתף 2 שדות"
+        },
+        {
+          "documentId": "ba744440-a357-43b3-83e0-03c2fabe7ebc",
+          "why": "4 שלבים זהים (ריענון SIM)"
+        },
+        {
+          "documentId": "68347add-1dd7-43e5-8519-aac95e92dcb1",
+          "why": "מסלול מקביל · APN, ריענון SIM"
+        }
+      ],
+      "createdAt": "2025-06-12T12:00:00.000Z",
+      "updatedAt": "2025-06-12T12:00:00.000Z"
+    }
+  },
+  {
+    "slug": "browsing",
+    "version": 7,
+    "label": "הוספת שלב 13 · החלפת SIM/eSIM",
+    "kind": "published",
+    "author": "ענבר ל.",
+    "at": "2025-06-12T09:48:00.000Z",
+    "snapshot": {
+      "id": "de69b623-0360-4191-85c4-c842016ba86b",
+      "slug": "browsing",
+      "code": "T-01",
+      "title": "איטיות גלישה / חוסר גלישה",
+      "description": "נוהל דיבאג מלא – משלב מסנן ראשוני עד טיפול עמוק במסלולי מקום ספציפי / בכל מקום",
+      "category": "tech",
+      "wave": 1,
+      "priority": "hh",
+      "kind": "steps",
+      "status": "published",
+      "currentVersion": 7,
+      "sourceId": null,
+      "sourceRef": "פרק 4",
+      "phases": [
+        {
+          "id": "p1",
+          "label": "שלב 1 – מסנן",
+          "note": "ללא מעורבות לקוח",
+          "steps": [
+            {
+              "key": "s1",
+              "num": "1",
+              "title": "בדיקת חסימת גלישה בארץ",
+              "blockRefs": [],
+              "sourceRef": "§4.1",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "פתח CRM ↗ שדה **\"גלישה בארץ\"**"
+                },
+                {
+                  "id": "a2",
+                  "text": "אם **\"חסום\"** → כנס לאזור האישי ↗ ביצוע פעולות ↗ גלישה ותוכן → הדלק את המתג"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ לא חסום – המשך לשלב 2",
+                  "goto": "s2"
+                },
+                {
+                  "kind": "alert",
+                  "text": "⚑ חסום – הפעל מתג גלישה"
+                }
+              ]
+            },
+            {
+              "key": "s2",
+              "num": "2",
+              "title": "בדיקת סיום חבילת גלישה",
+              "blockRefs": [],
+              "sourceRef": "§4.2",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "אזור אישי ↗ **\"השימושים שלי\"**"
+                }
+              ],
+              "outcomes": [],
+              "branch": {
+                "q": "מה מוצג?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "ניצל 100%",
+                    "text": "הסבר ללקוח שהחבילה הסתיימה. הצע חבילה חדשה ↗ \"רכישת נפח מתחדש\". אם ירצה להפסיק חידוש חודשי – לעלות לקו."
+                  },
+                  {
+                    "kind": "then",
+                    "label": "חבילה פעילה",
+                    "text": "המשך לשלב 3",
+                    "goto": "s3"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s3",
+              "num": "3",
+              "title": "בדיקות במכשיר הלקוח",
+              "blockId": "60b15e82-eb1a-4ea9-8fbd-4814ccd74bc0",
+              "blockRefs": [],
+              "sourceRef": "§4.3",
+              "deps": [],
+              "actions": [],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום השיחה"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – המשך לשלב 2 (מברר)",
+                  "goto": "s4"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "p2",
+          "label": "שלב 2 – מברר",
+          "steps": [
+            {
+              "key": "s4",
+              "num": "4",
+              "title": "סיווג סוג התקלה",
+              "blockRefs": [],
+              "script": "\"אתה לא גולש בכלל, או שהגלישה איטית?\"\n\"זה קורה בכל מקום או רק במקום מסוים?\"",
+              "sourceRef": "§4.4",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "לאיזה מסלול?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מקום ספציפי",
+                    "text": "→ **מסלול 1** (שלב 1א)",
+                    "goto": "s4a"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "בכל מקום",
+                    "text": "→ **מסלול 2** (שלב 5)",
+                    "goto": "s5"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "r1",
+          "label": "מסלול 1 – מקום ספציפי",
+          "route": "1",
+          "steps": [
+            {
+              "key": "s4a",
+              "num": "1א",
+              "title": "אימות המיקום",
+              "description": "בירור: מחסן / ממ\"ד / חדר תת-קרקעי / חדר ספציפי?",
+              "blockRefs": [],
+              "sourceRef": "§4.5",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "סוג מיקום?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מיקום נקודתי",
+                    "text": "הסבר על כיסוי רשת → סיום שיחה"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "אחר",
+                    "text": "המשך לבדיקת אנטנות",
+                    "goto": "s4b"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s4b",
+              "num": "1ב",
+              "title": "בדיקת אנטנות בסביבה",
+              "blockRefs": [],
+              "sourceRef": "§4.6",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "מצב אנטנות?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "אין אנטנות",
+                    "text": "תסריט פריסת רשת → הורדת לקוח מהקו"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "יש אנטנות",
+                    "text": "בדוק אם עוד לקוחות מדווחים: אם כן → פתח טופס רדיו + GNETRUCK (עדכון עד 3 שעות). אם לא → עבור למסלול 2 מסעיף 2.",
+                    "goto": "s6"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "r2",
+          "label": "מסלול 2 – בכל מקום",
+          "route": "2",
+          "steps": [
+            {
+              "key": "s5",
+              "num": "5",
+              "title": "בדיקת CRM – Prepaid / הונאה",
+              "blockRefs": [],
+              "sourceRef": "§4.7",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "מצב הלקוח?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "נוייד Prepaid / הונאה",
+                    "text": "פתח פנייה ל-IT → המתן לעדכון → חזור ללקוח"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "תקין",
+                    "text": "המשך לבדיקת סימון רשת",
+                    "goto": "s6"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s6",
+              "num": "6",
+              "title": "בדיקת סימון רשת",
+              "blockRefs": [],
+              "script": "\"איזה סימון מופיע ליד פסי הקליטה? (H+ / 3G / LTE / 5G)\"",
+              "sourceRef": "§4.8",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "סימון שמוצג?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "3G / H+ בלבד",
+                    "text": "הנחה לשנות הגדרת רשת → **4G/5G אוטומטי**. הסתדר? סיום. אחרת: המשך."
+                  },
+                  {
+                    "kind": "then",
+                    "label": "5G / 4G / LTE",
+                    "text": "המשך לבדיקת APN",
+                    "goto": "s7"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s7",
+              "num": "7",
+              "title": "בדיקת APN",
+              "blockRefs": [],
+              "sourceRef": "§4.9",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "ודא שה-APN מוגדר ל-**WE**"
+                },
+                {
+                  "id": "a2",
+                  "text": "אם לא מוגדר → הגדר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – שלב 8",
+                  "goto": "s8"
+                }
+              ]
+            },
+            {
+              "key": "s8",
+              "num": "8",
+              "title": "בדיקת מהירות גלישה",
+              "hint": "רק אם מדובר באיטיות",
+              "blockRefs": [],
+              "sourceRef": "§4.10",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "בקש מהלקוח להריץ **Speedtest**"
+                }
+              ],
+              "outcomes": [],
+              "branch": {
+                "q": "תוצאה?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "מעל 6 מגה",
+                    "text": "עדכן לקוח – תקין → סיום שיחה"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "מתחת ל-6 מגה",
+                    "text": "המשך לריענון גלישה",
+                    "goto": "s9"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s9",
+              "num": "9",
+              "title": "ריענון גלישה במערכת",
+              "blockRefs": [],
+              "sourceRef": "§4.11",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "לחץ על מתג **\"גלישה בארץ\"** ← כבה ← הפעל מחדש"
+                },
+                {
+                  "id": "a2",
+                  "text": "בקש מלקוח לאתחל מכשיר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – איפוס הגדרות רשת",
+                  "goto": "s10"
+                }
+              ]
+            },
+            {
+              "key": "s10",
+              "num": "10",
+              "title": "איפוס הגדרות רשת",
+              "blockId": "995a570f-0ce6-4eea-87e5-6d280436127e",
+              "blockRefs": [],
+              "sourceRef": "§4.12",
+              "deps": ["s7"],
+              "actions": [],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – ריענון SIM",
+                  "goto": "s11"
+                }
+              ]
+            },
+            {
+              "key": "s11",
+              "num": "11",
+              "title": "ריענון SIM",
+              "blockId": "5b2730fc-42ea-4807-84e1-fe1af41b0542",
+              "blockRefs": [],
+              "sourceRef": "§4.13",
+              "deps": ["s7"],
+              "actions": [],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "next",
+                  "text": "→ לא הסתדר – SIM במכשיר אחר",
+                  "goto": "s12"
+                }
+              ]
+            },
+            {
+              "key": "s12",
+              "num": "12",
+              "title": "SIM במכשיר אחר",
+              "blockRefs": [],
+              "sourceRef": "§4.14",
+              "deps": [],
+              "actions": [],
+              "outcomes": [],
+              "branch": {
+                "q": "תוצאה?",
+                "options": [
+                  {
+                    "kind": "if",
+                    "label": "עבד במכשיר אחר",
+                    "text": "בעיה במכשיר → הפנה למעבדה → הורד מהקו"
+                  },
+                  {
+                    "kind": "then",
+                    "label": "לא עבד",
+                    "text": "יתכן ה-SIM פגום → החלפת SIM / eSIM",
+                    "goto": "s13"
+                  }
+                ]
+              }
+            },
+            {
+              "key": "s13",
+              "num": "13",
+              "title": "החלפת SIM / eSIM",
+              "tone": "alert",
+              "blockRefs": [],
+              "sourceRef": "§4.15",
+              "deps": [],
+              "actions": [
+                {
+                  "id": "a1",
+                  "text": "**eSIM** – עדיפות ראשונה: בצע בדיגיטל"
+                },
+                {
+                  "id": "a2",
+                  "text": "**SIM פיזי** – שלח ללקוח להום סנטר"
+                }
+              ],
+              "outcomes": [
+                {
+                  "kind": "ok",
+                  "text": "✓ הסתדר – סיום"
+                },
+                {
+                  "kind": "alert",
+                  "text": "⚑ לא הסתדר – פנייה למומחי תמיכה"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "related": [
+        {
+          "documentId": "acdc0fa7-b72a-4b75-8c00-40893f2a91bf",
+          "why": "מוזכר בשלב 13 · משתף 2 שדות"
+        },
+        {
+          "documentId": "ba744440-a357-43b3-83e0-03c2fabe7ebc",
+          "why": "4 שלבים זהים (ריענון SIM)"
+        },
+        {
+          "documentId": "68347add-1dd7-43e5-8519-aac95e92dcb1",
+          "why": "מסלול מקביל · APN, ריענון SIM"
+        }
+      ],
+      "createdAt": "2025-06-12T12:00:00.000Z",
+      "updatedAt": "2025-06-12T12:00:00.000Z"
+    }
+  }
+]

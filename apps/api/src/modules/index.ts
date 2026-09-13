@@ -1,0 +1,25 @@
+import type { FastifyInstance } from 'fastify';
+import documents from './documents/routes.js';
+import blocks from './blocks/routes.js';
+import fields from './fields/routes.js';
+import scripts from './scripts/routes.js';
+import notes from './notes/routes.js';
+import drafts from './drafts/routes.js';
+import search from './search/routes.js';
+import trash from './trash/routes.js';
+import preferences from './preferences/routes.js';
+import events from './events/routes.js';
+import { startJobs } from '../jobs/index.js';
+
+/**
+ * Single registration point for every `/api/v1` content module (L0-owned contract).
+ * Other lanes add their module to this list — one line each, no changes to `app.ts`.
+ */
+export async function registerModules(v1: FastifyInstance) {
+  for (const m of [documents, blocks, fields, scripts, notes, drafts, search, trash, preferences, events])
+    await v1.register(m);
+  // L2 background workers (trash.purge, search.reindex) bind to L1's `app.boss` once it is up.
+  v1.addHook('onReady', async () => {
+    await startJobs(v1);
+  });
+}

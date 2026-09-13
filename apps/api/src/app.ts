@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyPluginAsync } from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import swagger from '@fastify/swagger';
@@ -25,6 +25,9 @@ import modelPlugin from './plugins/model.js';
 import testUserPlugin, { type TestUserOption } from './plugins/testUser.js';
 import { registerSourcesModule } from './modules/sources/index.js';
 // end L5: pipeline
+// L2: content modules
+import { registerModules } from './modules/index.js';
+import { EventBus } from './lib/events.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -33,7 +36,13 @@ declare module 'fastify' {
 }
 
 export async function buildApp(
-  opts: { config?: Partial<Config>; pool?: pg.Pool; boss?: boolean; testUser?: TestUserOption } = {},
+  opts: {
+    config?: Partial<Config>;
+    pool?: pg.Pool;
+    boss?: boolean;
+    plugins?: FastifyPluginAsync[];
+    testUser?: TestUserOption;
+  } = {},
 ): Promise<FastifyInstance> {
   const config = loadConfig(opts.config);
   const app = Fastify({
@@ -54,6 +63,19 @@ export async function buildApp(
   await app.register(bossPlugin, { boss: opts.boss });
   // L3: identity — session resolution into req.user and `config.requires` enforcement.
   await app.register(authPlugin);
+  // L2: content modules — caller-supplied plugins (fake auth in tests, L3's auth in production)
+  // must register before the route scopes so their hooks apply to every module route.
+  for (const p of opts.plugins ?? []) await app.register(p);
+  // L2: content modules — `app.events` (Postgres LISTEN/NOTIFY bus) used by every write path.
+  const events = new EventBus();
+  events.onError = (err) => app.log.error({ err }, 'event bus error');
+  app.decorate('events', events);
+  app.addHook('onReady', async () => {
+    if (config.NODE_ENV !== 'test') await events.start(config.DATABASE_URL);
+  });
+  app.addHook('onClose', async () => {
+    await events.stop();
+  });
   await app.register(swagger, {
     openapi: { info: { title: 'wecom KB API', version: '1.0.0' }, servers: [{ url: '/' }] },
     transform: jsonSchemaTransform,
@@ -78,6 +100,8 @@ export async function buildApp(
       await registerAuth(v1); // L3: identity
       await v1.register(adminRoutes, { prefix: '/admin' }); // L3: identity
       if (config.NODE_ENV !== 'test') await registerIdentitySyncJob(v1); // L3: identity
+      // L2: content modules
+      await registerModules(v1);
       // L5: pipeline
       await v1.register(modelPlugin);
       await v1.register(testUserPlugin, { testUser: opts.testUser });
