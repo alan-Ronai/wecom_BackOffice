@@ -103,7 +103,11 @@ export interface PinState {
   pinned: boolean;
 }
 export type AdminUser = import('@wecom/shared').User & {
-  roles?: { roleId: string; roleName: string; categoryScope: string[] | null }[];
+  roles?: {
+    roleId: string;
+    roleName: string;
+    categoryScope: import('@wecom/shared').Category[] | null;
+  }[];
 };
 export interface Paginated<T> {
   items: T[];
