@@ -1,0 +1,60 @@
+/** Shared library-document fixture used by the renderer and push tests. */
+export const docFixture = {
+  id: '11111111-1111-4111-8111-111111111111',
+  slug: 'browsing',
+  title: 'איטיות גלישה',
+  description: 'נוהל דיבאג',
+  category: 'tech',
+  wave: 1,
+  priority: 'hh',
+  kind: 'steps',
+  status: 'published',
+  currentVersion: 7,
+  related: [],
+  createdAt: '2025-06-12T00:00:00.000Z',
+  updatedAt: '2025-06-12T00:00:00.000Z',
+  phases: [
+    {
+      id: 'p1',
+      label: 'שלב 1 – מסנן',
+      steps: [
+        {
+          key: 's1',
+          num: '1',
+          title: 'בדיקת חסימה',
+          actions: [{ id: 'a1', text: 'פתח CRM ↗ שדה **"גלישה בארץ"**' }],
+          outcomes: [{ kind: 'ok', text: '✓ לא חסום – המשך לשלב 2', goto: 's2' }],
+          blockRefs: [],
+          deps: [],
+        },
+        {
+          key: 's2',
+          num: '2',
+          title: 'סיום חבילה',
+          actions: [],
+          outcomes: [],
+          branch: {
+            q: 'מה מוצג?',
+            options: [
+              { kind: 'if', label: 'ניצל 100%', text: 'הצע חבילה' },
+              { kind: 'then', label: 'פעילה', text: 'המשך' },
+            ],
+          },
+          script: '"מה מוצג?"',
+          blockRefs: [],
+          deps: [],
+        },
+        {
+          key: 's3',
+          num: '3',
+          title: 'ריענון SIM',
+          blockId: '33333333-3333-4333-8333-333333333333',
+          actions: [],
+          outcomes: [],
+          blockRefs: [],
+          deps: [],
+        },
+      ],
+    },
+  ],
+};

@@ -185,6 +185,55 @@ export const RoleUpsertSchema = z.object({
 export const GroupMapPutSchema = z.object({
   entries: z.array(z.object({ idpGroupId: z.string(), idpGroupName: z.string(), roleId: IdSchema })),
 });
+// --- connectors & two-way sync (L6) ---
+export const ConnectorCapabilitiesSchema = z.object({
+  read: z.boolean(),
+  write: z.boolean(),
+  webhooks: z.boolean(),
+  identity: z.boolean(),
+});
+export const ConnectorSchema = z.object({
+  id: IdSchema,
+  type: z.string(),
+  name: z.string(),
+  enabled: z.boolean(),
+  schedule: z.string(),
+  lastRunAt: IsoDateSchema.nullable(),
+  lastStatus: z.string().nullable(),
+  health: z.record(z.unknown()),
+  configMasked: z.record(z.unknown()),
+  capabilities: ConnectorCapabilitiesSchema,
+});
+export const ConnectorCreateBodySchema = z.object({
+  type: z.string().min(1),
+  name: z.string().min(1).max(80),
+  config: z.record(z.unknown()),
+  schedule: z
+    .string()
+    .regex(/^(\S+\s+){4}\S+$/)
+    .optional(),
+  enabled: z.boolean().optional(),
+});
+export const ConnectorPatchBodySchema = ConnectorCreateBodySchema.partial();
+export const SyncLinkStateSchema = z.enum(['synced', 'pending_import', 'pending_push', 'conflict']);
+export const SyncLinkSchema = z.object({
+  id: IdSchema,
+  documentId: IdSchema,
+  documentTitle: z.string(),
+  connectorId: IdSchema,
+  externalId: z.string(),
+  remoteUrl: z.string().nullable(),
+  state: SyncLinkStateSchema,
+  baseRemoteHash: z.string().nullable(),
+  baseLocalVersion: z.number().int(),
+  lastSyncedAt: IsoDateSchema.nullable(),
+  conflict: z.unknown().nullable(),
+});
+export const SyncResolveBodySchema = z.object({
+  resolution: z.enum(['ours', 'theirs', 'merged']),
+  merged: DocumentSchema.optional(),
+});
+
 export const AuditQuerySchema = PaginationQuerySchema.extend({
   actorId: IdSchema.optional(),
   entityType: z.string().optional(),

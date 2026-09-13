@@ -23,6 +23,12 @@ export const ConfigSchema = z.object({
   WATCH_DIR: z.string().optional(),
   BACKUP_DIR: z.string().default('/backups'),
   TRASH_DAYS: z.coerce.number().int().min(1).default(30), // L2: soft-delete retention window
+  // L6: AES-256-GCM key for connector configs at rest. Production sets a real
+  // key (`openssl rand -hex 32`); dev/test fall back to an all-zero key.
+  CONNECTOR_KEY: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/i)
+    .default('00'.repeat(32)),
 });
 export type Config = z.infer<typeof ConfigSchema>;
 export const loadConfig = (over: Partial<Config> = {}): Config =>

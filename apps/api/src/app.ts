@@ -18,6 +18,7 @@ import adminRoutes from './modules/admin/routes.js'; // L3: identity
 import { registerIdentitySyncJob } from './jobs/identity-sync.js'; // L3: identity
 import { loggerOptions, REQUEST_ID_HEADER } from './plugins/logging.js';
 import health from './routes/health.js';
+import connectorsModule from './modules/connectors/index.js';
 import { ErrorEnvelopeSchema } from '@wecom/shared';
 // L5: pipeline
 import multipart from '@fastify/multipart';
@@ -106,8 +107,10 @@ export async function buildApp(
       await v1.register(modelPlugin);
       await v1.register(testUserPlugin, { testUser: opts.testUser });
       await v1.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } });
-      await registerSourcesModule(v1);
+      const pipeline = await registerSourcesModule(v1);
       // end L5: pipeline
+      // L6: connectors
+      await v1.register(connectorsModule, { revisions: pipeline.revisions });
     },
     { prefix: '/api/v1' },
   );

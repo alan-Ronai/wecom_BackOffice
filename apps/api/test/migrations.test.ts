@@ -63,6 +63,8 @@ run('migrations', () => {
       'suggestions',
       'sessions',
       'audit_log',
+      'connectors',
+      'sync_links',
     ])
       expect(names, t).toContain(t);
   });
@@ -80,7 +82,7 @@ run('migrations', () => {
       databaseUrl: c.getConnectionUri(),
       dir: 'migrations',
       direction: 'down',
-      count: 7,
+      count: 8,
       migrationsTable: 'pgmigrations',
       ignorePattern: 'package\\.json',
       log: () => undefined,

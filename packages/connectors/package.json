@@ -14,10 +14,12 @@
   },
   "dependencies": {
     "@wecom/shared": "workspace:*",
+    "node-html-parser": "^6.1.13",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "vitest": "^2.1.1",
-    "typescript": "^5.6.2"
+    "@types/node": "^22.20.2",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
   }
 }
