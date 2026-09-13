@@ -1,0 +1,204 @@
+#!/usr/bin/env node
+/**
+ * The no-mocks end-to-end gate.
+ *
+ * Every other suite in this repo runs against msw. That is the right harness for component
+ * behaviour, but it cannot catch a contract mismatch — it *is* the contract, as the frontend
+ * review demonstrated (login broken, SSE never connecting, nine pages throwing on first render,
+ * all while 96 unit tests and 6 e2e specs were green).
+ *
+ * This gate runs the real thing:
+ *   1. a throwaway `pgvector/pgvector:pg16` container
+ *   2. `migrate`, `seed`, and `create-admin` (the break-glass local account)
+ *   3. the real API, production-like: NODE_ENV=production, AUTH_FALLBACK=none, no model service
+ *   4. the **built** SPA served by `vite preview`, proxying /api and /events to that API
+ *   5. Playwright against all of it
+ *
+ * Everything is torn down on exit, including on Ctrl-C and on failure.
+ *
+ * Usage: pnpm e2e:real [-- --grep <pattern>]
+ *   KEEP_STACK=1   leave the container and servers up after the run (for debugging)
+ *   E2E_HEADED=1   run Playwright headed
+ */
+import { spawn, spawnSync } from 'node:child_process';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+const CONTAINER = 'wecom-e2e-pg';
+const PG_PORT = Number(process.env.E2E_PG_PORT ?? 55432);
+const API_PORT = Number(process.env.E2E_API_PORT ?? 3101);
+const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 4174);
+const PG_PASSWORD = 'e2e-postgres';
+const DATABASE_URL = `postgres://postgres:${PG_PASSWORD}@127.0.0.1:${PG_PORT}/postgres`;
+
+export const ADMIN_EMAIL = 'e2e-admin@wecom.co.il';
+export const ADMIN_PASSWORD = 'e2e-break-glass-pw-2026';
+
+const API_URL = `http://127.0.0.1:${API_PORT}`;
+const WEB_URL = `http://127.0.0.1:${WEB_PORT}`;
+
+/* ── process bookkeeping ──────────────────────────────────────────────────── */
+
+const children = [];
+let tornDown = false;
+
+function run(cmd, args, opts = {}) {
+  const r = spawnSync(cmd, args, { cwd: ROOT, stdio: 'inherit', ...opts });
+  if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} exited ${r.status ?? r.signal}`);
+  return r;
+}
+
+/** Starts a long-lived process, prefixing its output so interleaved logs stay readable. */
+function start(label, cmd, args, opts = {}) {
+  const child = spawn(cmd, args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], ...opts });
+  children.push({ label, child });
+  const pipe = (stream, to) => {
+    let buf = '';
+    stream.on('data', (d) => {
+      buf += d.toString();
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const l of lines) if (l.trim()) to.write(`  [${label}] ${l}\n`);
+    });
+  };
+  pipe(child.stdout, process.stdout);
+  pipe(child.stderr, process.stdout);
+  child.on('exit', (code, signal) => {
+    if (!tornDown && code !== 0 && signal !== 'SIGTERM')
+      console.error(`\n✗ [${label}] exited unexpectedly (code ${code}, signal ${signal})\n`);
+  });
+  return child;
+}
+
+function teardown() {
+  if (tornDown) return;
+  tornDown = true;
+  if (process.env.KEEP_STACK === '1') {
+    console.log(`\nKEEP_STACK=1 — leaving the stack up:\n  db  ${DATABASE_URL}\n  api ${API_URL}\n  web ${WEB_URL}\n`);
+    return;
+  }
+  for (const { child } of children) {
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      /* already gone */
+    }
+  }
+  spawnSync('docker', ['rm', '-f', CONTAINER], { stdio: 'ignore' });
+}
+
+process.on('exit', teardown);
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    teardown();
+    process.exit(130);
+  });
+}
+
+/* ── waiting ──────────────────────────────────────────────────────────────── */
+
+async function waitFor(label, check, { timeoutMs = 120_000, everyMs = 500 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let lastErr;
+  while (Date.now() < deadline) {
+    try {
+      if (await check()) {
+        console.log(`✓ ${label}`);
+        return;
+      }
+    } catch (e) {
+      lastErr = e;
+    }
+    await sleep(everyMs);
+  }
+  throw new Error(`timed out waiting for ${label}${lastErr ? `: ${lastErr.message}` : ''}`);
+}
+
+const httpOk = (url) => async () => {
+  const res = await fetch(url).catch(() => null);
+  return !!res && res.status < 500;
+};
+
+/* ── the gate ─────────────────────────────────────────────────────────────── */
+
+async function main() {
+  const passthrough = process.argv.slice(2);
+
+  console.log('\n── 1. postgres (pgvector/pgvector:pg16) ──────────────────────');
+  spawnSync('docker', ['rm', '-f', CONTAINER], { stdio: 'ignore' });
+  run('docker', [
+    'run', '-d', '--name', CONTAINER,
+    '-e', `POSTGRES_PASSWORD=${PG_PASSWORD}`,
+    '-e', 'POSTGRES_DB=postgres',
+    '-p', `${PG_PORT}:5432`,
+    'pgvector/pgvector:pg16',
+  ]);
+  await waitFor(`postgres accepting connections on :${PG_PORT}`, () => {
+    const r = spawnSync('docker', ['exec', CONTAINER, 'pg_isready', '-U', 'postgres'], { stdio: 'ignore' });
+    return r.status === 0;
+  });
+  // pg_isready goes green a moment before the server finishes its first-boot restart.
+  await sleep(1000);
+
+  const dbEnv = { ...process.env, DATABASE_URL };
+
+  console.log('\n── 2. migrate, seed, create-admin ───────────────────────────');
+  run('pnpm', ['--filter', '@wecom/api', 'migrate'], { env: dbEnv });
+  run('pnpm', ['--filter', '@wecom/api', 'seed'], { env: dbEnv });
+  // No `--` separator: pnpm forwards these already, and a literal `--` reaches `parseArgs`.
+  run('pnpm', ['--filter', '@wecom/api', 'create-admin', '--email', ADMIN_EMAIL, '--password', ADMIN_PASSWORD, '--name', 'E2E Admin'], { env: dbEnv });
+
+  console.log('\n── 3. api (production-like) ─────────────────────────────────');
+  start('api', 'pnpm', ['--filter', '@wecom/api', 'exec', 'tsx', 'src/server.ts'], {
+    env: {
+      ...dbEnv,
+      NODE_ENV: 'production',
+      PORT: String(API_PORT),
+      // No SSO issuer is configured, so the local break-glass account is the only way in —
+      // which is exactly what this gate exercises. `none` means no Palo Alto fallback either.
+      AUTH_FALLBACK: 'none',
+      SESSION_SECRET: 'e2e-session-secret-at-least-16-chars',
+      PUBLIC_URL: WEB_URL,
+      // Requests arrive straight from Playwright here, not through nginx, so there is no
+      // forwarded header to trust. `TRUST_PROXY` is set by deploy/, not by this gate.
+      MODEL_DISABLED: 'true',
+      MIGRATE_ON_START: 'false',
+      BACKUP_DIR: '/tmp/wecom-e2e-backups',
+    },
+  });
+  await waitFor(`api healthy at ${API_URL}/api/v1/system/health`, httpOk(`${API_URL}/api/v1/system/health`));
+
+  console.log('\n── 4. web (built dist via vite preview) ─────────────────────');
+  run('pnpm', ['--filter', '@wecom/web', 'build']);
+  start('web', 'pnpm', ['--filter', '@wecom/web', 'exec', 'vite', 'preview', '--port', String(WEB_PORT), '--strictPort'], {
+    env: { ...process.env, E2E_API_URL: API_URL },
+  });
+  await waitFor(`web serving at ${WEB_URL}`, httpOk(WEB_URL));
+  await waitFor('web proxying /api to the real api', async () => {
+    const res = await fetch(`${WEB_URL}/api/v1/system/health`);
+    const body = await res.json();
+    return res.ok && body.ok === true;
+  });
+
+  console.log('\n── 5. playwright (no mocks) ─────────────────────────────────\n');
+  run('pnpm', ['--filter', '@wecom/web', 'exec', 'playwright', 'test', '--config', 'playwright.real.config.ts', ...passthrough], {
+    env: {
+      ...process.env,
+      E2E_REAL_BASE_URL: WEB_URL,
+      E2E_ADMIN_EMAIL: ADMIN_EMAIL,
+      E2E_ADMIN_PASSWORD: ADMIN_PASSWORD,
+      ...(process.env.E2E_HEADED === '1' ? { PWDEBUG: '0' } : {}),
+    },
+  });
+
+  console.log('\n✓ e2e:real passed against a real Postgres, a real API and the built SPA.\n');
+}
+
+main().catch((e) => {
+  console.error(`\n✗ e2e:real failed: ${e.message}\n`);
+  teardown();
+  process.exit(1);
+});

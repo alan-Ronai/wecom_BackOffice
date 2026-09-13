@@ -11,7 +11,8 @@
     "format": "prettier --write .",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "openapi": "pnpm --filter @wecom/api openapi && pnpm --filter @wecom/web generate:client"
+    "openapi": "pnpm --filter @wecom/api openapi && pnpm --filter @wecom/web generate:client",
+    "e2e:real": "node scripts/e2e-real.mjs"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.8.0",
