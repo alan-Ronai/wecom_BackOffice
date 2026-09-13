@@ -94,17 +94,13 @@ export async function scanWatchDir(app: FastifyInstance, deps: PipelineDeps, dir
 export async function registerPipelineJobs(app: FastifyInstance, deps: PipelineDeps): Promise<void> {
   if (!app.boss) return;
   // CPU-only inference: fetch a single job at a time so revisions are processed serially.
-  await app.boss.work<{ revisionId: string }>(
-    QUEUES.pipelineProcess,
-    { batchSize: 1 },
-    async (job) => {
-      for (const j of Array.isArray(job) ? job : [job]) {
-        app.log.info({ revisionId: j.data.revisionId }, 'pipeline.process start');
-        const r = await processRevision(deps, app.model, j.data.revisionId);
-        app.log.info({ ...r, revisionId: j.data.revisionId }, 'pipeline.process done');
-      }
-    },
-  );
+  await app.boss.work<{ revisionId: string }>(QUEUES.pipelineProcess, { batchSize: 1 }, async (job) => {
+    for (const j of Array.isArray(job) ? job : [job]) {
+      app.log.info({ revisionId: j.data.revisionId }, 'pipeline.process start');
+      const r = await processRevision(deps, app.model, j.data.revisionId);
+      app.log.info({ ...r, revisionId: j.data.revisionId }, 'pipeline.process done');
+    }
+  });
   await app.boss.work(QUEUES.sourcesWatch, async () => {
     const dir = app.config.WATCH_DIR;
     if (!dir) return;

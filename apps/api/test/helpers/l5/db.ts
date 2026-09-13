@@ -13,7 +13,8 @@ export async function withDb(fn: (pool: pg.Pool, uri: string) => Promise<void>):
     await runMigrations(uri);
     await fn(pool, uri);
   } finally {
-    await pool.end();
+    // buildApp's db plugin ends the pool it was handed on app.close(), so this may be a no-op.
+    await pool.end().catch(() => undefined);
     await container.stop();
   }
 }
