@@ -117,6 +117,7 @@ run('connector routes', () => {
       post_type: 'posts',
       post_id: 7,
       modified_gmt: '2025-06-12T10:00:00',
+      sent_at: new Date().toISOString(),
     });
     const ok = await app.inject({
       method: 'POST',

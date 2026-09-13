@@ -244,10 +244,13 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
   );
 
   // Webhook: raw body, signature verified by the connector, no session required.
+  // Public and unauthenticated until the HMAC is checked — and each call costs a
+  // connector lookup plus an AES-GCM decrypt before that — so it carries its own
+  // per-IP limit. A real WordPress sends one request per post save.
   app.post(
     '/connectors/:id/webhook',
     {
-      config: { public: true },
+      config: { public: true, rateLimit: { max: 60, timeWindow: '1 minute' } },
       schema: {
         tags: ['connectors'],
         params,
