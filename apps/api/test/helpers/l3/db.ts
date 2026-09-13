@@ -20,7 +20,12 @@ export async function startTestDb() {
     pool,
     url,
     stop: async () => {
-      await pool.end();
+      // buildApp({ pool }) closes the pool on app.close(); ending twice throws.
+      try {
+        await pool.end();
+      } catch {
+        /* already ended by the app under test */
+      }
       await c.stop();
     },
   };
