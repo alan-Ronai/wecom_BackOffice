@@ -1,6 +1,6 @@
 /** Sources, revisions and suggestions — the stage-2 pipeline surface the UI already drives. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Source, SourceRevision, Suggestion, SuggestionPayload } from '@wecom/shared';
+import type { SourceRevision, SuggestionPayload } from '@wecom/shared';
 import { api, apiUpload } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap } from '../unwrap.js';

@@ -37,10 +37,7 @@ export function LoginPage() {
 
         {list.includes('entra') ? (
           // The SSO route's querystring is `returnTo`, not `next`.
-          <a
-            className="btn primary"
-            href={`${API_BASE}/auth/login?returnTo=${encodeURIComponent(returnTo)}`}
-          >
+          <a className="btn primary" href={`${API_BASE}/auth/login?returnTo=${encodeURIComponent(returnTo)}`}>
             {PROVIDER_LABEL.entra}
           </a>
         ) : null}

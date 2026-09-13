@@ -68,9 +68,10 @@ describe('hooks', () => {
   });
 
   it('publishes with a label', async () => {
-    const { result } = renderHook(() => usePublish(fx.docBrowsing.id), { wrapper: wrap() });
+    const { result } = renderHook(() => usePublish(), { wrapper: wrap() });
     await act(async () => {
-      await result.current.mutateAsync({ label: 'עדכון' });
+      // The id is a mutation variable so create-then-publish can target the created document.
+      await result.current.mutateAsync({ id: fx.docBrowsing.id, label: 'עדכון' });
     });
     expect(state.published).toEqual([{ id: fx.docBrowsing.id, label: 'עדכון' }]);
   });
@@ -80,7 +81,13 @@ describe('hooks', () => {
     const empty = renderHook(() => useSearch(''), { wrapper: w });
     expect(empty.result.current.fetchStatus).toBe('idle');
     const hit = renderHook(() => useSearch('ריענון sim'), { wrapper: w });
-    await waitFor(() => expect(hit.result.current.data?.total).toBe(1));
+    await waitFor(() => expect(hit.result.current.data?.total).toBe(2));
+    expect(hit.result.current.data?.groups.map((g) => g.type)).toEqual(['steps', 'documents']);
     expect(hit.result.current.data?.groups[0].hits[0].stepKey).toBe('s11');
+
+    // `types` carries API *group* names, and the handler filters on them like the real route.
+    const filtered = renderHook(() => useSearch('ריענון sim', 'documents'), { wrapper: w });
+    await waitFor(() => expect(filtered.result.current.data?.groups).toHaveLength(1));
+    expect(filtered.result.current.data?.groups[0].type).toBe('documents');
   });
 });

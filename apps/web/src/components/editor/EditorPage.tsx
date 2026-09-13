@@ -137,10 +137,11 @@ export function EditorPage() {
   const leave = useCallback(() => go(isNew ? '/library' : `/doc/${id}`), [go, id, isNew]);
   // `Shell` also binds Escape (palette → drawer → split). Without this guard both handlers fire
   // and closing the palette inside the editor also navigated away, discarding the draft.
-  useHotkeys(
-    { Escape: () => modal.count === 0 && !palette.state.open && leave() },
-    [leave, modal.count, palette.state.open],
-  );
+  useHotkeys({ Escape: () => modal.count === 0 && !palette.state.open && leave() }, [
+    leave,
+    modal.count,
+    palette.state.open,
+  ]);
 
   const doPublish = async () => {
     if (!doc) return;

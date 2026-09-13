@@ -26,20 +26,25 @@ import type { paths } from './schema.js';
 
 type JsonOf<R> = R extends { content: { 'application/json': infer B } } ? B : never;
 /** The 200/201 JSON body of `paths[P][M]`. */
-export type Res<P extends keyof paths, M extends keyof paths[P]> =
-  paths[P][M] extends { responses: infer R }
-    ? R extends { 200: infer Ok }
-      ? JsonOf<Ok>
-      : R extends { 201: infer Created }
-        ? JsonOf<Created>
-        : never
-    : never;
+export type Res<P extends keyof paths, M extends keyof paths[P]> = paths[P][M] extends { responses: infer R }
+  ? R extends { 200: infer Ok }
+    ? JsonOf<Ok>
+    : R extends { 201: infer Created }
+      ? JsonOf<Created>
+      : never
+  : never;
 /** The JSON request body of `paths[P][M]`. */
-export type Body<P extends keyof paths, M extends keyof paths[P]> =
-  paths[P][M] extends { requestBody?: infer B } ? JsonOf<NonNullable<B>> : never;
+export type Body<P extends keyof paths, M extends keyof paths[P]> = paths[P][M] extends {
+  requestBody?: infer B;
+}
+  ? JsonOf<NonNullable<B>>
+  : never;
 /** The querystring of `paths[P][M]`. */
-export type Query<P extends keyof paths, M extends keyof paths[P]> =
-  paths[P][M] extends { parameters: { query?: infer Q } } ? NonNullable<Q> : never;
+export type Query<P extends keyof paths, M extends keyof paths[P]> = paths[P][M] extends {
+  parameters: { query?: infer Q };
+}
+  ? NonNullable<Q>
+  : never;
 /** The element type of an `{ items: T[] }` envelope. */
 export type ItemOf<T> = T extends { items: (infer E)[] } ? E : never;
 

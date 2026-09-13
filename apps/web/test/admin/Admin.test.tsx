@@ -31,12 +31,14 @@ describe('admin', () => {
     expect(await screen.findByText(/טיפול בשיחה/)).toBeInTheDocument();
   });
 
-  it('renders system status', async () => {
+  it('renders system status from /system/health', async () => {
     asAdmin();
     renderWithProviders(<App />, { route: '/admin/system' });
     expect(await screen.findByText(/מסד נתונים/)).toBeInTheDocument();
     expect(screen.getByText(/מודל/)).toBeInTheDocument();
-    expect(await screen.findByText('kb-2025-06-12.dump')).toBeInTheDocument();
+    expect(screen.getByText(/תור עבודות/)).toBeInTheDocument();
+    // `GET /admin/system` does not exist on the API, so db size / connectors / backups are gone.
+    expect(await screen.findByText(/גרסה 0.1.0/)).toBeInTheDocument();
   });
 
   it('shows the audit log with a before/after diff', async () => {

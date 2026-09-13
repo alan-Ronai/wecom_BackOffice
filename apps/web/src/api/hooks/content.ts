@@ -19,8 +19,7 @@ export const useBlockUsage = (id: string | undefined) =>
   useQuery({
     queryKey: keys.blockUsage(id ?? ''),
     enabled: !!id,
-    queryFn: async () =>
-      unwrap(await api.GET('/blocks/{id}/usage', { params: { path: { id: id! } } })).items,
+    queryFn: async () => unwrap(await api.GET('/blocks/{id}/usage', { params: { path: { id: id! } } })).items,
   });
 
 export const useUpsertBlock = () => {

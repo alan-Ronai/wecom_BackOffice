@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Document, Version } from '@wecom/shared';
+import type { Document } from '@wecom/shared';
 import { api } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap } from '../unwrap.js';
