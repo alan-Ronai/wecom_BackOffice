@@ -8,8 +8,12 @@ describe('wordDiff', () => {
     expect(d.a).toContain('<del class="d">5</del>');
     expect(d.b).toContain('<ins class="d">6</ins>');
   });
-  it('reports no change', () => { expect(wordDiff('a b', 'a b').changed).toBe(false); });
-  it('escapes html', () => { expect(wordDiff('<b>', '<b>').a).toBe('&lt;b&gt;'); });
+  it('reports no change', () => {
+    expect(wordDiff('a b', 'a b').changed).toBe(false);
+  });
+  it('escapes html', () => {
+    expect(wordDiff('<b>', '<b>').a).toBe('&lt;b&gt;');
+  });
 });
 describe('similarity', () => {
   it('is 1 for identical, low for unrelated', () => {

@@ -21,7 +21,12 @@ export const PaginationQuerySchema = z.object({
 export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
 
 export const paginated = <T extends z.ZodTypeAny>(item: T) =>
-  z.object({ items: z.array(item), total: z.number().int().nonnegative(), page: z.number().int(), pageSize: z.number().int() });
+  z.object({
+    items: z.array(item),
+    total: z.number().int().nonnegative(),
+    page: z.number().int(),
+    pageSize: z.number().int(),
+  });
 
 export const ErrorEnvelopeSchema = z.object({
   code: z.string(),

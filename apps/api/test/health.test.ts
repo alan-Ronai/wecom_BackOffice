@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { buildApp } from '../src/app.js';
 
 describe('health', () => {
@@ -7,7 +7,9 @@ describe('health', () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/system/health' });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.ok).toBe(false); expect(body.db).toBe(false); expect(typeof body.version).toBe('string');
+    expect(body.ok).toBe(false);
+    expect(body.db).toBe(false);
+    expect(typeof body.version).toBe('string');
     await app.close();
   });
   it('serves openapi json', async () => {

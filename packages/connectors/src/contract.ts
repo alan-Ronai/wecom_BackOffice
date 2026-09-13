@@ -1,12 +1,42 @@
 import type { ZodTypeAny } from 'zod';
 import type { Block, Document, Paragraph } from '@wecom/shared';
 
-export interface ConnectorInfo { id: string; name: string; capabilities: { read: boolean; write: boolean; webhooks: boolean; identity: boolean } }
-export interface RemoteItem { externalId: string; title: string; hash: string; updatedAt: string; kind: string; url?: string }
-export interface SourceContent { title: string; paragraphs: Paragraph[]; raw?: string; hash: string; meta?: Record<string, unknown> }
-export interface LibraryContent { document: Document; html: string; blocks: Block[] }
-export interface RemoteRef { externalId: string; url?: string; hash: string; updatedAt: string }
-export interface RemoteChange { externalId: string; kind: 'created' | 'updated' | 'deleted'; at: string }
+export interface ConnectorInfo {
+  id: string;
+  name: string;
+  capabilities: { read: boolean; write: boolean; webhooks: boolean; identity: boolean };
+}
+export interface RemoteItem {
+  externalId: string;
+  title: string;
+  hash: string;
+  updatedAt: string;
+  kind: string;
+  url?: string;
+}
+export interface SourceContent {
+  title: string;
+  paragraphs: Paragraph[];
+  raw?: string;
+  hash: string;
+  meta?: Record<string, unknown>;
+}
+export interface LibraryContent {
+  document: Document;
+  html: string;
+  blocks: Block[];
+}
+export interface RemoteRef {
+  externalId: string;
+  url?: string;
+  hash: string;
+  updatedAt: string;
+}
+export interface RemoteChange {
+  externalId: string;
+  kind: 'created' | 'updated' | 'deleted';
+  at: string;
+}
 
 export interface Connector<C = unknown> {
   describe(): ConnectorInfo;
