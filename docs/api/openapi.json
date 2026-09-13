@@ -57,6 +57,321 @@
           }
         }
       }
+    },
+    "/api/v1/auth/providers": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "entra",
+                          "local"
+                        ]
+                      }
+                    },
+                    "fallback": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "paloalto"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "providers",
+                    "fallback"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "returnTo",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/local": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 3
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "subject": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "entra",
+                            "paloalto",
+                            "local"
+                          ]
+                        },
+                        "email": {
+                          "type": "string",
+                          "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+                          "nullable": true
+                        },
+                        "displayName": {
+                          "type": "string"
+                        },
+                        "initials": {
+                          "type": "string",
+                          "maxLength": 2
+                        },
+                        "active": {
+                          "type": "boolean"
+                        },
+                        "lastLoginAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "subject",
+                        "source",
+                        "email",
+                        "displayName",
+                        "initials",
+                        "active",
+                        "lastLoginAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "docs.read",
+                          "docs.create",
+                          "docs.edit",
+                          "docs.publish",
+                          "docs.delete",
+                          "docs.restore",
+                          "blocks.edit",
+                          "fields.edit",
+                          "scripts.edit",
+                          "notes.write",
+                          "notes.moderate",
+                          "suggestions.review",
+                          "suggestions.apply",
+                          "sources.manage",
+                          "connectors.manage",
+                          "users.manage",
+                          "roles.manage",
+                          "audit.read",
+                          "system.admin"
+                        ]
+                      }
+                    },
+                    "categoryScopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "sim",
+                          "tech",
+                          "billing",
+                          "plans",
+                          "intl",
+                          "ops"
+                        ]
+                      },
+                      "nullable": true
+                    },
+                    "preferences": {
+                      "type": "object",
+                      "properties": {
+                        "theme": {
+                          "type": "string",
+                          "enum": [
+                            "light",
+                            "dark"
+                          ],
+                          "nullable": true,
+                          "default": null
+                        },
+                        "font": {
+                          "type": "string",
+                          "enum": [
+                            "plex",
+                            "rubik"
+                          ],
+                          "default": "plex"
+                        },
+                        "panel": {
+                          "type": "boolean",
+                          "default": true
+                        },
+                        "callMode": {
+                          "type": "boolean",
+                          "default": true
+                        },
+                        "sidebarExpanded": {
+                          "type": "boolean",
+                          "default": false
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "user",
+                    "roles",
+                    "permissions",
+                    "categoryScopes",
+                    "preferences"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "servers": [

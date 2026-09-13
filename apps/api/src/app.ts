@@ -13,6 +13,7 @@ import { loadConfig, type Config } from './config.js';
 import dbPlugin from './plugins/db.js';
 import bossPlugin from './plugins/boss.js';
 import authPlugin from './plugins/auth.js'; // L3: identity
+import { registerAuth } from './modules/auth/index.js'; // L3: identity
 import { loggerOptions, REQUEST_ID_HEADER } from './plugins/logging.js';
 import health from './routes/health.js';
 import { ErrorEnvelopeSchema } from '@wecom/shared';
@@ -66,6 +67,7 @@ export async function buildApp(
   await app.register(
     async (v1) => {
       await v1.register(health);
+      await registerAuth(v1); // L3: identity
     },
     { prefix: '/api/v1' },
   );
