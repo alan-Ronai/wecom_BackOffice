@@ -6,3 +6,6 @@ coverage
 .playwright-mcp
 .superpowers
 apps/web/src/api/schema.d.ts
+
+# design review screenshots
+design/review/*.png
