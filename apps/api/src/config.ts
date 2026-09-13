@@ -13,6 +13,8 @@ export const ConfigSchema = z.object({
   PALOALTO_HOST: z.string().optional(),
   PALOALTO_API_KEY: z.string().optional(),
   PALOALTO_SUBNETS: z.string().default(''),
+  // L3: test-only override; production always talks to the firewall over https.
+  PALOALTO_SCHEME: z.enum(['https', 'http']).default('https'),
   MODEL_URL: z.string().default('http://localhost:11434'),
   MODEL_NAME: z.string().default('qwen2.5:3b-instruct-q4_K_M'),
   BACKUP_DIR: z.string().default('/backups'),
