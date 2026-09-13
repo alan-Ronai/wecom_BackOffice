@@ -158,7 +158,13 @@ importers:
       '@wecom/shared':
         specifier: workspace:*
         version: link:../shared
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
     devDependencies:
+      '@types/node':
+        specifier: ^22.20.2
+        version: 22.20.2
       typescript:
         specifier: ^5.6.2
         version: 5.9.3
