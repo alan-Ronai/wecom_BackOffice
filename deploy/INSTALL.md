@@ -43,6 +43,13 @@ Ask IT for an app registration: Web platform, redirect URI = `OIDC_REDIRECT_URI`
 ## Palo Alto User-ID fallback
 Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST` (firewall management address), `PALOALTO_API_KEY` (from `https://<fw>/api/?type=keygen&user=…&password=…` with a read-only admin), and `PALOALTO_SUBNETS` (comma-separated CIDRs allowed to auto-login). The API asks the firewall which user owns the caller's IP and signs that user in. Roles for such users are assigned in `/admin/users`.
 
+## WordPress connector
+1. Generate the config-encryption key once and put it in `deploy/.env`: `CONNECTOR_KEY=$(openssl rand -hex 32)`. Connector configs are stored AES-256-GCM encrypted with it — rotating the key makes existing connectors unreadable, so keep it with the database backups.
+2. In WordPress, create a dedicated editor user for the KB and issue an **application password** (*Users → Profile → Application Passwords*). The REST API is reached at `https://<wp-host>/wp-json/wp/v2/…`.
+3. Copy `deploy/wp-plugin` to `wp-content/plugins/kb-sync`, activate **KB Sync**, and fill *Settings → KB Sync*: webhook URL `https://<kb-host>/api/v1/connectors/<connectorId>/webhook`, the shared secret, and the post types to sync (see `deploy/wp-plugin/README.md`).
+4. In the KB, add the connector under `/admin/connectors` with `baseUrl`, `username`, `applicationPassword`, `postTypes`, `categoryMap` (WP category slug → KB category) and `webhookSecret` (the same secret as step 3), then **Test** and **Run**. The default schedule is every 15 minutes; each connector gets its own cron job.
+5. Verify: edit a post in WordPress → suggestions appear in the review queue; publish a linked card in the KB → the post is updated. When both sides changed since the last sync the link goes to `conflict` and waits for a lead — nothing is overwritten automatically.
+
 ## Troubleshooting
 - `health` shows `db:false` → `docker compose logs db`; check `POSTGRES_PASSWORD` matches in `.env`.
 - `model:false` → `docker compose logs ollama-pull`; rerun with `docker compose up ollama-pull`.

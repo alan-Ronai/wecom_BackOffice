@@ -1,14 +1,24 @@
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import type { Paragraph } from '@wecom/shared';
-import type { Connector, ConnectorInfo, LibraryContent, RemoteItem, RemoteRef, SourceContent } from '../contract.js';
+import type {
+  Connector,
+  ConnectorInfo,
+  LibraryContent,
+  RemoteItem,
+  RemoteRef,
+  SourceContent,
+} from '../contract.js';
 import { JsonConfigSchema, type JsonConfig } from './config.js';
 
 type Row = Record<string, unknown>;
 const hash = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
 
 export function parseCsv(text: string): Row[] {
-  const lines = text.replace(/\r/g, '').split('\n').filter((l) => l.trim().length);
+  const lines = text
+    .replace(/\r/g, '')
+    .split('\n')
+    .filter((l) => l.trim().length);
   const split = (l: string) => {
     const out: string[] = [];
     let cur = '';

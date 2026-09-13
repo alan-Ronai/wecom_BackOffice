@@ -21,7 +21,21 @@ export const normalizeText = (s: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const BLOCKS = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'table', 'blockquote', 'pre', 'figure']);
+const BLOCKS = new Set([
+  'p',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'ul',
+  'ol',
+  'table',
+  'blockquote',
+  'pre',
+  'figure',
+]);
 
 function blockText(el: HTMLElement): string {
   const tag = el.tagName.toLowerCase();

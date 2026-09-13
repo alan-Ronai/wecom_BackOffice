@@ -86,7 +86,9 @@ run('connector routes', () => {
       payload: { name: 'שם חדש', enabled: false },
     });
     expect(patched.json()).toMatchObject({ name: 'שם חדש', enabled: false });
-    expect((await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` })).statusCode).toBe(204);
+    expect((await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` })).statusCode).toBe(
+      204,
+    );
   });
 
   it('rejects invalid config for the connector type', async () => {
@@ -159,6 +161,14 @@ run('connector routes', () => {
     expect(stub.posts.get('posts:7')!.title.rendered).toBe('איטיות גלישה');
     const links = (await app.inject({ method: 'GET', url: `/api/v1/connectors/${conn.id}/links` })).json();
     expect(links.items[0]).toMatchObject({ externalId: 'posts:7', state: 'synced', baseLocalVersion: 1 });
+
+    // The hook L2's publish.ts calls: every in-parity link is pushed again.
+    await pool.query('update documents set current_version=2, title=$2 where id=$1', [docId, 'גרסה חדשה']);
+    const refs = await app.connectors.sync.pushOnPublish(docId, userId);
+    expect(refs).toHaveLength(1);
+    expect(stub.posts.get('posts:7')!.title.rendered).toBe('גרסה חדשה');
+    const after = (await app.inject({ method: 'GET', url: `/api/v1/connectors/${conn.id}/links` })).json();
+    expect(after.items[0]).toMatchObject({ state: 'synced', baseLocalVersion: 2 });
     await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
   });
 

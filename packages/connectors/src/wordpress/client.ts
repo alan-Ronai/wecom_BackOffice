@@ -29,8 +29,7 @@ export class WpClient {
   private headers(): Record<string, string> {
     return {
       authorization:
-        'Basic ' +
-        Buffer.from(this.cfg.username + ':' + this.cfg.applicationPassword).toString('base64'),
+        'Basic ' + Buffer.from(this.cfg.username + ':' + this.cfg.applicationPassword).toString('base64'),
       'content-type': 'application/json',
     };
   }

@@ -115,11 +115,7 @@ export class WordPressConnector implements Connector<WpConfig> {
   }
 
   /** `body` carries the raw request text so the HMAC can be checked byte for byte. */
-  async parseWebhook(
-    cfg: WpConfig,
-    headers: Record<string, string>,
-    body: unknown,
-  ): Promise<RemoteChange[]> {
+  async parseWebhook(cfg: WpConfig, headers: Record<string, string>, body: unknown): Promise<RemoteChange[]> {
     const raw = (body as { raw?: string })?.raw ?? '';
     const sig = headers['x-kb-signature'] ?? headers['X-KB-Signature'];
     if (!verifySignature(cfg.webhookSecret, raw, sig)) throw new Error('invalid signature');

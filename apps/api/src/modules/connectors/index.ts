@@ -5,14 +5,7 @@ import { buildRegistry } from './registry.js';
 import { SyncService, type DocumentsService, type EventBus, type SourceRevisionService } from './sync.js';
 import routes from './routes.js';
 import { bossAdapter, registerConnectorJobs } from './jobs.js';
-import {
-  documentsOf,
-  eventsOf,
-  hasPermission,
-  revisionsOf,
-  userOf,
-  type Enqueue,
-} from './context.js';
+import { documentsOf, eventsOf, hasPermission, revisionsOf, userOf, type Enqueue } from './context.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -47,9 +40,7 @@ async function authShim(app: FastifyInstance): Promise<void> {
     if (!cfg?.requires?.length) return;
     const user = userOf(req);
     if (cfg.requires.every((p) => hasPermission(user, p))) return;
-    await reply
-      .status(403)
-      .send({ code: 'FORBIDDEN', message: 'אין הרשאה לפעולה זו', requestId: req.id });
+    await reply.status(403).send({ code: 'FORBIDDEN', message: 'אין הרשאה לפעולה זו', requestId: req.id });
   });
 }
 

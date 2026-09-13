@@ -218,6 +218,19 @@ export class SyncService {
     return ref;
   }
 
+  /**
+   * L2's publish hook: after a successful publish, push the new version to every
+   * connector whose link is in parity. Links in `conflict` are left alone — the
+   * remote is never overwritten until a lead resolves them.
+   */
+  async pushOnPublish(documentId: string, actorId: string | null): Promise<RemoteRef[]> {
+    const links = await this.d.repo.linksForDocument(documentId);
+    const out: RemoteRef[] = [];
+    for (const l of links)
+      if (l.state === 'synced') out.push(await this.pushDocument(l.connector_id, documentId, actorId));
+    return out;
+  }
+
   /** Webhook path: the same rules, but only for the listed external ids. */
   async handleRemoteChanges(connectorId: string, changes: RemoteChange[]): Promise<void> {
     const { conn, cfg } = await this.connectorFor(connectorId);
@@ -256,11 +269,7 @@ export class SyncService {
     );
   }
 
-  async resolveConflict(
-    link: SyncLinkRow,
-    body: ResolveBody,
-    actorId: string | null,
-  ): Promise<SyncLinkRow> {
+  async resolveConflict(link: SyncLinkRow, body: ResolveBody, actorId: string | null): Promise<SyncLinkRow> {
     const { conn, cfg } = await this.connectorFor(link.connector_id);
     const doc = await this.d.documents.getById(link.document_id);
     if (!doc) throw new Error('document not found');

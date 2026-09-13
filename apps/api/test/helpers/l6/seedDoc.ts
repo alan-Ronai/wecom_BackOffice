@@ -53,11 +53,10 @@ export async function seedDocument(
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  await pool.query('insert into document_versions(document_id, version, snapshot, label) values ($1, 1, $2, $3)', [
-    docId,
-    snapshot,
-    'seed',
-  ]);
+  await pool.query(
+    'insert into document_versions(document_id, version, snapshot, label) values ($1, 1, $2, $3)',
+    [docId, snapshot, 'seed'],
+  );
   return { docId, sourceId: src.rows[0].id as string };
 }
 
@@ -67,9 +66,10 @@ export function sqlDocumentsService(pool: pg.Pool): DocumentsService {
     const d = (await pool.query('select * from documents where id=$1', [id])).rows[0];
     if (!d) return null;
     const v = (
-      await pool.query('select snapshot from document_versions where document_id=$1 order by version desc limit 1', [
-        id,
-      ])
+      await pool.query(
+        'select snapshot from document_versions where document_id=$1 order by version desc limit 1',
+        [id],
+      )
     ).rows[0];
     return {
       ...(v?.snapshot ?? {}),
@@ -108,12 +108,10 @@ export function sqlDocumentsService(pool: pg.Pool): DocumentsService {
           [id],
         )
       ).rows[0].current_version;
-      await pool.query('insert into document_versions(document_id, version, snapshot, label) values ($1,$2,$3,$4)', [
-        id,
-        v,
-        { ...doc, currentVersion: v },
-        label,
-      ]);
+      await pool.query(
+        'insert into document_versions(document_id, version, snapshot, label) values ($1,$2,$3,$4)',
+        [id, v, { ...doc, currentVersion: v }, label],
+      );
       return (await load(id)) as Document;
     },
   };

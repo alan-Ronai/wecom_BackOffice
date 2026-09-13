@@ -80,7 +80,12 @@ export async function refreshSchedules(
       );
     }
     // singletonKey keeps a slow connector from overlapping with its next tick.
-    await boss.schedule(name, r.schedule, { connectorId: r.id }, { tz: 'Asia/Jerusalem', singletonKey: r.id });
+    await boss.schedule(
+      name,
+      r.schedule,
+      { connectorId: r.id },
+      { tz: 'Asia/Jerusalem', singletonKey: r.id },
+    );
     scheduled.add(name);
   }
 }

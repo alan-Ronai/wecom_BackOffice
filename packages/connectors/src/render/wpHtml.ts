@@ -31,8 +31,7 @@ function renderStep(s: Step, blocks: Map<string, Block>): string {
         s.branch.options.map((o) => `<tr><td>${t(o.label)}</td><td>${t(o.text)}</td></tr>`).join('') +
         '</tbody></table>',
     );
-  if (outcomes.length)
-    inner.push(`<p class="kb-outcomes">${outcomes.map((o) => t(o.text)).join(' · ')}</p>`);
+  if (outcomes.length) inner.push(`<p class="kb-outcomes">${outcomes.map((o) => t(o.text)).join(' · ')}</p>`);
   parts.push(b ? `<div data-kb-block="${escapeHtml(b.id)}">${inner.join('')}</div>` : inner.join(''));
   return parts.join('\n');
 }
