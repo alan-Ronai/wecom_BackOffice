@@ -6,3 +6,4 @@ coverage
 .playwright-mcp
 .superpowers
 apps/web/src/api/schema.d.ts
+.claude/worktrees
