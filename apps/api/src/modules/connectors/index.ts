@@ -53,7 +53,12 @@ async function authShim(app: FastifyInstance): Promise<void> {
 
 export default fp(async (app: FastifyInstance, opts: ConnectorsModuleOptions = {}) => {
   const repo = new ConnectorsRepo(app.db, app.config.CONNECTOR_KEY);
-  const registry = buildRegistry();
+  const registry = buildRegistry({
+    fileRoot: app.config.CONNECTOR_FILE_ROOT,
+    hostAllowlist: app.config.CONNECTOR_HOST_ALLOWLIST.split(',')
+      .map((h) => h.trim())
+      .filter(Boolean),
+  });
   const sync = new SyncService({
     repo,
     registry,

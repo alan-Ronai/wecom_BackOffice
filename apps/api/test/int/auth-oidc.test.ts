@@ -71,7 +71,7 @@ run('OIDC login round-trip', () => {
       email: 'inbar@wecom.co.il',
       displayName: 'ענבר ל.',
       source: 'entra',
-      initials: 'ע',
+      initials: 'על',
     });
     expect(body.roles).toEqual(['editor']);
     expect(body.permissions).toContain('docs.edit');

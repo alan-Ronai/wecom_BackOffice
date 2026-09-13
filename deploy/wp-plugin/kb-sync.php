@@ -2,7 +2,7 @@
 /**
  * Plugin Name: KB Sync
  * Description: Notifies the wecom knowledge platform when a post is saved or deleted (HMAC-signed webhook).
- * Version: 1.0.0
+ * Version: 1.1.0
  */
 if (!defined('ABSPATH')) exit;
 
@@ -20,7 +20,9 @@ function kb_sync_send($event, $post_id, $post) {
   if (!in_array($post->post_type, $types, true)) return;
   if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)) return;
   $rest_type = $post->post_type === 'post' ? 'posts' : ($post->post_type === 'page' ? 'pages' : $post->post_type);
-  $body = wp_json_encode(['event' => $event, 'post_type' => $rest_type, 'post_id' => (int) $post_id, 'modified_gmt' => str_replace(' ', 'T', $post->post_modified_gmt)]);
+  // sent_at is part of the signed body: the KB rejects a replayed request whose
+  // timestamp is more than five minutes from its own clock. Keep the server's time in sync.
+  $body = wp_json_encode(['event' => $event, 'post_type' => $rest_type, 'post_id' => (int) $post_id, 'modified_gmt' => str_replace(' ', 'T', $post->post_modified_gmt), 'sent_at' => gmdate('Y-m-d\\TH:i:s\\Z')]);
   $sig = hash_hmac('sha256', $body, $s['secret']);
   wp_remote_post($s['url'], ['timeout' => 5, 'blocking' => false, 'headers' => ['Content-Type' => 'application/json', 'X-KB-Signature' => $sig], 'body' => $body]);
 }

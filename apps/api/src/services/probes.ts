@@ -24,13 +24,30 @@ export async function probeModel(
   }
 }
 
+/**
+ * One `getQueueSize` per queue (8) per call, and the Dockerfile HEALTHCHECK hits
+ * `/system/health` every 30 s. A short cache keeps the depth useful without making
+ * the liveness probe eight round-trips.
+ */
+const QUEUE_CACHE_MS = 5_000;
+let queueCache: { at: number; value: number | null } | null = null;
+
 export async function probeQueue(boss: PgBoss | null): Promise<number | null> {
   if (!boss) return null;
+  if (queueCache && Date.now() - queueCache.at < QUEUE_CACHE_MS) return queueCache.value;
+  let value: number | null;
   try {
     let pending = 0;
     for (const q of Object.values(QUEUES)) pending += await boss.getQueueSize(q);
-    return pending;
+    value = pending;
   } catch {
-    return null;
+    value = null;
   }
+  queueCache = { at: Date.now(), value };
+  return value;
 }
+
+/** Test hook: the cache is process-global, so a test that changes queue depth must clear it. */
+export const resetQueueProbeCache = (): void => {
+  queueCache = null;
+};

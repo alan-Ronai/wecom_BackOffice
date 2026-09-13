@@ -43,6 +43,11 @@ const CACHE_TTL_MS = 60_000;
 /**
  * Infrastructure routes owned by other lanes that must answer without a session.
  * Route-level `config.public` is the normal way to opt out of authentication.
+ *
+ * `/api/docs/json` exposes the whole API surface unauthenticated. That is a
+ * deliberate choice for a closed-LAN deployment (the generated client and
+ * `deploy/*-check.sh` read it before anyone can log in); it leaks route and schema
+ * names only, never data. Drop it from this set if the API is ever exposed wider.
  */
 const PUBLIC_PATHS = new Set(['/api/v1/system/health', '/api/docs/json']);
 

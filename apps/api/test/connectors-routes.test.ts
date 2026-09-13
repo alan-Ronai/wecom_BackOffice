@@ -117,6 +117,7 @@ run('connector routes', () => {
       post_type: 'posts',
       post_id: 7,
       modified_gmt: '2025-06-12T10:00:00',
+      sent_at: new Date().toISOString(),
     });
     const ok = await app.inject({
       method: 'POST',
@@ -141,6 +142,8 @@ run('connector routes', () => {
       pool,
       databaseUrl: c.getConnectionUri(),
       testUser: { id: userId, permissions: ['docs.read'] },
+      revisions: memoryRevisions(),
+      documents: sqlDocumentsService(pool),
     });
     expect((await noPerm.inject({ method: 'GET', url: '/api/v1/connectors' })).statusCode).toBe(403);
     await noPerm.close();

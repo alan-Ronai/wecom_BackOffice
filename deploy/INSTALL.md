@@ -5,12 +5,12 @@ Target: one VMware VM, Ubuntu 22.04/24.04, 4 vCPU, 16 GB RAM, 80 GB disk, Docker
 ## Clean install
 1. Install Docker: `curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER` (log out and in).
 2. Clone: `git clone <repo-url> /opt/wecom-kb && cd /opt/wecom-kb`.
-3. Configure: `cp deploy/.env.example deploy/.env`, then set `POSTGRES_PASSWORD`, `SESSION_SECRET` (`openssl rand -hex 32`), `PUBLIC_URL` (the DNS name users will open), and the identity settings below.
+3. Configure: `cp deploy/.env.example deploy/.env`, then set `POSTGRES_PASSWORD`, `SESSION_SECRET` (`openssl rand -hex 32`), `CONNECTOR_KEY` (`openssl rand -hex 32` — required even if you add the WordPress connector later; it encrypts connector secrets at rest), `PUBLIC_URL` (the DNS name users will open), and the identity settings below. `SESSION_SECRET` and `CONNECTOR_KEY` have development defaults that the API **refuses to start with** when `NODE_ENV=production`, so a half-filled `.env` fails loudly at step 5 rather than silently storing secrets under a known key.
 4. TLS: place `cert.pem` and `key.pem` in `deploy/certs/` (see "TLS certificate").
 5. Start: `docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build`.
    First start pulls the model (~2 GB, 5–20 min on the LAN); progress: `docker compose -f deploy/docker-compose.yml logs -f ollama-pull`.
 6. Verify: `deploy/smoke.sh https://<PUBLIC_URL host>` prints `smoke passed`.
-7. Create the break-glass admin: `docker compose -f deploy/docker-compose.yml exec api pnpm --filter @wecom/api create-admin --email admin@wecom.local` (command provided by lane L3).
+7. Create the break-glass admin (`--password` is required; the command exits with a usage message without it): `docker compose -f deploy/docker-compose.yml exec api pnpm --filter @wecom/api create-admin --email admin@wecom.local --password '<a strong password>' --name 'מנהל'`.
 8. Seed the initial library: `docker compose -f deploy/docker-compose.yml exec api pnpm --filter @wecom/api seed` (lane L2).
 
 ## Upgrade
@@ -23,7 +23,7 @@ deploy/smoke.sh https://<host>
 Migrations run automatically when `api` starts, via the container entrypoint (`pnpm --filter @wecom/api migrate`, controlled by `MIGRATE_ON_START`, default true). Roll back an upgrade by checking out the previous tag and restoring the pre-upgrade dump.
 
 ## Backup
-The `backup` container runs `backup.sh` every night at 02:15 (`TZ=Asia/Jerusalem`) and writes `deploy/backups/kb-YYYYmmdd-HHMM.dump` (pg_dump custom format), keeping `BACKUP_RETENTION_DAYS` (14) days. Copy that folder to the file server with your normal VM backup job. Run one by hand: `docker compose -f deploy/docker-compose.yml exec backup backup.sh`.
+Both the `backup` container and the `api` container see `deploy/backups` (the API read-only), so the nightly `system.backup-check` job can report a stale backup on `GET /admin/system`. The `backup` container runs `backup.sh` every night at 02:15 (`TZ=Asia/Jerusalem`) and writes `deploy/backups/kb-YYYYmmdd-HHMM.dump` (pg_dump custom format), keeping `BACKUP_RETENTION_DAYS` (14) days. Copy that folder to the file server with your normal VM backup job. Run one by hand: `docker compose -f deploy/docker-compose.yml exec backup backup.sh`.
 
 ## Restore
 ```bash
@@ -33,6 +33,9 @@ docker compose -f deploy/docker-compose.yml start api
 deploy/smoke.sh https://<host>
 ```
 `restore.sh` recreates the `public` and `pgboss` schemas, loads the dump with `pg_restore` and prints the table count. Test a restore on a scratch VM once per quarter — this exact round trip (backup → drop → restore → verify row count, plus retention pruning) is exercised by `deploy/backup-check.sh` against a throwaway container.
+
+## Reverse proxy and client IPs
+`nginx` terminates TLS and forwards `X-Real-IP` / `X-Forwarded-For`. The API only believes those headers when `TRUST_PROXY` allows the peer, so leave it set (default `172.16.0.0/12`, the docker bridge range; `true` trusts any peer, `false` trusts none). `req.ip` is what the Palo Alto subnet allowlist, the per-IP auth rate limits and the `audit_log.ip` / `sessions.ip` columns record — with the wrong value the allowlist evaluates nginx's own address and every login shares one rate-limit bucket. Check it after install: `curl -sk https://<host>/api/v1/auth/me` from a workstation and confirm the workstation's address (not `172.x`) appears in `/admin/sessions`.
 
 ## TLS certificate
 Request a server certificate for `PUBLIC_URL`'s host from the internal CA (`deploy/certs/README.md`). Users' machines already trust the internal CA through GlobalProtect / domain policy, so no browser warning appears. Renewal: replace the two files and `docker compose -f deploy/docker-compose.yml restart web`.
@@ -48,11 +51,11 @@ Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST`
 2. In WordPress, create a dedicated editor user for the KB and issue an **application password** (*Users → Profile → Application Passwords*). The REST API is reached at `https://<wp-host>/wp-json/wp/v2/…`.
 3. Copy `deploy/wp-plugin` to `wp-content/plugins/kb-sync`, activate **KB Sync**, and fill *Settings → KB Sync*: webhook URL `https://<kb-host>/api/v1/connectors/<connectorId>/webhook`, the shared secret, and the post types to sync (see `deploy/wp-plugin/README.md`).
 4. In the KB, add the connector under `/admin/connectors` with `baseUrl`, `username`, `applicationPassword`, `postTypes`, `categoryMap` (WP category slug → KB category) and `webhookSecret` (the same secret as step 3), then **Test** and **Run**. The default schedule is every 15 minutes; each connector gets its own cron job.
-5. Verify: edit a post in WordPress → suggestions appear in the review queue; publish a linked card in the KB → the post is updated. When both sides changed since the last sync the link goes to `conflict` and waits for a lead — nothing is overwritten automatically.
+5. Verify both directions: edit a post in WordPress → suggestions appear in the review queue, and accepting + publishing them creates the `sync_links` row; publish a linked card in the KB → the post is updated (the push runs after the publish transaction commits, so a WordPress outage never blocks a local publish — it shows up as a `job.failed` event and an `api` log line). When both sides changed since the last sync the link goes to `conflict` and waits for a lead — nothing is overwritten automatically.
 
 ## Troubleshooting
 - `health` shows `db:false` → `docker compose logs db`; check `POSTGRES_PASSWORD` matches in `.env`.
 - `model:false` → `docker compose logs ollama-pull`; rerun with `docker compose up ollama-pull`.
 - Browser certificate error → the cert's CN/SAN does not match `PUBLIC_URL`, or the CA is not trusted on that machine.
-- Slow suggestions → expected on CPU (10–40 s per paragraph); jobs are queued, see `/admin/system`.
+- Slow suggestions → expected on CPU (10–40 s per paragraph); jobs are queued, see `GET /api/v1/admin/system` (queue depths, model reachability, last backup age).
 - Logs: `docker compose logs -f api` (JSON lines; filter by `requestId` shown in error messages).

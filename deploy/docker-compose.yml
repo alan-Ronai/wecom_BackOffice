@@ -35,7 +35,8 @@ services:
     depends_on:
       db: { condition: service_healthy }
       ollama: { condition: service_healthy }
-    volumes: [uploads:/data/uploads]
+    # ./backups is read-only here so `system.backup-check` can see the nightly dumps.
+    volumes: [uploads:/data/uploads, ./backups:/backups:ro, watch:/data/watch]
     restart: unless-stopped
 
   web:
@@ -64,3 +65,4 @@ volumes:
   dbdata: {}
   ollama: {}
   uploads: {}
+  watch: {}
