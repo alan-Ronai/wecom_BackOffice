@@ -1,0 +1,10 @@
+services:
+  ollama-pull:
+    entrypoint: ["/bin/sh", "-c", "echo skipping model pull in CI"]
+  web:
+    volumes:
+      - ./certs/cert.pem:/etc/nginx/certs/cert.pem:ro
+      - ./certs/key.pem:/etc/nginx/certs/key.pem:ro
+    ports: ["8443:443", "8080:80"]
+  backup:
+    profiles: ["never"]

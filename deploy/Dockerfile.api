@@ -1,0 +1,32 @@
+# ── build ───────────────────────────────────────────────────────────────
+FROM node:22-alpine AS build
+RUN corepack enable && corepack prepare pnpm@10.27.0 --activate
+WORKDIR /app
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+COPY packages/shared/package.json packages/shared/
+COPY packages/connectors/package.json packages/connectors/
+COPY packages/model/package.json packages/model/
+COPY apps/api/package.json apps/api/
+RUN pnpm install --frozen-lockfile --filter @wecom/api...
+COPY packages ./packages
+COPY apps/api ./apps/api
+RUN pnpm --filter @wecom/api... build
+
+# ── runtime ─────────────────────────────────────────────────────────────
+# Keeps the full workspace (not `pnpm deploy`'s flattened output) because the
+# entrypoint runs `pnpm --filter @wecom/api migrate` before starting the
+# server, which needs the pnpm workspace context to resolve the filter.
+FROM node:22-alpine
+RUN corepack enable && corepack prepare pnpm@10.27.0 --activate
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build /app ./
+COPY apps/api/migrations ./apps/api/migrations
+COPY deploy/docker-entrypoint-api.sh /usr/local/bin/docker-entrypoint-api.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-api.sh \
+ && addgroup -S app && adduser -S app -G app && chown -R app:app /app
+USER app
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --retries=5 \
+  CMD wget -qO- http://127.0.0.1:3000/api/v1/system/health | grep -q '"db":true' || exit 1
+ENTRYPOINT ["docker-entrypoint-api.sh"]
