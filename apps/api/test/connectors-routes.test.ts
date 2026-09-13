@@ -181,7 +181,10 @@ run('connector routes', () => {
       boss: false,
     });
     const r = await real.inject({ method: 'GET', url: '/api/v1/connectors' });
-    expect(r.statusCode).toBe(403);
+    // L3's auth plugin answers 401 for an anonymous caller; the local shim
+    // (used before L3 landed) answers 403. Either proves the route is wired
+    // and not public.
+    expect([401, 403]).toContain(r.statusCode);
     await real.close();
   });
 });

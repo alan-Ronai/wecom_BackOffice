@@ -22,19 +22,26 @@ export interface ConnectorsModuleOptions {
 }
 
 /**
- * Temporary stand-in for L3's auth plugin: enforces route
- * `config.requires` and captures `req.rawBody` for the webhook route. Scoped to
- * this module's routes and removed the moment L3 registers first.
+ * The webhook verifies an HMAC over the exact request bytes, so the raw body
+ * has to survive JSON parsing. Scoped to this module's routes; L3's auth plugin
+ * does not provide it, so this is registered regardless of the shim below.
  */
-async function authShim(app: FastifyInstance): Promise<void> {
-  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
-    (_req as FastifyRequest & { rawBody?: string }).rawBody = body as string;
+async function rawBodyParser(app: FastifyInstance): Promise<void> {
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    (req as FastifyRequest & { rawBody?: string }).rawBody = body as string;
     try {
       done(null, JSON.parse(body as string));
     } catch {
       done(null, {});
     }
   });
+}
+
+/**
+ * Temporary stand-in for L3's auth plugin: enforces route `config.requires`.
+ * Scoped to this module's routes and removed the moment L3 registers first.
+ */
+async function authShim(app: FastifyInstance): Promise<void> {
   app.addHook('onRequest', async (req, reply) => {
     const cfg = req.routeOptions?.config as { requires?: readonly string[]; public?: boolean } | undefined;
     if (!cfg?.requires?.length) return;
@@ -76,6 +83,7 @@ export default fp(async (app: FastifyInstance, opts: ConnectorsModuleOptions = {
   }
 
   await app.register(async (scope) => {
+    await rawBodyParser(scope);
     // L3 owns `app.audit` and `req.user`; keep the shim only until it lands.
     if (!app.hasDecorator('audit')) await authShim(scope);
     await scope.register(routes, { repo, registry, sync, enqueue, refresh });

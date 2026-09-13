@@ -10,6 +10,7 @@ import {
   SyncLinkSchema,
   SyncResolveBodySchema,
   paginated,
+  type Permission,
 } from '@wecom/shared';
 import type { ConnectorRegistry } from '@wecom/connectors';
 import { maskConfig, type ConnectorRow, type ConnectorsRepo, type SyncLinkRow } from './repo.js';
@@ -57,7 +58,7 @@ const E = ErrorEnvelopeSchema;
 const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) => {
   const { repo, registry, sync } = opts;
   const audit = auditOf(app);
-  const manage = { requires: ['connectors.manage'] as const };
+  const manage: { requires: Permission[] } = { requires: ['connectors.manage'] };
   const params = z.object({ id: IdSchema });
   const notFound = (req: FastifyRequest, message: string) => ({
     code: 'NOT_FOUND',
@@ -246,7 +247,7 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
   app.post(
     '/connectors/:id/webhook',
     {
-      config: { public: true, rawBody: true },
+      config: { public: true },
       schema: {
         tags: ['connectors'],
         params,
@@ -284,7 +285,7 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
   app.post(
     '/sync-links/:id/resolve',
     {
-      config: { requires: ['suggestions.apply'] as const },
+      config: { requires: ['suggestions.apply'] as Permission[] },
       schema: {
         tags: ['connectors'],
         params,
