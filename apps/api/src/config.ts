@@ -15,6 +15,10 @@ export const ConfigSchema = z.object({
   PALOALTO_SUBNETS: z.string().default(''),
   MODEL_URL: z.string().default('http://localhost:11434'),
   MODEL_NAME: z.string().default('qwen2.5:3b-instruct-q4_K_M'),
+  // L5: pipeline
+  EMBED_MODEL: z.string().default('nomic-embed-text'),
+  MODEL_DISABLED: z.coerce.boolean().default(false),
+  WATCH_DIR: z.string().optional(),
   BACKUP_DIR: z.string().default('/backups'),
 });
 export type Config = z.infer<typeof ConfigSchema>;
