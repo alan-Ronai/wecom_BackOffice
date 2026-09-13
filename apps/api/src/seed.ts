@@ -126,12 +126,26 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
       const ins = await tx.query(
         `insert into blocks(id, slug, title, kind, description, script, current_version, created_by, updated_by, updated_at)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9) on conflict (slug) do nothing returning id`,
-        [b.id, b.slug, b.title, b.kind, b.description ?? null, b.script ?? null, b.currentVersion, authorId, b.updatedAt],
+        [
+          b.id,
+          b.slug,
+          b.title,
+          b.kind,
+          b.description ?? null,
+          b.script ?? null,
+          b.currentVersion,
+          authorId,
+          b.updatedAt,
+        ],
       );
       if (!ins.rowCount) continue;
       counts.blocks++;
       for (const [i, a] of b.actions.entries())
-        await tx.query('insert into block_actions(block_id, position, text) values ($1,$2,$3)', [b.id, i, a.text]);
+        await tx.query('insert into block_actions(block_id, position, text) values ($1,$2,$3)', [
+          b.id,
+          i,
+          a.text,
+        ]);
       for (const [i, o] of b.outcomes.entries())
         await tx.query(
           'insert into block_outcomes(block_id, position, kind, text, goto_step_key) values ($1,$2,$3,$4,$5)',

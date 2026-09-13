@@ -16,9 +16,9 @@ run('fake auth', () => {
     const app = await buildTestApp(db.pool, db.url);
     expect((await app.inject({ method: 'GET', url: '/api/v1/documents' })).statusCode).toBe(401);
     const u = await makeUser(db.pool, { perms: ['docs.read'] });
-    expect(
-      (await app.inject({ method: 'GET', url: '/api/v1/documents', headers: auth(u) })).statusCode,
-    ).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/api/v1/documents', headers: auth(u) })).statusCode).toBe(
+      200,
+    );
     await app.close();
   });
 });

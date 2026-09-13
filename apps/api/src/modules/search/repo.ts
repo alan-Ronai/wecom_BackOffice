@@ -124,7 +124,11 @@ export async function search(
         id: x.id as string,
         title: x.title as string,
         snippet: (x.description as string) || '',
-        meta: [sourceFile(x.category as string), CATEGORY_LABELS[x.category as string], 'v' + x.current_version]
+        meta: [
+          sourceFile(x.category as string),
+          CATEGORY_LABELS[x.category as string],
+          'v' + x.current_version,
+        ]
           .filter(Boolean)
           .join(' · '),
         score: Number(x.score ?? 0),

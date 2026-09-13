@@ -192,8 +192,7 @@ run('documents', () => {
       payload: s2,
     });
     expect(
-      (await app.inject({ method: 'GET', url: `/api/v1/documents/${c.id}`, headers: auth(u) })).json()
-        .status,
+      (await app.inject({ method: 'GET', url: `/api/v1/documents/${c.id}`, headers: auth(u) })).json().status,
     ).toBe('review');
     await app.inject({
       method: 'POST',

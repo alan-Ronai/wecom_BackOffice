@@ -45,8 +45,6 @@ run('audit', () => {
         throw new Error('boom');
       }),
     ).rejects.toThrow('boom');
-    expect((await db.pool.query("select count(*)::int n from audit_log where action='x'")).rows[0].n).toBe(
-      0,
-    );
+    expect((await db.pool.query("select count(*)::int n from audit_log where action='x'")).rows[0].n).toBe(0);
   });
 });

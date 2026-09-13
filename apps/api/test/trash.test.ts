@@ -112,9 +112,9 @@ run('trash', () => {
       headers: { ...auth(u), 'x-confirm': 'empty' },
     });
     expect(e.json().purged).toBeGreaterThan(0);
-    expect((await app.inject({ method: 'GET', url: '/api/v1/trash', headers: auth(u) })).json().items).toEqual(
-      [],
-    );
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/v1/trash', headers: auth(u) })).json().items,
+    ).toEqual([]);
   });
 
   it('purgeExpired removes rows older than the window', async () => {

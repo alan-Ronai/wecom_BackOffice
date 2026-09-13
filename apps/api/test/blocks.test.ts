@@ -78,7 +78,10 @@ run('blocks', () => {
       payload: {
         title: 'ריענון SIM',
         kind: 'step',
-        actions: [{ id: 'b1', text: 'CRM ← sim block lbl ← שמור' }, { id: 'b2', text: 'לחכות 90 שניות' }],
+        actions: [
+          { id: 'b1', text: 'CRM ← sim block lbl ← שמור' },
+          { id: 'b2', text: 'לחכות 90 שניות' },
+        ],
         outcomes: [],
         label: '90 שניות',
       },
@@ -92,13 +95,13 @@ run('blocks', () => {
     ).json();
     expect(doc.phases[0].steps[0].blockId).toBe(b.id);
     expect(
-      (
-        await app.inject({ method: 'GET', url: `/api/v1/blocks/${b.id}/versions`, headers: auth(u) })
-      ).json().items.map((v: { version: number }) => v.version),
+      (await app.inject({ method: 'GET', url: `/api/v1/blocks/${b.id}/versions`, headers: auth(u) }))
+        .json()
+        .items.map((v: { version: number }) => v.version),
     ).toEqual([1, 2]);
-    expect((await app.inject({ method: 'GET', url: '/api/v1/blocks', headers: auth(u) })).json().items).toHaveLength(
-      1,
-    );
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/v1/blocks', headers: auth(u) })).json().items,
+    ).toHaveLength(1);
   });
 
   it('requires blocks.edit to write and soft deletes', async () => {

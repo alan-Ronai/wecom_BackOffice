@@ -169,12 +169,15 @@ export async function purge(tx: Tx, type: TrashType, id: string): Promise<void> 
 export async function purgeExpired(pool: pg.Pool, days: number): Promise<number> {
   const cutoff = `now() - interval '${Number(days)} days'`;
   let n = 0;
-  const blocks = await pool.query(`select id from blocks where deleted_at is not null and deleted_at < ${cutoff}`);
+  const blocks = await pool.query(
+    `select id from blocks where deleted_at is not null and deleted_at < ${cutoff}`,
+  );
   for (const b of blocks.rows) {
     await pool.query('update steps set block_id=null where block_id=$1', [b.id]);
-    await pool.query('update steps set block_refs = array_remove(block_refs, $1) where $1 = any(block_refs)', [
-      b.id,
-    ]);
+    await pool.query(
+      'update steps set block_refs = array_remove(block_refs, $1) where $1 = any(block_refs)',
+      [b.id],
+    );
   }
   for (const table of ['documents', 'blocks', 'crm_fields', 'scripts']) {
     const r = await pool.query(

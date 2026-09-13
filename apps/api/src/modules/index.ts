@@ -16,18 +16,7 @@ import { startJobs } from '../jobs/index.js';
  * Other lanes add their module to this list — one line each, no changes to `app.ts`.
  */
 export async function registerModules(v1: FastifyInstance) {
-  for (const m of [
-    documents,
-    blocks,
-    fields,
-    scripts,
-    notes,
-    drafts,
-    search,
-    trash,
-    preferences,
-    events,
-  ])
+  for (const m of [documents, blocks, fields, scripts, notes, drafts, search, trash, preferences, events])
     await v1.register(m);
   // L2 background workers (trash.purge, search.reindex) bind to L1's `app.boss` once it is up.
   v1.addHook('onReady', async () => {

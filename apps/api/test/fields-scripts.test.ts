@@ -111,8 +111,8 @@ run('fields and scripts', () => {
     expect(
       (await app.inject({ method: 'DELETE', url: `/api/v1/scripts/${s.id}`, headers: auth(u) })).statusCode,
     ).toBe(200);
-    expect((await app.inject({ method: 'GET', url: '/api/v1/scripts', headers: auth(u) })).json().items).toHaveLength(
-      0,
-    );
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/v1/scripts', headers: auth(u) })).json().items,
+    ).toHaveLength(0);
   });
 });

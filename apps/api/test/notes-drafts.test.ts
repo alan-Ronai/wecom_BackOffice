@@ -83,9 +83,9 @@ run('notes, drafts and preferences', () => {
       })
     ).json();
     expect(mine.otherEditors.map((e: { name: string }) => e.name)).toEqual(['אלון ר.']);
-    expect((await app.inject({ method: 'GET', url: '/api/v1/drafts', headers: auth(u) })).json().items).toHaveLength(
-      1,
-    );
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/v1/drafts', headers: auth(u) })).json().items,
+    ).toHaveLength(1);
     expect(
       (await app.inject({ method: 'DELETE', url: `/api/v1/documents/${c.id}/draft`, headers: auth(u) }))
         .statusCode,
@@ -102,12 +102,11 @@ run('notes, drafts and preferences', () => {
     expect(put.json().draftKey).toBe('new:abc123');
     expect(put.json().documentId).toBeNull();
     expect(
-      (await app.inject({ method: 'GET', url: '/api/v1/drafts/new/abc123', headers: auth(u) })).json()
-        .payload.title,
+      (await app.inject({ method: 'GET', url: '/api/v1/drafts/new/abc123', headers: auth(u) })).json().payload
+        .title,
     ).toBe('מסמך חדש');
     expect(
-      (await app.inject({ method: 'DELETE', url: '/api/v1/drafts/new/abc123', headers: auth(u) }))
-        .statusCode,
+      (await app.inject({ method: 'DELETE', url: '/api/v1/drafts/new/abc123', headers: auth(u) })).statusCode,
     ).toBe(204);
   });
 

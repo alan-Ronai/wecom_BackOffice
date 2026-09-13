@@ -28,9 +28,10 @@ run('seed', () => {
       .rows[0];
     expect(b.status).toBe('published');
     expect(b.current_version).toBe(7);
-    const vs = await db.pool.query('select version, label from document_versions where document_id=$1 order by version', [
-      b.id,
-    ]);
+    const vs = await db.pool.query(
+      'select version, label from document_versions where document_id=$1 order by version',
+      [b.id],
+    );
     expect(vs.rows.map((v) => v.version)).toEqual([3, 4, 5, 6, 7]);
     const v5 = (
       await db.pool.query('select snapshot from document_versions where document_id=$1 and version=5', [b.id])
@@ -47,11 +48,16 @@ run('seed', () => {
         )
       ).rows[0].n,
     ).toBe(3);
-    expect((await db.pool.query('select count(*)::int n from step_field_refs')).rows[0].n).toBeGreaterThan(20);
+    expect((await db.pool.query('select count(*)::int n from step_field_refs')).rows[0].n).toBeGreaterThan(
+      20,
+    );
     // card-only topics land as zero-step drafts
     expect(
-      (await db.pool.query("select count(*)::int n from documents where status='draft' and topic_id is not null"))
-        .rows[0].n,
+      (
+        await db.pool.query(
+          "select count(*)::int n from documents where status='draft' and topic_id is not null",
+        )
+      ).rows[0].n,
     ).toBe(29);
     expect((await db.pool.query('select count(*)::int n from script_refs')).rows[0].n).toBeGreaterThan(0);
     expect((await db.pool.query('select count(*)::int n from notes')).rows[0].n).toBe(1);

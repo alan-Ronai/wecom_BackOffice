@@ -13,7 +13,11 @@ async function reportFailure(app: FastifyInstance, jobName: string, err: unknown
     await withTransaction(app.db, (tx) =>
       app.events.publish(
         tx,
-        makeEvent('job.failed', { jobName, jobId: '', error: err instanceof Error ? err.message : String(err) }),
+        makeEvent('job.failed', {
+          jobName,
+          jobId: '',
+          error: err instanceof Error ? err.message : String(err),
+        }),
       ),
     );
   } catch (e) {

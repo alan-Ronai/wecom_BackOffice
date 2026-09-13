@@ -1,292 +1,292 @@
 [
- {
-  "topicId": 1,
-  "id": "8966725d-78ce-4f76-8abb-f4d132784d20",
-  "slug": "topic-1",
-  "title": "הפעלת SIM פיזי חדש",
-  "description": "שלבי הפעלה, זיהוי לקוח, בדיקת סטטוס קו, מה לומר ללקוח",
-  "category": "sim",
-  "wave": 1,
-  "priority": "hh"
- },
- {
-  "topicId": 2,
-  "id": "5e96822c-02df-452e-8fd7-453f0c1ffd4b",
-  "slug": "topic-2",
-  "title": "הפעלת eSIM – קוד QR",
-  "description": "דרישות מקדימות, שליחת QR, סריקה, טעויות נפוצות, אימות",
-  "category": "sim",
-  "wave": 1,
-  "priority": "hh"
- },
- {
-  "topicId": 3,
-  "id": "40a0a1b1-0b57-497b-82d9-63fcdf9dbf22",
-  "slug": "topic-3",
-  "title": "מעבר SIM פיזי ↔ eSIM",
-  "description": "בדיקת תאימות, ביטול פרופיל ישן, הפקה מחדש",
-  "category": "sim",
-  "wave": 1,
-  "priority": "h"
- },
- {
-  "topicId": 4,
-  "id": "ce046dd3-72d5-4ad6-8b74-de73a218239c",
-  "slug": "topic-4",
-  "title": "תקלה אחרי הפעלת SIM/eSIM",
-  "description": "אבחון, רענון קו, APN, הסלמה",
-  "category": "sim",
-  "wave": 1,
-  "priority": "h"
- },
- {
-  "topicId": 5,
-  "id": "61a345ad-d436-4364-88eb-6c687a1dd3d9",
-  "slug": "topic-5",
-  "title": "QR לא נסרק / קוד לא התקבל",
-  "description": "סיבות, שליחה מחדש, בדיקת מצלמה, חלופות",
-  "category": "sim",
-  "wave": 1,
-  "priority": "h"
- },
- {
-  "topicId": 6,
-  "id": "d6277abe-229e-4ded-82bf-c7c47d1b5d4a",
-  "slug": "topic-6",
-  "title": "החלפת SIM אבוד/גנוב",
-  "description": "חסימה מיידית, אימות מוגבר, הנפקה חדשה",
-  "category": "sim",
-  "wave": 2,
-  "priority": "m"
- },
- {
-  "topicId": 7,
-  "id": "d9959f4f-dfec-4e67-83ee-e33fe1761b13",
-  "slug": "topic-7",
-  "title": "בירור סטטוס משלוח SIM",
-  "description": "בדיקת הזמנה, שליח, נקודת איסוף",
-  "category": "sim",
-  "wave": 2,
-  "priority": "m"
- },
- {
-  "topicId": 8,
-  "id": "84b9b1b4-fcf4-41a7-8f72-a80779cb0109",
-  "slug": "topic-8",
-  "title": "איסוף SIM מהום סנטר",
-  "description": "תנאי איסוף, מה לקוח צריך להביא",
-  "category": "sim",
-  "wave": 2,
-  "priority": "m"
- },
- {
-  "topicId": 9,
-  "id": "2249424b-e14a-4358-81ad-b3b0ddb50b1b",
-  "slug": "topic-9",
-  "title": "תאימות מכשיר – VoLTE/eSIM/5G",
-  "description": "בדיקת דגם, גרסת מערכת, הסבר מגבלות",
-  "category": "sim",
-  "wave": 2,
-  "priority": "m"
- },
- {
-  "topicId": 10,
-  "id": "78694b08-1dd9-4b6a-81cf-c3b146ae258f",
-  "slug": "topic-10",
-  "title": "קווים שנרכשו ולא הופעלו",
-  "description": "בדיקת סטטוס, הדרכת הפעלה, סגירת טיפול",
-  "category": "sim",
-  "wave": 2,
-  "priority": "m"
- },
- {
-  "topicId": 19,
-  "id": "67a21c0e-62bc-4ff0-8618-111ed1139e19",
-  "slug": "topic-19",
-  "title": "Hotspot לא עובד",
-  "description": "תמיכה בחבילה, APN, הגדרות שיתוף",
-  "category": "tech",
-  "wave": 2,
-  "priority": "m"
- },
- {
-  "topicId": 21,
-  "id": "35d22ae1-6ee2-4b43-862c-ae8deaa45512",
-  "slug": "topic-21",
-  "title": "בירור חיוב גבוה / לא מזוהה",
-  "description": "פירוק חיוב, השוואה לחודשים, שירותים נלווים",
-  "category": "billing",
-  "wave": 1,
-  "priority": "hh"
- },
- {
-  "topicId": 22,
-  "id": "38154021-8977-4f89-8e9e-13498bc06790",
-  "slug": "topic-22",
-  "title": "הסבר חשבונית וסעיפי חיוב",
-  "description": "מבנה חשבונית, קבועים/משתנים, זיכויים, מע\"מ",
-  "category": "billing",
-  "wave": 1,
-  "priority": "hh"
- },
- {
-  "topicId": 23,
-  "id": "b60bbc7c-0ffd-4cbb-8216-a6c43364f082",
-  "slug": "topic-23",
-  "title": "תשלום חוב / חסימת קו",
-  "description": "בדיקת יתרה, אפשרויות תשלום, הסרת חסימה",
-  "category": "billing",
-  "wave": 1,
-  "priority": "h"
- },
- {
-  "topicId": 24,
-  "id": "c69c5f12-4e48-4a2d-8040-73c248b335d0",
-  "slug": "topic-24",
-  "title": "עדכון אמצעי תשלום / אשראי",
-  "description": "אימות לקוח, עדכון כרטיס, פג תוקף, הוראת קבע",
-  "category": "billing",
-  "wave": 1,
-  "priority": "h"
- },
- {
-  "topicId": 25,
-  "id": "c16d2e97-e56e-401a-850b-aea702a575f3",
-  "slug": "topic-25",
-  "title": "זיכויים והחזרים",
-  "description": "בדיקת זכאות, SLA, עדכון לקוח, הסלמה",
-  "category": "billing",
-  "wave": 2,
-  "priority": "m"
- },
- {
-  "topicId": 26,
-  "id": "897f0735-6855-4ea1-8826-89d492e9db89",
-  "slug": "topic-26",
-  "title": "שליחת חשבונית / אישור תשלום",
-  "description": "סוגי מסמכים, אימות, זמני שליחה",
-  "category": "billing",
-  "wave": 2,
-  "priority": "m"
- },
- {
-  "topicId": 27,
-  "id": "27ddaeb3-641c-41c1-8ed1-0475899d3844",
-  "slug": "topic-27",
-  "title": "שינוי מסלול / הוזלת חבילה",
-  "description": "מסלול נוכחי, הצעות זמינות, השפעה על התחייבויות",
-  "category": "plans",
-  "wave": 1,
-  "priority": "h"
- },
- {
-  "topicId": 28,
-  "id": "a710a74c-e3dc-4ee0-88c9-40eed480e7d9",
-  "slug": "topic-28",
-  "title": "צירוף קו / שדרוג 5G",
-  "description": "תנאי הצטרפות, בדיקת מכשיר, עלויות, הפעלה",
-  "category": "plans",
-  "wave": 1,
-  "priority": "h"
- },
- {
-  "topicId": 29,
-  "id": "28a89f37-a0af-47a8-8236-7891a72fb04d",
-  "slug": "topic-29",
-  "title": "ניתוק / ביטול קו",
-  "description": "אימות, סיבת ניתוק, שימור, מועד, אישור",
-  "category": "plans",
-  "wave": 1,
-  "priority": "h"
- },
- {
-  "topicId": 30,
-  "id": "becd2e6e-a1a1-42dd-8c0f-31bb90980943",
-  "slug": "topic-30",
-  "title": "הקפאת קו זמנית",
-  "description": "תנאי הקפאה, משך, עלות, חזרה לפעילות",
-  "category": "plans",
-  "wave": 3,
-  "priority": "l"
- },
- {
-  "topicId": 31,
-  "id": "a90fab82-842e-462b-821b-a733f86bd07a",
-  "slug": "topic-31",
-  "title": "העברת בעלות על קו",
-  "description": "מסמכים, אימות שני צדדים, השפעה על חיובים",
-  "category": "plans",
-  "wave": 2,
-  "priority": "m"
- },
- {
-  "topicId": 32,
-  "id": "b0021321-4557-4917-814f-6f95088d6790",
-  "slug": "topic-32",
-  "title": "עדכון פרטי לקוח",
-  "description": "כתובת, מייל, טלפון, פרטי חיוב, אימות",
-  "category": "plans",
-  "wave": 1,
-  "priority": "h"
- },
- {
-  "topicId": 33,
-  "id": "dac6f0cb-d96c-4889-8d23-76c4fb09971e",
-  "slug": "topic-33",
-  "title": "ניוד מספרים",
-  "description": "שלבי ניוד, סטטוס, זמני השלמה, תקלות",
-  "category": "plans",
-  "wave": 2,
-  "priority": "m"
- },
- {
-  "topicId": 34,
-  "id": "2d964831-ef51-4ada-805a-27e83347b567",
-  "slug": "topic-34",
-  "title": "רכישת חבילת חו\"ל לפני טיסה",
-  "description": "התאמת חבילה, מדינות, נפח, מועד הפעלה",
-  "category": "intl",
-  "wave": 1,
-  "priority": "m"
- },
- {
-  "topicId": 36,
-  "id": "cd0867fd-fe75-49ec-88aa-106dd189236f",
-  "slug": "topic-36",
-  "title": "בירור תעריפי חו\"ל / חיוב אחרי חזרה",
-  "description": "הסבר תעריפים, חריגה, טיפול",
-  "category": "intl",
-  "wave": 2,
-  "priority": "m"
- },
- {
-  "topicId": 37,
-  "id": "0ba5fb1d-6c1a-4f37-87fa-0f8f16c7e475",
-  "slug": "topic-37",
-  "title": "זיהוי ואימות לקוח",
-  "description": "פרטים נדרשים לכל פעולה, אימות מוגבר, ניסוח",
-  "category": "ops",
-  "wave": 1,
-  "priority": "h"
- },
- {
-  "topicId": 38,
-  "id": "025a2eeb-31f4-477b-8e30-f321af7c0e96",
-  "slug": "topic-38",
-  "title": "ניתוב והעברת שיחה",
-  "description": "מתי להעביר, מה לתעד, מניעת העברה חוזרת",
-  "category": "ops",
-  "wave": 2,
-  "priority": "m"
- },
- {
-  "topicId": 39,
-  "id": "72f89200-3c44-48e4-80df-8843c3617e4a",
-  "slug": "topic-39",
-  "title": "תיאום Callback / מעקב",
-  "description": "מתי לפתוח, SLA, עדכון לקוח, סגירת מעגל",
-  "category": "ops",
-  "wave": 2,
-  "priority": "m"
- }
+  {
+    "topicId": 1,
+    "id": "8966725d-78ce-4f76-8abb-f4d132784d20",
+    "slug": "topic-1",
+    "title": "הפעלת SIM פיזי חדש",
+    "description": "שלבי הפעלה, זיהוי לקוח, בדיקת סטטוס קו, מה לומר ללקוח",
+    "category": "sim",
+    "wave": 1,
+    "priority": "hh"
+  },
+  {
+    "topicId": 2,
+    "id": "5e96822c-02df-452e-8fd7-453f0c1ffd4b",
+    "slug": "topic-2",
+    "title": "הפעלת eSIM – קוד QR",
+    "description": "דרישות מקדימות, שליחת QR, סריקה, טעויות נפוצות, אימות",
+    "category": "sim",
+    "wave": 1,
+    "priority": "hh"
+  },
+  {
+    "topicId": 3,
+    "id": "40a0a1b1-0b57-497b-82d9-63fcdf9dbf22",
+    "slug": "topic-3",
+    "title": "מעבר SIM פיזי ↔ eSIM",
+    "description": "בדיקת תאימות, ביטול פרופיל ישן, הפקה מחדש",
+    "category": "sim",
+    "wave": 1,
+    "priority": "h"
+  },
+  {
+    "topicId": 4,
+    "id": "ce046dd3-72d5-4ad6-8b74-de73a218239c",
+    "slug": "topic-4",
+    "title": "תקלה אחרי הפעלת SIM/eSIM",
+    "description": "אבחון, רענון קו, APN, הסלמה",
+    "category": "sim",
+    "wave": 1,
+    "priority": "h"
+  },
+  {
+    "topicId": 5,
+    "id": "61a345ad-d436-4364-88eb-6c687a1dd3d9",
+    "slug": "topic-5",
+    "title": "QR לא נסרק / קוד לא התקבל",
+    "description": "סיבות, שליחה מחדש, בדיקת מצלמה, חלופות",
+    "category": "sim",
+    "wave": 1,
+    "priority": "h"
+  },
+  {
+    "topicId": 6,
+    "id": "d6277abe-229e-4ded-82bf-c7c47d1b5d4a",
+    "slug": "topic-6",
+    "title": "החלפת SIM אבוד/גנוב",
+    "description": "חסימה מיידית, אימות מוגבר, הנפקה חדשה",
+    "category": "sim",
+    "wave": 2,
+    "priority": "m"
+  },
+  {
+    "topicId": 7,
+    "id": "d9959f4f-dfec-4e67-83ee-e33fe1761b13",
+    "slug": "topic-7",
+    "title": "בירור סטטוס משלוח SIM",
+    "description": "בדיקת הזמנה, שליח, נקודת איסוף",
+    "category": "sim",
+    "wave": 2,
+    "priority": "m"
+  },
+  {
+    "topicId": 8,
+    "id": "84b9b1b4-fcf4-41a7-8f72-a80779cb0109",
+    "slug": "topic-8",
+    "title": "איסוף SIM מהום סנטר",
+    "description": "תנאי איסוף, מה לקוח צריך להביא",
+    "category": "sim",
+    "wave": 2,
+    "priority": "m"
+  },
+  {
+    "topicId": 9,
+    "id": "2249424b-e14a-4358-81ad-b3b0ddb50b1b",
+    "slug": "topic-9",
+    "title": "תאימות מכשיר – VoLTE/eSIM/5G",
+    "description": "בדיקת דגם, גרסת מערכת, הסבר מגבלות",
+    "category": "sim",
+    "wave": 2,
+    "priority": "m"
+  },
+  {
+    "topicId": 10,
+    "id": "78694b08-1dd9-4b6a-81cf-c3b146ae258f",
+    "slug": "topic-10",
+    "title": "קווים שנרכשו ולא הופעלו",
+    "description": "בדיקת סטטוס, הדרכת הפעלה, סגירת טיפול",
+    "category": "sim",
+    "wave": 2,
+    "priority": "m"
+  },
+  {
+    "topicId": 19,
+    "id": "67a21c0e-62bc-4ff0-8618-111ed1139e19",
+    "slug": "topic-19",
+    "title": "Hotspot לא עובד",
+    "description": "תמיכה בחבילה, APN, הגדרות שיתוף",
+    "category": "tech",
+    "wave": 2,
+    "priority": "m"
+  },
+  {
+    "topicId": 21,
+    "id": "35d22ae1-6ee2-4b43-862c-ae8deaa45512",
+    "slug": "topic-21",
+    "title": "בירור חיוב גבוה / לא מזוהה",
+    "description": "פירוק חיוב, השוואה לחודשים, שירותים נלווים",
+    "category": "billing",
+    "wave": 1,
+    "priority": "hh"
+  },
+  {
+    "topicId": 22,
+    "id": "38154021-8977-4f89-8e9e-13498bc06790",
+    "slug": "topic-22",
+    "title": "הסבר חשבונית וסעיפי חיוב",
+    "description": "מבנה חשבונית, קבועים/משתנים, זיכויים, מע\"מ",
+    "category": "billing",
+    "wave": 1,
+    "priority": "hh"
+  },
+  {
+    "topicId": 23,
+    "id": "b60bbc7c-0ffd-4cbb-8216-a6c43364f082",
+    "slug": "topic-23",
+    "title": "תשלום חוב / חסימת קו",
+    "description": "בדיקת יתרה, אפשרויות תשלום, הסרת חסימה",
+    "category": "billing",
+    "wave": 1,
+    "priority": "h"
+  },
+  {
+    "topicId": 24,
+    "id": "c69c5f12-4e48-4a2d-8040-73c248b335d0",
+    "slug": "topic-24",
+    "title": "עדכון אמצעי תשלום / אשראי",
+    "description": "אימות לקוח, עדכון כרטיס, פג תוקף, הוראת קבע",
+    "category": "billing",
+    "wave": 1,
+    "priority": "h"
+  },
+  {
+    "topicId": 25,
+    "id": "c16d2e97-e56e-401a-850b-aea702a575f3",
+    "slug": "topic-25",
+    "title": "זיכויים והחזרים",
+    "description": "בדיקת זכאות, SLA, עדכון לקוח, הסלמה",
+    "category": "billing",
+    "wave": 2,
+    "priority": "m"
+  },
+  {
+    "topicId": 26,
+    "id": "897f0735-6855-4ea1-8826-89d492e9db89",
+    "slug": "topic-26",
+    "title": "שליחת חשבונית / אישור תשלום",
+    "description": "סוגי מסמכים, אימות, זמני שליחה",
+    "category": "billing",
+    "wave": 2,
+    "priority": "m"
+  },
+  {
+    "topicId": 27,
+    "id": "27ddaeb3-641c-41c1-8ed1-0475899d3844",
+    "slug": "topic-27",
+    "title": "שינוי מסלול / הוזלת חבילה",
+    "description": "מסלול נוכחי, הצעות זמינות, השפעה על התחייבויות",
+    "category": "plans",
+    "wave": 1,
+    "priority": "h"
+  },
+  {
+    "topicId": 28,
+    "id": "a710a74c-e3dc-4ee0-88c9-40eed480e7d9",
+    "slug": "topic-28",
+    "title": "צירוף קו / שדרוג 5G",
+    "description": "תנאי הצטרפות, בדיקת מכשיר, עלויות, הפעלה",
+    "category": "plans",
+    "wave": 1,
+    "priority": "h"
+  },
+  {
+    "topicId": 29,
+    "id": "28a89f37-a0af-47a8-8236-7891a72fb04d",
+    "slug": "topic-29",
+    "title": "ניתוק / ביטול קו",
+    "description": "אימות, סיבת ניתוק, שימור, מועד, אישור",
+    "category": "plans",
+    "wave": 1,
+    "priority": "h"
+  },
+  {
+    "topicId": 30,
+    "id": "becd2e6e-a1a1-42dd-8c0f-31bb90980943",
+    "slug": "topic-30",
+    "title": "הקפאת קו זמנית",
+    "description": "תנאי הקפאה, משך, עלות, חזרה לפעילות",
+    "category": "plans",
+    "wave": 3,
+    "priority": "l"
+  },
+  {
+    "topicId": 31,
+    "id": "a90fab82-842e-462b-821b-a733f86bd07a",
+    "slug": "topic-31",
+    "title": "העברת בעלות על קו",
+    "description": "מסמכים, אימות שני צדדים, השפעה על חיובים",
+    "category": "plans",
+    "wave": 2,
+    "priority": "m"
+  },
+  {
+    "topicId": 32,
+    "id": "b0021321-4557-4917-814f-6f95088d6790",
+    "slug": "topic-32",
+    "title": "עדכון פרטי לקוח",
+    "description": "כתובת, מייל, טלפון, פרטי חיוב, אימות",
+    "category": "plans",
+    "wave": 1,
+    "priority": "h"
+  },
+  {
+    "topicId": 33,
+    "id": "dac6f0cb-d96c-4889-8d23-76c4fb09971e",
+    "slug": "topic-33",
+    "title": "ניוד מספרים",
+    "description": "שלבי ניוד, סטטוס, זמני השלמה, תקלות",
+    "category": "plans",
+    "wave": 2,
+    "priority": "m"
+  },
+  {
+    "topicId": 34,
+    "id": "2d964831-ef51-4ada-805a-27e83347b567",
+    "slug": "topic-34",
+    "title": "רכישת חבילת חו\"ל לפני טיסה",
+    "description": "התאמת חבילה, מדינות, נפח, מועד הפעלה",
+    "category": "intl",
+    "wave": 1,
+    "priority": "m"
+  },
+  {
+    "topicId": 36,
+    "id": "cd0867fd-fe75-49ec-88aa-106dd189236f",
+    "slug": "topic-36",
+    "title": "בירור תעריפי חו\"ל / חיוב אחרי חזרה",
+    "description": "הסבר תעריפים, חריגה, טיפול",
+    "category": "intl",
+    "wave": 2,
+    "priority": "m"
+  },
+  {
+    "topicId": 37,
+    "id": "0ba5fb1d-6c1a-4f37-87fa-0f8f16c7e475",
+    "slug": "topic-37",
+    "title": "זיהוי ואימות לקוח",
+    "description": "פרטים נדרשים לכל פעולה, אימות מוגבר, ניסוח",
+    "category": "ops",
+    "wave": 1,
+    "priority": "h"
+  },
+  {
+    "topicId": 38,
+    "id": "025a2eeb-31f4-477b-8e30-f321af7c0e96",
+    "slug": "topic-38",
+    "title": "ניתוב והעברת שיחה",
+    "description": "מתי להעביר, מה לתעד, מניעת העברה חוזרת",
+    "category": "ops",
+    "wave": 2,
+    "priority": "m"
+  },
+  {
+    "topicId": 39,
+    "id": "72f89200-3c44-48e4-80df-8843c3617e4a",
+    "slug": "topic-39",
+    "title": "תיאום Callback / מעקב",
+    "description": "מתי לפתוח, SLA, עדכון לקוח, סגירת מעגל",
+    "category": "ops",
+    "wave": 2,
+    "priority": "m"
+  }
 ]

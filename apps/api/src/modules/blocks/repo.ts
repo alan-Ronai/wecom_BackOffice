@@ -44,10 +44,11 @@ export async function publishBlock(
   );
   if (!cur.rowCount) throw httpError(404, 'NOT_FOUND', 'הבלוק לא נמצא');
   const version = (cur.rows[0].current_version as number) + 1;
-  await tx.query(
-    'update blocks set current_version=$2, updated_by=$3, updated_at=now() where id=$1',
-    [id, version, opts.actorId],
-  );
+  await tx.query('update blocks set current_version=$2, updated_by=$3, updated_at=now() where id=$1', [
+    id,
+    version,
+    opts.actorId,
+  ]);
   const updated = (await getBlock(tx, id))!;
   await tx.query(
     'insert into block_versions(block_id, version, snapshot, author_id, label) values ($1,$2,$3,$4,$5)',
@@ -60,7 +61,14 @@ export async function createBlock(tx: Tx, body: UpsertBlockBody, userId: string)
   const r = await tx.query(
     `insert into blocks(slug, title, kind, description, script, current_version, created_by, updated_by)
      values ($1,$2,$3,$4,$5,0,$6,$6) returning id`,
-    [body.slug ?? slugify(body.title), body.title, body.kind, body.description ?? null, body.script ?? null, userId],
+    [
+      body.slug ?? slugify(body.title),
+      body.title,
+      body.kind,
+      body.description ?? null,
+      body.script ?? null,
+      userId,
+    ],
   );
   const id = r.rows[0].id as string;
   await writeChildren(tx, id, body);

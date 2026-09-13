@@ -62,10 +62,9 @@ export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Doc
       'select o.* from step_outcomes o join steps s on s.id=o.step_id where s.document_id = any($1) order by o.position',
       [ids],
     ),
-    q.query(
-      'select b.* from step_branches b join steps s on s.id=b.step_id where s.document_id = any($1)',
-      [ids],
-    ),
+    q.query('select b.* from step_branches b join steps s on s.id=b.step_id where s.document_id = any($1)', [
+      ids,
+    ]),
     q.query(
       'select o.* from step_branch_options o join step_branches b on b.id=o.branch_id join steps s on s.id=b.step_id where s.document_id = any($1) order by o.position',
       [ids],
@@ -335,11 +334,7 @@ export const loadDocRefs = async (q: Q): Promise<DocRef[]> =>
 
 /** Recompute `step_field_refs`, `document_links` and `documents.search_text` for one document. */
 export async function recomputeDerived(tx: Tx, doc: Document): Promise<void> {
-  const [blocks, fields, refs] = await Promise.all([
-    loadBlocksMap(tx),
-    loadFieldNames(tx),
-    loadDocRefs(tx),
-  ]);
+  const [blocks, fields, refs] = await Promise.all([loadBlocksMap(tx), loadFieldNames(tx), loadDocRefs(tx)]);
   const stepIds = new Map<string, string>(
     (await tx.query('select id, step_key from steps where document_id=$1', [doc.id])).rows.map((r) => [
       r.step_key as string,
@@ -390,9 +385,10 @@ export async function saveStructure(
   userId: string,
   ifMatch?: string,
 ): Promise<Document> {
-  const cur = await tx.query('select etag, status from documents where id=$1 and deleted_at is null for update', [
-    id,
-  ]);
+  const cur = await tx.query(
+    'select etag, status from documents where id=$1 and deleted_at is null for update',
+    [id],
+  );
   if (!cur.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
   if (ifMatch && ifMatch !== cur.rows[0].etag)
     throw httpError(412, 'ETAG_MISMATCH', 'המסמך השתנה בינתיים — טען מחדש ונסה שוב');
@@ -439,10 +435,10 @@ export async function saveStructure(
           [sid, i, o.kind, o.text, o.goto ?? null],
         );
       if (s.branch) {
-        const br = await tx.query('insert into step_branches(step_id, question) values ($1,$2) returning id', [
-          sid,
-          s.branch.q,
-        ]);
+        const br = await tx.query(
+          'insert into step_branches(step_id, question) values ($1,$2) returning id',
+          [sid, s.branch.q],
+        );
         for (const [i, o] of s.branch.options.entries())
           await tx.query(
             'insert into step_branch_options(branch_id, position, kind, label, text, goto_step_key) values ($1,$2,$3,$4,$5,$6)',
@@ -645,9 +641,10 @@ export async function relatedFor(q: Q, doc: Document) {
     if (!out.has(r.id)) out.set(r.id, 'משתף ' + r.n + ' שדות CRM');
   const ids = [...out.keys()].slice(0, 6);
   if (!ids.length) return [];
-  const docs = await q.query('select id, title, category from documents where id = any($1) and deleted_at is null', [
-    ids,
-  ]);
+  const docs = await q.query(
+    'select id, title, category from documents where id = any($1) and deleted_at is null',
+    [ids],
+  );
   return docs.rows.map((d) => ({
     documentId: d.id as string,
     title: d.title as string,

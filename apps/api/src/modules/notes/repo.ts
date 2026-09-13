@@ -21,10 +21,10 @@ const SELECT = `select n.*, u.display_name,
   from notes n join users u on u.id=n.author_id`;
 
 export async function listNotes(q: Q, documentId: string, userId: string): Promise<Note[]> {
-  const r = await q.query(
-    `${SELECT} where n.document_id=$1 and n.deleted_at is null order by n.created_at`,
-    [documentId, userId],
-  );
+  const r = await q.query(`${SELECT} where n.document_id=$1 and n.deleted_at is null order by n.created_at`, [
+    documentId,
+    userId,
+  ]);
   return r.rows.map(toNote);
 }
 

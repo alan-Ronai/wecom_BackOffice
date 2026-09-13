@@ -11,7 +11,9 @@ const toScript = (r: Record<string, unknown>): Script => ({
   updatedAt: iso(r.updated_at as Date)!,
 });
 
-export async function listScripts(q: Q): Promise<(Script & { usedIn: { documentId: string; title: string }[] })[]> {
+export async function listScripts(
+  q: Q,
+): Promise<(Script & { usedIn: { documentId: string; title: string }[] })[]> {
   const [s, refs] = await Promise.all([
     q.query('select * from scripts where deleted_at is null order by title'),
     q.query(
