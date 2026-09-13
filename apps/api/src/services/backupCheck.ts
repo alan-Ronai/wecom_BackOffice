@@ -7,13 +7,14 @@ export interface BackupCheckResult {
   ageHours: number | null;
 }
 
-const BACKUP_FILE_RE = /^kb-\d{8}-\d{4}\.sql\.gz$/;
+const BACKUP_FILE_RE = /^kb-\d{8}-\d{4}\.dump$/;
 
 /**
  * Verifies that a recent nightly backup exists in `backupDir` (written by
- * deploy/backup.sh as kb-YYYYmmdd-HHMM.sql.gz). Used by the
- * `system.backup-check` job so `/admin/system` can surface a stale-backup
- * warning without reaching into the filesystem itself.
+ * deploy/backup.sh as kb-YYYYmmdd-HHMM.dump, pg_dump custom format). Used by the
+ * `system.backup-check` job so `GET /admin/system` can surface a stale-backup
+ * warning without reaching into the filesystem itself. The API container must
+ * mount the backup directory read-only (see deploy/docker-compose.yml).
  */
 export async function checkBackupAge(backupDir: string, maxAgeHours = 26): Promise<BackupCheckResult> {
   try {

@@ -26,21 +26,31 @@ describe('checkBackupAge', () => {
 
   it('reports ok with a recent backup file and picks the newest one', async () => {
     dir = await mkdtemp(path.join(tmpdir(), 'kb-backup-'));
-    const older = path.join(dir, 'kb-20200101-0000.sql.gz');
-    const newer = path.join(dir, 'kb-20260913-0215.sql.gz');
+    const older = path.join(dir, 'kb-20200101-0000.dump');
+    const newer = path.join(dir, 'kb-20260913-0215.dump');
     await writeFile(older, 'x');
     await writeFile(newer, 'x');
     const oldTime = new Date(Date.now() - 40 * 3_600_000);
     await utimes(older, oldTime, oldTime);
     const r = await checkBackupAge(dir);
     expect(r.ok).toBe(true);
-    expect(r.latestFile).toBe('kb-20260913-0215.sql.gz');
+    expect(r.latestFile).toBe('kb-20260913-0215.dump');
     expect(r.ageHours).toBeLessThan(1);
+  });
+
+  it('ignores files that are not deploy/backup.sh dumps', async () => {
+    dir = await mkdtemp(path.join(tmpdir(), 'kb-backup-'));
+    // The old pattern looked for `.sql.gz`, which backup.sh has never written.
+    await writeFile(path.join(dir, 'kb-20260913-0215.sql.gz'), 'x');
+    await writeFile(path.join(dir, 'notes.txt'), 'x');
+    const r = await checkBackupAge(dir);
+    expect(r.ok).toBe(false);
+    expect(r.latestFile).toBeNull();
   });
 
   it('reports not ok when the newest file is older than maxAgeHours', async () => {
     dir = await mkdtemp(path.join(tmpdir(), 'kb-backup-'));
-    const stale = path.join(dir, 'kb-20200101-0000.sql.gz');
+    const stale = path.join(dir, 'kb-20200101-0000.dump');
     await writeFile(stale, 'x');
     const staleTime = new Date(Date.now() - 40 * 3_600_000);
     await utimes(stale, staleTime, staleTime);
