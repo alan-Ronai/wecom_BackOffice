@@ -19,7 +19,7 @@ export async function makeUser(
   const id: string = r.rows[0].id;
   return {
     id,
-    header: JSON.stringify({
+    header: asciiJson({
       id,
       displayName: name,
       permissions: o.perms ?? [...PERMISSIONS],
@@ -28,6 +28,10 @@ export async function makeUser(
     name,
   };
 }
+
+/** Header values must be a ByteString, so Hebrew names are \uXXXX-escaped (JSON.parse decodes them). */
+const asciiJson = (v: unknown) =>
+  JSON.stringify(v).replace(/[^\x20-\x7e]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
 
 export const auth = (u: { header: string }) => ({ 'x-test-user': u.header });
 

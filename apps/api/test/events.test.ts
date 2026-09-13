@@ -3,7 +3,8 @@ import { startTestDb, integration } from './helpers/db.js';
 import { EventBus } from '../src/lib/events.js';
 import { withTransaction } from '../src/lib/sql.js';
 import { makeEvent } from '@wecom/shared';
-import { D1 } from './helpers/fixtures.js';
+import { D1, auth, makeUser } from './helpers/fixtures.js';
+import { buildTestApp } from './helpers/app.js';
 
 const run = integration ? describe : describe.skip;
 run('EventBus', () => {
@@ -38,5 +39,23 @@ run('EventBus', () => {
     await new Promise((r) => setTimeout(r, 200));
     expect(seen).toBe(0);
     await bus.stop();
+  });
+
+  it('streams a published event over SSE', async () => {
+    const app = await buildTestApp(db.pool, db.url);
+    await app.events.start(db.url);
+    const u = await makeUser(db.pool);
+    const addr = await app.listen({ port: 0, host: '127.0.0.1' });
+    const res = await fetch(addr + '/api/v1/events', { headers: auth(u) });
+    const reader = res.body!.getReader();
+    const dec = new TextDecoder();
+    await withTransaction(db.pool, (tx) =>
+      app.events.publish(tx, makeEvent('document.updated', { documentId: D1, actorId: null })),
+    );
+    let buf = '';
+    while (!buf.includes('event: document.updated')) buf += dec.decode((await reader.read()).value);
+    expect(buf).toContain(`"documentId":"${D1}"`);
+    await reader.cancel();
+    await app.close();
   });
 });

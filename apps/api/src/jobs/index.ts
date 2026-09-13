@@ -27,7 +27,8 @@ async function reportFailure(app: FastifyInstance, jobName: string, err: unknown
  */
 export async function startJobs(app: FastifyInstance): Promise<void> {
   const boss = app.boss;
-  if (!boss) return;
+  // Tests drive the queues themselves; a live worker here would steal their jobs.
+  if (!boss || app.config.NODE_ENV === 'test') return;
 
   await boss.work(QUEUES.trashPurge, async () => {
     try {
