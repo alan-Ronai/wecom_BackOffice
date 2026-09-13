@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   CreateDocumentBodySchema,
@@ -27,6 +27,38 @@ import { annotateBlame, diffDocuments, diffStats } from './diff.js';
 
 const Params = z.object({ id: IdSchema });
 const VersionParams = z.object({ id: IdSchema, v: z.coerce.number().int().min(0) });
+
+/**
+ * Closes the KB -> remote half of the two-way sync (L6's `pushOnPublish`). Called
+ * *after* the publish transaction commits, so a WordPress outage can never roll
+ * back a local publish: a failure is logged and emitted as `job.failed` instead of
+ * failing the response. Links in `conflict` are skipped by `pushOnPublish` itself.
+ */
+async function pushOnPublish(
+  app: FastifyInstance,
+  req: FastifyRequest,
+  documentId: string,
+  actorId: string,
+): Promise<void> {
+  const sync = app.connectors?.sync;
+  if (!sync) return;
+  try {
+    const refs = await sync.pushOnPublish(documentId, actorId);
+    if (refs.length) req.log.info({ documentId, pushed: refs.length }, 'push-on-publish');
+  } catch (err) {
+    req.log.error({ err, documentId }, 'push-on-publish failed');
+    await withTransaction(app.db, (tx) =>
+      app.events.publish(
+        tx,
+        makeEvent('job.failed', {
+          jobName: 'sync.pushOnPublish',
+          jobId: documentId,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      ),
+    );
+  }
+}
 
 export default async function routes(app: FastifyInstance) {
   app.get(
@@ -190,7 +222,7 @@ export default async function routes(app: FastifyInstance) {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
       const body = req.body as z.infer<typeof PublishBodySchema>;
-      return withTransaction(app.db, async (tx) => {
+      const result = await withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
         if (!hasScope(user, before.category)) throw forbidden();
@@ -215,6 +247,8 @@ export default async function routes(app: FastifyInstance) {
         );
         return { document: doc, version, auditId };
       });
+      await pushOnPublish(app, req, id, user.id);
+      return result;
     },
   );
 
@@ -291,7 +325,7 @@ export default async function routes(app: FastifyInstance) {
     async (req) => {
       const user = requireUser(req);
       const { id, v } = req.params as { id: string; v: number };
-      return withTransaction(app.db, async (tx) => {
+      const result = await withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
         if (!hasScope(user, before.category)) throw forbidden();
@@ -312,6 +346,8 @@ export default async function routes(app: FastifyInstance) {
         );
         return { document: doc, version, auditId };
       });
+      await pushOnPublish(app, req, id, user.id);
+      return result;
     },
   );
 

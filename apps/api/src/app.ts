@@ -9,7 +9,7 @@ import {
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
 import type pg from 'pg';
-import { loadConfig, type Config } from './config.js';
+import { loadConfig, trustProxySetting, type Config } from './config.js';
 import dbPlugin from './plugins/db.js';
 import bossPlugin from './plugins/boss.js';
 import authPlugin from './plugins/auth.js'; // L3: identity
@@ -19,6 +19,7 @@ import { registerIdentitySyncJob } from './jobs/identity-sync.js'; // L3: identi
 import { loggerOptions, REQUEST_ID_HEADER } from './plugins/logging.js';
 import health from './routes/health.js';
 import connectorsModule from './modules/connectors/index.js';
+import { documentsAdapter } from './modules/connectors/documents-adapter.js';
 import { ErrorEnvelopeSchema } from '@wecom/shared';
 // L5: pipeline
 import multipart from '@fastify/multipart';
@@ -50,6 +51,10 @@ export async function buildApp(
     logger: loggerOptions(config),
     requestIdHeader: REQUEST_ID_HEADER,
     genReqId: () => crypto.randomUUID(),
+    // Behind nginx every request's `req.ip` would otherwise be the proxy's own
+    // address, which silently defeats the Palo Alto subnet allowlist, collapses
+    // the per-IP auth rate limits into one bucket and blanks the audit trail.
+    trustProxy: trustProxySetting(config),
   }).withTypeProvider<ZodTypeProvider>();
   app.addHook('onSend', async (req, reply) => {
     reply.header(REQUEST_ID_HEADER, req.id);
@@ -109,8 +114,22 @@ export async function buildApp(
       await v1.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } });
       const pipeline = await registerSourcesModule(v1);
       // end L5: pipeline
-      // L6: connectors
-      await v1.register(connectorsModule, { revisions: pipeline.revisions });
+      // L6: connectors — both cross-lane services are supplied explicitly; the
+      // module throws at boot rather than degrading to a silent no-op without them.
+      await v1.register(connectorsModule, {
+        revisions: pipeline.revisions,
+        documents: documentsAdapter(v1.db),
+      });
+      // Closes the two-way sync loop: L5 applies a connector-backed source's
+      // accepted suggestions -> L6 creates/refreshes the `sync_links` row. Runs
+      // after the apply has committed, so a remote outage cannot roll it back.
+      pipeline.suggestions.setAfterApplied(async (sourceId, documentId, version) => {
+        try {
+          await v1.connectors.sync.afterSuggestionsApplied(sourceId, documentId, version);
+        } catch (err) {
+          v1.log.error({ err, sourceId, documentId }, 'afterSuggestionsApplied failed');
+        }
+      });
     },
     { prefix: '/api/v1' },
   );

@@ -34,6 +34,9 @@ deploy/smoke.sh https://<host>
 ```
 `restore.sh` recreates the `public` and `pgboss` schemas, loads the dump with `pg_restore` and prints the table count. Test a restore on a scratch VM once per quarter — this exact round trip (backup → drop → restore → verify row count, plus retention pruning) is exercised by `deploy/backup-check.sh` against a throwaway container.
 
+## Reverse proxy and client IPs
+`nginx` terminates TLS and forwards `X-Real-IP` / `X-Forwarded-For`. The API only believes those headers when `TRUST_PROXY` allows the peer, so leave it set (default `172.16.0.0/12`, the docker bridge range; `true` trusts any peer, `false` trusts none). `req.ip` is what the Palo Alto subnet allowlist, the per-IP auth rate limits and the `audit_log.ip` / `sessions.ip` columns record — with the wrong value the allowlist evaluates nginx's own address and every login shares one rate-limit bucket. Check it after install: `curl -sk https://<host>/api/v1/auth/me` from a workstation and confirm the workstation's address (not `172.x`) appears in `/admin/sessions`.
+
 ## TLS certificate
 Request a server certificate for `PUBLIC_URL`'s host from the internal CA (`deploy/certs/README.md`). Users' machines already trust the internal CA through GlobalProtect / domain policy, so no browser warning appears. Renewal: replace the two files and `docker compose -f deploy/docker-compose.yml restart web`.
 

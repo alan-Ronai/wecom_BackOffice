@@ -21,6 +21,14 @@ export interface EventSink {
   publish(tx: ContentClient, event: Event): void | Promise<void>;
 }
 
+/**
+ * L6's `SyncService.afterSuggestionsApplied`: the only path that creates a
+ * `sync_links` row for a remote item imported as a new card. Supplied by `app.ts`
+ * once both modules are registered (L5 must not import L6), and invoked after the
+ * apply transaction commits so a remote outage cannot roll the apply back.
+ */
+export type AppliedHook = (sourceId: string, documentId: string, version: number) => Promise<void>;
+
 const row = (r: Record<string, unknown>): Suggestion => ({
   id: r.id as string,
   sourceRevisionId: r.source_revision_id as string,
@@ -66,6 +74,13 @@ export class SuggestionService {
     private readonly content: ContentApi,
     private readonly events: EventSink,
   ) {}
+
+  private afterApplied: AppliedHook | null = null;
+
+  /** Wired in `app.ts` after the connectors module is registered. */
+  setAfterApplied(fn: AppliedHook | null): void {
+    this.afterApplied = fn;
+  }
 
   async createFromProposals(revisionId: string, items: ProposedSuggestion[]): Promise<Suggestion[]> {
     const out: Suggestion[] = [];
@@ -353,11 +368,14 @@ export class SuggestionService {
     } finally {
       client.release();
     }
-    for (const p of published)
+    for (const p of published) {
       await this.events.publish(
         this.pool,
         makeEvent('document.published', { documentId: p.documentId, version: p.version, actorId }),
       );
+      // Closes the remote -> KB half of the two-way sync loop.
+      if (this.afterApplied) await this.afterApplied(sourceId, p.documentId, p.version);
+    }
     return { applied, versions };
   }
 }

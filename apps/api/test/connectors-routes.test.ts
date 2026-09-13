@@ -141,6 +141,8 @@ run('connector routes', () => {
       pool,
       databaseUrl: c.getConnectionUri(),
       testUser: { id: userId, permissions: ['docs.read'] },
+      revisions: memoryRevisions(),
+      documents: sqlDocumentsService(pool),
     });
     expect((await noPerm.inject({ method: 'GET', url: '/api/v1/connectors' })).statusCode).toBe(403);
     await noPerm.close();

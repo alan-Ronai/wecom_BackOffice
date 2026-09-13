@@ -58,26 +58,22 @@ export const eventsOf = (app: FastifyInstance): EventBus => {
 
 type Services = { revisions?: SourceRevisionService; documents?: DocumentsService };
 
-/** L5's pipeline entry point; a no-op until `SourceRevisionService` lands. */
+/**
+ * L5's pipeline entry point. Required: the previous no-op fallback silently
+ * dropped every remote import while reporting the connector healthy.
+ */
 export const revisionsOf = (app: FastifyInstance): SourceRevisionService => {
   const s = (app as FastifyInstance & { services?: Services }).services?.revisions;
-  return s ?? { ingest: async () => ({ revisionId: '', changed: false }) };
+  if (!s) throw new Error('connectors module: `revisions` (L5 SourceRevisionService) was not supplied');
+  return s;
 };
 
-/** L2's documents service; unlinked documents make every reconciliation a no-op. */
+/**
+ * L2's documents service. Required for the same reason: a stub whose `getById`
+ * returns null turns every reconciliation into a no-op that looks like success.
+ */
 export const documentsOf = (app: FastifyInstance): DocumentsService => {
   const s = (app as FastifyInstance & { services?: Services }).services?.documents;
-  return (
-    s ?? {
-      getById: async () => null,
-      getVersionSnapshot: async () => null,
-      getBlocksFor: async () => [],
-      ensureSourceForConnector: async () => {
-        throw new Error('documents service is not available yet (L2)');
-      },
-      replaceStructure: async () => {
-        throw new Error('documents service is not available yet (L2)');
-      },
-    }
-  );
+  if (!s) throw new Error('connectors module: `documents` (L2 DocumentsService) was not supplied');
+  return s;
 };
