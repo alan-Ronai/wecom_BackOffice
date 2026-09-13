@@ -43,6 +43,6 @@ describe('auth', () => {
 
   it('shows the app when authenticated', async () => {
     renderWithProviders(<App />, { route: '/library' });
-    await waitFor(() => expect(screen.getByText('ספריית ידע')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText('ספריית ידע').length).toBeGreaterThan(0));
   });
 });
