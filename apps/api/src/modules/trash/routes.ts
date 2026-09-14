@@ -109,7 +109,16 @@ export default async function routes(app: FastifyInstance) {
     '/trash',
     {
       config: { requires: ['docs.delete'] },
-      schema: { tags: ['trash'], response: { 200: z.object({ purged: z.number().int() }) } },
+      schema: {
+        tags: ['trash'],
+        response: {
+          200: z.object({
+            purged: z.number().int(),
+            /** Items left in the trash because they were published once (PRD §10). */
+            skipped: z.number().int(),
+          }),
+        },
+      },
     },
     async (req) => {
       const user = requireUser(req);
@@ -117,18 +126,23 @@ export default async function routes(app: FastifyInstance) {
         throw httpError(428, 'CONFIRM_REQUIRED', 'ריקון סל המיחזור דורש אישור');
       return withTransaction(app.db, async (tx) => {
         const items = await repo.listTrash(tx, app.config.TRASH_DAYS);
-        for (const i of items) await repo.purge(tx, i.type, i.id);
+        let purged = 0;
+        // A once-published item skips rather than aborting the whole empty; the operator is
+        // told how many stayed behind instead of the request 409ing on the first one.
+        for (const i of items)
+          if (await repo.purge(tx, i.type, i.id, { skipOncePublished: true })) purged++;
+        const skipped = items.length - purged;
         await audit(tx, {
           actorId: user.id,
           action: 'trash.purge',
           entityType: 'trash',
           entityId: null,
           before: { items: items.length },
-          after: null,
+          after: { purged, skipped },
           requestId: req.id,
           ip: req.ip,
         });
-        return { purged: items.length };
+        return { purged, skipped };
       });
     },
   );

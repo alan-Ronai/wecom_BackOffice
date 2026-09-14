@@ -2,7 +2,7 @@ import type pg from 'pg';
 import type { TrashItem } from '@wecom/shared';
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
-import { getDocument, iso, recomputeDerived, type Q } from '../documents/repo.js';
+import { getDocument, hasPublishedVersion, iso, recomputeDerived, type Q } from '../documents/repo.js';
 import { CATEGORY_LABELS, sourceFile } from '../search/repo.js';
 
 export type TrashType = TrashItem['type'];
@@ -138,7 +138,37 @@ export async function restore(tx: Tx, type: TrashType, id: string, userId: strin
   }
 }
 
-export async function purge(tx: Tx, type: TrashType, id: string): Promise<void> {
+/**
+ * PRD §10 / spec §2.2: an item that was ever published is never hard-deleted, even from the
+ * trash. `purgeExpired` has carried this rule since wave 2; the two operator-facing routes
+ * (`DELETE /trash/:type/:id`, `DELETE /trash`) did not, which made them a route to permanent,
+ * unrecoverable loss of published content and its whole `document_versions` history.
+ *
+ * `script` maps onto `documents` (0030), so it is guarded too.
+ */
+export const isOncePublished = async (q: Q, type: TrashType, id: string): Promise<boolean> =>
+  (type === 'document' || type === 'script') && (await hasPublishedVersion(q, id));
+
+export const oncePublishedError = () =>
+  httpError(409, 'ONCE_PUBLISHED', 'פריט שפורסם בעבר אינו נמחק לצמיתות; הוא נשאר בסל המיחזור', {
+    allowed: ['invalid', 'archived'],
+  });
+
+/**
+ * Hard-delete one trashed item. Returns false when the once-published rule skipped it, which
+ * only happens under `{ skipOncePublished: true }` — empty-trash passes it so one protected
+ * document does not abort the whole operation; the single-item route lets the 409 through.
+ */
+export async function purge(
+  tx: Tx,
+  type: TrashType,
+  id: string,
+  opts: { skipOncePublished?: boolean } = {},
+): Promise<boolean> {
+  if (await isOncePublished(tx, type, id)) {
+    if (opts.skipOncePublished) return false;
+    throw oncePublishedError();
+  }
   const t = TABLE[type];
   if (type === 'block') {
     await tx.query('update steps set block_id=null where block_id=$1', [id]);
@@ -151,6 +181,7 @@ export async function purge(tx: Tx, type: TrashType, id: string): Promise<void> 
     [id],
   );
   if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'הפריט לא נמצא בסל המיחזור');
+  return true;
 }
 
 /** Hard delete everything whose retention window has elapsed. Returns the number of rows removed. */
