@@ -101,26 +101,12 @@ export const PRESETS: { group: string; items: string[] }[] = [
   },
 ];
 
-/** Legacy KB.KEYMAP — the `?` overlay. */
-export const KEYMAP: [string, string][] = [
-  ['Ctrl K', 'חיפוש בכל המקורות'],
-  ['Ctrl D', 'מצב כהה / בהיר'],
-  ['Ctrl \\', 'פיצול מסך'],
-  ['Alt T', 'פתיחת מסמך בלשונית חדשה'],
-  ['Alt ← / →', 'היסטוריה אחורה / קדימה'],
-  ['↑ ↓', 'מעבר בין שלבים (מצב שיחה)'],
-  ['↵', 'פתיחת השלב הנוכחי'],
-  ['1 – 3', 'בחירת תוצאה בשלב'],
-  ['G ואז מספר', 'קפיצה לשלב'],
-  ['N', 'הערת נציג לשלב'],
-  ['P', 'הצמד / בטל הצמדה'],
-  ['C', 'העתקת סיכום לתיעוד'],
-  ['E', 'עריכת המסמך'],
-  ['H', 'היסטוריית גרסאות'],
-  ['W', 'סגירת הלשונית'],
-  ['?', 'מפת הקיצורים'],
-  ['Esc', 'סגירת חלון / חזרה'],
-];
+/*
+ * The `?` overlay used to be a hand-written list here, beside the bindings but not derived from
+ * them, and after three lanes it no longer described the app: undo/redo and the library's list
+ * mode were bound and undocumented. It is generated from the declared map in `src/lib/keys.ts`
+ * now, and re-exported from there.
+ */
 
 /** How many days an item survives in the trash before the nightly purge. */
 export const TRASH_DAYS = 30;

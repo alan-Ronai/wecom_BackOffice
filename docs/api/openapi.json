@@ -368,6 +368,33 @@
                         "sidebarExpanded": {
                           "type": "boolean",
                           "default": false
+                        },
+                        "density": {
+                          "type": "string",
+                          "enum": [
+                            "comfortable",
+                            "compact"
+                          ]
+                        },
+                        "libraryView": {
+                          "type": "string",
+                          "enum": [
+                            "cards",
+                            "list"
+                          ]
+                        },
+                        "savedViewId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "lastSeen": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "tourDone": {
+                          "type": "boolean"
                         }
                       },
                       "additionalProperties": false
@@ -11542,6 +11569,33 @@
                     "sidebarExpanded": {
                       "type": "boolean",
                       "default": false
+                    },
+                    "density": {
+                      "type": "string",
+                      "enum": [
+                        "comfortable",
+                        "compact"
+                      ]
+                    },
+                    "libraryView": {
+                      "type": "string",
+                      "enum": [
+                        "cards",
+                        "list"
+                      ]
+                    },
+                    "savedViewId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastSeen": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "tourDone": {
+                      "type": "boolean"
                     }
                   },
                   "additionalProperties": false
@@ -11590,6 +11644,33 @@
                   "sidebarExpanded": {
                     "type": "boolean",
                     "default": false
+                  },
+                  "density": {
+                    "type": "string",
+                    "enum": [
+                      "comfortable",
+                      "compact"
+                    ]
+                  },
+                  "libraryView": {
+                    "type": "string",
+                    "enum": [
+                      "cards",
+                      "list"
+                    ]
+                  },
+                  "savedViewId": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "lastSeen": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "tourDone": {
+                    "type": "boolean"
                   }
                 },
                 "additionalProperties": false
@@ -11633,6 +11714,33 @@
                     "sidebarExpanded": {
                       "type": "boolean",
                       "default": false
+                    },
+                    "density": {
+                      "type": "string",
+                      "enum": [
+                        "comfortable",
+                        "compact"
+                      ]
+                    },
+                    "libraryView": {
+                      "type": "string",
+                      "enum": [
+                        "cards",
+                        "list"
+                      ]
+                    },
+                    "savedViewId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastSeen": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "tourDone": {
+                      "type": "boolean"
                     }
                   },
                   "additionalProperties": false

@@ -21,7 +21,7 @@ import { useCan } from '../../api/hooks/me.js';
 import { ApiError } from '../../api/unwrap.js';
 import { CATS, CAT_KEYS, PRI, SOURCE_FILES } from '../../lib/constants.js';
 import { ago, download } from '../../lib/format.js';
-import { useHotkeys } from '../../lib/keyboard.js';
+import { useHotkeys } from '../../lib/keys.js';
 import { allSteps } from '../../lib/steps.js';
 import {
   addAction,
@@ -215,6 +215,7 @@ export function EditorPage() {
   );
 
   useHotkeys(
+    'editor',
     {
       // `useHotkeys` lower-cases bare keys, so Ctrl Shift Z arrives here as `ctrl+z` with the
       // shift flag set — one binding covers both directions. Ctrl Y is the Windows habit.
@@ -231,7 +232,10 @@ export function EditorPage() {
           setMulti(new Set());
           return;
         }
-        return modal.count === 0 && !palette.state.open && leave();
+        // A modal or the palette is in front of the editor and is not the editor's to close, so
+        // decline and let the global scope handle it.
+        if (modal.count !== 0 || palette.state.open) return false;
+        leave();
       },
       // `R` rather than `r`: `useHotkeys` normalises bare keys to lower case, so only the
       // un-normalised fallback matches — which is exactly the Shift R the keymap advertises.

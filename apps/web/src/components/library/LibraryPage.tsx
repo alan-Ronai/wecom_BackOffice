@@ -11,7 +11,7 @@ import { useBlocks, useFields, useScripts } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
 import { useBulkDocuments, useSaveView, useViews, type SavedView } from '../../api/hooks/collab.js';
 import { useUiPrefs } from '../../api/hooks/uiPrefs.js';
-import { useHotkeys } from '../../lib/keyboard.js';
+import { useHotkeys } from '../../lib/keys.js';
 import { CATS, WAVES } from '../../lib/constants.js';
 import { download, fmtDate } from '../../lib/format.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
@@ -293,10 +293,11 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
 
   /**
    * 6a's keyboard-first list. Bound only in list mode so the card grid keeps behaving the way it
-   * always has; `Escape` clears a selection before `Shell`'s handler gets a chance to close
-   * anything else, because a live selection is the most local thing on screen.
+   * always has. The `library` scope outranks the shell's, so `Escape` clears a live selection —
+   * the most local thing on screen — rather than closing something behind it.
    */
   useHotkeys(
+    'library',
     listMode
       ? {
           j: () => setCursor((i) => Math.min(items.length - 1, i + 1)),
@@ -321,9 +322,10 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
             const c = items[cursor];
             if (c) openCard(c);
           },
-          Escape: (e) => {
-            if (!selected.size) return;
-            e.stopPropagation();
+          // Declining (`false`) hands `Escape` on to the shell, which is what should close a
+          // palette or the split when there is no selection to clear.
+          Escape: () => {
+            if (!selected.size) return false;
             clearSelection();
           },
         }

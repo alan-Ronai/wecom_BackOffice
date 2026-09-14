@@ -4,7 +4,6 @@ import { crmChip } from '@wecom/shared';
 import { useDocuments } from '../../api/hooks/documents.js';
 import { useDeleteField, useFields } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
-import { useEntityDialogs } from './dialogs.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
@@ -17,7 +16,6 @@ export function FieldsPage() {
   const go = useNavigate();
   const fields = useFields();
   const docs = useDocuments({ sort: 'wave' });
-  const dialogs = useEntityDialogs();
   const can = useCan();
   const modal = useModal();
   const toast = useToast();

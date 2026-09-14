@@ -11,6 +11,7 @@
  */
 import { http, HttpResponse, type RequestHandler } from 'msw';
 import type { z } from 'zod';
+import { TelemetryBatchSchema } from '@wecom/shared';
 import type {
   Comment,
   MentionCandidateSchema,
@@ -21,6 +22,7 @@ import type {
   Template,
 } from '@wecom/shared';
 import { fx, D_BROWSING, D_INTL, U1, U2 } from './fixtures.js';
+import { stage4State } from './stage4.js';
 
 type MentionCandidate = z.infer<typeof MentionCandidateSchema>;
 
@@ -397,9 +399,22 @@ export const stage45Handlers: RequestHandler[] = [
   }),
 
   /* ── telemetry ────────────────────────────────────────────────────────── */
+  /**
+   * The **one** handler for `POST /telemetry`. Stage 4 owns the route (it feeds the dashboards)
+   * and stage 4–5 owns the emitters (the article's outcome picker, palette and jump), so both
+   * lanes' suites assert on it. msw answers with the first matching handler, so two registrations
+   * meant one lane's log silently stayed empty — the batch is recorded into both logs here
+   * instead, after being validated against the contract both lanes are written to.
+   */
   http.post(`${B}/telemetry`, async ({ request }) => {
-    const body = (await request.json()) as { events: Stage45State['telemetry'] };
-    stage45State.telemetry.push(...body.events);
+    const parsed = TelemetryBatchSchema.safeParse(await request.json());
+    if (!parsed.success)
+      return HttpResponse.json(
+        { code: 'VALIDATION', message: 'telemetry batch does not match the contract' },
+        { status: 400 },
+      );
+    stage45State.telemetry.push(...parsed.data.events);
+    stage4State.telemetry.push(...parsed.data.events);
     return noContent();
   }),
 ];

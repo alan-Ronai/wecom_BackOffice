@@ -593,11 +593,9 @@ export const stage4Handlers: RequestHandler[] = [
   }),
 
   http.get(`${B}/dashboards`, () => HttpResponse.json(dashboard)),
-  http.post(`${B}/telemetry`, async ({ request }) => {
-    const body = (await request.json()) as { events: { kind: string; documentId?: string }[] };
-    stage4State.telemetry.push(...body.events);
-    return new HttpResponse(null, { status: 204 });
-  }),
+  // `POST /telemetry` is registered once, in `stage45.ts`, and records into `stage4State.telemetry`
+  // as well as `stage45State.telemetry` — see the comment there. Registering it in both modules
+  // meant msw answered from whichever came first and the other lane's log never filled.
 
   http.get(`${B}/documents/:id/backlinks`, ({ params }) =>
     HttpResponse.json({ items: impactFor(`doc:${String(params.id)}`).inbound }),

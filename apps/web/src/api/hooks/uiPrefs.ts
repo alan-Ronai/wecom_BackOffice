@@ -3,14 +3,14 @@
  * "changed since I last looked" map and whether the onboarding tour has been dismissed.
  *
  * All of it belongs in `/me/preferences` (spec: preferences follow the user across machines, and
- * `localStorage` does not). `PreferencesSchema` in `@wecom/shared` does not carry these keys yet —
- * widening it is backend lane B's change — and zod strips unknown keys, so today the server keeps
- * the five core fields and silently drops the rest.
+ * `localStorage` does not). `PreferencesSchema` in `@wecom/shared` now declares all five keys as
+ * optional fields, so `PUT /me/preferences` stores them and every one of these settings follows
+ * the user — which is what the round was asking for.
  *
- * So this hook writes the **whole** extended object to `PUT /me/preferences` and mirrors it into
- * `localStorage`. Reads layer the server's answer over the mirror, meaning:
- *   - today  — core prefs sync across machines, the new keys survive a reload on this machine;
- *   - after the schema widens — the server's copy wins on every key, with no code change here.
+ * The `localStorage` mirror is kept, demoted from "the only copy of these keys" to what it should
+ * have been all along: a cache that survives the first paint before `/me/preferences` has
+ * answered, and the fallback when a write fails. Reads layer the server's answer over the mirror,
+ * so the server wins on every key it returns.
  *
  * `test/lib/uiPrefs.test.ts` pins both halves of that behaviour.
  */
@@ -19,7 +19,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { PreferencesSchema, type Preferences } from '@wecom/shared';
 import { z } from 'zod';
 import { keys } from '../keys.js';
-import { stageJson } from '../stage45.js';
+import { api } from '../client.js';
+import { checked } from '../stage45.js';
 import { applyPrefs, DEFAULT_PREFERENCES } from '../../lib/prefs.js';
 import { usePreferences } from './preferences.js';
 
@@ -128,14 +129,13 @@ export function useUiPrefs(): UiPrefsApi {
       writeMirror(next);
       // Seed the core query so the rest of the app (Sidebar, Shell, Article) sees it instantly.
       qc.setQueryData<Preferences>(keys.prefs, PreferencesSchema.parse(next));
-      void stageJson(PreferencesSchema.passthrough(), '/me/preferences', {
-        method: 'PUT',
-        body: next,
-      })
-        .then(() => qc.invalidateQueries({ queryKey: keys.me }))
-        .catch(() => {
-          /* the mirror already holds it; a failed sync must not lose the toggle */
-        });
+      const sync = async () => {
+        checked(PreferencesSchema, await api.PUT('/me/preferences', { body: next }));
+        await qc.invalidateQueries({ queryKey: keys.me });
+      };
+      void sync().catch(() => {
+        /* the mirror already holds it; a failed sync must not lose the toggle */
+      });
     },
     [prefs, qc],
   );
