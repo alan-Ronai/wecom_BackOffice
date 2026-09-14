@@ -168,12 +168,20 @@ export function ConnectorWizard() {
   const [config, setConfig] = useState<Record<string, unknown>>({});
   const [schedule, setSchedule] = useState<string | null>(null);
   const [result, setResult] = useState<ConnectorTestResult | null>(null);
+  /**
+   * What the server said the config was when this form loaded, so `submit` can send the keys the
+   * operator actually changed rather than the whole object. `null` while creating.
+   */
+  const [loaded, setLoaded] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     if (!existing.data) return;
     setTypeId(existing.data.type);
     setName(existing.data.name);
-    setConfig({ ...existing.data.config });
+    // `GET /connectors/{id}` answers the detail shape: `configMasked`, not `config`. Reading
+    // `.config` here is what used to load this form blank and then PATCH the blank back.
+    setConfig({ ...existing.data.configMasked });
+    setLoaded({ ...existing.data.configMasked });
     setSchedule(existing.data.schedule);
   }, [existing.data]);
 
@@ -208,18 +216,40 @@ export function ConnectorWizard() {
     }
   };
 
+  /**
+   * The config to send, which is deliberately not "the form state".
+   *
+   * Two things are filtered out. A **masked** value is a placeholder for a secret the server
+   * already holds and this browser was never given; sending it back would overwrite the real
+   * secret with four bullet characters. An **unchanged** value is one the server already has
+   * right, and on an edit there is no reason to restate it — which also means that if the form
+   * somehow loads empty, `submit` sends `{}` keys rather than blanking every key the connector
+   * has. Creating sends everything, because there is nothing on the server yet to preserve.
+   */
+  const configPayload = (): Record<string, unknown> =>
+    Object.fromEntries(
+      Object.entries(config).filter(
+        ([k, v]) => !isMask(v) && (!loaded || !Object.is(JSON.stringify(loaded[k]), JSON.stringify(v))),
+      ),
+    );
+
   const submit = async () => {
-    // A masked secret is a placeholder for a value the server already has; sending it back would
-    // overwrite the real secret with four bullet characters.
-    const payload = Object.fromEntries(Object.entries(config).filter(([, v]) => !isMask(v)));
+    const payload = configPayload();
     try {
-      const saved = await save.mutateAsync({
-        ...(id ? { id } : {}),
-        type: typeId,
-        name: name.trim(),
-        config: payload,
-        schedule,
-      });
+      const saved = await save.mutateAsync(
+        id
+          ? {
+              id,
+              patch: {
+                name: name.trim(),
+                // On an edit with nothing changed, the key is omitted rather than sent empty:
+                // PATCH takes a whole config object, and `{}` is the spelling that clears one.
+                ...(Object.keys(payload).length ? { config: payload } : {}),
+                schedule,
+              },
+            }
+          : { create: { type: typeId, name: name.trim(), config: payload, schedule } },
+      );
       toast(editing ? 'המחבר נשמר' : 'המחבר נוצר', 'ok');
       nav(`/admin/connectors/${saved.id}`);
       setStep(3);
@@ -376,6 +406,20 @@ export function ConnectorWizard() {
                 ))}
               </select>
             </label>
+            {/*
+              The write contract declares `schedule` as a non-null string, so "ללא תזמון" is the
+              one choice on this screen a save cannot carry. Saying so is better than letting the
+              select show a state the server will not be in. See `writeBody` in `api/stage5.ts`.
+            */}
+            {editing && schedule === null && existing.data?.schedule ? (
+              <div className="field-error" role="status">
+                הסרת תזמון אינה נתמכת עדיין בשרת — התזמון הקיים (
+                <bdi className="lat" dir="ltr">
+                  {existing.data.schedule}
+                </bdi>
+                ) יישמר. ניתן לכבות את המחבר במסך המחברים.
+              </div>
+            ) : null}
 
             {type?.capabilities.webhooks && id ? (
               <>

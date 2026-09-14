@@ -7,7 +7,7 @@ import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
 import { withMe } from '../msw/handlers.js';
 import { server } from '../msw/server.js';
-import { C_WP, stage5State } from '../msw/stage5.js';
+import { C_WP, connectorDetail, stage5State } from '../msw/stage5.js';
 import { describeCron } from '../../src/components/admin/ConnectorsPage.js';
 
 const asAdmin = () => server.use(withMe({ roles: ['admin'], permissions: [...PERMISSIONS] }));
@@ -73,7 +73,7 @@ describe('admin · connector registry', () => {
     server.use(
       http.patch('/api/v1/connectors/:id', async ({ request }) => {
         body = await request.json();
-        return HttpResponse.json({ ...stage5State.connectors[0], enabled: false });
+        return HttpResponse.json({ ...connectorDetail(stage5State.connectors[0]), enabled: false });
       }),
     );
     renderWithProviders(<App />, { route: '/admin/connectors' });
@@ -151,7 +151,7 @@ describe('admin · connector wizard', () => {
     server.use(
       http.post('/api/v1/connectors', async ({ request }) => {
         body = (await request.json()) as Record<string, unknown>;
-        return HttpResponse.json({ ...stage5State.connectors[0], id: C_WP }, { status: 201 });
+        return HttpResponse.json({ ...connectorDetail(stage5State.connectors[0]), id: C_WP }, { status: 201 });
       }),
     );
     renderWithProviders(<App />, { route: '/admin/connectors/new' });
@@ -176,7 +176,7 @@ describe('admin · connector wizard', () => {
     server.use(
       http.patch('/api/v1/connectors/:id', async ({ request }) => {
         body = (await request.json()) as Record<string, unknown>;
-        return HttpResponse.json(stage5State.connectors[0]);
+        return HttpResponse.json(connectorDetail(stage5State.connectors[0]));
       }),
     );
     renderWithProviders(<App />, { route: `/admin/connectors/${C_WP}` });
@@ -188,10 +188,35 @@ describe('admin · connector wizard', () => {
     await userEvent.click(screen.getByRole('button', { name: 'שמור' }));
 
     await waitFor(() => expect(body).toBeDefined());
-    const config = body!.config as Record<string, unknown>;
-    expect(config).not.toHaveProperty('appPassword');
-    expect(config).not.toHaveProperty('webhookSecret');
-    expect(config.baseUrl).toBe('https://help.wecom.co.il');
+    // Nothing in the config was touched, so there is no `config` key at all. `{}` would be the
+    // spelling that clears one, and restating the unchanged values would mean re-sending the
+    // masked placeholders standing in for secrets this browser never received.
+    expect(body).not.toHaveProperty('config');
+  });
+
+  it('sends only the config key the operator actually changed', async () => {
+    asAdmin();
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.patch('/api/v1/connectors/:id', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(connectorDetail(stage5State.connectors[0]));
+      }),
+    );
+    renderWithProviders(<App />, { route: `/admin/connectors/${C_WP}` });
+
+    // The form is seeded from `configMasked`, which is what the detail route actually answers —
+    // reading `.config` here loaded it blank and then PATCHed the blank back.
+    const username = await screen.findByLabelText('משתמש WordPress');
+    expect(username).toHaveValue('kb-bot');
+    await userEvent.clear(username);
+    await userEvent.type(username, 'kb-bot-2');
+
+    await userEvent.click(screen.getByRole('button', { name: '4. תזמון' }));
+    await userEvent.click(screen.getByRole('button', { name: 'שמור' }));
+
+    await waitFor(() => expect(body).toBeDefined());
+    expect(body!.config).toEqual({ username: 'kb-bot-2' });
   });
 
   it('does not offer a type change on a saved connector', async () => {

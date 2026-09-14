@@ -12,7 +12,7 @@
  * answered, and the fallback when a write fails. Reads layer the server's answer over the mirror,
  * so the server wins on every key it returns.
  *
- * `test/lib/uiPrefs.test.ts` pins both halves of that behaviour.
+ * `test/lib/uiPrefs.test.tsx` pins both halves of that behaviour.
  */
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -84,10 +84,17 @@ function writeMirror(p: UiPrefs): void {
   for (const l of mirrorListeners) l();
 }
 
-/** Test seam: drops the cached mirror so each test starts from its own `localStorage`. */
+/**
+ * Test seam: drops the cached mirror so each test starts from its own `localStorage`.
+ *
+ * Deliberately does *not* clear `mirrorListeners`. A listener is owned by the component that
+ * subscribed it and removed by that component's own cleanup; dropping the set here would
+ * unsubscribe anything still mounted, which happens to be harmless only because `test/setup.ts`
+ * calls `cleanup()` first. Resetting state a seam does not own is how a test helper starts
+ * deciding whether the product works.
+ */
 export function __resetUiPrefsCache(): void {
   mirrorCache = null;
-  mirrorListeners.clear();
 }
 
 /** Drops `undefined` values so a server answer that omits a key does not erase the mirror's. */
