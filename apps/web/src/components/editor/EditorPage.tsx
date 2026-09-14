@@ -403,7 +403,7 @@ export function EditorPage() {
             placeholder="שם פריט הידע…"
             aria-label="שם פריט הידע"
             value={doc.title}
-            onChange={(e) => update({ ...doc, title: e.target.value })}
+            onChange={(e) => update({ ...doc, title: e.target.value }, 'שם הפריט')}
           />
           <span className="chip chip-amber">
             {published.data ? `טיוטה על v${published.data.currentVersion}` : 'טיוטה'}
@@ -499,7 +499,7 @@ export function EditorPage() {
               <select
                 aria-label="קטגוריה"
                 value={doc.category}
-                onChange={(e) => update({ ...doc, category: e.target.value as Category })}
+                onChange={(e) => update({ ...doc, category: e.target.value as Category }, 'קטגוריה')}
               >
                 {CAT_KEYS.map((c) => (
                   <option key={c} value={c}>
@@ -513,7 +513,7 @@ export function EditorPage() {
               <select
                 aria-label="גל כתיבה"
                 value={doc.wave}
-                onChange={(e) => update({ ...doc, wave: Number(e.target.value) as 1 | 2 | 3 })}
+                onChange={(e) => update({ ...doc, wave: Number(e.target.value) as 1 | 2 | 3 }, 'גל')}
               >
                 {[1, 2, 3].map((w) => (
                   <option key={w} value={w}>
@@ -527,7 +527,7 @@ export function EditorPage() {
               <select
                 aria-label="שכיחות"
                 value={doc.priority}
-                onChange={(e) => update({ ...doc, priority: e.target.value as Document['priority'] })}
+                onChange={(e) => update({ ...doc, priority: e.target.value as Document['priority'] }, 'עדיפות')}
               >
                 {Object.entries(PRI).map(([k, v]) => (
                   <option key={k} value={k}>
@@ -558,7 +558,7 @@ export function EditorPage() {
             aria-label="תיאור קצר"
             placeholder="תיאור קצר לנציגים (מוצג בכרטיס)"
             value={doc.description}
-            onChange={(e) => update({ ...doc, description: e.target.value })}
+            onChange={(e) => update({ ...doc, description: e.target.value }, 'תיאור')}
           />
 
           {pane === 'steps' &&

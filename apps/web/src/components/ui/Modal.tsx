@@ -8,6 +8,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useHotkeys } from '../../lib/keys.js';
+import { useFocusTrap } from './useFocusTrap.js';
 
 export interface ModalOptions {
   title: string;
@@ -31,6 +33,69 @@ export interface ModalApi {
 }
 
 const Ctx = createContext<ModalApi | null>(null);
+
+/**
+ * One dialog from the stack, as its own component so it can hold a focus trap.
+ *
+ * `role="dialog"` was already here; `aria-modal="true"` is what tells a screen reader that the
+ * page behind is not available, and `useFocusTrap` is what makes that true for the keyboard.
+ */
+function Dialog({
+  entry: m,
+  topmost,
+  onDismiss,
+}: {
+  entry: Entry;
+  topmost: boolean;
+  onDismiss: () => void;
+}) {
+  const trap = useFocusTrap<HTMLDivElement>(topmost);
+  const dismissWithDefault = () => {
+    m.buttons?.[0]?.onClick?.();
+    onDismiss();
+  };
+
+  return (
+    <div
+      className={`overlay center${m.dark ? ' dark' : ''}`}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !m.sticky) dismissWithDefault();
+      }}
+    >
+      <div
+        ref={trap}
+        className={`modal${m.wide ? ' wide' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={m.title}
+      >
+        <h2>
+          {m.title}
+          <span className="x" role="button" tabIndex={0} title="סגור (Esc)" onClick={dismissWithDefault}>
+            ✕
+          </span>
+        </h2>
+        <div>{m.body}</div>
+        {m.buttons?.length ? (
+          <div className="foot">
+            {m.buttons.map((b, i) => (
+              <button
+                key={i}
+                className={`btn ${b.cls ?? ''}`}
+                onClick={() => {
+                  if (b.onClick?.() === false) return;
+                  onDismiss();
+                }}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 function PromptBody({
   label,
@@ -136,71 +201,45 @@ export function ModalProvider({ children }: { children: ReactNode }) {
     [open, close, confirm, prompt, stack.length],
   );
 
-  useEffect(() => {
-    if (!stack.length) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
+  /**
+   * `Escape` closes the topmost dialog — through the shared registry, not a private listener.
+   *
+   * This used to be a `document`-level capture listener, for a reason that was real at the time:
+   * the registry refused every bare key while the caret was in a text field, so a dialog with an
+   * input in it could not be closed any other way. That guard now exempts `Escape` (`lib/keys.ts`),
+   * which is what lets this be an ordinary `overlay`-scope binding — and being in the registry is
+   * what makes the dialog's claim on `Escape` visible to every other screen rather than something
+   * they each have to discover by racing it.
+   *
+   * Declining when the stack is empty lets the keystroke fall through to whatever is underneath.
+   */
+  useHotkeys(
+    'overlay',
+    {
+      Escape: () => {
+        if (!stack.length) return false;
         setStack((s) => {
           const top = s[s.length - 1];
           top?.buttons?.[0]?.onClick?.();
           return s.slice(0, -1);
         });
-      }
-    };
-    document.addEventListener('keydown', onKey, true);
-    return () => document.removeEventListener('keydown', onKey, true);
-  }, [stack.length]);
+      },
+    },
+    [stack.length],
+  );
 
   return (
     <Ctx.Provider value={value}>
       {children}
-      {stack.map((m) => (
-        <div
+      {stack.map((m, i) => (
+        <Dialog
           key={m.id}
-          className={`overlay center${m.dark ? ' dark' : ''}`}
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget && !m.sticky) {
-              m.buttons?.[0]?.onClick?.();
-              setStack((s) => s.filter((x) => x.id !== m.id));
-            }
-          }}
-        >
-          <div className={`modal${m.wide ? ' wide' : ''}`} role="dialog" aria-label={m.title}>
-            <h2>
-              {m.title}
-              <span
-                className="x"
-                role="button"
-                tabIndex={0}
-                title="סגור (Esc)"
-                onClick={() => {
-                  m.buttons?.[0]?.onClick?.();
-                  setStack((s) => s.filter((x) => x.id !== m.id));
-                }}
-              >
-                ✕
-              </span>
-            </h2>
-            <div>{m.body}</div>
-            {m.buttons?.length ? (
-              <div className="foot">
-                {m.buttons.map((b, i) => (
-                  <button
-                    key={i}
-                    className={`btn ${b.cls ?? ''}`}
-                    onClick={() => {
-                      if (b.onClick?.() === false) return;
-                      setStack((s) => s.filter((x) => x.id !== m.id));
-                    }}
-                  >
-                    {b.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
+          entry={m}
+          // Only the dialog on top of the stack traps focus: two traps fighting over `Tab` is
+          // worse than none, and a stacked dialog is by definition the one being used.
+          topmost={i === stack.length - 1}
+          onDismiss={() => setStack((s) => s.filter((x) => x.id !== m.id))}
+        />
       ))}
     </Ctx.Provider>
   );

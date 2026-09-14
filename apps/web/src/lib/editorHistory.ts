@@ -21,6 +21,20 @@ export interface HistoryEntry {
 /** Deep enough to cover a session of editing; a knowledge item is small. */
 const LIMIT = 60;
 
+/**
+ * How long a run of same-labelled edits keeps collapsing into one point.
+ *
+ * Typing is not sixty events, it is one edit. `patchStep` runs on every `onChange`, so without
+ * coalescing a single sentence pushed a snapshot per keystroke: `Ctrl Z` undid one character,
+ * `LIMIT` evicted everything that had actually happened, and the strip card 6c calls
+ * "נקודות שמירה" filled with sixty points all labelled "שינוי" — a save-point strip with no save
+ * points in it.
+ *
+ * 800 ms is long enough to span the pause between words and short enough that stopping to think
+ * ends the run, which is about where a person would draw the line themselves.
+ */
+const COALESCE_MS = 800;
+
 export interface EditorHistory {
   entries: HistoryEntry[];
   index: number;
@@ -53,7 +67,21 @@ export function useEditorHistory(): EditorHistory {
     (doc: Document, label: string) => {
       const { entries: cur, index: i } = ref.current;
       const kept = cur.slice(0, i + 1);
-      const next = [...kept, { doc, at: Date.now(), label }].slice(-LIMIT);
+      const at = Date.now();
+      const prev = kept[kept.length - 1];
+
+      // A continuing run of the same kind of edit replaces its own last snapshot instead of
+      // appending one. The label is the discriminator, which is why the structural mutations
+      // (`מחיקת שלב`, `העברת שלב`, `שכפול`) each pass a distinct one and therefore always land as
+      // their own point — those are exactly the edits `Ctrl Z` exists for. `kept.length > 1`
+      // keeps the initial `נטען` entry from ever being replaced.
+      if (prev && kept.length > 1 && prev.label === label && at - prev.at < COALESCE_MS) {
+        const next = [...kept.slice(0, -1), { doc, at, label }];
+        commit(next, next.length - 1);
+        return;
+      }
+
+      const next = [...kept, { doc, at, label }].slice(-LIMIT);
       commit(next, next.length - 1);
     },
     [commit],

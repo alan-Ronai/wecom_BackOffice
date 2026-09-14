@@ -5,6 +5,7 @@ import type { AuditDiffRow } from '../../api/stage5.js';
 import type { AuditQuery } from '../../api/types.js';
 import { fmtDate, fmtTime } from '../../lib/format.js';
 import { Chip, LoadError } from '../ui/index.js';
+import { useFocusTrap } from '../ui/useFocusTrap.js';
 
 const ENTITY_LABEL: Record<string, string> = {
   document: 'מסמך',
@@ -77,6 +78,7 @@ export function AuditPage() {
   const [actorId, setActorId] = useState('');
   const [days, setDays] = useState<number | null>(7);
   const [openId, setOpenId] = useState<string | null>(null);
+  const drawer = useFocusTrap<HTMLElement>(!!openId);
 
   const query: AuditQuery = {
     ...(entityType ? { entityType } : {}),
@@ -204,7 +206,7 @@ export function AuditPage() {
       )}
 
       {openId ? (
-        <aside className="drawer" role="dialog" aria-label="פרטי רשומת ביקורת">
+        <aside ref={drawer} className="drawer" role="dialog" aria-modal="true" aria-label="פרטי רשומת ביקורת">
           <div className="drawer-head">
             <b>פרטי הפעולה</b>
             <button className="btn ghost xs" onClick={() => setOpenId(null)}>

@@ -88,6 +88,41 @@ describe('the hotkey registry', () => {
     cleanup();
   });
 
+  it('lets Escape through while typing — it is the one bare key that always must', () => {
+    const escape = vi.fn();
+    const pin = vi.fn();
+    const { container } = render(
+      <>
+        <input aria-label="field" />
+        <Binder scope="editor" map={{ Escape: escape }} />
+        <Binder scope="article" map={{ p: pin }} />
+      </>,
+    );
+    container.querySelector('input')!.focus();
+    press('Escape');
+    press('p');
+    // `p` is a character somebody is trying to type. `Escape` never is, and without this the
+    // editor's title input could not clear a selection or leave the editor at all.
+    expect(escape).toHaveBeenCalledTimes(1);
+    expect(pin).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('gives an open overlay Escape before the route underneath sees it', () => {
+    const dialog = vi.fn();
+    const editor = vi.fn();
+    render(
+      <>
+        <Binder scope="editor" map={{ Escape: editor }} />
+        <Binder scope="overlay" map={{ Escape: dialog }} />
+      </>,
+    );
+    press('Escape');
+    expect(dialog).toHaveBeenCalledTimes(1);
+    expect(editor).not.toHaveBeenCalled();
+    cleanup();
+  });
+
   it('matches the un-normalised spelling, which is how Shift R reaches the editor', () => {
     const review = vi.fn();
     render(<Binder scope="editor" map={{ R: review }} />);

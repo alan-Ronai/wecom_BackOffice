@@ -29,9 +29,10 @@ import {
   type TemplateBodySchema,
 } from '@wecom/shared';
 import { keys } from '../keys.js';
-import { api } from '../client.js';
+import { api, API_BASE } from '../client.js';
 import { unwrap } from '../unwrap.js';
 import { checked } from '../stage45.js';
+import { beaconJson, useUnloadFlush } from '../../lib/unloadFlush.js';
 
 export type Notification = z.infer<typeof NotificationsResponseSchema>['items'][number];
 export type MentionCandidate = z.infer<typeof MentionCandidateSchema>;
@@ -254,12 +255,28 @@ export function usePresence(documentId: string | undefined, enabled = true): Pre
     void api.POST('/documents/{id}/presence', { params: { path: { id: documentId } } }).catch(() => {});
   };
 
+  /**
+   * The heartbeat stops while the tab is in the background, and resumes the moment it is not.
+   *
+   * The read above is a TanStack `refetchInterval`, which pauses on blur by default. The write
+   * was a bare `setInterval`, which does not — so a tab left open in another window went on
+   * claiming "currently editing this document" indefinitely while no longer being told about
+   * anyone else, and the editor's conflict banner is downstream of exactly that. Gating the beat
+   * on visibility makes the two halves agree; beating once on the way back means a returning tab
+   * re-appears to everyone else immediately rather than up to `HEARTBEAT_MS` later.
+   */
   useEffect(() => {
     if (!on) return;
-    beat.current();
-    const t = setInterval(() => beat.current(), HEARTBEAT_MS);
+    const visible = () => document.visibilityState === 'visible';
+    const maybeBeat = () => {
+      if (visible()) beat.current();
+    };
+    maybeBeat();
+    const t = setInterval(maybeBeat, HEARTBEAT_MS);
+    document.addEventListener('visibilitychange', maybeBeat);
     return () => {
       clearInterval(t);
+      document.removeEventListener('visibilitychange', maybeBeat);
       if (documentId) qc.removeQueries({ queryKey: keys.presence(documentId) });
     };
   }, [on, documentId, qc]);
@@ -287,8 +304,14 @@ export function useBulkDocuments() {
 /**
  * Batched: outcome picks fire once per keypress during a call, and one request per keypress on a
  * LAN VM that also runs the model is exactly the traffic this app should not generate. Events are
- * buffered and flushed every 10 s, on unmount, and on `beforeunload`; a failed flush is dropped
- * rather than retried — usage analytics must never be able to break the call the agent is on.
+ * buffered and flushed every 10 s, on unmount, and when the page goes away; a failed flush is
+ * dropped rather than retried — usage analytics must never be able to break the call the agent
+ * is on.
+ *
+ * The going-away flush uses `sendBeacon` via `useUnloadFlush`, not `beforeunload` + `fetch`. The
+ * batch at risk is the one covering the last ten seconds before a tab closes, which on a call is
+ * the tail — the part carrying the outcome. See `lib/unloadFlush.ts` for why the obvious pairing
+ * loses it.
  */
 const FLUSH_MS = 10_000;
 
@@ -296,8 +319,8 @@ export function useTelemetry(): (e: TelemetryEvent) => void {
   const buffer = useRef<TelemetryEvent[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const flush = useRef<() => void>(() => {});
-  flush.current = () => {
+  const flush = useRef<(unloading?: boolean) => void>(() => {});
+  flush.current = (unloading = false) => {
     const events = buffer.current;
     if (!events.length) return;
     buffer.current = [];
@@ -305,17 +328,12 @@ export function useTelemetry(): (e: TelemetryEvent) => void {
       clearTimeout(timer.current);
       timer.current = null;
     }
-    void api.POST('/telemetry', { body: { events } }).catch(() => {});
+    if (unloading) beaconJson(`${API_BASE}/telemetry`, { events });
+    else void api.POST('/telemetry', { body: { events } }).catch(() => {});
   };
 
-  useEffect(() => {
-    const onUnload = () => flush.current();
-    window.addEventListener('beforeunload', onUnload);
-    return () => {
-      window.removeEventListener('beforeunload', onUnload);
-      flush.current();
-    };
-  }, []);
+  useUnloadFlush(() => flush.current(true));
+  useEffect(() => () => flush.current(), []);
 
   return useMemo(
     () => (e: TelemetryEvent) => {

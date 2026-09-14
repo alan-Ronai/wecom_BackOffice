@@ -11,6 +11,7 @@ import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.
 import { useCan } from '../../api/hooks/me.js';
 import { useTelemetry } from '../../api/hooks/collab.js';
 import { Html } from '../Fmt.js';
+import { useFocusTrap } from '../ui/useFocusTrap.js';
 import type { SearchHit } from '../../api/types.js';
 
 /**
@@ -76,6 +77,7 @@ export function Palette() {
   const [type, setType] = useState('all');
   const [sel, setSel] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const trap = useFocusTrap<HTMLDivElement>(true);
   const debounced = useDebounced(q, 120);
   const search = useSearch(debounced, type);
 
@@ -261,7 +263,7 @@ export function Palette() {
         if (e.target === e.currentTarget) palette.close();
       }}
     >
-      <div className="palette" role="dialog" aria-label="חיפוש">
+      <div ref={trap} className="palette" role="dialog" aria-modal="true" aria-label="חיפוש">
         <div className="in">
           <span className="ic">⌕</span>
           <input

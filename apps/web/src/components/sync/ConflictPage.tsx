@@ -78,19 +78,32 @@ const defaultChoice = (r: MergeRow): Side => {
   return 'ours';
 };
 
-/** Rebuilds our phases with the chosen text, which is what `resolution: 'merged'` sends. */
-function mergedPhases(c: ConflictView, rows: MergeRow[], choice: Record<string, Side>): Phase[] {
+/**
+ * Rebuilds our phases with the resolved text, which is what `resolution: 'merged'` sends.
+ *
+ * `resultOf` is what each row actually ends up saying — the picked side, or whatever the operator
+ * typed over it. Taking a function rather than the pick map is the whole of card 4e's "תוצאה
+ * ניתנת לעריכה": a paragraph where *both* sides are wrong (the common case once a WordPress editor
+ * and a KB author have both touched the same step) previously had no resolution on this screen at
+ * all — you had to pick the less-wrong side, leave, and edit the document afterwards.
+ */
+function mergedPhases(
+  c: ConflictView,
+  rows: MergeRow[],
+  resultOf: (r: MergeRow) => string | null,
+): Phase[] {
   const byRef = new Map(rows.map((r) => [r.ref, r]));
   const phases: Phase[] = c.ours.phases.map((p) => ({
     ...p,
     steps: p.steps.map((s) => {
       const ref = refOf(s);
       const r = byRef.get(ref);
-      if (!r || choice[ref] !== 'theirs' || r.theirs === null) return s;
-      return { ...s, description: r.theirs };
+      if (!r) return s;
+      const text = resultOf(r);
+      return text === null || text === s.description ? s : { ...s, description: text };
     }),
   }));
-  const added = rows.filter((r) => r.ours === null && choice[r.ref] === 'theirs');
+  const added = rows.filter((r) => r.ours === null && resultOf(r) !== null);
   if (added.length) {
     const last = phases[phases.length - 1];
     const steps = [
@@ -99,7 +112,7 @@ function mergedPhases(c: ConflictView, rows: MergeRow[], choice: Record<string, 
         key: `imported-${r.ref.replace(/\W+/g, '')}`,
         num: String(last.steps.length + i + 1),
         title: r.heading,
-        description: r.theirs ?? '',
+        description: resultOf(r) ?? '',
         sourceRef: r.ref,
         blockRefs: [],
         deps: [],
@@ -120,9 +133,24 @@ export function ConflictPage() {
   const conflict = useConflict(id);
   const resolve = useResolveConflict();
   const [choice, setChoice] = useState<Record<string, Side>>({});
+  /**
+   * Per-paragraph text the operator typed, overriding whichever side is picked.
+   *
+   * Keyed by `ref` rather than held as row state so that picking a side after editing is
+   * unambiguous — the pick clears the override, which is the only reading of "I changed my mind"
+   * that does not silently keep text the operator can no longer see the origin of.
+   */
+  const [edited, setEdited] = useState<Record<string, string>>({});
 
   const rows = useMemo(() => (conflict.data ? buildRows(conflict.data) : []), [conflict.data]);
   const pick = (r: MergeRow): Side => choice[r.ref] ?? defaultChoice(r);
+  /** What this paragraph will actually say. `null` means "not in the merged document". */
+  const resultOf = (r: MergeRow): string | null =>
+    edited[r.ref] ?? (pick(r) === 'theirs' ? r.theirs : r.ours);
+  const choose = (r: MergeRow, side: Side) => {
+    setChoice((s) => ({ ...s, [r.ref]: side }));
+    setEdited(({ [r.ref]: _dropped, ...rest }) => rest);
+  };
   const contested = rows.filter((r) => r.contested);
 
   if (!can('suggestions.apply'))
@@ -141,7 +169,7 @@ export function ConflictPage() {
       await resolve.mutateAsync({
         id: c.link.id,
         resolution,
-        ...(resolution === 'merged' ? { merged: { phases: mergedPhases(c, rows, choice) } } : {}),
+        ...(resolution === 'merged' ? { merged: { phases: mergedPhases(c, rows, resultOf) } } : {}),
         label: `פתרון קונפליקט סנכרון · ${c.link.connectorName}`,
       });
       toast('הקונפליקט נפתר', 'ok');
@@ -201,6 +229,7 @@ export function ConflictPage() {
 
           {rows.map((r) => {
             const side = pick(r);
+            const result = resultOf(r);
             return (
               <section key={r.ref} className={'merge-row' + (r.contested ? ' contested' : '')}>
                 <div className="merge-ref">
@@ -221,7 +250,7 @@ export function ConflictPage() {
                         className="btn xs"
                         aria-label={`קח מ-${c.link.connectorName} · ${r.ref}`}
                         aria-pressed={side === 'theirs'}
-                        onClick={() => setChoice((s) => ({ ...s, [r.ref]: 'theirs' }))}
+                        onClick={() => choose(r, 'theirs')}
                       >
                         {r.ours === null ? 'ייבא פסקה' : `קח מ-${c.link.connectorName}`}
                       </button>
@@ -234,13 +263,45 @@ export function ConflictPage() {
                         className="btn xs"
                         aria-label={`השאר את שלנו · ${r.ref}`}
                         aria-pressed={side === 'ours'}
-                        onClick={() => setChoice((s) => ({ ...s, [r.ref]: 'ours' }))}
+                        onClick={() => choose(r, 'ours')}
                       >
                         {r.ours === null ? 'אל תייבא' : 'השאר את שלנו'}
                       </button>
                     ) : null}
                   </div>
                 </div>
+
+                {/*
+                  Card 4e's editable result. The three columns above are the evidence; this is the
+                  answer, and until now the answer could only ever be one of the two columns. A row
+                  where both sides are wrong is the normal outcome of two people editing the same
+                  step, and it had no resolution path on this screen at all.
+                */}
+                {result !== null ? (
+                  <div className="merge-result">
+                    <label>
+                      <span className="eyebrow">תוצאה</span>
+                      <textarea
+                        aria-label={`תוצאה · ${r.ref}`}
+                        rows={Math.min(8, Math.max(2, Math.ceil(result.length / 90)))}
+                        value={result}
+                        onChange={(e) => setEdited((s) => ({ ...s, [r.ref]: e.target.value }))}
+                      />
+                    </label>
+                    {edited[r.ref] !== undefined ? (
+                      <div className="merge-result-foot">
+                        <Chip tone="chip-blue">נערך ידנית</Chip>
+                        <button
+                          className="btn xs ghost"
+                          aria-label={`בטל עריכה · ${r.ref}`}
+                          onClick={() => setEdited(({ [r.ref]: _dropped, ...rest }) => rest)}
+                        >
+                          בטל עריכה
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </section>
             );
           })}
