@@ -32,3 +32,36 @@ the next wave can reopen it cheaply.
 | `POST /sync-links/:id/resolve` remains, deprecated | Wave 3's ruling, untouched here. | An old client keeps working; the contract carries two spellings. |
 | A pending push is not surfaced on the article | After a remote edit *and* a local publish the sync link is `conflict`; resolving it is an operator action on `/sync`. The article's source-review flag answers a different question ("the source moved", an editorial decision) and the two are deliberately separate. | An editor can clear the review flag and believe the loop is closed while WordPress still shows the old text. A badge on the article reading the link state would close it. |
 | Frontend I10 pin-state item from wave 2 | Already closed by `apps/web/test/article/PageOneIndependence.test.tsx`; listed because the wave-2 ledger still names it as open. | None. |
+
+## Fix wave — API
+
+Rows appended by the wave-4 final-review fix pass (`fix/wave4-api`). Everything Critical and
+Important in packages A and B, plus C-C2/C-I2/C-I5 and the API halves of D-C2/D-I9, was fixed;
+these are the items deliberately left open, with the reasoning.
+
+| Item | Ruling | Cost if wrong |
+|---|---|---|
+| **A-M4** — `topicView` returns the topic and world metadata before applying scope, and `recordTopicView` fires for a topic the caller cannot read | The metadata is a name and a description, not content, and the item list is correctly empty. Turning an out-of-scope world into a 404 changes the shape of a route the web is being rebuilt against in the same wave, and D-C2 already stops the article page from inflating `topic_views` — the larger half of the pollution. | A scoped caller can confirm a topic exists in another world and learn its name and item count, and a deliberate visit to such a topic still records a view. A 404 on the world check plus recording only on a non-empty result closes both; it is ~5 lines in `taxonomy/routes.ts`. |
+| **A-M13** — the seed's `_usedIn` → `document_links` insert lost the `on conflict do nothing` the old `script_refs` insert had | `document_links` has no unique constraint to conflict on, so restoring the guard means adding one — and `document_links` legitimately carries several rows per pair (different `from_step_key`, `type`, `origin`). Picking the right constraint is a schema decision, not a seed fix. | A duplicated `_usedIn` entry in the fixture produces duplicate edges. The graph dedupes by `edgeKey`; `/scripts`'s `usedIn` does not, so a script would list the same document twice. |
+| **A-M14** — `user_roles.world_scope` has no FK to `worlds(slug)` while `documents.category` has one with `on update cascade` | Latent: `patchWorld` cannot change a slug (`WorldPatchSchema` omits it), so nothing can drift today. A `text[]` column cannot take a plain FK — it needs either a join table or a trigger, which is a schema change wave 4 does not otherwise need. | If slug editing is ever added, documents follow the rename through the cascade and every user's scope silently stops matching — a scoped user quietly seeing nothing. Whoever adds slug editing must add the join table with it. |
+| **B-M1** — the W1/W2 schema probes (`hasColumn` for `owner_id`/`editor_id`/`doc_type`, `to_regclass('document_topics')`, `probeCapabilities`, the `body_html` probe) always take the "present" branch now | The reviewer's own ruling was "drop probes, fallbacks and those two cases in W7". Removing them also means deleting the `feedback-alerts.test.ts` cases that keep the pre-W2 fallback alive, which is a test change unrelated to any Critical here. The `body_html` probe went with B-I2's rewrite; the rest stayed. | Two extra round trips on every uncached `/analytics/usage`, and a permanent second code path that is never exercised in production and cannot rot visibly. |
+| **B-M5** — `resolveOne` accepts any `(document_id, version)` that exists | §5.4 describes the picker as "the newest published version created *after* the feedback", and `getFeedbackDetail` already computes that list as `laterVersions`. Enforcing it server-side is a behaviour change to a route the web drawer drives, and it wants to land with the drawer, not against it. | An editor can resolve a report against an older version, or against a `kind='system'` row, and the "closed with version N" record then says something untrue. The fix is one `exists` against `laterVersions`' predicate. |
+| **B-M10** — a historical source version is served with the *current* etag | `getSourceVersion` selects `s.etag` (live) alongside `v.html`, so a client that opens version 3, edits and PUTs with that etag passes `If-Match` even though current is 7. Fixing it properly means giving each version its own etag (a column and a backfill); reusing the version number as a weak etag would change the `If-Match` contract mid-wave. B-I3 narrows the window by making the header mandatory, but does not close this. | An edit made on top of an old version can overwrite a newer one without a 412. Reachable only from the history pane's edit path. |
+| **B-M14** — `POST /assets` trusts the client's declared mime | The 4-mime allowlist plus `nosniff` and the immutable cache header keep this off the XSS path; the cost is cosmetic. Sniffing magic bytes wants to live next to `imageSize`, which already parses those same headers, and that is a small refactor rather than a guard. | A non-image labelled `image/png` is stored, `imageSize` reads garbage dimensions, and the docx exporter sizes a broken box around it. |
+| **B-M15** (partially) — `gcUnreferencedAssets` extracting ids into a join table on save | Done as far as one pass over each HTML column with a regexp rather than an assets × versions cross product, which removes the quadratic term. A real `asset_refs` join table maintained on save is a schema plus a write-path change, and the gc runs weekly. | The gc scans every HTML row once per run. Fine at this size; revisit if the source corpus grows an order of magnitude. |
+
+Two further notes for the ledger, neither a parked item:
+
+- **A-I8's stated symptom is not quite right, but its root cause is.** The review says restoring
+  0007's function on a wave-4 rollback makes "a query containing a Hebrew stopword stop matching".
+  It does not: with 0007's definition the *index* keeps the stopwords while `kb_tsquery` strips
+  them from the query, so the query is a subset of the vector and still matches. What actually
+  breaks is the invariant 0027 exists to hold — the two sides tokenise differently, and rows
+  written before and after the rollback are indexed inconsistently. The fix (restore 0027's
+  definition, which is what is live when 0030 runs) is the same either way, and the new
+  `migrations.test.ts` case asserts the index side still strips stopwords after rolling back
+  through 0030.
+- **A leak the new boundary rows caught that nothing in the review names.** `loadGraph` drops
+  orphaned catalogue nodes only `if (scopes)`. W4 gives every source document a `sources` row
+  titled after its document, so an unscoped *reader* was handed `source:<id>` nodes labelled with
+  the titles of drafts. The gate is now `scopes || !readUnpublished`.
