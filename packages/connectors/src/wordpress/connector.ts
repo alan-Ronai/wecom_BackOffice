@@ -100,8 +100,9 @@ export class WordPressConnector implements Connector<WpConfig> {
   }
 
   async push(cfg: WpConfig, externalId: string | null, content: LibraryContent): Promise<RemoteRef> {
-    const html = content.html && content.html.trim() ? content.html : renderWpHtml(content);
     const client = this.client(cfg);
+    let html = content.html && content.html.trim() ? content.html : renderWpHtml(content);
+    if (content.assets) html = await this.rewriteAssets(client, html, content.assets);
     let type: string;
     let post: WpPost;
     if (externalId) {
@@ -122,6 +123,34 @@ export class WordPressConnector implements Connector<WpConfig> {
       hash: contentHash(htmlToParagraphs(html)),
       updatedAt: post.modified_gmt + 'Z',
     };
+  }
+
+  private static ASSET_IMG = /<img([^>]*?)\ssrc="\/api\/v1\/assets\/([0-9a-f-]{36})"([^>]*)>/g;
+  /** Every KB asset image becomes a WordPress media item; unknown assets are dropped rather than left broken. */
+  private async rewriteAssets(
+    client: WpClient,
+    html: string,
+    resolve: NonNullable<LibraryContent['assets']>,
+  ): Promise<string> {
+    const uploaded = new Map<string, string>();
+    const ids = [...html.matchAll(WordPressConnector.ASSET_IMG)].map((m) => m[2]);
+    for (const id of new Set(ids)) {
+      const a = await resolve(id);
+      if (!a) continue;
+      const ext =
+        a.mime === 'image/png'
+          ? 'png'
+          : a.mime === 'image/gif'
+            ? 'gif'
+            : a.mime === 'image/webp'
+              ? 'webp'
+              : 'jpg';
+      const m = await client.uploadMedia(a.bytes, a.mime, `${id}.${ext}`);
+      uploaded.set(id, m.source_url);
+    }
+    return html.replace(WordPressConnector.ASSET_IMG, (_all, pre: string, id: string, post: string) =>
+      uploaded.has(id) ? `<img${pre} src="${uploaded.get(id)}"${post}>` : '',
+    );
   }
 
   /** `body` carries the raw request text so the HMAC can be checked byte for byte. */

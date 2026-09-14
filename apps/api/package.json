@@ -34,6 +34,7 @@
     "fastify-type-provider-zod": "^4.0.1",
     "ipaddr.js": "^2.5.0",
     "jszip": "^3.10.2",
+    "mammoth": "1.12.3",
     "node-pg-migrate": "^7.6.1",
     "openid-client": "^6.8.8",
     "pg": "^8.13.0",

@@ -1,5 +1,5 @@
 import type { ZodTypeAny } from 'zod';
-import type { Block, Document, Paragraph } from '@wecom/shared';
+import type { AssetBytesResolver, Block, Document, Paragraph } from '@wecom/shared';
 
 export interface ConnectorInfo {
   id: string;
@@ -25,6 +25,8 @@ export interface LibraryContent {
   document: Document;
   html: string;
   blocks: Block[];
+  /** W4: resolves `/api/v1/assets/<id>` images so a push can re-host them on the remote. */
+  assets?: AssetBytesResolver;
 }
 export interface RemoteRef {
   externalId: string;

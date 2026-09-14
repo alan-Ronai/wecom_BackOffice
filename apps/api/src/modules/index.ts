@@ -13,6 +13,7 @@ import graph from './graph/routes.js';
 import explorer from './explorer/routes.js';
 import dashboards from './dashboards/routes.js';
 import collab from './collab/routes.js'; // stage 5: collaboration
+import sourcedocs from './sourcedocs/index.js'; // wave 4: source documents
 import taxonomy from './taxonomy/index.js'; // wave 4 W1: worlds, topics, tags
 import { startJobs } from '../jobs/index.js';
 
@@ -36,6 +37,7 @@ export async function registerModules(v1: FastifyInstance) {
     explorer,
     dashboards,
     collab,
+    sourcedocs,
     taxonomy,
   ])
     await v1.register(m);

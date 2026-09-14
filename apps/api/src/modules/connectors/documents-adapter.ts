@@ -3,6 +3,7 @@ import type { Block, Document } from '@wecom/shared';
 import { withTransaction } from '../../lib/sql.js';
 import { publishDocument } from '../documents/publish.js';
 import { getDocument, getVersion, loadBlocksMap, saveStructure } from '../documents/repo.js';
+import { getSourceDocument, saveSourceDocument } from '../sourcedocs/repo.js';
 import type { DocumentsService } from './sync.js';
 
 /** `sources.kind` values a connector can own; anything else is stored as a generic json source. */
@@ -46,6 +47,13 @@ export function documentsAdapter(pool: pg.Pool): DocumentsService {
       );
       return { sourceId: r.rows[0].id };
     },
+
+    getSourceHtml: async (id) => (await getSourceDocument(pool, id))?.html ?? null,
+
+    putSourceFromRemote: (id, html, label) =>
+      withTransaction(pool, async (tx) => {
+        await saveSourceDocument(tx, id, { html, label, authorId: null });
+      }),
 
     /** Conflict resolution `merged`: write the merged tree and freeze it as a `sync` version. */
     replaceStructure: (id, doc, actorId, label) =>

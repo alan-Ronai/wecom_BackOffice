@@ -117,4 +117,21 @@ describe('push', () => {
     expect(ref.externalId).toBe('posts:7');
     expect(stub.posts.get('posts:7')?.content.rendered).toBe('<p>ידני</p>');
   });
+  it('pushes source html, uploading asset images to wp/v2/media and rewriting src', async () => {
+    const c = new WordPressConnector();
+    const A = '11111111-1111-4111-8111-111111111111';
+    const png = Uint8Array.from([137, 80, 78, 71]);
+    const ref = await c.push(cfg(), 'posts:7', {
+      ...content(),
+      html: `<h2>מקור</h2><p><img src="/api/v1/assets/${A}" alt="x"></p>`,
+      assets: async (id) => (id === A ? { bytes: png, mime: 'image/png' } : null),
+    });
+    const put = stub.puts.filter((p) => p.type === 'posts' && p.id === 7).pop()!;
+    expect((put.body as { content: string }).content).toContain('<h2>מקור</h2>');
+    expect((put.body as { content: string }).content).toContain('http://wp/media/');
+    expect((put.body as { content: string }).content).not.toContain('/api/v1/assets/');
+    expect(stub.media.length).toBe(1);
+    expect(stub.media[0].mime).toBe('image/png');
+    expect(ref.externalId).toBe('posts:7');
+  });
 });

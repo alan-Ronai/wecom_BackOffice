@@ -38,6 +38,7 @@ export async function registerSourcesModule(app: FastifyInstance): Promise<Pipel
       },
     },
   );
+  app.decorate('revisions', revisions); // W4: the sourcedocs module ingests through the same service
   const mapping = new MappingService(app.db);
   const deps: PipelineDeps = {
     revisions,

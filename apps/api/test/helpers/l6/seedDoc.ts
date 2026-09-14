@@ -2,6 +2,8 @@ import type pg from 'pg';
 import type { Block, Document } from '@wecom/shared';
 import type { SourceContent } from '@wecom/connectors';
 import type { DocumentsService, SourceRevisionService } from '../../../src/modules/connectors/sync.js';
+import { getSourceDocument, saveSourceDocument } from '../../../src/modules/sourcedocs/repo.js';
+import { withTransaction } from '../../../src/lib/sql.js';
 
 let seq = 0;
 
@@ -89,6 +91,12 @@ export function sqlDocumentsService(pool: pg.Pool): DocumentsService {
         )
       ).rows[0]?.snapshot ?? null,
     getBlocksFor: async (): Promise<Block[]> => [],
+    // W4: real source-document reads/writes so the sync path behaves as in production.
+    getSourceHtml: async (id) => (await getSourceDocument(pool, id))?.html ?? null,
+    putSourceFromRemote: (id, html, label) =>
+      withTransaction(pool, async (tx) => {
+        await saveSourceDocument(tx, id, { html, label, authorId: null });
+      }),
     ensureSourceForConnector: async (connectorId, externalId, title) => {
       const existing = await pool.query('select id from sources where connector_id=$1 and external_id=$2', [
         connectorId,

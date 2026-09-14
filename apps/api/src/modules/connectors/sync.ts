@@ -1,7 +1,7 @@
 import type pg from 'pg';
 import type { Connector, ConnectorRegistry, RemoteChange, RemoteItem, RemoteRef } from '@wecom/connectors';
 import type { SourceContent } from '@wecom/connectors';
-import { makeEvent, type Block, type Document, type Event } from '@wecom/shared';
+import { makeEvent, type AssetBytesResolver, type Block, type Document, type Event } from '@wecom/shared';
 import type { ConnectorsRepo, SyncLinkRow } from './repo.js';
 
 /**
@@ -28,6 +28,10 @@ export interface DocumentsService {
     title: string,
   ): Promise<{ sourceId: string }>;
   replaceStructure(id: string, doc: Document, actorId: string | null, label: string): Promise<Document>;
+  /** W4: the item's canonical HTML source, or null when it has none (fall back to the step render). */
+  getSourceHtml(documentId: string): Promise<string | null>;
+  /** W4: record an inbound remote body as a new source version (author null). Does not ingest — the caller already did. */
+  putSourceFromRemote(documentId: string, html: string, label: string): Promise<void>;
 }
 
 export interface EventBus {
@@ -41,6 +45,8 @@ export interface SyncDeps {
   revisions: SourceRevisionService;
   documents: DocumentsService;
   events: EventBus;
+  /** W4: resolves asset images so a push can re-host them on the remote. */
+  assets?: AssetBytesResolver;
 }
 
 export interface RunResult {
@@ -149,6 +155,7 @@ export class SyncService {
     if (remoteChanged && !localChanged) {
       const content = await conn.fetch(cfg, r!.externalId);
       if (link.source_id) await this.d.revisions.ingest(link.source_id, content, actorId);
+      if (content.raw) await this.d.documents.putSourceFromRemote(doc.id, content.raw, 'מוורדפרס');
       await this.d.repo.setLinkState(link.id, 'pending_import');
       result.imported++;
       return;
@@ -261,7 +268,13 @@ export class SyncService {
     doc: Document,
   ): Promise<SyncLinkRow> {
     const blocks = await this.d.documents.getBlocksFor(doc);
-    const ref = await conn.push(cfg, link.external_id, { document: doc, html: '', blocks });
+    const html = (await this.d.documents.getSourceHtml(doc.id)) ?? '';
+    const ref = await conn.push(cfg, link.external_id, {
+      document: doc,
+      html,
+      blocks,
+      assets: this.d.assets,
+    });
     return this.d.repo.upsertLink({
       documentId: doc.id,
       connectorId: link.connector_id,
@@ -287,7 +300,13 @@ export class SyncService {
     const sourceId = existing?.source_id ?? src.sourceId;
     const target = existing ? existing.external_id : src.externalId;
     const blocks = await this.d.documents.getBlocksFor(doc);
-    const ref = await conn.push(cfg, target, { document: doc, html: '', blocks });
+    const html = (await this.d.documents.getSourceHtml(doc.id)) ?? '';
+    const ref = await conn.push(cfg, target, {
+      document: doc,
+      html,
+      blocks,
+      assets: this.d.assets,
+    });
     await this.d.repo.upsertLink({
       documentId,
       connectorId,
@@ -360,6 +379,7 @@ export class SyncService {
     if (body.resolution === 'theirs') {
       const content = await conn.fetch(cfg, link.external_id);
       if (link.source_id) await this.d.revisions.ingest(link.source_id, content, actorId);
+      if (content.raw) await this.d.documents.putSourceFromRemote(doc.id, content.raw, 'מוורדפרס');
       const row = await this.d.repo.upsertLink({
         documentId: doc.id,
         connectorId: link.connector_id,
