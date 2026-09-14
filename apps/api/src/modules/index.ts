@@ -9,6 +9,7 @@ import search from './search/routes.js';
 import trash from './trash/routes.js';
 import preferences from './preferences/routes.js';
 import events from './events/routes.js';
+import collab from './collab/routes.js'; // stage 5: collaboration
 import { startJobs } from '../jobs/index.js';
 
 /**
@@ -16,7 +17,19 @@ import { startJobs } from '../jobs/index.js';
  * Other lanes add their module to this list — one line each, no changes to `app.ts`.
  */
 export async function registerModules(v1: FastifyInstance) {
-  for (const m of [documents, blocks, fields, scripts, notes, drafts, search, trash, preferences, events])
+  for (const m of [
+    documents,
+    blocks,
+    fields,
+    scripts,
+    notes,
+    drafts,
+    search,
+    trash,
+    preferences,
+    events,
+    collab,
+  ])
     await v1.register(m);
   // L2 background workers (trash.purge, search.reindex) bind to L1's `app.boss` once it is up.
   v1.addHook('onReady', async () => {
