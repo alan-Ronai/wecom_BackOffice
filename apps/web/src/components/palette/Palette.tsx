@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { escapeHtml } from '@wecom/shared';
+import { escapeHtml, type Permission } from '@wecom/shared';
 import { useSearch } from '../../api/hooks/search.js';
 import { useDebounced } from '../../lib/useDebounced.js';
 import { useNav } from '../shell/navStore.js';
@@ -8,6 +8,7 @@ import { usePalette } from './paletteStore.js';
 import { useEntityDialogs } from '../library/dialogs.js';
 import { useSettings } from '../settings/SettingsDialog.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
+import { useCan } from '../../api/hooks/me.js';
 import { Html } from '../Fmt.js';
 import type { SearchHit } from '../../api/types.js';
 
@@ -67,6 +68,7 @@ export function Palette() {
   const settings = useSettings();
   const prefs = usePreferences();
   const savePrefs = useSavePreferences();
+  const can = useCan();
 
   const [q, setQ] = useState('');
   const [type, setType] = useState('all');
@@ -155,8 +157,29 @@ export function Palette() {
       { id: 'type', title: 'הגדרות תצוגה וטיפוגרפיה', icon: '⚙', run: settings.open },
       { id: 'print', title: 'הדפסה', icon: '🖨', run: () => window.print() },
     );
+
+    /**
+     * The operator actions. Gated on the same permission as the route each one opens, so the
+     * palette never offers a destination that answers "אין הרשאה".
+     */
+    const gated: [Permission, string, string, string][] = [
+      ['sources.manage', 'sync', 'תור סנכרון – מה ממתין לייבוא או לדחיפה', '⟳'],
+      ['sources.manage', 'sync/parity', 'דו״ח התאמה – מה זהה ומה לא', '⚖'],
+      ['connectors.manage', 'admin/connectors', 'מחברים – הגדרה, בדיקה והרצה', '🔌'],
+      ['connectors.manage', 'admin/connectors/new', 'מחבר חדש', '✚'],
+      ['users.manage', 'admin/users', 'משתמשים – תפקידים והיקף קטגוריות', '👥'],
+      ['roles.manage', 'admin/roles', 'תפקידים והרשאות – מטריצת הרשאות', '🛡'],
+      ['roles.manage', 'admin/groups', 'מיפוי קבוצות Entra לתפקידים', '🔗'],
+      ['users.manage', 'admin/sessions', 'חיבורים פעילים – ניתוק מושב', '🖥'],
+      ['audit.read', 'admin/audit', 'יומן פעולות – מי שינה מה ומתי', '🧾'],
+      ['system.admin', 'admin/identity', 'זהות וכניסה – OIDC, שער, אורך מושב', '🪪'],
+      ['system.admin', 'admin/system', 'מצב מערכת', '⚙'],
+    ];
+    for (const [needs, to, title, icon] of gated)
+      if (can(needs)) list.push({ id: to, title, icon, run: () => go(`/${to}`) });
+
     return list;
-  }, [go, loc.pathname, nav, prefs.data, savePrefs, settings.open]);
+  }, [can, go, loc.pathname, nav, prefs.data, savePrefs, settings.open]);
 
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];

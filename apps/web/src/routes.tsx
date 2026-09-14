@@ -15,12 +15,18 @@ import { GraphPage } from './components/graph/GraphPage.js';
 import { FieldPage } from './components/library/FieldPage.js';
 import { BlockPage } from './components/library/BlockPage.js';
 import { DashboardsPage } from './components/dashboards/DashboardsPage.js';
+import { SyncQueuePage } from './components/sync/SyncQueuePage.js';
+import { ParityPage } from './components/sync/ParityPage.js';
+import { ConflictPage } from './components/sync/ConflictPage.js';
 import { AdminLayout } from './components/admin/AdminLayout.js';
 import { UsersPage } from './components/admin/UsersPage.js';
 import { RolesPage } from './components/admin/RolesPage.js';
 import { GroupsMapPage } from './components/admin/GroupsMapPage.js';
 import { SessionsPage } from './components/admin/SessionsPage.js';
 import { AuditPage } from './components/admin/AuditPage.js';
+import { IdentityPage } from './components/admin/IdentityPage.js';
+import { ConnectorsPage } from './components/admin/ConnectorsPage.js';
+import { ConnectorWizard } from './components/admin/ConnectorWizard.js';
 import { SystemPage } from './components/admin/SystemPage.js';
 
 /** Routes mirror the legacy hashes one-to-one (spec §5). */
@@ -58,6 +64,9 @@ export const routeObjects: RouteObject[] = [
       { path: 'data/:sourceId', element: <DataPage /> },
       { path: 'graph', element: <GraphPage /> },
       { path: 'dashboards', element: <DashboardsPage /> },
+      { path: 'sync', element: <SyncQueuePage /> },
+      { path: 'sync/parity', element: <ParityPage /> },
+      { path: 'sync/conflicts/:id', element: <ConflictPage /> },
       {
         path: 'admin',
         element: <AdminLayout />,
@@ -68,6 +77,11 @@ export const routeObjects: RouteObject[] = [
           { path: 'groups', element: <GroupsMapPage /> },
           { path: 'sessions', element: <SessionsPage /> },
           { path: 'audit', element: <AuditPage /> },
+          { path: 'identity', element: <IdentityPage /> },
+          { path: 'connectors', element: <ConnectorsPage /> },
+          // `new` before `:id`, or the wizard would try to load a connector called "new".
+          { path: 'connectors/new', element: <ConnectorWizard /> },
+          { path: 'connectors/:id', element: <ConnectorWizard /> },
           { path: 'system', element: <SystemPage /> },
         ],
       },

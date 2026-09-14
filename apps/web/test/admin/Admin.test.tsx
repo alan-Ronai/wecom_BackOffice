@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen } from '@testing-library/react';
 import { PERMISSIONS } from '@wecom/shared';
 import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
@@ -11,25 +10,14 @@ const asAdmin = () => server.use(withMe({ roles: ['admin'], permissions: [...PER
 
 describe('admin', () => {
   it('blocks non-admins', async () => {
+    // The demo persona is an administrator, so this needs an explicitly narrower user.
+    server.use(withMe({ roles: ['agent'], permissions: ['docs.read', 'notes.write'] }));
     renderWithProviders(<App />, { route: '/admin/users' });
     expect(await screen.findByText('אין הרשאה לאזור הניהול')).toBeInTheDocument();
   });
 
-  it('shows the permission matrix to admins and locks the admin role', async () => {
-    asAdmin();
-    renderWithProviders(<App />, { route: '/admin/roles' });
-    expect(await screen.findByText('docs.publish')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getAllByRole('columnheader').length).toBeGreaterThan(1));
-    expect(screen.getByLabelText('roles.manage · admin')).toBeDisabled();
-    expect(screen.getByLabelText('docs.publish · admin')).toBeEnabled();
-  });
-
-  it('lists users with their roles and scope', async () => {
-    asAdmin();
-    renderWithProviders(<App />, { route: '/admin/users' });
-    expect(await screen.findByText('ענבר ל.')).toBeInTheDocument();
-    expect(await screen.findByText(/טיפול בשיחה/)).toBeInTheDocument();
-  });
+  // The users and roles screens have their own suites — `test/admin/Users.test.tsx` and
+  // `test/admin/Roles.test.tsx`.
 
   it('renders the operator diagnostics from /admin/system', async () => {
     asAdmin();
@@ -50,20 +38,6 @@ describe('admin', () => {
     expect(await screen.findByText('לא ניתן לטעון מצב מערכת')).toBeInTheDocument();
   });
 
-  it('shows the audit log with a before/after diff', async () => {
-    asAdmin();
-    renderWithProviders(<App />, { route: '/admin/audit' });
-    expect(await screen.findByText('docs.publish')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'לפני / אחרי' }));
-    expect(await screen.findByText('לפני')).toBeInTheDocument();
-  });
-
-  it('lists sessions and group mappings', async () => {
-    asAdmin();
-    const { unmount } = renderWithProviders(<App />, { route: '/admin/sessions' });
-    expect(await screen.findByText('Chrome/128')).toBeInTheDocument();
-    unmount();
-    renderWithProviders(<App />, { route: '/admin/groups' });
-    await waitFor(() => expect(screen.getByLabelText('שם קבוצה 1')).toHaveValue('KB-Leads'));
-  });
+  // The audit explorer, sessions and group mappings have their own suites —
+  // `test/admin/Audit.test.tsx` and `test/admin/GroupsSessions.test.tsx`.
 });

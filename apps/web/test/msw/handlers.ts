@@ -15,6 +15,7 @@ import type { Document, Note, Suggestion } from '@wecom/shared';
 import * as fixtures from './fixtures.js';
 import { fx } from './fixtures.js';
 import { resetStage4State, stage4Handlers } from './stage4.js';
+import { resetStage5, stage5Handlers } from './stage5.js';
 import type { TrashItem } from '../../src/api/types.js';
 
 const B = '/api/v1';
@@ -55,6 +56,7 @@ export const state: State = initial();
 export function resetState(): void {
   Object.assign(state, initial());
   resetStage4State();
+  resetStage5();
 }
 
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
@@ -467,9 +469,7 @@ export const handlers: RequestHandler[] = [
     return HttpResponse.json(state.preferences);
   }),
 
-  http.get(`${B}/admin/users`, () =>
-    HttpResponse.json({ items: fx.users, total: fx.users.length, page: 1, pageSize: 50 }),
-  ),
+  // `GET /admin/users` lives in `stage5.ts` — stage 5 changed its row shape and added filters.
   // `{ ok, auditId }` — the caller re-reads the user from the invalidated list.
   http.patch(`${B}/admin/users/:id`, () => HttpResponse.json({ ok: true, auditId: AUDIT })),
   http.get(`${B}/admin/roles`, () => HttpResponse.json({ items: fx.roles })),
@@ -493,9 +493,17 @@ export const handlers: RequestHandler[] = [
   http.put(`${B}/admin/groups-map`, () => HttpResponse.json({ ok: true, auditId: AUDIT })),
   http.get(`${B}/admin/sessions`, () => HttpResponse.json({ items: fx.sessions })),
   http.delete(`${B}/admin/sessions/:id`, () => HttpResponse.json({ ok: true, auditId: AUDIT })),
-  http.get(`${B}/admin/audit`, () =>
-    HttpResponse.json({ items: fx.audit, total: fx.audit.length, page: 1, pageSize: 50 }),
-  ),
+  http.get(`${B}/admin/audit`, ({ request }) => {
+    const u = new URL(request.url);
+    const actorId = u.searchParams.get('actorId');
+    const entityType = u.searchParams.get('entityType');
+    const from = u.searchParams.get('from');
+    let items = fx.audit;
+    if (actorId) items = items.filter((e) => e.actorId === actorId);
+    if (entityType) items = items.filter((e) => e.entityType === entityType);
+    if (from) items = items.filter((e) => e.at >= from);
+    return HttpResponse.json({ items, total: items.length, page: 1, pageSize: 50 });
+  }),
   http.get(`${B}/admin/system`, () => HttpResponse.json(fx.system)),
   http.post(`${B}/admin/users`, async ({ request }) => {
     const b = (await request.json()) as { email: string; displayName: string };
@@ -519,6 +527,7 @@ export const handlers: RequestHandler[] = [
   // Stage 4 — connected data (`test/msw/stage4.ts`), kept in its own module so the two stages
   // can be reviewed apart. Registered last; the patterns are disjoint from everything above.
   ...stage4Handlers,
+  ...stage5Handlers,
 ];
 
 /** Override `/auth/me` for permission tests. */

@@ -23,7 +23,7 @@ import type {
   Version,
 } from '@wecom/shared';
 import { PERMISSIONS } from '@wecom/shared';
-import type { AdminUser, GroupMap, Session, TrashItem } from '../../src/api/types.js';
+import type { GroupMap, Session, TrashItem } from '../../src/api/types.js';
 
 export const U1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
 export const U2 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2';
@@ -42,7 +42,7 @@ export const SUG_1 = '88888888-8888-4888-8888-888888888881';
 export const ROLE_LEAD = '99999999-9999-4999-8999-999999999991';
 export const ROLE_ADMIN = '99999999-9999-4999-8999-999999999992';
 
-const T = '2025-06-12T12:48:00.000Z';
+export const T = '2025-06-12T12:48:00.000Z';
 
 /** Fills the schema defaults TypeScript still demands on the output type. */
 const step = (s: Partial<Step> & Pick<Step, 'key' | 'num' | 'title'>): Step => ({
@@ -64,23 +64,11 @@ export const me: Me = {
     active: true,
     lastLoginAt: T,
   },
-  roles: ['lead'],
-  permissions: [
-    'docs.read',
-    'docs.create',
-    'docs.edit',
-    'docs.publish',
-    'docs.delete',
-    'docs.restore',
-    'blocks.edit',
-    'fields.edit',
-    'scripts.edit',
-    'notes.write',
-    'notes.moderate',
-    'suggestions.review',
-    'suggestions.apply',
-    'sources.manage',
-  ],
+  // The demo persona is the administrator the design draws ("ענבר ל. · מנהלת"), so the mock-backed
+  // build can actually reach the operator screens. Tests that need a narrower user swap `/auth/me`
+  // with `withMe`.
+  roles: ['admin'],
+  permissions: [...PERMISSIONS],
   categoryScopes: null,
   preferences: { theme: null, font: 'plex', panel: true, callMode: true, sidebarExpanded: false },
 };
@@ -785,47 +773,43 @@ export const roles: Role[] = [
   },
 ];
 
-// `GET /admin/users` returns `AdminUserRowSchema`: the role grants the people page shows
-// (role, name, category scope) plus the derived IdP groups, live session count and
-// `createdAt`. The grant bookkeeping (`grantedBy`/`grantedAt`) is not part of this row.
-export const users: AdminUser[] = [
-  {
-    ...me.user,
-    roles: [{ roleId: ROLE_LEAD, roleName: 'lead', categoryScope: null }],
-    groups: ['KB-Leads'],
-    sessions: 1,
-    createdAt: T,
-  },
-  {
-    id: U2,
-    subject: 'dana@wecom.co.il',
-    source: 'entra',
-    email: 'dana@wecom.co.il',
-    displayName: 'דנה ר.',
-    initials: 'ד',
-    active: true,
-    lastLoginAt: T,
-    roles: [{ roleId: ROLE_LEAD, roleName: 'lead', categoryScope: ['ops'] }],
-    groups: ['KB-Leads'],
-    sessions: 0,
-    createdAt: T,
-  },
-];
+// `GET /admin/users` now answers `AdminUserRowSchema` rows (stage 5) — see `test/msw/stage5.ts`,
+// which owns that fixture so the row shape lives next to the handler that serves it.
 
 export const groupsMap: GroupMap[] = [{ idpGroupId: 'g-leads', idpGroupName: 'KB-Leads', roleId: ROLE_LEAD }];
 
+// Real user-agent strings: the screen parses them into "Chrome · Windows", and a fixture that
+// says `Chrome/128` would let that parser rot untested.
 export const sessions: Session[] = [
   {
     id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1',
     userId: U1,
-    ip: '10.0.0.7',
-    userAgent: 'Chrome/128',
+    ip: '10.20.4.17',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36',
+    createdAt: T,
+    lastSeenAt: T,
+    // Far enough out that "פג" is a state the fixture can still distinguish.
+    expiresAt: '2099-01-01T00:00:00.000Z',
+    revokedAt: null,
+  },
+  {
+    id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2',
+    userId: U2,
+    ip: '10.20.9.4',
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1',
     createdAt: T,
     lastSeenAt: T,
     expiresAt: T,
     revokedAt: null,
   },
 ];
+
+/**
+ * The audit explorer defaults to the last seven days, which is right for a log and wrong for a
+ * frozen fixture date — so these two entries are always "a couple of hours ago" and "yesterday".
+ */
+export const AUDIT_RECENT = new Date(Date.now() - 2 * 3_600_000).toISOString();
+export const AUDIT_YESTERDAY = new Date(Date.now() - 26 * 3_600_000).toISOString();
 
 export const audit: AuditEntry[] = [
   {
@@ -837,9 +821,23 @@ export const audit: AuditEntry[] = [
     entityId: D_BROWSING,
     before: { currentVersion: 6 },
     after: { currentVersion: 7 },
-    ip: '10.0.0.7',
+    ip: '10.20.4.17',
     requestId: 'req-1',
-    at: T,
+    at: AUDIT_RECENT,
+  },
+  // A second actor and a second entity type, so the explorer's filters have something to narrow.
+  {
+    id: 'dddddddd-dddd-4ddd-8ddd-ddddddddddd2',
+    actorId: U2,
+    actorName: 'דנה ר.',
+    action: 'roles.update',
+    entityType: 'role',
+    entityId: ROLE_LEAD,
+    before: { permissions: ['docs.read'] },
+    after: { permissions: ['docs.read', 'docs.edit'] },
+    ip: '10.20.4.61',
+    requestId: 'req-2',
+    at: AUDIT_YESTERDAY,
   },
 ];
 
@@ -891,7 +889,6 @@ export const fx = {
   revision,
   suggestions,
   trash,
-  users,
   roles,
   groupsMap,
   sessions,
