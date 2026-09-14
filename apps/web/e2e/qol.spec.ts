@@ -40,7 +40,7 @@ test('list mode: J/K move, X selects, and a bulk action applies to the selection
 
   const bar = page.getByRole('region', { name: 'פעולות על הפריטים שנבחרו' });
   await bar.getByRole('button', { name: '📌 הצמד' }).click();
-  await expect(page.getByText(/בוצע על 1 פריטים/)).toBeVisible();
+  await expect(page.getByText(/בוצע על פריט אחד/)).toBeVisible();
   await expect(page.getByText('1 נבחרו')).toBeHidden();
 });
 
