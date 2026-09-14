@@ -9,7 +9,6 @@ import {
   ErrorEnvelopeSchema,
   IdSchema,
   SyncLinkSchema,
-  SyncResolveBodySchema,
   SyncRunResultSchema,
   paginated,
   type Permission,
@@ -405,40 +404,11 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
     },
   );
 
-  /**
-   * @deprecated Superseded by `POST /sync/links/:id/resolve` (`sync-ui.ts`), which is the one
-   * the stage-5 contract names and the one the web calls. Both are registered and take
-   * different bodies (`SyncResolveBodySchema` vs `ResolveConflictBodySchema`), which is one
-   * resolve endpoint too many; this one is kept for the L6-era callers and marked `deprecated`
-   * in the OpenAPI so a client sees it before it is removed.
-   */
-  app.post(
-    '/sync-links/:id/resolve',
-    {
-      config: { requires: ['suggestions.apply'] as Permission[] },
-      schema: {
-        tags: ['connectors'],
-        deprecated: true,
-        params,
-        body: SyncResolveBodySchema,
-        response: { 200: SyncLinkSchema, 403: E, 404: E },
-      },
-    },
-    async (req, reply) => {
-      const link = await repo.linkById(req.params.id);
-      if (!link) return reply.status(404).send(notFound(req, 'קישור סנכרון לא נמצא'));
-      const updated = await sync.resolveConflict(link, req.body, userOf(req)?.id ?? null);
-      await audit(
-        req,
-        'sync.resolve',
-        'sync_link',
-        link.id,
-        { state: link.state },
-        { state: updated.state, resolution: req.body.resolution },
-      );
-      return reply.send(linkToApi(updated));
-    },
-  );
+  // The deprecated `POST /sync-links/:id/resolve` spelling was removed here: `POST
+  // /sync/links/:id/resolve` (`sync-ui.ts`) is the one the stage-5 contract names, the one the
+  // web calls, and the one `connectors-sync.int.test.ts` covers. The two took different bodies
+  // (`SyncResolveBodySchema` vs `ResolveConflictBodySchema`), which was one resolve endpoint too
+  // many; the acceptance review §6.1 marked this half for removal rather than for new tests.
 };
 
 export default routes;
