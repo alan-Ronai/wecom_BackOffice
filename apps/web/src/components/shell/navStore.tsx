@@ -138,9 +138,7 @@ export function NavProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const known = titles.current.get(loc.pathname);
-    document.title = docTitle(
-      known ?? ROUTE_TITLES[loc.pathname.split('/')[1] ?? ''] ?? 'מאגר ידע פנימי',
-    );
+    document.title = docTitle(known ?? ROUTE_TITLES[loc.pathname.split('/')[1] ?? ''] ?? 'מאגר ידע פנימי');
   }, [loc.pathname]);
 
   // M6: both pieces of state are derived up front and set separately. Calling `setActiveTab`

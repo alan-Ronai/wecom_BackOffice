@@ -42,10 +42,7 @@ describe('parity · editor quick commands (gap)', () => {
     await userEvent.click(await screen.findByText('+ שדה CRM'));
 
     const dialog = await screen.findByRole('dialog', { name: 'שדה CRM' });
-    await userEvent.selectOptions(
-      await screen.findByLabelText('בחר שדה מ-crm-fields.json'),
-      'sim block lbl',
-    );
+    await userEvent.selectOptions(await screen.findByLabelText('בחר שדה מ-crm-fields.json'), 'sim block lbl');
     await userEvent.click(await screen.findByRole('button', { name: 'הוסף' }));
     expect(dialog).not.toBeInTheDocument();
 

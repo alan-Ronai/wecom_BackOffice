@@ -52,9 +52,7 @@ describe('parity · Ctrl \\ (split screen)', () => {
     await screen.findByRole('heading', { name: /איטיות גלישה/ });
 
     await userEvent.keyboard('{Control>}\\{/Control}');
-    expect(
-      await screen.findByPlaceholderText('איזה מסמך להציג לצד הנוכחי?'),
-    ).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('איזה מסמך להציג לצד הנוכחי?')).toBeInTheDocument();
   });
 
   /** Legacy: closing the split confirms it — `KB.toast('פיצול מסך בוטל')`. */

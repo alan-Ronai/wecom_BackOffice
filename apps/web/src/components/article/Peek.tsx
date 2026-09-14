@@ -46,9 +46,7 @@ export function Peek() {
   const blocks = useBlocks();
   const shared = useMemo(() => {
     if (!doc || !currentQ.data) return [];
-    const mine = new Set(
-      currentQ.data.phases.flatMap((p) => p.steps.map((s) => s.blockId)).filter(Boolean),
-    );
+    const mine = new Set(currentQ.data.phases.flatMap((p) => p.steps.map((s) => s.blockId)).filter(Boolean));
     return doc.phases
       .flatMap((p) => p.steps)
       .filter((s) => s.blockId && mine.has(s.blockId))
