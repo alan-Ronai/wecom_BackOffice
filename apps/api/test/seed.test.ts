@@ -70,10 +70,15 @@ run('seed', () => {
         )
       ).rows[0].n,
     ).toBe(0);
-    expect((await db.pool.query(`select doc_type from documents where slug='pdf-011'`)).rows[0].doc_type).toBe('M');
-    expect((await db.pool.query(`select doc_type from documents where slug='topic-1'`)).rows[0].doc_type).toBe('I');
     expect(
-      (await db.pool.query(`select count(*)::int n from documents where doc_type='T' and kind='text'`)).rows[0].n,
+      (await db.pool.query(`select doc_type from documents where slug='pdf-011'`)).rows[0].doc_type,
+    ).toBe('M');
+    expect(
+      (await db.pool.query(`select doc_type from documents where slug='topic-1'`)).rows[0].doc_type,
+    ).toBe('I');
+    expect(
+      (await db.pool.query(`select count(*)::int n from documents where doc_type='T' and kind='text'`))
+        .rows[0].n,
     ).toBe(7);
     expect(
       (

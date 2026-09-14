@@ -107,10 +107,10 @@ const docTypeFor = (d: { code?: string; kind: string; phases: unknown[] }): stri
 
 /** W1: every item is a member of its primary world, plus its legacy topic when it had one. */
 const membership = async (tx: Tx, documentId: string, world: string, topicSlug: string | null) => {
-  await tx.query('insert into document_worlds(document_id, world_slug) values ($1,$2) on conflict do nothing', [
-    documentId,
-    world,
-  ]);
+  await tx.query(
+    'insert into document_worlds(document_id, world_slug) values ($1,$2) on conflict do nothing',
+    [documentId, world],
+  );
   if (topicSlug)
     await tx.query(
       'insert into document_topics(document_id, topic_id) select $1, t.id from topics t where t.slug=$2 on conflict do nothing',
@@ -309,7 +309,14 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
       const ins = await tx.query(
         `insert into documents(id, slug, title, description, category, wave, priority, kind, status, doc_type, tags, body_html, current_version, created_at, updated_at)
          values ($1,$2,$3,'','ops',3,'m','text','published','T',$4,$5,1,$6,$6) on conflict (id) do nothing returning id`,
-        [s.id, 'script-' + s.id.replace(/-/g, '').slice(0, 8), s.title, s.tags, textToHtml(s.text), s.updatedAt],
+        [
+          s.id,
+          'script-' + s.id.replace(/-/g, '').slice(0, 8),
+          s.title,
+          s.tags,
+          textToHtml(s.text),
+          s.updatedAt,
+        ],
       );
       if (!ins.rowCount) continue;
       counts.scripts++;

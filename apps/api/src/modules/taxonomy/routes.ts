@@ -145,10 +145,17 @@ export default async function routes(app: FastifyInstance) {
       const force = (req.query as { force?: boolean }).force === true;
       await withTransaction(app.db, async (tx) => {
         const w = await repo.deactivateWorld(tx, slug, force, user.id);
-        await log(req)(tx, 'taxonomy.world.deactivate', 'world', w.id, { active: true }, {
-          active: false,
-          force,
-        });
+        await log(req)(
+          tx,
+          'taxonomy.world.deactivate',
+          'world',
+          w.id,
+          { active: true },
+          {
+            active: false,
+            force,
+          },
+        );
         await changed(tx, 'world', w.id);
       });
       reply.code(204);

@@ -103,31 +103,34 @@ type Row = Record<string, never> & Record<string, unknown>;
 /** Assemble the normalised rows of several documents into the shared `Document` shape. */
 export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Document>> {
   if (!ids.length) return new Map();
-  const [docs, phases, steps, actions, outcomes, branches, options, worldRows, topicRows] =
-    await Promise.all([
-    q.query('select * from documents where id = any($1) and deleted_at is null', [ids]),
-    q.query('select * from phases where document_id = any($1) order by position', [ids]),
-    q.query('select * from steps where document_id = any($1) order by position', [ids]),
-    q.query(
-      'select a.* from step_actions a join steps s on s.id=a.step_id where s.document_id = any($1) order by a.position',
-      [ids],
-    ),
-    q.query(
-      'select o.* from step_outcomes o join steps s on s.id=o.step_id where s.document_id = any($1) order by o.position',
-      [ids],
-    ),
-    q.query('select b.* from step_branches b join steps s on s.id=b.step_id where s.document_id = any($1)', [
-      ids,
-    ]),
-    q.query(
-      'select o.* from step_branch_options o join step_branches b on b.id=o.branch_id join steps s on s.id=b.step_id where s.document_id = any($1) order by o.position',
-      [ids],
-    ),
-    q.query('select document_id, world_slug from document_worlds where document_id = any($1)', [ids]),
-    q.query('select document_id, topic_id from document_topics where document_id = any($1) order by topic_id', [
-      ids,
-    ]),
-  ]);
+  const [docs, phases, steps, actions, outcomes, branches, options, worldRows, topicRows] = await Promise.all(
+    [
+      q.query('select * from documents where id = any($1) and deleted_at is null', [ids]),
+      q.query('select * from phases where document_id = any($1) order by position', [ids]),
+      q.query('select * from steps where document_id = any($1) order by position', [ids]),
+      q.query(
+        'select a.* from step_actions a join steps s on s.id=a.step_id where s.document_id = any($1) order by a.position',
+        [ids],
+      ),
+      q.query(
+        'select o.* from step_outcomes o join steps s on s.id=o.step_id where s.document_id = any($1) order by o.position',
+        [ids],
+      ),
+      q.query(
+        'select b.* from step_branches b join steps s on s.id=b.step_id where s.document_id = any($1)',
+        [ids],
+      ),
+      q.query(
+        'select o.* from step_branch_options o join step_branches b on b.id=o.branch_id join steps s on s.id=b.step_id where s.document_id = any($1) order by o.position',
+        [ids],
+      ),
+      q.query('select document_id, world_slug from document_worlds where document_id = any($1)', [ids]),
+      q.query(
+        'select document_id, topic_id from document_topics where document_id = any($1) order by topic_id',
+        [ids],
+      ),
+    ],
+  );
   const phasesBy = groupBy(phases.rows as Row[], 'document_id');
   const stepsBy = groupBy(steps.rows as Row[], 'phase_id');
   const actBy = groupBy(actions.rows as Row[], 'step_id');
@@ -363,7 +366,13 @@ export async function insertDocument(
       await tx.query('savepoint insert_document');
       const r = await tx.query(sql, values(slug));
       try {
-        await syncMemberships(tx, r.rows[0].id as string, body.category, body.worlds ?? [], body.topics ?? []);
+        await syncMemberships(
+          tx,
+          r.rows[0].id as string,
+          body.category,
+          body.worlds ?? [],
+          body.topics ?? [],
+        );
       } catch (e) {
         mapTaxonomyFkError(e);
       }

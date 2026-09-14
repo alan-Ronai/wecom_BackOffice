@@ -28,7 +28,12 @@ export default async function routes(app: FastifyInstance) {
     '/scripts',
     {
       config: { requires: ['scripts.edit'] },
-      schema: { deprecated: true, tags: ['scripts'], body: UpsertScriptBodySchema, response: { 200: ScriptSchema } },
+      schema: {
+        deprecated: true,
+        tags: ['scripts'],
+        body: UpsertScriptBodySchema,
+        response: { 200: ScriptSchema },
+      },
     },
     async (req) => {
       const user = requireUser(req);
@@ -89,7 +94,12 @@ export default async function routes(app: FastifyInstance) {
     '/scripts/:id',
     {
       config: { requires: ['scripts.edit'] },
-      schema: { deprecated: true, tags: ['scripts'], params: Params, response: { 200: z.object({ auditId: z.string() }) } },
+      schema: {
+        deprecated: true,
+        tags: ['scripts'],
+        params: Params,
+        response: { 200: z.object({ auditId: z.string() }) },
+      },
     },
     async (req) => {
       const user = requireUser(req);

@@ -93,12 +93,7 @@ export async function patchWorld(tx: Tx, slug: string, body: WorldPatch, userId:
   return (await getWorld(tx, slug))!;
 }
 /** Never deletes rows: items and history stay. 409 while active items remain unless `force`. */
-export async function deactivateWorld(
-  tx: Tx,
-  slug: string,
-  force: boolean,
-  userId: string,
-): Promise<World> {
+export async function deactivateWorld(tx: Tx, slug: string, force: boolean, userId: string): Promise<World> {
   const w = await getWorld(tx, slug);
   if (!w) throw httpError(404, 'NOT_FOUND', 'עולם התוכן לא נמצא');
   if (w.itemCount > 0 && !force)
@@ -250,7 +245,10 @@ export async function topicView(q: Q, topicId: string, vis: Visibility): Promise
   return TopicViewSchema.parse({ topic, world, groups });
 }
 
-export async function listTags(q: Q, o: { q?: string; limit: number }): Promise<{ tag: string; count: number }[]> {
+export async function listTags(
+  q: Q,
+  o: { q?: string; limit: number },
+): Promise<{ tag: string; count: number }[]> {
   const r = await q.query(
     `select tag, count(*)::int count from documents d, unnest(d.tags) tag
       where d.deleted_at is null and ($1::text is null or tag ilike '%' || $1 || '%')
