@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"><style>body{margin:0;background:#ECEEF1;font-family:'IBM Plex Sans Hebrew',Rubik,system-ui,sans-serif;color:#1F2E3B}a{color:#1F2E3B}a:hover{color:#FF3D00}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}@keyframes wkPulse{0%,100%{opacity:.35}50%{opacity:1}}
+/* shared tokens for turns 3–6 */
+.k-side{background:#1F2E3B;color:#fff;display:flex;flex-direction:column;padding:16px 0}.k-side .logo{padding:0 18px 14px;font-size:22px;font-weight:700;color:#FF3D00;font-family:Rubik,sans-serif}.k-side .sec{padding:6px 18px;font-size:10.5px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.4)}.k-side .nav{display:flex;flex-direction:column;gap:2px;padding:0 10px;font-size:13px}.k-side .nav>div{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;color:rgba(255,255,255,.7)}.k-side .nav>div.on{background:rgba(255,61,0,.16);color:#fff;font-weight:500}.k-side .nav .cnt{margin-inline-start:auto;font-size:11px;color:rgba(255,255,255,.5)}
+.k-top{height:56px;display:flex;align-items:center;gap:10px;padding:0 22px;background:#fff;border-bottom:1px solid #E2E4E6}.k-crumb{font-size:12.5px;color:#6B7280}.k-crumb b{color:#1F2E3B;font-weight:500}.k-actions{margin-inline-start:auto;display:flex;gap:8px}
+.k-btn{white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;border:1px solid #E2E4E6;font-size:12.5px;background:#fff}.k-btn.p{background:#FF3D00;color:#fff;border-color:#FF3D00;font-weight:500}.k-btn.n{background:#1F2E3B;color:#fff;border-color:#1F2E3B}.k-btn.d{color:#C02800;border-color:#FFB596}
+.k-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;background:#F5F5F5;color:#6B7280;white-space:nowrap}.k-chip.red{background:#FFF0EB;color:#C02800}.k-chip.amber{background:#FFF8EE;color:#B86A00}.k-chip.green{background:#EDFAF3;color:#1A7A4A}.k-chip.blue{background:#EBF1FF;color:#1D45B4}.k-chip.navy{background:#1F2E3B;color:#fff}
+.k-eyebrow{font-size:10.5px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:#6B7280}.k-card{background:#fff;border:1px solid #E2E4E6;border-radius:12px;padding:14px 16px}.k-mono{font-family:'IBM Plex Mono',monospace;unicode-bidi:isolate;direction:ltr}.k-crm{unicode-bidi:isolate;direction:ltr;display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;background:#1F2E3B;color:#fff;padding:1px 7px;border-radius:5px}.k-crm.rtl{direction:rtl}
+.k-table{display:grid;gap:0;font-size:12.5px}.k-table>div{display:contents}.k-table>div>span{padding:10px 12px;border-bottom:1px solid #F0F2F4;display:flex;align-items:center;gap:8px;min-width:0}.k-table>div.h>span{font-size:10.5px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:#6B7280;border-bottom:1px solid #E2E4E6}.k-table>div.sel>span{background:#FFF8F5}
+.k-av{width:26px;height:26px;border-radius:50%;background:#1F2E3B;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:600;flex-shrink:0}.k-av.r{background:#FF3D00}.k-av.g{background:#A6ABB0}
+.k-kbd{font-family:'IBM Plex Mono',monospace;font-size:10.5px;background:#F0F2F4;padding:1px 6px;border-radius:4px;color:#6B7280;direction:ltr;unicode-bidi:isolate}
+.k-toggle{width:30px;height:18px;border-radius:9px;background:#C7CBD0;position:relative;flex-shrink:0}.k-toggle.on{background:#FF3D00}.k-toggle::after{content:'';position:absolute;top:2px;right:2px;width:14px;height:14px;border-radius:50%;background:#fff}.k-toggle.on::after{right:auto;left:2px}
+.k-focus{outline:2px solid #FF3D00;outline-offset:2px;border-radius:6px}
+/* carried from turn 6 — segmented control, mobile frame */
+.q-seg{display:inline-flex;border:1px solid #E2E4E6;border-radius:8px;overflow:hidden;font-size:11.5px;background:#fff}.q-seg>span{padding:5px 10px;color:#6B7280}.q-seg>span.on{background:#1F2E3B;color:#fff;font-weight:500}
+.q-mob{width:390px;box-sizing:border-box;background:#F4F5F7;display:flex;flex-direction:column;height:720px;overflow:hidden}
+.q-botnav{display:flex;background:#fff;border-top:1px solid #E2E4E6;padding:8px 6px 12px;font-size:10.5px;color:#6B7280}.q-botnav>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px}.q-botnav>div.on{color:#FF3D00;font-weight:600}
+/* turn 7 — taxonomy, feedback, source, usage */
+.t-b{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:5px;font:600 11px/1 'IBM Plex Mono',monospace;direction:ltr;unicode-bidi:isolate;flex-shrink:0;color:#fff}
+.t-b.M{background:#1D45B4}.t-b.R{background:#1A7A4A}.t-b.O{background:#5A6472}.t-b.E{background:#C02800}.t-b.S{background:#6B3FA0}.t-b.T{background:#B86A00}.t-b.I{background:#0E7C86}
+.t-b.sm{width:17px;height:17px;font-size:9.5px;border-radius:4px}
+.t-bl{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;white-space:nowrap}
+.t-tabs{display:flex;gap:2px;font-size:12.5px;border-bottom:1px solid #E2E4E6;background:#fff;flex-wrap:wrap}
+.t-tabs>span{padding:9px 13px;color:#6B7280;border-bottom:2px solid transparent;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.t-tabs>span.on{color:#1F2E3B;font-weight:600;border-bottom-color:#FF3D00}
+.t-grip{color:#C7CBD0;font-size:12px;letter-spacing:-2px;flex-shrink:0;cursor:grab}
+.t-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid #F0F2F4;font-size:12.5px;min-width:0}
+.t-row.on{background:#FFF8F5;box-shadow:inset 3px 0 0 #FF3D00}
+.t-row.off{color:#A6ABB0}
+.t-ghost{border:1px dashed #FFB596;background:#FFF8F5;border-radius:8px}
+.t-dlg{background:#fff;border-radius:14px;box-shadow:0 18px 48px rgba(31,46,59,.26);border:1px solid #E2E4E6;box-sizing:border-box}
+.t-dhd{display:flex;align-items:center;gap:8px;padding:14px 18px 10px;font-size:15px;font-weight:600}
+.t-dbd{padding:4px 18px 14px;display:flex;flex-direction:column;gap:11px}
+.t-dft{display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid #F0F2F4;background:#FAFBFC;border-radius:0 0 13px 13px;flex-wrap:wrap}
+.t-fld{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:#6B7280}
+.t-in{border:1px solid #D7DBDF;border-radius:8px;padding:7px 10px;font-size:12.5px;color:#1F2E3B;background:#fff;display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:17px}
+.t-in.ph{color:#A6ABB0}
+.t-in.sel::after{content:'⌄';margin-inline-start:auto;color:#6B7280}
+.t-radio{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid #E2E4E6;border-radius:9px;font-size:12.5px;background:#fff}
+.t-radio.on{border-color:#FF3D00;background:#FFF8F5}
+.t-dot{width:14px;height:14px;border-radius:50%;border:1.5px solid #C7CBD0;flex-shrink:0;margin-top:2px;box-sizing:border-box}
+.t-radio.on .t-dot{border-color:#FF3D00;border-width:4.5px}
+.t-chk{width:15px;height:15px;border-radius:4px;border:1.5px solid #C7CBD0;flex-shrink:0;display:grid;place-items:center;font:600 8.5px/1 system-ui,sans-serif;color:#fff;box-sizing:border-box}
+.t-chk.on{background:#FF3D00;border-color:#FF3D00}
+.t-tool{display:flex;flex-wrap:wrap;align-items:center;gap:2px;padding:6px 8px;border-bottom:1px solid #E2E4E6;background:#FAFBFC}
+.t-tool>span{min-width:26px;height:26px;box-sizing:border-box;display:inline-grid;place-items:center;border-radius:6px;font-size:12.5px;color:#4B5563;padding:0 6px}
+.t-tool>span.on{background:#1F2E3B;color:#fff}
+.t-tool>span.sep{min-width:1px;width:1px;height:16px;background:#E2E4E6;padding:0;margin:0 4px;border-radius:0}
+.t-bar{height:9px;border-radius:5px;background:#EEF0F3;overflow:hidden;flex:1;min-width:0}
+.t-bar>i{display:block;height:100%;border-radius:5px;background:#FF3D00}
+.t-bar>i.b{background:#1D45B4}.t-bar>i.g{background:#1A7A4A}.t-bar>i.n{background:#5A6472}
+.t-col{display:flex;align-items:flex-end;gap:4px;height:64px}
+.t-col>i{flex:1;min-width:6px;background:#C9D6E8;border-radius:3px 3px 0 0;display:block}
+.t-col>i.hi{background:#FF3D00}
+.t-banner{display:flex;align-items:flex-start;gap:9px;padding:10px 16px;font-size:12.5px;line-height:1.5}
+.t-banner.amber{background:#FFF8EE;border-bottom:1px solid #F1DEC0;color:#7A4E00}
+.t-banner.red{background:#FFF0EB;border-bottom:1px solid #FFD4C2;color:#8A1E00}
+.t-banner.blue{background:#EBF1FF;border-bottom:1px solid #CBD9F7;color:#123089}
+.t-empty{display:flex;flex-direction:column;align-items:center;gap:7px;padding:26px 16px;text-align:center;color:#6B7280;font-size:12.5px;line-height:1.5}
+.t-url{font-family:'IBM Plex Mono',monospace;direction:ltr;unicode-bidi:isolate;font-size:11px;background:#F0F2F4;border-radius:7px;padding:5px 9px;color:#4B5563;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.t-hint{font-size:11px;color:#6B7280;display:flex;align-items:center;gap:8px;flex-wrap:wrap;line-height:1.7}
+.t-tag{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;padding:1px 8px;border-radius:5px;background:#F0F2F4;color:#4B5563;white-space:nowrap}
+.t-tag.x{background:#1F2E3B;color:#fff}
+.t-doc{font-size:12.5px;line-height:1.75;color:#333D47}
+.t-doc h4{margin:0 0 4px;font-size:14px}
+.t-doc p{margin:0 0 8px}
+.t-sr{position:relative;padding-inline-start:10px}
+.t-sr::before{content:'';position:absolute;inset-block:2px;inset-inline-start:0;width:3px;border-radius:3px;background:#FFB596}
+</style></helmet>
+<section class="dv-turn" id="t7">
+<div class="dv-thd"><a class="dv-tid" href="#t7">7</a><span class="dv-tname">גל 4 — טקסונומיה, נושאים, משוב, מסמך מקור, שימוש וממשל</span></div>
+<div class="dv-opts">
+
+<!-- ══════════ 7a ══════════ -->
+<div class="dv-opt" id="7a">
+<div class="dv-olabel"><a class="dv-oid" href="#7a">7a</a>Taxonomy admin <bdi class="k-mono">/admin/taxonomy</bdi> — עולמות ונושאים, גרירה לסידור, מתג פעיל, מונים, דיאלוגי הוספה/שינוי־שם, והעברת פריטים בהשבתה (409)</div>
+<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+
+  <div class="dv-card" dir="rtl" style="width:1280px;height:720px;display:grid;grid-template-columns:210px 1fr;background:#F4F5F7">
+    <div class="k-side">
+      <div class="logo">wecom.</div>
+      <div class="sec">ניהול</div>
+      <div class="nav">
+        <div>👥 משתמשים<span class="cnt">34</span></div>
+        <div>🛡 תפקידים והרשאות</div>
+        <div>🔌 מחברים<span class="cnt">3</span></div>
+        <div class="on">🗂 עולמות תוכן ונושאים<span class="cnt">6</span></div>
+        <div>💬 משוב<span class="cnt">12</span></div>
+        <div>📈 שימוש</div>
+        <div>📜 יומן ביקורת</div>
+      </div>
+      <div style="margin-top:auto;padding:12px 18px 0;font-size:11px;color:rgba(255,255,255,.5);line-height:1.7">נדרשת הרשאת<br><bdi class="k-mono" style="color:#FFB596">taxonomy.manage</bdi></div>
+    </div>
+    <div style="display:flex;flex-direction:column;min-width:0">
+      <div class="k-top"><span class="k-crumb">ניהול · <b>עולמות תוכן ונושאים</b></span>
+        <div class="k-actions"><span class="k-btn">↺ שחזר סדר</span><span class="k-btn">✚ נושא חדש</span><span class="k-btn p">✚ עולם תוכן</span></div></div>
+
+      <div class="t-banner blue"><span>ℹ️</span><div>סדר העולמות והנושאים כאן הוא הסדר בסרגל הצד ובדף הנושא. גרירה שומרת מיד דרך <bdi class="k-mono">PUT /worlds/reorder</bdi>; השבתה אף פעם לא מוחקת — הפריטים וההיסטוריה נשארים.</div></div>
+
+      <div style="flex:1;display:grid;grid-template-columns:500px 1fr;gap:16px;padding:16px 18px;min-height:0;min-width:0">
+
+        <!-- worlds -->
+        <div class="k-card" style="padding:0;display:flex;flex-direction:column;min-height:0;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid #E2E4E6">
+            <b style="font-size:13.5px">עולמות תוכן</b><span class="k-chip">6 פעילים · 1 מושבת</span>
+            <span style="margin-inline-start:auto" class="t-hint"><span class="k-kbd">Space</span> הרם <span class="k-kbd">↑ ↓</span> הזז</span>
+          </div>
+          <div style="flex:1;overflow:hidden;min-height:0">
+            <sc-for list="{{ worlds }}" as="w">
+              <div class="t-row {{ w.cls }}" onClick="{{ w.pick }}">
+                <span class="t-grip">⣿</span>
+                <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px">
+                  <div style="display:flex;align-items:center;gap:7px;min-width:0">
+                    <b style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ w.name }}</b>
+                    <bdi class="k-mono" style="font-size:10.5px;color:#9BA6B2">{{ w.slug }}</bdi>
+                  </div>
+                  <span style="font-size:11px;color:#6B7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ w.desc }}</span>
+                </div>
+                <span class="k-chip" style="flex-shrink:0">{{ w.topics }} נושאים</span>
+                <span class="k-chip blue" style="flex-shrink:0">{{ w.items }} פריטים</span>
+                <span class="k-toggle {{ w.tg }}"></span>
+                <span style="color:#9BA6B2;flex-shrink:0">⋮</span>
+              </div>
+            </sc-for>
+            <div class="t-row t-ghost" style="margin:8px 12px;border-bottom:none;color:#B86A00">
+              <span class="t-grip" style="color:#FFB596">⣿</span><span>גרירה: “מסלולים” יעבור למקום 3 — שחרור שומר</span><span class="k-chip amber" style="margin-inline-start:auto">שומר…</span>
+            </div>
+          </div>
+          <div style="padding:9px 14px;border-top:1px solid #F0F2F4;font-size:11px;color:#6B7280;display:flex;gap:10px;align-items:center">
+            <span>מושבת אחד מוסתר —</span><span style="color:#FF3D00">הצג מושבתים</span>
+            <span style="margin-inline-start:auto"><span class="k-kbd">Enter</span> פתח נושאים</span>
+          </div>
+        </div>
+
+        <!-- topics of selected world -->
+        <div class="k-card" style="padding:0;display:flex;flex-direction:column;min-height:0;overflow:hidden;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid #E2E4E6;flex-wrap:wrap">
+            <b style="font-size:13.5px">נושאים ב“{{ sel.name }}”</b>
+            <bdi class="k-mono" style="font-size:10.5px;color:#9BA6B2">{{ sel.slug }}</bdi>
+            <span class="k-btn" style="margin-inline-start:auto;padding:4px 10px;font-size:11.5px">✎ שנה שם</span>
+            <span class="k-btn" style="padding:4px 10px;font-size:11.5px">✚ נושא</span>
+          </div>
+          <div style="flex:1;min-height:0;overflow:hidden">
+            <sc-for list="{{ sel.list }}" as="t">
+              <div class="t-row {{ t.cls }}">
+                <span class="t-grip">⣿</span>
+                <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px">
+                  <div style="display:flex;align-items:center;gap:7px;min-width:0"><b style="font-size:12.5px">{{ t.name }}</b><bdi class="k-mono" style="font-size:10.5px;color:#9BA6B2">{{ t.slug }}</bdi><sc-if value="{{ t.flag }}" hint-placeholder-val="{{ true }}"><span class="k-chip red">{{ t.flag }}</span></sc-if></div>
+                  <span style="font-size:11px;color:#6B7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.desc }}</span>
+                </div>
+                <span class="k-chip blue" style="flex-shrink:0">{{ t.items }} פריטים</span>
+                <span class="k-toggle {{ t.tg }}"></span>
+                <span style="color:#9BA6B2;flex-shrink:0">⋮</span>
+              </div>
+            </sc-for>
+            <sc-if value="{{ sel.empty }}" hint-placeholder-val="{{ true }}">
+              <div class="t-empty"><span style="font-size:22px">🗂</span><b style="font-size:13px;color:#1F2E3B">אין עדיין נושאים בעולם הזה</b><span>נושא מקבץ פריטים לפי סוג — אבחון, טיפול, תפעול. הוסיפו את הראשון כדי שהפריטים יופיעו ב־<bdi class="k-mono">/topic/:id</bdi>.</span><span class="k-btn p" style="margin-top:4px">✚ נושא ראשון</span></div>
+            </sc-if>
+          </div>
+          <div style="padding:9px 14px;border-top:1px solid #F0F2F4;font-size:11px;color:#6B7280;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <span>הסדר נשמר אוטומטית</span>
+            <span style="margin-inline-start:auto"><span class="k-kbd">Esc</span> בטל גרירה · <span class="k-kbd">Ctrl Z</span> החזר סדר</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- add / rename dialog -->
+  <div class="dv-card t-dlg" dir="rtl" style="width:380px">
+    <div class="t-dhd">✚ עולם תוכן חדש<span style="margin-inline-start:auto;color:#9BA6B2;font-size:15px">✕</span></div>
+    <div class="t-dbd">
+      <label class="t-fld">שם התצוגה<span class="t-in">אבטחה ופרטיות</span></label>
+      <label class="t-fld">מזהה (slug)<span class="t-in"><bdi class="k-mono">security</bdi><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">נוצר מהשם · ניתן לעריכה</span></span></label>
+      <label class="t-fld">תיאור<span class="t-in ph">מה נכנס לעולם הזה — נראה בראש דף הנושא</span></label>
+      <div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span class="k-toggle on"></span>פעיל מיד <span style="color:#6B7280;font-size:11px">— יופיע בסרגל הצד ובמסנני הספרייה</span></div>
+      <div class="t-banner red" style="border-radius:9px;border:1px solid #FFD4C2;border-bottom:1px solid #FFD4C2"><span>⛔</span><div><b>409 · <bdi class="k-mono">WORLD_EXISTS</bdi></b><br>עולם תוכן עם מזהה זה כבר קיים. בחרו מזהה אחר.</div></div>
+    </div>
+    <div class="t-dft"><span class="k-btn p">צור</span><span class="k-btn">ביטול</span><span class="t-hint" style="margin-inline-start:auto"><span class="k-kbd">Ctrl Enter</span> צור</span></div>
+  </div>
+
+  <!-- 409 move-items dialog -->
+  <div class="dv-card t-dlg" dir="rtl" style="width:470px">
+    <div class="t-dhd">⚠️ השבתת “מסלולים”<span style="margin-inline-start:auto;color:#9BA6B2;font-size:15px">✕</span></div>
+    <div class="t-dbd">
+      <div class="t-banner amber" style="border-radius:9px;border:1px solid #F1DEC0;border-bottom:1px solid #F1DEC0"><span>⚠️</span><div><b>409 · <bdi class="k-mono">WORLD_IN_USE</bdi></b><br>בעולם התוכן יש עדיין <b>11 פריטים</b> פעילים. אפשר להעביר אותם לעולם אחר, או להשבית בכל זאת — הפריטים יישארו משויכים ויוסתרו מהניווט.</div></div>
+      <label class="t-fld">העבר את 11 הפריטים אל<span class="t-in sel">חיובים <bdi class="k-mono" style="font-size:10.5px;color:#9BA6B2">billing</bdi></span></label>
+      <div class="t-fld">הפריטים שיועברו
+        <div style="border:1px solid #E2E4E6;border-radius:9px;overflow:hidden">
+          <div class="t-row" style="padding:7px 11px"><span class="t-chk on">✓</span><span class="t-b sm R">R</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1F2E3B">שדרוג מסלול באמצע תקופה</span><span class="k-chip green">פורסם</span></div>
+          <div class="t-row" style="padding:7px 11px"><span class="t-chk on">✓</span><span class="t-b sm M">M</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1F2E3B">בירור חריגת חבילת גלישה</span><span class="k-chip green">פורסם</span></div>
+          <div class="t-row" style="padding:7px 11px;border-bottom:none"><span class="t-chk">·</span><span class="t-b sm I">I</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1F2E3B">טבלת מסלולים 2026</span><span class="k-chip amber">טיוטה</span></div>
+        </div>
+        <span style="font-size:11px;color:#6B7280">10 מתוך 11 נבחרו · פריט שלא נבחר יישאר ב“מסלולים” המושבת</span>
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px"><span class="t-chk on" style="margin-top:2px">✓</span><span>שמור את “מסלולים” כעולם מושבת (ניתן להפעיל חזרה) — הנתונים לא נמחקים</span></label>
+    </div>
+    <div class="t-dft"><span class="k-btn p">העבר והשבת</span><span class="k-btn d">השבת בלי להעביר</span><span class="k-btn">ביטול</span></div>
+  </div>
+
+</div></div>
+
+<!-- ══════════ 7b ══════════ -->
+<div class="dv-opt" id="7b">
+<div class="dv-olabel"><a class="dv-oid" href="#7b">7b</a>Topic page <bdi class="k-mono">/topic/:id</bdi> — כותרת עולם ותיאור, שורה לכל סוג מסמך בסדר ה‑PRD (M אבחון · R טיפול · O תפעול · E הסלמה · S מומחה · T תסריט · I מידע), תגי סוג, עולמות, תגיות, תאריכי עדכון, הקודם/הבא, ומצב פריט לא זמין</div>
+<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+
+  <div class="dv-card" dir="rtl" style="width:1280px;height:1090px;display:grid;grid-template-columns:210px 1fr;background:#F4F5F7">
+    <div class="k-side">
+      <div class="logo">wecom.</div>
+      <div class="sec">עולמות תוכן</div>
+      <div class="nav" style="font-size:12.5px">
+        <div>📶 SIM / eSIM<span class="cnt">7</span></div>
+        <div class="on" style="align-items:flex-start;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box">🔧 תמיכה טכנית<span class="cnt">18</span></div>
+          <div style="display:flex;flex-direction:column;gap:2px;width:100%;box-sizing:border-box;font-size:11.5px;padding-inline-start:22px">
+            <span style="color:rgba(255,255,255,.65)">קליטה ורשת</span>
+            <span style="color:#fff;font-weight:600">מהירות וגלישה · 9</span>
+            <span style="color:rgba(255,255,255,.65)">מכשיר והגדרות</span>
+          </div>
+        </div>
+        <div>💳 חיובים<span class="cnt">11</span></div>
+        <div>🧾 מסלולים<span class="cnt">11</span></div>
+        <div>🌍 חו"ל ונדידה<span class="cnt">8</span></div>
+        <div>📞 טיפול בשיחה<span class="cnt">6</span></div>
+      </div>
+      <div style="margin-top:auto;padding:12px 18px 0;font-size:11px;color:rgba(255,255,255,.5);line-height:1.7"><span class="k-kbd" style="background:rgba(255,255,255,.1);color:#fff">Ctrl K</span> חיפוש<br><span class="k-kbd" style="background:rgba(255,255,255,.1);color:#fff">G</span> אז <span class="k-kbd" style="background:rgba(255,255,255,.1);color:#fff">T</span> מעבר לנושא</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;min-width:0">
+      <div class="k-top"><span class="k-crumb">ספרייה · תמיכה טכנית · <b>מהירות וגלישה</b></span>
+        <div class="k-actions"><span class="k-btn">⎙ הדפס נושא</span><span class="k-btn">🔔 עקוב</span><span class="k-btn p">✚ פריט בנושא</span></div></div>
+
+      <div style="background:#fff;border-bottom:1px solid #E2E4E6;padding:16px 22px 14px;display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+          <span class="k-chip navy">🔧 תמיכה טכנית</span>
+          <div style="margin:0;font-size:23px;font-weight:600">מהירות וגלישה</div>
+          <span class="k-chip">9 פריטים</span>
+          <div style="margin-inline-start:auto;display:flex;align-items:center;gap:8px">
+            <span class="k-btn" style="padding:4px 10px;font-size:11.5px">→ הנושא הקודם · קליטה ורשת</span>
+            <span class="k-btn" style="padding:4px 10px;font-size:11.5px">מכשיר והגדרות · הנושא הבא ←</span>
+          </div>
+        </div>
+        <div style="margin:0;font-size:13px;color:#4B5563;line-height:1.6;max-width:820px">כל מה שקשור לקצב הגלישה שהלקוח חווה — מדידה, בידוד התקלה בין מכשיר לרשת, פתרונות בשירות עצמי, והסלמה לתשתיות כשהבעיה אזורית. מתעדכן מול נהלי התמיכה ב‑WordPress.</div>
+        <div class="t-hint"><span class="t-url">/topic/tech-speed?docType=&amp;tag=</span><span>· סדר הקבוצות קבוע לפי ה‑PRD ואינו ניתן לשינוי</span><span style="margin-inline-start:auto"><span class="k-kbd">J</span> / <span class="k-kbd">K</span> בין פריטים · <span class="k-kbd">Enter</span> פתיחה</span></div>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow:hidden;padding:12px 22px 0;display:flex;flex-direction:column;gap:10px">
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px"><span class="t-b M">M</span><b style="font-size:13px">אבחון</b><span class="k-chip">2</span><span style="flex:1;height:1px;background:#E2E4E6"></span></div>
+          <div style="display:flex;gap:10px">
+            <div class="k-card" style="flex:1;min-width:0;padding:10px 13px;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm M">M</span><b style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">בדיקת מהירות גלישה מול הלקוח</b><span class="k-chip green" style="margin-inline-start:auto">פורסם</span></div>
+              <span style="font-size:11.5px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">איך למדוד נכון, ומה נחשב תקין לכל טכנולוגיה</span>
+              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="k-chip navy">תמיכה טכנית</span><span class="t-tag"># מהירות</span><span class="t-tag"># מדידה</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">עודכן 12.9</span></div>
+            </div>
+            <div class="k-card" style="flex:1;min-width:0;padding:10px 13px;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm M">M</span><b style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">בידוד: מכשיר או רשת</b><span class="k-chip green" style="margin-inline-start:auto">פורסם</span></div>
+              <span style="font-size:11.5px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">שלושה מבחנים שמפרידים תקלת מכשיר מתקלת אתר</span>
+              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="k-chip navy">תמיכה טכנית</span><span class="k-chip">SIM / eSIM</span><span class="t-tag"># אבחון</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">עודכן 8.9</span></div>
+            </div>
+            <div style="flex:1;min-width:0"></div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px"><span class="t-b R">R</span><b style="font-size:13px">טיפול</b><span class="k-chip">3</span><span style="flex:1;height:1px;background:#E2E4E6"></span></div>
+          <div style="display:flex;gap:10px">
+            <div class="k-card" style="flex:1;min-width:0;padding:10px 13px;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm R">R</span><b style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">איטיות גלישה</b><span class="k-chip amber" style="margin-inline-start:auto">מסמך חלקי</span></div>
+              <span style="font-size:11.5px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">15 שלבים · התסריט המלא מהמדידה ועד ההסלמה</span>
+              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="k-chip navy">תמיכה טכנית</span><span class="t-tag"># מהירות</span><span class="t-tag"># גל 2</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">עודכן היום</span></div>
+            </div>
+            <div class="k-card" style="flex:1;min-width:0;padding:10px 13px;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm R">R</span><b style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Hotspot לא עובד</b><span class="k-chip green" style="margin-inline-start:auto">פורסם</span></div>
+              <span style="font-size:11.5px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">6 שלבים · כולל בדיקת חסימת APN</span>
+              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="k-chip navy">תמיכה טכנית</span><span class="t-tag"># מכשיר</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">עודכן 2.9</span></div>
+            </div>
+            <div class="k-card" style="flex:1;min-width:0;padding:10px 13px;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm R">R</span><b style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">גלישה איטית רק בערב</b><span class="k-chip green" style="margin-inline-start:auto">פורסם</span></div>
+              <span style="font-size:11.5px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">עומס אזורי — מה אומרים ומתי פותחים תקלה</span>
+              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="k-chip navy">תמיכה טכנית</span><span class="t-tag"># עומס</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">עודכן 29.8</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px"><span class="t-b O">O</span><b style="font-size:13px">תפעול</b><span class="k-chip">1</span><span style="flex:1;height:1px;background:#E2E4E6"></span></div>
+          <div style="display:flex;gap:10px">
+            <div class="k-card" style="flex:1;min-width:0;padding:10px 13px;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm O">O</span><b style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">פתיחת תקלת תשתית ב‑CRM</b><span class="k-chip green" style="margin-inline-start:auto">פורסם</span></div>
+              <span style="font-size:11.5px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">שדות חובה, קוד סיבה, ושיוך לצוות NOC</span>
+              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="k-chip navy">תמיכה טכנית</span><span class="k-chip">טיפול בשיחה</span><span class="t-tag"># CRM</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">עודכן 5.9</span></div>
+            </div>
+            <div style="flex:2;min-width:0"></div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px"><span class="t-b E">E</span><b style="font-size:13px">הסלמה</b><span class="k-chip">1</span><span style="flex:1;height:1px;background:#E2E4E6"></span></div>
+          <div style="display:flex;gap:10px">
+            <div class="k-card" style="flex:1;min-width:0;padding:10px 13px;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm E">E</span><b style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">הסלמה לתשתיות — מתי ואיך</b><span class="k-chip green" style="margin-inline-start:auto">פורסם</span></div>
+              <span style="font-size:11.5px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">ספי זמן, נתונים שחייבים להיות בתקלה, ומי מאשר</span>
+              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="k-chip navy">תמיכה טכנית</span><span class="t-tag"># הסלמה</span><span class="t-tag"># SLA</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">עודכן 21.8</span></div>
+            </div>
+            <div style="flex:2;min-width:0"></div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px"><span class="t-b S">S</span><b style="font-size:13px">מומחה</b><span class="k-chip">1</span><span style="flex:1;height:1px;background:#E2E4E6"></span></div>
+          <div style="display:flex;gap:10px">
+            <div class="k-card" style="flex:1;min-width:0;padding:10px 13px;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm S">S</span><b style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">ניתוח לוג רדיו (מומחי רשת)</b><span class="k-chip blue" style="margin-inline-start:auto">בסקירה</span></div>
+              <span style="font-size:11.5px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">לקריאה של דרג שני בלבד — מונחים וטבלת קודים</span>
+              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="k-chip navy">תמיכה טכנית</span><span class="t-tag"># דרג 2</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">עודכן 30.8</span></div>
+            </div>
+            <div style="flex:2;min-width:0"></div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px"><span class="t-b T">T</span><b style="font-size:13px">תסריט</b><span class="k-chip">1</span><span style="flex:1;height:1px;background:#E2E4E6"></span></div>
+          <div style="display:flex;gap:10px">
+            <div class="k-card" style="flex:1;min-width:0;padding:10px 13px;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm T">T</span><b style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">הסבר ללקוח: למה הגלישה איטית</b><span class="k-chip green" style="margin-inline-start:auto">פורסם</span></div>
+              <span style="font-size:11.5px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">נוסח דיבור · הומר מתסריט בגל 4</span>
+              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="k-chip navy">תמיכה טכנית</span><span class="t-tag"># תסריט</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">עודכן 12.9</span></div>
+            </div>
+            <div style="flex:2;min-width:0"></div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px"><span class="t-b I">I</span><b style="font-size:13px">מידע</b><span class="k-chip">0</span><span style="flex:1;height:1px;background:#E2E4E6"></span></div>
+          <div class="t-empty" style="padding:12px 16px;border:1px dashed #D7DBDF;border-radius:11px;background:#FBFCFD;gap:6px">
+            <span style="font-size:12.5px">אין פריטי מידע בנושא הזה. פריטי <b>I</b> הם דפי רקע — טבלאות, מונחים והסברים שאין בהם שלבים.</span>
+            <span class="k-btn" style="padding:4px 10px;font-size:11.5px">✚ צור פריט מידע</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:9px 22px;border-top:1px solid #E2E4E6;background:#fff;font-size:11.5px;color:#6B7280;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span>9 פריטים גלויים · 2 מוסתרים לפי הרשאות</span>
+        <span style="margin-inline-start:auto"><span class="k-kbd">1</span>–<span class="k-kbd">7</span> קפיצה לקבוצת סוג</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div class="dv-card" dir="rtl" style="width:470px;box-sizing:border-box">
+      <div class="k-top" style="height:48px;padding:0 16px"><span class="k-crumb">ספרייה · תמיכה טכנית · <b>פריט</b></span></div>
+      <div class="t-empty" style="padding:44px 26px">
+        <span style="font-size:30px">🔒</span>
+        <b style="font-size:15px;color:#1F2E3B">פריט זה אינו זמין כרגע</b>
+        <span style="max-width:330px">הפריט נמצא בעריכה, סומן כלא בתוקף או הועבר לארכיון. אם הוא נחוץ לכם עכשיו — אפשר לדווח לצוות התוכן והם יחזירו אותו או יפנו לפריט מחליף.</span>
+        <div style="display:flex;gap:8px;margin-top:6px"><span class="k-btn p">💬 דווח שחסר לי הפריט</span><span class="k-btn">→ חזרה לנושא</span></div>
+        <span class="t-hint" style="margin-top:4px">שרת: <bdi class="k-mono">404 NOT_PUBLISHED</bdi> · מסנן הסטטוס מוסתר ללא <bdi class="k-mono">docs.read_unpublished</bdi></span>
+      </div>
+    </div>
+
+    <div class="dv-card" dir="rtl" style="width:470px;box-sizing:border-box;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+      <div class="k-eyebrow">כותרת מאמר · ניווט בתוך הנושא</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="t-b R">R</span><b style="font-size:15px">איטיות גלישה</b><span class="k-chip amber">מסמך חלקי</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11.5px;color:#6B7280">
+        <span class="k-chip navy">תמיכה טכנית</span><span class="k-chip">מהירות וגלישה</span><span class="t-tag"># מהירות</span><span class="t-tag"># גל 2</span><span>· עודכן היום 09:41</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;border-top:1px solid #F0F2F4;padding-top:10px;flex-wrap:wrap">
+        <span class="k-btn" style="padding:4px 10px;font-size:11.5px">→ הקודם · בדיקת מהירות</span>
+        <span style="font-size:11px;color:#9BA6B2">4 מתוך 9 בנושא</span>
+        <span class="k-btn" style="margin-inline-start:auto;padding:4px 10px;font-size:11.5px">Hotspot לא עובד ←</span>
+      </div>
+      <div class="t-hint"><span class="k-kbd">Alt →</span> הקודם · <span class="k-kbd">Alt ←</span> הבא — נשאר בתוך הנושא ומדלג על פריטים לא גלויים</div>
+    </div>
+  </div>
+
+</div></div>
+
+<!-- ══════════ 7c ══════════ -->
+<div class="dv-opt" id="7c">
+<div class="dv-olabel"><a class="dv-oid" href="#7c">7c</a>Library facets + editor metadata — מסנני עולם/נושא/סוג/תגית ב‑URL, פאנל מטא־דאטה בעורך (סוג, עולם ראשי ומשניים, נושאים, תגיות עם השלמה, בעלים ועורך אחראי), ועורך עשיר קומפקטי לפריטי T/I</div>
+<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+
+  <div class="dv-card" dir="rtl" style="width:1280px;height:720px;display:grid;grid-template-columns:230px 1fr;background:#F4F5F7">
+    <div style="background:#fff;border-inline-end:1px solid #E2E4E6;display:flex;flex-direction:column;min-height:0">
+      <div style="padding:13px 15px 9px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #F0F2F4"><b style="font-size:13px">מסננים</b><span class="k-chip red">3 פעילים</span><span style="margin-inline-start:auto;font-size:11px;color:#FF3D00">נקה</span></div>
+      <div style="flex:1;min-height:0;overflow:hidden;padding:11px 15px;display:flex;flex-direction:column;gap:14px;font-size:12.5px">
+
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div class="k-eyebrow">עולם תוכן</div>
+          <label style="display:flex;align-items:center;gap:7px"><span class="t-chk on">✓</span>תמיכה טכנית<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">18</span></label>
+          <label style="display:flex;align-items:center;gap:7px"><span class="t-chk">·</span>SIM / eSIM<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">7</span></label>
+          <label style="display:flex;align-items:center;gap:7px"><span class="t-chk">·</span>חיובים<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">11</span></label>
+          <label style="display:flex;align-items:center;gap:7px"><span class="t-chk">·</span>חו"ל ונדידה<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">8</span></label>
+          <span style="color:#FF3D00;font-size:11px">עוד 2</span>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div class="k-eyebrow">נושא</div>
+          <label style="display:flex;align-items:center;gap:7px"><span class="t-chk on">✓</span>מהירות וגלישה<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">9</span></label>
+          <label style="display:flex;align-items:center;gap:7px"><span class="t-chk">·</span>קליטה ורשת<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">5</span></label>
+          <label style="display:flex;align-items:center;gap:7px"><span class="t-chk">·</span>מכשיר והגדרות<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">4</span></label>
+          <span style="font-size:10.5px;color:#9BA6B2">הרשימה מסוננת לפי העולם שנבחר</span>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div class="k-eyebrow">סוג מסמך</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="display:flex;align-items:center;gap:7px"><span class="t-chk on">✓</span><span class="t-b sm M">M</span>אבחון<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">2</span></label>
+            <label style="display:flex;align-items:center;gap:7px"><span class="t-chk on">✓</span><span class="t-b sm R">R</span>טיפול<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">3</span></label>
+            <label style="display:flex;align-items:center;gap:7px"><span class="t-chk">·</span><span class="t-b sm O">O</span>תפעול<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">1</span></label>
+            <label style="display:flex;align-items:center;gap:7px"><span class="t-chk">·</span><span class="t-b sm E">E</span>הסלמה<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">1</span></label>
+            <label style="display:flex;align-items:center;gap:7px"><span class="t-chk">·</span><span class="t-b sm S">S</span>מומחה<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">1</span></label>
+            <label style="display:flex;align-items:center;gap:7px"><span class="t-chk">·</span><span class="t-b sm T">T</span>תסריט<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">1</span></label>
+            <label style="display:flex;align-items:center;gap:7px;opacity:.5"><span class="t-chk">·</span><span class="t-b sm I">I</span>מידע<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">0</span></label>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div class="k-eyebrow">תגיות</div>
+          <span class="t-in ph" style="padding:5px 9px;font-size:11.5px">⌕ סנן תגיות…</span>
+          <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="t-tag x"># מהירות ✕</span><span class="t-tag"># מדידה 4</span><span class="t-tag"># עומס 3</span><span class="t-tag"># CRM 6</span><span class="t-tag"># SLA 2</span></div>
+        </div>
+      </div>
+      <div style="padding:9px 15px;border-top:1px solid #F0F2F4;font-size:11px;color:#6B7280"><span class="k-kbd">F</span> פתח/סגור מסננים · המצב נשמר ב‑URL</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;min-width:0">
+      <div class="k-top"><span class="k-crumb"><b>ספרייה</b> · 5 תוצאות מתוך 52</span>
+        <div class="k-actions"><span class="k-btn" style="min-width:200px;color:#A6ABB0">⌕ חיפוש <span class="k-kbd">Ctrl K</span></span><span class="k-btn">⤓ ייצוא</span><span class="k-btn p">✚ פריט ידע</span></div></div>
+
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 18px;background:#fff;border-bottom:1px solid #F0F2F4;flex-wrap:wrap">
+        <span class="t-url" style="flex:1">/library?world=tech&amp;topic=tech-speed&amp;docType=M&amp;docType=R&amp;tag=%D7%9E%D7%94%D7%99%D7%A8%D7%95%D7%AA</span>
+        <span class="k-btn" style="padding:4px 10px;font-size:11.5px">⧉ העתק קישור</span>
+        <span class="k-btn" style="padding:4px 10px;font-size:11.5px">💾 שמור כתצוגה</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;padding:9px 18px;background:#fff;border-bottom:1px solid #E2E4E6;flex-wrap:wrap">
+        <span class="k-eyebrow">פעיל</span>
+        <span class="k-chip navy">תמיכה טכנית ✕</span><span class="k-chip navy">מהירות וגלישה ✕</span><span class="k-chip" style="background:#1D45B4;color:#fff">M ✕</span><span class="k-chip" style="background:#1A7A4A;color:#fff">R ✕</span><span class="t-tag x"># מהירות ✕</span>
+        <span style="margin-inline-start:auto" class="q-seg"><span class="on">כרטיסים</span><span>רשימה</span><span>טבלה</span></span>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow:hidden;padding:14px 18px;display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:min-content;gap:12px">
+        <div class="k-card" style="padding:12px 14px;display:flex;flex-direction:column;gap:7px;min-width:0">
+          <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm R">R</span><b style="font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">איטיות גלישה</b><span style="margin-inline-start:auto;color:#9BA6B2">⋮</span></div>
+          <span style="font-size:11.5px;color:#6B7280;line-height:1.5">15 שלבים · התסריט המלא מהמדידה ועד ההסלמה לתשתיות</span>
+          <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="k-chip navy">תמיכה טכנית</span><span class="k-chip">מהירות וגלישה</span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="t-tag"># מהירות</span><span class="t-tag"># גל 2</span></div>
+          <div style="display:flex;align-items:center;gap:6px;border-top:1px solid #F0F2F4;padding-top:7px"><span class="k-chip amber">מסמך חלקי</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">עודכן היום</span></div>
+        </div>
+        <div class="k-card" style="padding:12px 14px;display:flex;flex-direction:column;gap:7px;min-width:0">
+          <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm M">M</span><b style="font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">בדיקת מהירות גלישה</b><span style="margin-inline-start:auto;color:#9BA6B2">⋮</span></div>
+          <span style="font-size:11.5px;color:#6B7280;line-height:1.5">איך למדוד נכון, ומה נחשב תקין לכל טכנולוגיה</span>
+          <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="k-chip navy">תמיכה טכנית</span><span class="k-chip">מהירות וגלישה</span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="t-tag"># מהירות</span><span class="t-tag"># מדידה</span></div>
+          <div style="display:flex;align-items:center;gap:6px;border-top:1px solid #F0F2F4;padding-top:7px"><span class="k-chip green">פורסם</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">עודכן 12.9</span></div>
+        </div>
+        <div class="k-card" style="padding:12px 14px;display:flex;flex-direction:column;gap:7px;min-width:0">
+          <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm M">M</span><b style="font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">בידוד: מכשיר או רשת</b><span style="margin-inline-start:auto;color:#9BA6B2">⋮</span></div>
+          <span style="font-size:11.5px;color:#6B7280;line-height:1.5">שלושה מבחנים שמפרידים תקלת מכשיר מתקלת אתר</span>
+          <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="k-chip navy">תמיכה טכנית</span><span class="k-chip">SIM / eSIM</span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="t-tag"># אבחון</span></div>
+          <div style="display:flex;align-items:center;gap:6px;border-top:1px solid #F0F2F4;padding-top:7px"><span class="k-chip green">פורסם</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">עודכן 8.9</span></div>
+        </div>
+        <div class="k-card" style="padding:12px 14px;display:flex;flex-direction:column;gap:7px;min-width:0">
+          <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm R">R</span><b style="font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Hotspot לא עובד</b><span style="margin-inline-start:auto;color:#9BA6B2">⋮</span></div>
+          <span style="font-size:11.5px;color:#6B7280;line-height:1.5">6 שלבים · כולל בדיקת חסימת APN</span>
+          <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="k-chip navy">תמיכה טכנית</span><span class="k-chip">מכשיר והגדרות</span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="t-tag"># מכשיר</span></div>
+          <div style="display:flex;align-items:center;gap:6px;border-top:1px solid #F0F2F4;padding-top:7px"><span class="k-chip green">פורסם</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">עודכן 2.9</span></div>
+        </div>
+        <div class="k-card" style="padding:12px 14px;display:flex;flex-direction:column;gap:7px;min-width:0;opacity:.72;border-style:dashed">
+          <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm R">R</span><b style="font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:line-through">מדידת מהירות בכבל</b><span style="margin-inline-start:auto;color:#9BA6B2">⋮</span></div>
+          <span style="font-size:11.5px;color:#6B7280;line-height:1.5">הוחלף על ידי “בדיקת מהירות גלישה” · נראה לעורכים בלבד</span>
+          <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="k-chip navy">תמיכה טכנית</span></div>
+          <div style="display:flex;align-items:center;gap:6px;border-top:1px solid #F0F2F4;padding-top:7px"><span class="k-chip red">לא בתוקף</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">סומן 1.9 · דנה</span></div>
+        </div>
+        <div class="t-empty" style="border:1px dashed #D7DBDF;border-radius:12px;background:#FBFCFD;padding:16px 14px;gap:5px">
+          <span style="font-size:20px">⌕</span><b style="font-size:12.5px;color:#1F2E3B">זה כל מה שתואם</b>
+          <span style="font-size:11.5px">הסירו תגית או סוג כדי להרחיב</span>
+        </div>
+      </div>
+      <div style="padding:9px 18px;border-top:1px solid #E2E4E6;background:#fff;font-size:11.5px;color:#6B7280;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span>5 תוצאות · מסננים מסונכרנים עם החיפוש (<bdi class="k-mono">GET /search</bdi>)</span>
+        <span style="margin-inline-start:auto"><span class="k-kbd">Alt ←</span> חזרה למסננים הקודמים</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- metadata panel -->
+  <div class="dv-card" dir="rtl" style="width:400px;box-sizing:border-box;display:flex;flex-direction:column">
+    <div style="padding:13px 16px 10px;border-bottom:1px solid #E2E4E6;display:flex;align-items:center;gap:8px"><b style="font-size:14px">מטא־דאטה</b><span class="k-chip amber">לא נשמר</span><span style="margin-inline-start:auto;font-size:11px;color:#6B7280">טיוטה על v8</span></div>
+    <div style="padding:13px 16px;display:flex;flex-direction:column;gap:12px">
+      <label class="t-fld">סוג מסמך
+        <span class="t-in sel"><span class="t-b sm R">R</span>טיפול</span>
+        <span style="font-size:10.5px;color:#9BA6B2">מגדיר את התג בכרטיס, את מיקום הפריט בדף הנושא ואת סדר התוצאות</span>
+      </label>
+      <label class="t-fld">עולם ראשי
+        <span class="t-in sel">תמיכה טכנית <bdi class="k-mono" style="font-size:10.5px;color:#9BA6B2">tech</bdi></span>
+        <span style="font-size:10.5px;color:#9BA6B2">קובע הרשאות (<bdi class="k-mono">worldScopes</bdi>) ואת יעד הסנכרון ל‑WordPress</span>
+      </label>
+      <div class="t-fld">עולמות נוספים
+        <span class="t-in"><span class="k-chip navy">SIM / eSIM ✕</span><span class="k-chip navy">טיפול בשיחה ✕</span><span style="color:#A6ABB0">הוסף…</span></span>
+      </div>
+      <div class="t-fld">נושאים
+        <span class="t-in"><span class="k-chip">מהירות וגלישה ✕</span><span style="color:#A6ABB0">הוסף…</span></span>
+      </div>
+      <div class="t-fld" style="position:relative">תגיות
+        <span class="t-in"><span class="t-tag x"># מהירות ✕</span><span class="t-tag x"># גל 2 ✕</span><span style="color:#1F2E3B">מד<span style="display:inline-block;width:1px;height:12px;background:#FF3D00;vertical-align:-2px;animation:wkPulse 1s infinite"></span></span></span>
+        <div style="position:absolute;top:100%;inset-inline-start:0;inset-inline-end:0;margin-top:4px;background:#fff;border:1px solid #E2E4E6;border-radius:10px;box-shadow:0 12px 30px rgba(31,46,59,.18);padding:5px;z-index:3;font-size:12px">
+          <div style="padding:6px 9px;border-radius:7px;background:#FFF8F5;display:flex;align-items:center;gap:7px"><b># מדידה</b><span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">4 פריטים</span></div>
+          <div style="padding:6px 9px;display:flex;align-items:center;gap:7px"># מדדי שירות<span style="margin-inline-start:auto;color:#9BA6B2;font-size:11px">2</span></div>
+          <div style="padding:6px 9px;display:flex;align-items:center;gap:7px;color:#FF3D00">✚ צור תגית חדשה “מד”</div>
+          <div style="padding:5px 9px;border-top:1px solid #F0F2F4;font-size:10.5px;color:#9BA6B2">השלמה מ‑<bdi class="k-mono">GET /tags?q=</bdi> · <span class="k-kbd">↑↓</span> <span class="k-kbd">Enter</span></div>
+        </div>
+      </div>
+      <div style="height:122px"></div>
+      <label class="t-fld">בעלים (אחראי תוכן)
+        <span class="t-in"><span class="k-av" style="width:20px;height:20px;font-size:9.5px">דל</span>דנה לוי<span style="margin-inline-start:auto;color:#6B7280">⌄</span></span>
+      </label>
+      <label class="t-fld">עורך אחראי
+        <span class="t-in"><span class="k-av r" style="width:20px;height:20px;font-size:9.5px">ענ</span>ענבר כהן<span style="margin-inline-start:auto;color:#6B7280">⌄</span></span>
+      </label>
+      <div class="t-banner amber" style="border-radius:9px;border:1px solid #F1DEC0;border-bottom:1px solid #F1DEC0"><span>⚠️</span><div>שינוי העולם הראשי ישנה מי רשאי לערוך את הפריט. שני עורכים יאבדו גישה.</div></div>
+    </div>
+    <div class="t-dft" style="border-radius:0"><span class="k-btn p">שמור מטא־דאטה</span><span class="k-btn">בטל</span><span class="t-hint" style="margin-inline-start:auto"><span class="k-kbd">Ctrl S</span></span></div>
+  </div>
+
+  <!-- compact rich editor for T / I -->
+  <div class="dv-card" dir="rtl" style="width:560px;box-sizing:border-box;display:flex;flex-direction:column">
+    <div style="padding:12px 16px 9px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #E2E4E6;flex-wrap:wrap">
+      <span class="t-b T">T</span><b style="font-size:14px">הסבר ללקוח: למה הגלישה איטית</b>
+      <span class="k-chip">פריט טקסט · <bdi class="k-mono">bodyHtml</bdi></span>
+      <span style="margin-inline-start:auto;font-size:11px;color:#6B7280">נשמר אוטומטית לפני 3 שניות</span>
+    </div>
+    <div class="t-tool">
+      <span class="on">B</span><span><i>I</i></span><span style="text-decoration:underline">U</span><span class="sep"></span>
+      <span>H2</span><span>H3</span><span class="sep"></span><span>• רשימה</span><span>1. ממוספרת</span><span class="sep"></span><span>🔗</span><span>⌗ ציטוט</span><span class="sep"></span><span class="on">↵ RTL</span><span>LTR</span>
+      <span style="margin-inline-start:auto;font-size:11px;color:#6B7280">מצב קומפקטי — בלי טבלאות ותמונות</span>
+    </div>
+    <div style="padding:14px 18px;min-height:190px;background:#fff">
+      <div class="t-doc">
+        <h4>מה אומרים ללקוח</h4>
+        <p>“בדקתי את החיבור שלך עכשיו. המהירות שאתה מקבל תואמת את מה שהרשת מספקת באזור שלך בשעה הזאת — זה לא תקלה במכשיר ולא בכרטיס.”</p>
+        <p>אם הלקוח מתעקש שהיה מהיר יותר בעבר:</p>
+        <ul style="margin:0 0 8px;padding-inline-start:20px"><li>אל תבטיחו שיפור בלוח זמנים מסוים.</li><li>הסבירו שעומס ערב הוא זמני ומטופל בתוכנית שדרוג.</li><li>הציעו בדיקה חוזרת בשעת בוקר, ותעדו את התוצאה בתקלה.</li></ul>
+        <p style="color:#9BA6B2">הקלד “/” לפקודות…</p>
+      </div>
+    </div>
+    <div class="t-dft" style="border-radius:0"><span class="k-btn p">שמור גרסה</span><span class="k-btn">תצוגה מקדימה</span><span class="t-hint" style="margin-inline-start:auto">אותו רכיב TipTap כמו עורך המקור · אותה רשימת תגיות מותרות</span></div>
+  </div>
+
+</div></div>
+
+<!-- ══════════ 7d ══════════ -->
+<div class="dv-opt" id="7d">
+<div class="dv-olabel"><a class="dv-oid" href="#7d">7d</a>Feedback — מודל הנציג (7 סיבות, עד 1000 תווים, הקשר אוטומטי לקריאה בלבד), תור העורכים <bdi class="k-mono">/feedback</bdi> עם לשוניות סטטוס ומגירה, דיאלוג פרסום עם סגירת משובים, ולשונית ניתוח עם תרשימים נגישים</div>
+<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+
+  <!-- agent modal -->
+  <div class="dv-card" dir="rtl" style="width:1000px;height:640px;background:#F4F5F7;position:relative;overflow:hidden">
+    <div style="filter:blur(1.2px);opacity:.55">
+      <div class="k-top"><span class="k-crumb">ספרייה · תמיכה טכנית · <b>איטיות גלישה</b></span><div class="k-actions"><span class="k-btn">⎙</span><span class="k-btn p">💬 דיווח על בעיה / משוב</span></div></div>
+      <div style="padding:16px 22px;display:flex;flex-direction:column;gap:9px">
+        <div style="font-size:21px;font-weight:600">איטיות גלישה</div>
+        <div class="k-card" style="padding:12px 14px"><b style="font-size:13.5px">שלב 8 · בדיקת מהירות מול הלקוח</b><div style="font-size:12.5px;color:#6B7280;line-height:1.6;margin-top:5px">בקש מהלקוח להריץ בדיקת מהירות ברשת הסלולרית בלבד, בלי Wi‑Fi, ורשום את התוצאה בשדה <bdi class="k-crm">speed_test_mbps</bdi>.</div></div>
+        <div class="k-card" style="padding:12px 14px"><b style="font-size:13.5px">שלב 9 · השוואה לתקן האזורי</b><div style="font-size:12.5px;color:#6B7280;margin-top:5px">אם התוצאה נמוכה מ‑20% מהתקן — המשך לשלב 11.</div></div>
+      </div>
+    </div>
+    <div style="position:absolute;inset:0;background:rgba(31,46,59,.32);display:flex;align-items:center;justify-content:center;padding:18px">
+      <div class="t-dlg" style="width:520px;max-width:100%">
+        <div class="t-dhd">💬 דיווח על בעיה / משוב<span style="margin-inline-start:auto;color:#9BA6B2;font-size:15px">✕</span></div>
+        <div class="t-dbd" style="gap:9px">
+          <div style="background:#F7F8FA;border:1px solid #E2E4E6;border-radius:10px;padding:9px 12px;display:flex;flex-direction:column;gap:5px">
+            <div class="k-eyebrow">הקשר מצורף אוטומטית · לקריאה בלבד</div>
+            <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;font-size:11.5px;color:#4B5563">
+              <span class="t-b sm R">R</span><b style="font-size:12px">איטיות גלישה</b><span class="k-chip navy">תמיכה טכנית</span><span class="k-chip">גרסה <bdi class="k-mono">v8</bdi></span><span class="k-chip amber">שלב 8 · בדיקת מהירות</span>
+            </div>
+            <span style="font-size:10.5px;color:#9BA6B2">הדיווח משויך לשם שלכם — אין אפשרות דיווח אנונימי.</span>
+          </div>
+
+          <div class="t-fld">מה הבעיה?<span style="font-size:10.5px">בחרו סיבה אחת — היא זו שמופיעה בניתוח</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <label class="t-radio"><span class="t-dot"></span>המידע לא מעודכן</label>
+            <label class="t-radio"><span class="t-dot"></span>מצאתי טעות</label>
+            <label class="t-radio"><span class="t-dot"></span>ההנחיה לא ברורה</label>
+            <label class="t-radio"><span class="t-dot"></span>חסר מידע</label>
+            <label class="t-radio on" style="grid-column:span 2"><span class="t-dot"></span><span>התהליך לא עובד בפועל<br><span style="font-size:10.5px;color:#B86A00">מתריע מיידית גם למי שמורשה לפרסם בעולם התוכן</span></span></label>
+            <label class="t-radio"><span class="t-dot"></span>לא מצאתי תשובה למקרה שלי</label>
+            <label class="t-radio"><span class="t-dot"></span>אחר</label>
+          </div>
+
+          <label class="t-fld">פרטים (לא חובה)
+            <span class="t-in" style="min-height:52px;align-items:flex-start;line-height:1.6">שלב 8 מבקש להריץ בדיקה בלי Wi‑Fi, אבל באנדרואיד 15 האפליקציה נופלת. עקפתי דרך הדפדפן.</span>
+            <span style="display:flex;font-size:10.5px"><span>אל תכללו פרטים מזהים של לקוח</span><span style="margin-inline-start:auto"><bdi class="k-mono">128 / 1000</bdi></span></span>
+          </label>
+        </div>
+        <div class="t-dft"><span class="k-btn p">שלח דיווח</span><span class="k-btn">ביטול</span><span class="t-hint" style="margin-inline-start:auto"><span class="k-kbd">Esc</span> סגור · <span class="k-kbd">Ctrl Enter</span> שלח</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- publish dialog with open feedback -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div class="dv-card t-dlg" dir="rtl" style="width:500px;box-sizing:border-box">
+      <div class="t-dhd">🚀 פרסום “איטיות גלישה” <bdi class="k-mono" style="font-size:12px;color:#9BA6B2">v9</bdi><span style="margin-inline-start:auto;color:#9BA6B2;font-size:15px">✕</span></div>
+      <div class="t-dbd">
+        <label class="t-fld">תווית הגרסה<span class="t-in">עדכון אחרי דיווחי שטח · ספטמבר</span></label>
+        <div class="t-fld">משובים פתוחים על הפריט (4)
+          <div style="border:1px solid #E2E4E6;border-radius:10px;overflow:hidden">
+            <div class="t-row" style="padding:8px 11px;align-items:flex-start"><span class="t-chk on" style="margin-top:2px">✓</span><div style="flex:1;min-width:0"><b style="font-size:12px">התהליך לא עובד בפועל</b><div style="font-size:11px;color:#6B7280">שלב 8 · דני מ. · לפני יומיים</div></div><span class="k-chip red">חוזר ×3</span></div>
+            <div class="t-row" style="padding:8px 11px;align-items:flex-start"><span class="t-chk on" style="margin-top:2px">✓</span><div style="flex:1;min-width:0"><b style="font-size:12px">ההנחיה לא ברורה</b><div style="font-size:11px;color:#6B7280">שלב 11 · מיכל ב. · לפני 4 ימים</div></div><span class="k-chip">בבדיקה</span></div>
+            <div class="t-row" style="padding:8px 11px;align-items:flex-start"><span class="t-chk on" style="margin-top:2px">✓</span><div style="flex:1;min-width:0"><b style="font-size:12px">המידע לא מעודכן</b><div style="font-size:11px;color:#6B7280">ללא שלב · יוסי ק. · לפני שבוע</div></div><span class="k-chip amber">דורש עדכון</span></div>
+            <div class="t-row" style="padding:8px 11px;align-items:flex-start;border-bottom:none"><span class="t-chk" style="margin-top:2px">·</span><div style="flex:1;min-width:0"><b style="font-size:12px">חסר מידע — מקרה eSIM</b><div style="font-size:11px;color:#6B7280">שלב 3 · רות א. · לפני 3 ימים</div></div><span class="k-chip">חדש</span></div>
+          </div>
+          <span style="font-size:11px;color:#6B7280">3 ייסגרו כ“טופל” עם <bdi class="k-mono">resolvedVersion = 9</bdi> באותה טרנזקציה. מה שלא נבחר נשאר פתוח בתור.</span>
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px"><span class="t-chk on" style="margin-top:2px">✓</span><span>נקה את דגל “המקור השתנה” — עברתי על ההצעות של גרסת מקור 12</span></label>
+      </div>
+      <div class="t-dft"><span class="k-btn p">פרסם וסגור 3 משובים</span><span class="k-btn">פרסם בלבד</span><span class="k-btn">ביטול</span></div>
+    </div>
+
+    <div class="dv-card" dir="rtl" style="width:500px;box-sizing:border-box;padding:0;overflow:hidden">
+      <div style="padding:12px 16px 9px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #E2E4E6"><b style="font-size:13.5px">תור המשוב · מצב ריק ומצב שגיאה</b></div>
+      <div class="t-empty" style="padding:26px 20px;border-bottom:1px solid #F0F2F4">
+        <span style="font-size:24px">🎉</span><b style="font-size:13.5px;color:#1F2E3B">אין משוב פתוח בעולמות שלכם</b>
+        <span style="max-width:340px">כל הדיווחים טופלו. כשנציג מדווח על פריט שאתם הבעלים שלו, הוא יופיע כאן ותקבלו התראה.</span>
+        <span class="k-btn" style="padding:4px 10px;font-size:11.5px">הצג גם משובים שטופלו</span>
+      </div>
+      <div class="t-banner red" style="border-bottom:none"><span>⛔</span><div><b>לא הצלחנו לטעון את התור</b><br>השרת החזיר <bdi class="k-mono">503</bdi>. המסננים נשמרו — נסו שוב בעוד רגע.<div style="margin-top:7px;display:flex;gap:7px"><span class="k-btn" style="padding:4px 10px;font-size:11.5px">↻ נסה שוב</span><span class="k-btn" style="padding:4px 10px;font-size:11.5px">דווח לתמיכה</span></div></div></div>
+    </div>
+  </div>
+
+  <!-- editor queue -->
+  <div class="dv-card" dir="rtl" style="width:1280px;height:845px;display:grid;grid-template-columns:210px 1fr;background:#F4F5F7">
+    <div class="k-side">
+      <div class="logo">wecom.</div>
+      <div class="sec">תוכן</div>
+      <div class="nav">
+        <div>📚 ספרייה<span class="cnt">52</span></div>
+        <div>✅ ממתין לאישור<span class="cnt">3</span></div>
+        <div class="on">💬 משוב<span class="cnt">12</span></div>
+        <div>📄 מקורות<span class="cnt">4</span></div>
+        <div>📈 שימוש</div>
+      </div>
+      <div style="margin-top:auto;padding:12px 18px 0;font-size:11px;color:rgba(255,255,255,.5);line-height:1.7">נדרשת הרשאת<br><bdi class="k-mono" style="color:#FFB596">feedback.manage</bdi></div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;min-width:0">
+      <div class="k-top"><span class="k-crumb"><b>משוב מהשטח</b> · 12 פתוחים</span>
+        <div class="k-actions"><span class="k-btn">⤓ ייצוא CSV</span><span class="k-btn">⚙️ תדירות הסיכום היומי</span></div></div>
+
+      <div class="t-tabs">
+        <sc-for list="{{ fbTabs }}" as="tb">
+          <span class="{{ tb.cls }}" onClick="{{ tb.pick }}">{{ tb.name }}<span class="k-chip {{ tb.tone }}">{{ tb.n }}</span></span>
+        </sc-for>
+        <span style="margin-inline-start:auto;padding:9px 13px;color:#6B7280">📊 ניתוח</span>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:7px;padding:9px 18px;background:#fff;border-bottom:1px solid #E2E4E6;flex-wrap:wrap">
+        <span class="t-in sel" style="padding:4px 9px;font-size:11.5px;min-height:14px">עולם: תמיכה טכנית</span>
+        <span class="t-in sel" style="padding:4px 9px;font-size:11.5px;min-height:14px">סוג: הכל</span>
+        <span class="t-in sel" style="padding:4px 9px;font-size:11.5px;min-height:14px">סיבה: הכל</span>
+        <span class="t-in sel" style="padding:4px 9px;font-size:11.5px;min-height:14px">פריט: הכל</span>
+        <span class="t-in sel" style="padding:4px 9px;font-size:11.5px;min-height:14px">מטפל: ענבר כהן</span>
+        <span style="margin-inline-start:auto;font-size:11.5px;color:#6B7280">{{ fbCount }} שורות</span>
+      </div>
+
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:1fr 420px;min-width:0">
+        <div style="min-width:0;overflow:hidden;background:#fff;border-inline-end:1px solid #E2E4E6;display:flex;flex-direction:column">
+          <div class="k-table" style="grid-template-columns:38px 42px 1fr 120px 92px 88px 78px">
+            <div class="h"><span></span><span></span><span>פריט ושלב</span><span>סיבה</span><span>מדווח</span><span>מטפל</span><span>נפתח</span></div>
+            <sc-for list="{{ fbRows }}" as="r">
+              <div class="{{ r.cls }}">
+                <span><span class="t-chk {{ r.chk }}">✓</span></span>
+                <span><span class="t-b sm {{ r.dt }}">{{ r.dt }}</span></span>
+                <span style="min-width:0"><span style="min-width:0;display:flex;flex-direction:column;gap:2px"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.title }}</b><span style="font-size:10.5px;color:#9BA6B2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.step }}</span></span></span>
+                <span><span class="k-chip {{ r.tone }}">{{ r.kind }}</span></span>
+                <span style="color:#4B5563">{{ r.who }}</span>
+                <span style="color:#4B5563">{{ r.owner }}</span>
+                <span style="color:#9BA6B2;font-size:11.5px">{{ r.when }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <sc-if value="{{ fbEmpty }}" hint-placeholder-val="{{ true }}">
+            <div class="t-empty" style="padding:40px 20px"><span style="font-size:24px">📭</span><b style="font-size:13.5px;color:#1F2E3B">אין פריטים בסטטוס הזה</b><span style="max-width:320px">נסו לשונית אחרת, או הסירו את מסנן המטפל כדי לראות גם משוב שלא שויך אליכם.</span></div>
+          </sc-if>
+          <div style="margin-top:auto;padding:9px 14px;font-size:11.5px;color:#6B7280;display:flex;gap:10px;align-items:center;border-top:1px solid #F0F2F4">
+            <span>{{ fbCount }} מתוך 12</span>
+            <span style="margin-inline-start:auto"><span class="k-kbd">J/K</span> שורות · <span class="k-kbd">E</span> מגירה · <span class="k-kbd">A</span> שייך לי</span>
+          </div>
+        </div>
+
+        <!-- drawer -->
+        <div style="background:#FBFCFD;display:flex;flex-direction:column;min-height:0;min-width:0">
+          <div style="padding:13px 16px 10px;border-bottom:1px solid #E2E4E6;background:#fff;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="k-chip red">התהליך לא עובד בפועל</span><span class="k-chip">חוזר ×3 ב‑7 ימים</span>
+            <span style="margin-inline-start:auto;color:#9BA6B2">✕</span>
+          </div>
+          <div style="flex:1;min-height:0;overflow:hidden;padding:13px 16px;display:flex;flex-direction:column;gap:11px">
+            <div class="k-card" style="padding:10px 13px;display:flex;flex-direction:column;gap:6px">
+              <div class="k-eyebrow">הקשר הדיווח</div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="t-b sm R">R</span><b style="font-size:12.5px">איטיות גלישה</b><span class="k-chip navy">תמיכה טכנית</span></div>
+              <div style="font-size:11.5px;color:#6B7280;line-height:1.6">שלב 8 · בדיקת מהירות מול הלקוח<br>גרסה בעת הדיווח: <bdi class="k-mono">v8</bdi> — “עדכון אחרי ביקורת איכות · אוגוסט”</div>
+              <span class="k-btn" style="padding:4px 10px;font-size:11.5px;align-self:flex-start">↗ פתח מסמך בשלב 8</span>
+              <span class="t-url">/doc/1f3a…/step-08</span>
+            </div>
+            <div class="k-card" style="padding:10px 13px;display:flex;flex-direction:column;gap:5px">
+              <div style="display:flex;align-items:center;gap:7px"><span class="k-av g" style="width:22px;height:22px;font-size:10px">דנ</span><b style="font-size:12.5px">דני מ.</b><span style="margin-inline-start:auto;font-size:11px;color:#9BA6B2">14.9 · 11:26</span></div>
+              <div style="font-size:12.5px;line-height:1.65;color:#333D47">שלב 8 מבקש להריץ בדיקה בלי Wi‑Fi, אבל באנדרואיד 15 האפליקציה נופלת. עקפתי דרך הדפדפן ורשמתי את התוצאה ידנית.</div>
+            </div>
+            <label class="t-fld">סטטוס<span class="t-in sel"><span class="k-chip amber">דורש עדכון</span></span></label>
+            <label class="t-fld">מטפל<span class="t-in"><span class="k-av r" style="width:20px;height:20px;font-size:9.5px">ענ</span>ענבר כהן<span style="margin-inline-start:auto;color:#6B7280">⌄</span></span></label>
+            <label class="t-fld">הערת החלטה<span class="t-in" style="min-height:40px;align-items:flex-start;line-height:1.6">מחליפים את ההנחיה: בדיקה בדפדפן היא הדרך המומלצת. מתוקן ב‑v9.</span></label>
+            <label class="t-fld">נסגר בגרסה<span class="t-in sel"><bdi class="k-mono">v9</bdi> · “עדכון אחרי דיווחי שטח · ספטמבר” <span class="k-chip green">הגרסה הראשונה שפורסמה אחרי הדיווח</span></span></label>
+          </div>
+          <div class="t-dft" style="border-radius:0;background:#fff"><span class="k-btn p">סמן כטופל</span><span class="k-btn">לא נדרש שינוי</span><span class="t-hint" style="margin-inline-start:auto"><span class="k-kbd">Ctrl Enter</span> שמור</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- analytics tab -->
+  <div class="dv-card" dir="rtl" style="width:1280px;height:640px;display:flex;flex-direction:column;background:#F4F5F7">
+    <div class="k-top"><span class="k-crumb">משוב · <b>ניתוח</b> · 1.8–14.9</span>
+      <div class="k-actions"><span class="q-seg"><span>7 ימים</span><span class="on">30 ימים</span><span>רבעון</span></span><span class="k-btn">עולם: הכל</span><span class="k-btn">⤓ CSV</span></div></div>
+    <div class="t-banner blue"><span>♿</span><div>כל תרשים כאן נגיש גם כטבלה: לכל עמודה ולכל פס יש ערך מספרי לצידו, טווח תיאור ב‑<bdi class="k-mono">aria-label</bdi>, וכפתור “הצג כטבלה”. הצבע לעולם אינו המידע היחיד — הסיבה כתובה בטקסט.</div></div>
+
+    <div style="flex:1;min-height:0;overflow:hidden;padding:14px 18px;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:auto 1fr;gap:12px">
+      <div class="k-card" style="display:flex;flex-direction:column;gap:5px"><div class="k-eyebrow">משובים ב‑30 יום</div><div style="font-size:26px;font-weight:600">142</div><div style="font-size:11.5px;color:#1A7A4A">▼ 12% מול התקופה הקודמת</div></div>
+      <div class="k-card" style="display:flex;flex-direction:column;gap:5px"><div class="k-eyebrow">זמן ממוצע לסגירה</div><div style="font-size:26px;font-weight:600">31.4 <span style="font-size:13px;font-weight:400;color:#6B7280">שעות</span></div><div style="font-size:11.5px;color:#6B7280">חציון 18 · 90% תוך 76</div></div>
+      <div class="k-card" style="display:flex;flex-direction:column;gap:5px"><div class="k-eyebrow">הובילו לשינוי בפועל</div><div style="font-size:26px;font-weight:600">63%</div><div style="font-size:11.5px;color:#6B7280">89 מתוך 142 נסגרו עם גרסה חדשה</div></div>
+      <div class="k-card" style="display:flex;flex-direction:column;gap:5px"><div class="k-eyebrow">התראות חריגה</div><div style="font-size:26px;font-weight:600">2</div><div style="font-size:11.5px;color:#C02800">“איטיות גלישה” · “חיוב כפול”</div></div>
+
+      <div class="k-card" style="grid-column:span 2;display:flex;flex-direction:column;gap:9px;min-height:0">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13px">לפי סיבה</b><span style="margin-inline-start:auto;font-size:11px;color:#FF3D00">הצג כטבלה</span></div>
+        <div style="display:flex;flex-direction:column;gap:7px;font-size:12px">
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:132px;flex-shrink:0">המידע לא מעודכן</span><span class="t-bar"><i style="width:100%"></i></span><b style="width:48px;text-align:end"><bdi class="k-mono">41</bdi></b></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:132px;flex-shrink:0">התהליך לא עובד בפועל</span><span class="t-bar"><i style="width:73%"></i></span><b style="width:48px;text-align:end"><bdi class="k-mono">30</bdi></b></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:132px;flex-shrink:0">ההנחיה לא ברורה</span><span class="t-bar"><i class="b" style="width:63%"></i></span><b style="width:48px;text-align:end"><bdi class="k-mono">26</bdi></b></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:132px;flex-shrink:0">חסר מידע</span><span class="t-bar"><i class="b" style="width:46%"></i></span><b style="width:48px;text-align:end"><bdi class="k-mono">19</bdi></b></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:132px;flex-shrink:0">מצאתי טעות</span><span class="t-bar"><i class="n" style="width:32%"></i></span><b style="width:48px;text-align:end"><bdi class="k-mono">13</bdi></b></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:132px;flex-shrink:0">לא מצאתי תשובה</span><span class="t-bar"><i class="n" style="width:22%"></i></span><b style="width:48px;text-align:end"><bdi class="k-mono">9</bdi></b></div>
+          <div style="display:flex;align-items:center;gap:9px"><span style="width:132px;flex-shrink:0">אחר</span><span class="t-bar"><i class="n" style="width:10%"></i></span><b style="width:48px;text-align:end"><bdi class="k-mono">4</bdi></b></div>
+        </div>
+      </div>
+
+      <div class="k-card" style="display:flex;flex-direction:column;gap:9px;min-width:0;min-height:0">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13px">הפריטים המדוּוחים ביותר</b></div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:11.5px">
+          <div style="display:flex;align-items:center;gap:6px;min-width:0"><span class="t-b sm R">R</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">איטיות גלישה</span><span class="k-chip red">18</span></div>
+          <div style="display:flex;align-items:center;gap:6px;min-width:0"><span class="t-b sm R">R</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">חיוב כפול בחשבונית</span><span class="k-chip red">14</span></div>
+          <div style="display:flex;align-items:center;gap:6px;min-width:0"><span class="t-b sm M">M</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">אין גלישה בחו"ל</span><span class="k-chip amber">11</span></div>
+          <div style="display:flex;align-items:center;gap:6px;min-width:0"><span class="t-b sm O">O</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">פתיחת תקלת תשתית</span><span class="k-chip amber">8</span></div>
+          <div style="display:flex;align-items:center;gap:6px;min-width:0"><span class="t-b sm T">T</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">הסבר ללקוח: איטיות</span><span class="k-chip">6</span></div>
+        </div>
+        <div style="margin-top:auto;font-size:10.5px;color:#9BA6B2;border-top:1px solid #F0F2F4;padding-top:7px">לחיצה פותחת את התור מסונן לפריט</div>
+      </div>
+
+      <div class="k-card" style="display:flex;flex-direction:column;gap:9px;min-width:0;min-height:0">
+        <b style="font-size:13px">חוזר לפי נושא</b>
+        <div style="display:flex;flex-direction:column;gap:7px;font-size:11.5px">
+          <div style="display:flex;align-items:center;gap:7px"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">מהירות וגלישה</span><span class="t-bar" style="max-width:62px"><i style="width:100%"></i></span><b><bdi class="k-mono">27</bdi></b></div>
+          <div style="display:flex;align-items:center;gap:7px"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">חשבונית והסברים</span><span class="t-bar" style="max-width:62px"><i style="width:78%"></i></span><b><bdi class="k-mono">21</bdi></b></div>
+          <div style="display:flex;align-items:center;gap:7px"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">נדידה וחבילות</span><span class="t-bar" style="max-width:62px"><i class="b" style="width:52%"></i></span><b><bdi class="k-mono">14</bdi></b></div>
+          <div style="display:flex;align-items:center;gap:7px"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">מכשיר והגדרות</span><span class="t-bar" style="max-width:62px"><i class="n" style="width:33%"></i></span><b><bdi class="k-mono">9</bdi></b></div>
+        </div>
+        <div style="margin-top:auto;font-size:10.5px;color:#9BA6B2;border-top:1px solid #F0F2F4;padding-top:7px">נושא עם ≥3 דיווחים באותה סיבה מסומן לבדיקה מבנית</div>
+      </div>
+
+      <div class="k-card" style="grid-column:span 4;display:flex;flex-direction:column;gap:9px;min-height:0">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:13px">משובים ליום ושעות לסגירה</b><span class="k-chip" style="background:#FF3D00;color:#fff">נפתחו</span><span class="k-chip blue">שעות לסגירה (ממוצע נע)</span><span style="margin-inline-start:auto;font-size:11px;color:#FF3D00">הצג כטבלה</span></div>
+        <div style="display:flex;align-items:flex-end;gap:10px">
+          <div class="t-col" style="flex:1">
+            <i style="height:34%"></i><i style="height:52%"></i><i style="height:41%"></i><i style="height:66%"></i><i style="height:48%"></i><i style="height:45%"></i><i style="height:28%"></i><i style="height:57%"></i><i style="height:63%"></i><i style="height:40%"></i><i style="height:71%"></i><i style="height:49%"></i><i style="height:38%"></i><i style="height:55%"></i><i style="height:60%"></i><i style="height:44%"></i><i style="height:33%"></i><i style="height:47%"></i><i style="height:69%"></i><i style="height:52%"></i><i style="height:40%"></i><i style="height:36%"></i><i style="height:58%"></i><i style="height:64%"></i><i style="height:78%"></i><i class="hi" style="height:100%"></i><i style="height:74%"></i><i style="height:61%"></i><i style="height:53%"></i><i style="height:39%"></i>
+          </div>
+          <div style="width:190px;flex-shrink:0;font-size:11px;color:#6B7280;line-height:1.7">
+            שיא ב‑10.9 — <b style="color:#1F2E3B">14 דיווחים</b> אחרי דחיפת “נהלי תמיכה” מ‑WordPress.<br>
+            <span class="k-chip amber">התראת חריגה נשלחה</span>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10.5px;color:#9BA6B2;padding-inline-end:200px"><span><bdi class="k-mono">16.8</bdi></span><span><bdi class="k-mono">23.8</bdi></span><span><bdi class="k-mono">30.8</bdi></span><span><bdi class="k-mono">6.9</bdi></span><span><bdi class="k-mono">14.9</bdi></span></div>
+      </div>
+    </div>
+  </div>
+
+</div></div>
+
+<!-- ══════════ 7e ══════════ -->
+<div class="dv-opt" id="7e">
+<div class="dv-olabel"><a class="dv-oid" href="#7e">7e</a>Source editor &amp; pane — מצבי חלונית עבודה/מקור/מפוצל (לחיצים), סרגל TipTap בעברית, שמירת גרסה עם תווית, רשימת גרסאות, ייבוא/ייצוא Word עם אזהרת אובדן עיצוב, חסימת “עריכת מקור”, ובאנר “המקור השתנה” עם “נקה דגל”</div>
+<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+
+  <div class="dv-card" dir="rtl" style="width:1280px;height:780px;display:grid;grid-template-columns:210px 1fr;background:#F4F5F7">
+    <div class="k-side">
+      <div class="logo">wecom.</div>
+      <div class="sec">מסמך</div>
+      <div class="nav">
+        <div class="on">📄 איטיות גלישה</div>
+        <div>🕘 היסטוריית גרסאות<span class="cnt">9</span></div>
+        <div>💡 הצעות מהמקור<span class="cnt">3</span></div>
+        <div>💬 משוב<span class="cnt">4</span></div>
+        <div>🔗 קשרים<span class="cnt">7</span></div>
+      </div>
+      <div style="margin-top:auto;padding:12px 18px 0;font-size:11px;color:rgba(255,255,255,.5);line-height:1.7">מקור: <span style="color:#fff">נהלי תמיכה טכנית</span><br><bdi class="k-mono" style="color:#FFB596">v12</bdi> · WordPress · 14.9</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;min-width:0">
+      <div class="k-top"><span class="k-crumb">תמיכה טכנית · מהירות וגלישה · <b>איטיות גלישה</b></span>
+        <div class="k-actions"><span class="k-btn">💬 משוב <span class="k-chip red">4</span></span><span class="k-btn">✎ ערוך תצוגת עבודה</span><span class="k-btn p">🚀 פרסם</span></div></div>
+
+      <div class="t-banner amber">
+        <span>⚑</span>
+        <div style="flex:1;min-width:0">
+          <b>המקור השתנה — התצוגה לעבודה לא עודכנה</b><br>
+          גרסת מקור <bdi class="k-mono">v12</bdi> · “נהלי תמיכה טכנית” נדחפה מ‑WordPress ב‑14.9 09:12 והפיקה <b>3 הצעות</b> לשלבים 4, 8 ו‑11. שום דבר בתצוגת העבודה לא השתנה מעצמו.
+          <div style="display:flex;gap:7px;margin-top:8px;flex-wrap:wrap">
+            <span class="k-btn p" style="padding:4px 10px;font-size:11.5px">💡 עבור על 3 ההצעות</span>
+            <span class="k-btn" style="padding:4px 10px;font-size:11.5px">⇄ השווה מקור v11 ← v12</span>
+            <span class="k-btn" style="padding:4px 10px;font-size:11.5px">✓ נקה דגל</span>
+          </div>
+        </div>
+        <span style="font-size:11px;color:#9A6A1E;white-space:nowrap">הדגל נוקה אוטומטית בפרסום</span>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 18px;background:#fff;border-bottom:1px solid #E2E4E6;flex-wrap:wrap">
+        <span class="k-eyebrow">חלונית</span>
+        <span class="q-seg">
+          <sc-for list="{{ panes }}" as="p"><span class="{{ p.cls }}" onClick="{{ p.pick }}">{{ p.name }}</span></sc-for>
+        </span>
+        <span style="font-size:11px;color:#6B7280">הבחירה נשמרת בהעדפות המשתמש</span>
+        <span style="margin-inline-start:auto" class="t-hint"><span class="k-kbd">Alt 1</span> עבודה · <span class="k-kbd">Alt 2</span> מקור · <span class="k-kbd">Alt 3</span> מפוצל</span>
+      </div>
+
+      <div style="flex:1;min-height:0;display:flex;min-width:0">
+
+        <sc-if value="{{ showWork }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#F7F8FA;border-inline-end:1px solid #E2E4E6">
+          <div style="padding:9px 16px;background:#fff;border-bottom:1px solid #F0F2F4;display:flex;align-items:center;gap:8px"><b style="font-size:12.5px">תצוגה לעבודה</b><span class="k-chip amber">מסמך חלקי</span><span class="k-chip"><bdi class="k-mono">v8</bdi></span><span style="margin-inline-start:auto;font-size:11px;color:#6B7280">15 שלבים</span></div>
+          <div style="flex:1;min-height:0;overflow:hidden;padding:12px 16px;display:flex;flex-direction:column;gap:9px">
+            <div class="k-card" style="padding:11px 13px"><div style="display:flex;align-items:center;gap:7px"><b style="font-size:13px">שלב 4 · זיהוי טכנולוגיית הרשת</b><span class="k-chip amber" style="margin-inline-start:auto">הצעה ממתינה</span></div><div style="font-size:12px;color:#6B7280;line-height:1.6;margin-top:5px">ודא מול ה‑CRM אם הלקוח על <bdi class="k-crm">5G</bdi> או <bdi class="k-crm">LTE</bdi>. הציפייה שונה לחלוטין בין השתיים.</div></div>
+            <div class="k-card" style="padding:11px 13px;border-color:#FFB596"><div style="display:flex;align-items:center;gap:7px"><b style="font-size:13px">שלב 8 · בדיקת מהירות מול הלקוח</b><span class="k-chip red" style="margin-inline-start:auto">2 הצעות · 3 משובים</span></div><div class="t-sr" style="font-size:12px;color:#6B7280;line-height:1.6;margin-top:6px">בקש מהלקוח להריץ בדיקת מהירות ברשת הסלולרית בלבד, בלי Wi‑Fi, ורשום את התוצאה בשדה <bdi class="k-crm">speed_test_mbps</bdi>.</div><div style="margin-top:7px;font-size:11px;color:#B86A00">המקור מציע: להוסיף “אם האפליקציה נופלת — השתמש בדפדפן”.</div></div>
+            <div class="k-card" style="padding:11px 13px"><div style="display:flex;align-items:center;gap:7px"><b style="font-size:13px">שלב 9 · השוואה לתקן האזורי</b></div><div style="font-size:12px;color:#6B7280;line-height:1.6;margin-top:5px">תוצאה נמוכה מ‑20% מהתקן מצדיקה מעבר לשלב 11.</div></div>
+            <div class="k-card" style="padding:11px 13px"><div style="display:flex;align-items:center;gap:7px"><b style="font-size:13px">שלב 11 · הסלמה לתשתיות</b><span class="k-chip amber" style="margin-inline-start:auto">הצעה ממתינה</span></div><div style="font-size:12px;color:#6B7280;line-height:1.6;margin-top:5px">פתח תקלה עם קוד סיבה <bdi class="k-crm">NET-SPD</bdi> וצרף שלוש מדידות.</div></div>
+          </div>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ showSrc }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#fff">
+          <div style="padding:9px 16px;border-bottom:1px solid #F0F2F4;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <b style="font-size:12.5px">מסמך המקור</b><span class="k-chip blue">לקריאה בלבד</span><span class="k-chip"><bdi class="k-mono">v12</bdi></span>
+            <span style="margin-inline-start:auto;display:flex;gap:6px"><span class="k-btn" style="padding:4px 10px;font-size:11.5px">⤓ הורד DOCX מקורי</span><span class="k-btn p" style="padding:4px 10px;font-size:11.5px">✎ עריכת מקור</span></span>
+          </div>
+          <div style="flex:1;min-height:0;overflow:hidden;padding:14px 20px">
+            <div class="t-doc">
+              <h4>4. זיהוי טכנולוגיית הרשת</h4>
+              <p>לפני כל מדידה יש לוודא באיזו טכנולוגיה הלקוח מחובר בפועל — 5G, LTE או 3G. הציפייה למהירות שונה מהותית בין השלוש, ומדידה שמושווית לתקן הלא נכון מייצרת הסלמה מיותרת.</p>
+              <h4>8. בדיקת מהירות מול הלקוח</h4>
+              <p>יש לבקש מהלקוח להריץ בדיקת מהירות כשהוא מחובר לרשת הסלולרית בלבד, ללא Wi‑Fi. <b>אם אפליקציית הבדיקה אינה נפתחת או קורסת, יש להשתמש בבדיקה מבוססת דפדפן</b> ולתעד את התוצאה ידנית.</p>
+              <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin:0 0 8px">
+                <tr style="background:#F7F8FA"><th style="border:1px solid #E2E4E6;padding:5px 8px;text-align:start">טכנולוגיה</th><th style="border:1px solid #E2E4E6;padding:5px 8px;text-align:start">תקין (Mbps)</th><th style="border:1px solid #E2E4E6;padding:5px 8px;text-align:start">סף הסלמה</th></tr>
+                <tr><td style="border:1px solid #E2E4E6;padding:5px 8px"><bdi class="k-mono">5G</bdi></td><td style="border:1px solid #E2E4E6;padding:5px 8px"><bdi class="k-mono">80–300</bdi></td><td style="border:1px solid #E2E4E6;padding:5px 8px"><bdi class="k-mono">&lt; 25</bdi></td></tr>
+                <tr><td style="border:1px solid #E2E4E6;padding:5px 8px"><bdi class="k-mono">LTE</bdi></td><td style="border:1px solid #E2E4E6;padding:5px 8px"><bdi class="k-mono">15–60</bdi></td><td style="border:1px solid #E2E4E6;padding:5px 8px"><bdi class="k-mono">&lt; 5</bdi></td></tr>
+              </table>
+              <h4>11. הסלמה לתשתיות</h4>
+              <p>הסלמה מתבצעת רק לאחר שלוש מדידות נפרדות בשעות שונות. יש לצרף צילום מסך של כל מדידה.</p>
+            </div>
+          </div>
+          <div style="padding:9px 16px;border-top:1px solid #F0F2F4;font-size:11px;color:#6B7280;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <span>עודכן על ידי סנכרון WordPress · 14.9 09:12</span>
+            <span style="margin-inline-start:auto">HTML מסונן לפי רשימת התגיות המותרות</span>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+
+  <!-- source editor -->
+  <div class="dv-card" dir="rtl" style="width:1280px;height:660px;display:grid;grid-template-columns:1fr 300px;background:#fff">
+    <div style="display:flex;flex-direction:column;min-width:0;border-inline-end:1px solid #E2E4E6">
+      <div class="k-top" style="height:50px"><span class="k-crumb">עריכת מקור · <b>נהלי תמיכה טכנית</b></span>
+        <div class="k-actions"><span class="k-chip amber">טיוטה נשמרה לפני 3 שניות</span><span class="k-btn">⤒ ייבוא מ‑Word</span><span class="k-btn">⤓ ייצוא ל‑Word</span><span class="k-btn p">💾 שמור גרסה</span></div></div>
+      <div class="t-tool">
+        <span class="on">RTL</span><span>LTR</span><span class="sep"></span>
+        <span>H1</span><span class="on">H2</span><span>H3</span><span>H4</span><span>פסקה</span><span class="sep"></span>
+        <span style="font-weight:700">B</span><span><i>I</i></span><span style="text-decoration:underline">U</span><span style="text-decoration:line-through">S</span><span class="sep"></span>
+        <span>• רשימה</span><span>1. ממוספרת</span><span>⌗ ציטוט</span><span><bdi class="k-mono" style="font-size:11px">&lt;/&gt;</bdi></span><span class="sep"></span>
+        <span>▦ טבלה</span><span>🖼 תמונה</span><span>🔗 קישור</span><span>― קו</span><span class="sep"></span>
+        <span>↺</span><span>↻</span>
+      </div>
+      <div style="flex:1;min-height:0;overflow:hidden;padding:16px 26px">
+        <div class="t-doc" style="font-size:13px">
+          <div style="font-size:19px;font-weight:600;margin:0 0 10px">נהלי תמיכה טכנית — מהירות גלישה</div>
+          <h4>8. בדיקת מהירות מול הלקוח</h4>
+          <p>יש לבקש מהלקוח להריץ בדיקת מהירות כשהוא מחובר לרשת הסלולרית בלבד, ללא Wi‑Fi. <b>אם אפליקציית הבדיקה אינה נפתחת או קורסת, יש להשתמש בבדיקה מבוססת דפדפן</b> ולתעד את התוצאה ידנית<span style="display:inline-block;width:1.5px;height:15px;background:#FF3D00;vertical-align:-3px;animation:wkPulse 1s infinite"></span></p>
+          <div style="display:flex;gap:12px;align-items:flex-start;margin:0 0 10px">
+            <div style="width:190px;height:104px;border-radius:9px;background:linear-gradient(135deg,#DCE4EE,#EEF1F5);border:1px solid #E2E4E6;display:grid;place-items:center;color:#8A97A6;font-size:11.5px;flex-shrink:0">🖼 מסך בדיקת המהירות</div>
+            <div style="font-size:11.5px;color:#6B7280;line-height:1.7">
+              <span class="k-chip blue">נכס <bdi class="k-mono">a3f1…</bdi></span><br>
+              <bdi class="k-mono" style="font-size:10.5px">image/png · 84KB · 720×400</bdi><br>
+              בייצוא ל‑Word הבייטים מוטמעים; בדחיפה ל‑WordPress הקובץ עולה ל‑<bdi class="k-mono">wp/v2/media</bdi> וה‑<bdi class="k-mono">src</bdi> נכתב מחדש.
+            </div>
+          </div>
+          <p style="color:#9BA6B2">המשך כתיבה…</p>
+        </div>
+      </div>
+      <div style="padding:9px 18px;border-top:1px solid #E2E4E6;font-size:11px;color:#6B7280;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span>שמירה אוטומטית כל 3 שניות ל‑<bdi class="k-mono">drafts/source:&lt;id&gt;</bdi> — פרטית לכם · הדבקת תמונה מעלה ל‑<bdi class="k-mono">/assets</bdi> ומחליפה ל‑<bdi class="k-mono">&lt;img src="/api/v1/assets/:id"&gt;</bdi></span>
+        <span style="margin-inline-start:auto"><span class="k-kbd">Ctrl S</span> שמור גרסה · <span class="k-kbd">Ctrl B</span> מודגש · <span class="k-kbd">Ctrl Shift 7</span> רשימה</span>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;min-width:0;background:#FBFCFD">
+      <div style="padding:12px 15px 9px;border-bottom:1px solid #E2E4E6;display:flex;align-items:center;gap:8px"><b style="font-size:13px">גרסאות מקור</b><span class="k-chip">12</span></div>
+      <div style="flex:1;min-height:0;overflow:hidden">
+        <div class="t-row on" style="align-items:flex-start;padding:10px 13px"><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px"><b><bdi class="k-mono">v12</bdi></b><span class="k-chip amber">נוכחית</span></div><div style="font-size:11.5px;color:#4B5563;margin-top:3px">נדחף מ‑WordPress</div><div style="font-size:10.5px;color:#9BA6B2">14.9 09:12 · סנכרון</div></div></div>
+        <div class="t-row" style="align-items:flex-start;padding:10px 13px"><div style="flex:1;min-width:0"><b><bdi class="k-mono">v11</bdi></b><div style="font-size:11.5px;color:#4B5563;margin-top:3px">יובא מ‑Word</div><div style="font-size:10.5px;color:#9BA6B2">8.9 16:40 · דנה לוי</div></div><span class="k-btn" style="padding:3px 8px;font-size:11px">שחזר</span></div>
+        <div class="t-row" style="align-items:flex-start;padding:10px 13px"><div style="flex:1;min-width:0"><b><bdi class="k-mono">v10</bdi></b><div style="font-size:11.5px;color:#4B5563;margin-top:3px">תיקון טבלת הספים</div><div style="font-size:10.5px;color:#9BA6B2">2.9 11:05 · ענבר כהן</div></div><span class="k-btn" style="padding:3px 8px;font-size:11px">שחזר</span></div>
+        <div class="t-row" style="align-items:flex-start;padding:10px 13px"><div style="flex:1;min-width:0"><b><bdi class="k-mono">v9</bdi></b><div style="font-size:11.5px;color:#4B5563;margin-top:3px">ניסוח מחדש של שלב 11</div><div style="font-size:10.5px;color:#9BA6B2">21.8 09:31 · דנה לוי</div></div><span class="k-btn" style="padding:3px 8px;font-size:11px">שחזר</span></div>
+      </div>
+      <div style="padding:12px 15px;border-top:1px solid #E2E4E6;background:#fff;display:flex;flex-direction:column;gap:9px">
+        <div class="k-eyebrow">שמירת גרסה</div>
+        <label class="t-fld">תווית<span class="t-in">הבהרת שלב 8 — בדיקה בדפדפן</span></label>
+        <div style="font-size:11px;color:#6B7280;line-height:1.6">שמירה מייצרת <bdi class="k-mono">v13</bdi>, מריצה את צינור ההצעות ומדליקה “המקור השתנה” בתצוגת העבודה.</div>
+        <div style="display:flex;gap:7px"><span class="k-btn p" style="flex:1;justify-content:center">שמור v13</span><span class="k-btn">ביטול</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- word dialogs + gating -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div class="dv-card t-dlg" dir="rtl" style="width:470px;box-sizing:border-box">
+      <div class="t-dhd">⤒ ייבוא מ‑Word<span style="margin-inline-start:auto;color:#9BA6B2;font-size:15px">✕</span></div>
+      <div class="t-dbd">
+        <div style="border:1.5px dashed #C7CBD0;border-radius:11px;padding:20px;text-align:center;color:#6B7280;font-size:12.5px;line-height:1.6"><div style="font-size:22px">📄</div>גררו לכאן קובץ <bdi class="k-mono">.docx</bdi><br><span style="font-size:11px">או <span style="color:#FF3D00">בחרו קובץ</span> · עד 10MB</span></div>
+        <div style="display:flex;align-items:center;gap:8px;background:#F7F8FA;border:1px solid #E2E4E6;border-radius:9px;padding:8px 11px;font-size:12px"><span>📄</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><bdi class="k-mono">tech-support-speed-v3.docx</bdi></span><span class="k-chip">218KB</span><span style="color:#9BA6B2">✕</span></div>
+        <div class="t-banner amber" style="border-radius:9px;border:1px solid #F1DEC0;border-bottom:1px solid #F1DEC0"><span>ℹ️</span><div><b>מה נשמר ומה לא</b><br>נשמרים: כותרות H1–H4, פסקאות, רשימות, טבלאות, תמונות, קישורים, מודגש/נטוי/קו־תחתון.<br>נמחקים: גופנים וצבעים, תיבות טקסט, הערות שוליים, מספור אוטומטי מותאם, סימני מעקב־שינויים.</div></div>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px"><span class="t-chk on" style="margin-top:2px">✓</span><span>שמור כגרסה חדשה עם התווית “יובא מ‑Word”</span></label>
+      </div>
+      <div class="t-dft"><span class="k-btn p">ייבא ושמור גרסה</span><span class="k-btn">ביטול</span></div>
+    </div>
+
+    <div class="dv-card t-dlg" dir="rtl" style="width:470px;box-sizing:border-box">
+      <div class="t-dhd">⤓ ייצוא ל‑Word<span style="margin-inline-start:auto;color:#9BA6B2;font-size:15px">✕</span></div>
+      <div class="t-dbd">
+        <label class="t-fld">גרסה לייצוא<span class="t-in sel"><bdi class="k-mono">v12</bdi> · נדחף מ‑WordPress · 14.9</span></label>
+        <div class="t-banner blue" style="border-radius:9px;border:1px solid #CBD9F7;border-bottom:1px solid #CBD9F7"><span>ℹ️</span><div>הקובץ נבנה מה‑HTML המסונן, ולכן הוא מכיל בדיוק את מה שמותר במערכת: כותרות, פסקאות, רשימות, טבלאות, תמונות, קישורים והדגשות. <b>כל עיצוב שמחוץ לרשימה הזו לא קיים בקובץ</b> — לא בגלל הייצוא אלא כי הוא נוקה כבר בשמירה.</div></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#6B7280"><span>📎</span>2 תמונות יוטמעו בקובץ (<bdi class="k-mono">168KB</bdi>)</div>
+      </div>
+      <div class="t-dft"><span class="k-btn p">הורד <bdi class="k-mono">.docx</bdi></span><span class="k-btn">ביטול</span></div>
+    </div>
+
+    <div class="dv-card" dir="rtl" style="width:470px;box-sizing:border-box;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+      <div class="k-eyebrow">חסימת “עריכת מקור”</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="k-btn" style="opacity:.5;border-style:dashed">✎ עריכת מקור</span>
+        <span class="k-chip">מושבת</span>
+      </div>
+      <div style="background:#1F2E3B;color:#fff;border-radius:10px;padding:10px 13px;font-size:12px;line-height:1.6;max-width:330px">
+        עריכת מסמך המקור פתוחה למי שיש לו <bdi class="k-mono" style="color:#FFB596">docs.edit</bdi> בעולם “תמיכה טכנית”. יש לכם הרשאת קריאה בלבד כאן.
+        <div style="margin-top:7px;font-size:11px;color:rgba(255,255,255,.7)">אפשר לדווח על בעיה במקור דרך כפתור המשוב.</div>
+      </div>
+      <div class="t-banner red" style="border-radius:9px;border:1px solid #FFD4C2;border-bottom:1px solid #FFD4C2"><span>⛔</span><div><b>409 · <bdi class="k-mono">ETAG_MISMATCH</bdi></b><br>מישהו אחר שמר את המקור בזמן שערכתם (<bdi class="k-mono">v12 → v13</bdi>). הטיוטה שלכם נשמרה.<div style="margin-top:7px;display:flex;gap:7px;flex-wrap:wrap"><span class="k-btn" style="padding:4px 10px;font-size:11.5px">⇄ השווה מול v13</span><span class="k-btn" style="padding:4px 10px;font-size:11.5px">טען מחדש</span><span class="k-btn d" style="padding:4px 10px;font-size:11.5px">דרוס עם שלי</span></div></div></div>
+    </div>
+  </div>
+
+</div></div>
+
+<!-- ══════════ 7f ══════════ -->
+<div class="dv-opt" id="7f">
+<div class="dv-olabel"><a class="dv-oid" href="#7f">7f</a>Usage analytics <bdi class="k-mono">/analytics</bdi> — צפיות בפריטים ובנושאים, חיפושים ללא תוצאה עם “צור פריט”, טבלת התיישנות (פריט, בעלים, עדכון אחרון, פרסום אחרון), צלילה ליומן החיפוש; וצ׳יפים ותפריט ממשל (“סמן כלא בתוקף”, “העבר לארכיון” עם סיבה)</div>
+<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+
+  <div class="dv-card" dir="rtl" style="width:1280px;height:820px;display:grid;grid-template-columns:210px 1fr;background:#F4F5F7">
+    <div class="k-side">
+      <div class="logo">wecom.</div>
+      <div class="sec">תובנות</div>
+      <div class="nav">
+        <div class="on">📈 שימוש</div>
+        <div>💬 משוב<span class="cnt">12</span></div>
+        <div>🔄 סנכרון</div>
+        <div>📜 יומן ביקורת</div>
+      </div>
+      <div style="margin-top:auto;padding:12px 18px 0;font-size:11px;color:rgba(255,255,255,.5);line-height:1.7">נדרשת הרשאת<br><bdi class="k-mono" style="color:#FFB596">analytics.read</bdi><br><span style="font-size:10.5px">עורכים רואים את הפריטים שלהם</span></div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;min-width:0">
+      <div class="k-top"><span class="k-crumb"><b>שימוש</b> · 16.8–14.9</span>
+        <div class="k-actions"><span class="q-seg"><span>7 ימים</span><span class="on">30 ימים</span><span>רבעון</span></span><span class="k-btn">עולם: הכל</span><span class="k-btn">⤓ CSV</span></div></div>
+
+      <div style="flex:1;min-height:0;overflow:hidden;padding:14px 18px;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:auto auto 1fr;gap:12px;min-width:0">
+
+        <div class="k-card" style="display:flex;flex-direction:column;gap:5px"><div class="k-eyebrow">צפיות בפריטים</div><div style="font-size:26px;font-weight:600">8,412</div><div style="font-size:11.5px;color:#1A7A4A">▲ 9% מול 30 הימים הקודמים</div></div>
+        <div class="k-card" style="display:flex;flex-direction:column;gap:5px"><div class="k-eyebrow">צפיות בנושאים</div><div style="font-size:26px;font-weight:600">2,106</div><div style="font-size:11.5px;color:#6B7280">נכנס לשימוש ב‑1.9</div></div>
+        <div class="k-card" style="display:flex;flex-direction:column;gap:5px"><div class="k-eyebrow">חיפושים</div><div style="font-size:26px;font-weight:600">5,930</div><div style="font-size:11.5px;color:#C02800">347 בלי אף תוצאה (5.9%)</div></div>
+        <div class="k-card" style="display:flex;flex-direction:column;gap:5px"><div class="k-eyebrow">נציגים פעילים</div><div style="font-size:26px;font-weight:600">96 <span style="font-size:13px;font-weight:400;color:#6B7280">/ 128</span></div><div style="font-size:11.5px;color:#6B7280">32 לא נכנסו החודש</div></div>
+
+        <div class="k-card" style="grid-column:span 2;display:flex;flex-direction:column;gap:8px;min-height:0">
+          <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13px">הפריטים הנצפים ביותר</b><span style="margin-inline-start:auto;font-size:11px;color:#FF3D00">הצג כטבלה</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:12px">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0"><span class="t-b sm R">R</span><span style="width:150px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">איטיות גלישה</span><span class="t-bar"><i style="width:100%"></i></span><b style="width:52px;text-align:end"><bdi class="k-mono">1,284</bdi></b></div>
+            <div style="display:flex;align-items:center;gap:8px;min-width:0"><span class="t-b sm R">R</span><span style="width:150px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">חיוב כפול בחשבונית</span><span class="t-bar"><i style="width:81%"></i></span><b style="width:52px;text-align:end"><bdi class="k-mono">1,041</bdi></b></div>
+            <div style="display:flex;align-items:center;gap:8px;min-width:0"><span class="t-b sm M">M</span><span style="width:150px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">אין קליטה / אין שירות</span><span class="t-bar"><i class="b" style="width:64%"></i></span><b style="width:52px;text-align:end"><bdi class="k-mono">822</bdi></b></div>
+            <div style="display:flex;align-items:center;gap:8px;min-width:0"><span class="t-b sm M">M</span><span style="width:150px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">אין גלישה בחו"ל</span><span class="t-bar"><i class="b" style="width:47%"></i></span><b style="width:52px;text-align:end"><bdi class="k-mono">604</bdi></b></div>
+            <div style="display:flex;align-items:center;gap:8px;min-width:0"><span class="t-b sm T">T</span><span style="width:150px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">הסבר ללקוח: איטיות</span><span class="t-bar"><i class="n" style="width:31%"></i></span><b style="width:52px;text-align:end"><bdi class="k-mono">399</bdi></b></div>
+          </div>
+        </div>
+
+        <div class="k-card" style="grid-column:span 2;display:flex;flex-direction:column;gap:8px;min-height:0">
+          <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13px">הנושאים הנצפים ביותר</b><span class="k-chip">מתוך <bdi class="k-mono">view_topic</bdi></span><span style="margin-inline-start:auto;font-size:11px;color:#FF3D00">הצג כטבלה</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:12px">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0"><span style="width:158px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">מהירות וגלישה</span><span class="t-bar"><i style="width:100%"></i></span><b style="width:44px;text-align:end"><bdi class="k-mono">487</bdi></b></div>
+            <div style="display:flex;align-items:center;gap:8px;min-width:0"><span style="width:158px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">חשבונית והסברים</span><span class="t-bar"><i style="width:74%"></i></span><b style="width:44px;text-align:end"><bdi class="k-mono">361</bdi></b></div>
+            <div style="display:flex;align-items:center;gap:8px;min-width:0"><span style="width:158px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">נדידה וחבילות</span><span class="t-bar"><i class="b" style="width:55%"></i></span><b style="width:44px;text-align:end"><bdi class="k-mono">268</bdi></b></div>
+            <div style="display:flex;align-items:center;gap:8px;min-width:0"><span style="width:158px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">קליטה ורשת</span><span class="t-bar"><i class="b" style="width:41%"></i></span><b style="width:44px;text-align:end"><bdi class="k-mono">201</bdi></b></div>
+            <div style="display:flex;align-items:center;gap:8px;min-width:0"><span style="width:158px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">מכשיר והגדרות</span><span class="t-bar"><i class="n" style="width:24%"></i></span><b style="width:44px;text-align:end"><bdi class="k-mono">117</bdi></b></div>
+          </div>
+        </div>
+
+        <!-- zero results -->
+        <div class="k-card" style="grid-column:span 2;padding:0;display:flex;flex-direction:column;min-height:0;overflow:hidden">
+          <div style="padding:12px 15px 9px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #F0F2F4"><b style="font-size:13px">חיפושים ללא תוצאה</b><span class="k-chip red">347</span><span style="margin-inline-start:auto;font-size:11px;color:#FF3D00">כל היומן ↗</span></div>
+          <div class="k-table" style="grid-template-columns:1fr 62px 78px 108px">
+            <div class="h"><span>מונח</span><span>פעמים</span><span>נציגים</span><span>פעולה</span></div>
+            <div><span style="min-width:0"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">החזר על חיוב כפול</b></span><span><bdi class="k-mono">41</bdi></span><span><bdi class="k-mono">28</bdi></span><span><span class="k-btn p" style="padding:3px 9px;font-size:11px">✚ צור פריט</span></span></div>
+            <div><span style="min-width:0"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">eSIM לשעון</b></span><span><bdi class="k-mono">33</bdi></span><span><bdi class="k-mono">25</bdi></span><span><span class="k-btn p" style="padding:3px 9px;font-size:11px">✚ צור פריט</span></span></div>
+            <div><span style="min-width:0"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">ניתוק אוטומטי בחו"ל</b></span><span><bdi class="k-mono">27</bdi></span><span><bdi class="k-mono">19</bdi></span><span><span class="k-btn" style="padding:3px 9px;font-size:11px">משויך ל‑3</span></span></div>
+            <div><span style="min-width:0"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">5G לא נתמך במכשיר</b></span><span><bdi class="k-mono">22</bdi></span><span><bdi class="k-mono">17</bdi></span><span><span class="k-btn p" style="padding:3px 9px;font-size:11px">✚ צור פריט</span></span></div>
+            <div><span style="min-width:0"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">חשבונית באנגלית</b></span><span><bdi class="k-mono">18</bdi></span><span><bdi class="k-mono">14</bdi></span><span><span class="k-btn" style="padding:3px 9px;font-size:11px">התעלם</span></span></div>
+          </div>
+          <div style="margin-top:auto;padding:8px 15px;font-size:10.5px;color:#9BA6B2;border-top:1px solid #F0F2F4">“צור פריט” פותח עורך חדש עם הכותרת והתגית מהמונח · <bdi class="k-mono">search_log where results = 0</bdi></div>
+        </div>
+
+        <!-- staleness -->
+        <div class="k-card" style="grid-column:span 2;padding:0;display:flex;flex-direction:column;min-height:0;overflow:hidden">
+          <div style="padding:12px 15px 9px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #F0F2F4"><b style="font-size:13px">התיישנות</b><span class="k-chip amber">14 פריטים מעל 90 יום</span><span style="margin-inline-start:auto;font-size:11px;color:#FF3D00">בעלים: הכל ⌄</span></div>
+          <div class="k-table" style="grid-template-columns:40px 1fr 90px 82px 82px">
+            <div class="h"><span></span><span>פריט</span><span>בעלים</span><span>עדכון</span><span>פרסום</span></div>
+            <div><span><span class="t-b sm O">O</span></span><span style="min-width:0"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">נוהל זיכוי ידני</b></span><span style="color:#4B5563">יוסי ק.</span><span><span class="k-chip red">214 יום</span></span><span style="color:#9BA6B2"><bdi class="k-mono">12.2.26</bdi></span></div>
+            <div><span><span class="t-b sm I">I</span></span><span style="min-width:0"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">טבלת מסלולים 2025</b></span><span style="color:#4B5563">— ללא</span><span><span class="k-chip red">188 יום</span></span><span style="color:#9BA6B2">מעולם</span></div>
+            <div><span><span class="t-b sm E">E</span></span><span style="min-width:0"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">הסלמה לספק הבינלאומי</b></span><span style="color:#4B5563">דנה לוי</span><span><span class="k-chip amber">142 יום</span></span><span style="color:#9BA6B2"><bdi class="k-mono">25.4.26</bdi></span></div>
+            <div><span><span class="t-b sm R">R</span></span><span style="min-width:0"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">החלפת SIM בחנות</b></span><span style="color:#4B5563">ענבר כהן</span><span><span class="k-chip amber">119 יום</span></span><span style="color:#9BA6B2"><bdi class="k-mono">18.5.26</bdi></span></div>
+            <div><span><span class="t-b sm M">M</span></span><span style="min-width:0"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">אבחון קליטה בבית</b></span><span style="color:#4B5563">דנה לוי</span><span><span class="k-chip">97 יום</span></span><span style="color:#9BA6B2"><bdi class="k-mono">9.6.26</bdi></span></div>
+          </div>
+          <div style="margin-top:auto;padding:8px 15px;font-size:10.5px;color:#9BA6B2;border-top:1px solid #F0F2F4">פריט בלי בעלים הוא הסימן הראשון להתיישנות — שיוך בעלים בפאנל המטא־דאטה</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <!-- search log drill-down -->
+    <div class="dv-card" dir="rtl" style="width:520px;box-sizing:border-box;padding:0;overflow:hidden">
+      <div style="padding:12px 16px 9px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #E2E4E6;flex-wrap:wrap">
+        <b style="font-size:13.5px">יומן חיפוש · “eSIM לשעון”</b><span class="k-chip red">0 תוצאות</span>
+        <span style="margin-inline-start:auto;color:#9BA6B2">✕</span>
+      </div>
+      <div style="padding:10px 16px;display:flex;gap:7px;flex-wrap:wrap;border-bottom:1px solid #F0F2F4"><span class="k-chip navy">ללא תוצאה בלבד</span><span class="k-chip">30 יום</span><span class="k-chip">כל העולמות</span></div>
+      <div class="k-table" style="grid-template-columns:96px 1fr 58px 64px">
+        <div class="h"><span>מתי</span><span>נציג ומסננים</span><span>תוצאות</span><span>זמן</span></div>
+        <div><span style="color:#9BA6B2"><bdi class="k-mono">14.9 11:42</bdi></span><span style="min-width:0"><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><b>רות א.</b><span style="font-size:10.5px;color:#9BA6B2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">world=sim · docType=M</span></span></span><span><span class="k-chip red">0</span></span><span style="color:#9BA6B2"><bdi class="k-mono">38ms</bdi></span></div>
+        <div><span style="color:#9BA6B2"><bdi class="k-mono">14.9 10:07</bdi></span><span style="min-width:0"><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><b>דני מ.</b><span style="font-size:10.5px;color:#9BA6B2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">ללא מסננים</span></span></span><span><span class="k-chip red">0</span></span><span style="color:#9BA6B2"><bdi class="k-mono">31ms</bdi></span></div>
+        <div><span style="color:#9BA6B2"><bdi class="k-mono">13.9 16:51</bdi></span><span style="min-width:0"><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><b>מיכל ב.</b><span style="font-size:10.5px;color:#9BA6B2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">tag=eSIM</span></span></span><span><span class="k-chip red">0</span></span><span style="color:#9BA6B2"><bdi class="k-mono">44ms</bdi></span></div>
+        <div><span style="color:#9BA6B2"><bdi class="k-mono">12.9 09:18</bdi></span><span style="min-width:0"><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><b>רות א.</b><span style="font-size:10.5px;color:#9BA6B2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">world=sim</span></span></span><span><span class="k-chip red">0</span></span><span style="color:#9BA6B2"><bdi class="k-mono">29ms</bdi></span></div>
+      </div>
+      <div style="padding:10px 16px;border-top:1px solid #F0F2F4;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="k-btn p" style="padding:4px 10px;font-size:11.5px">✚ צור פריט “eSIM לשעון”</span>
+        <span class="t-hint" style="margin-inline-start:auto">33 שורות · <span class="k-kbd">←</span> <span class="k-kbd">→</span> דפדוף</span>
+      </div>
+    </div>
+
+    <!-- governance menu -->
+    <div class="dv-card" dir="rtl" style="width:520px;box-sizing:border-box;padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+      <div class="k-eyebrow">ממשל · צ׳יפים ותפריט בכרטיס ובכותרת המאמר</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <span class="k-chip amber">טיוטה</span><span class="k-chip blue">בסקירה</span><span class="k-chip green">פורסם</span><span class="k-chip amber">מסמך חלקי</span><span class="k-chip red">לא בתוקף</span><span class="k-chip">בארכיון</span>
+      </div>
+      <div style="position:relative;padding-bottom:196px">
+        <div class="k-card" style="padding:11px 13px;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:7px;min-width:0"><span class="t-b sm R">R</span><b style="font-size:13px">מדידת מהירות בכבל</b><span class="k-chip green">פורסם</span><span style="margin-inline-start:auto;color:#FF3D00;font-weight:600">⋮</span></div>
+          <span style="font-size:11.5px;color:#6B7280">הוחלף בפועל על ידי “בדיקת מהירות גלישה”</span>
+        </div>
+        <div style="position:absolute;top:58px;inset-inline-start:0;width:250px;background:#fff;border:1px solid #E2E4E6;border-radius:11px;box-shadow:0 14px 34px rgba(31,46,59,.2);padding:6px;font-size:12.5px;z-index:2">
+          <div style="padding:7px 10px;border-radius:7px">✎ ערוך</div>
+          <div style="padding:7px 10px;border-radius:7px">⧉ שכפל</div>
+          <div style="height:1px;background:#F0F2F4;margin:4px 0"></div>
+          <div style="padding:7px 10px;border-radius:7px;background:#FFF8F5;color:#C02800;display:flex;align-items:center;gap:7px">⊘ סמן כלא בתוקף</div>
+          <div style="padding:7px 10px;border-radius:7px;display:flex;align-items:center;gap:7px">🗄 העבר לארכיון</div>
+          <div style="height:1px;background:#F0F2F4;margin:4px 0"></div>
+          <div style="padding:5px 10px;font-size:10.5px;color:#9BA6B2;line-height:1.6">פריט שפורסם פעם אחת לא נמחק לעולם — מחיקה מחזירה <bdi class="k-mono">409 ONCE_PUBLISHED</bdi> ומציעה את שתי הפעולות האלה.</div>
+        </div>
+      </div>
+      <div class="t-dlg" style="box-shadow:none;border-radius:11px">
+        <div class="t-dhd" style="padding:12px 15px 8px;font-size:13.5px">⊘ סימון “מדידת מהירות בכבל” כלא בתוקף</div>
+        <div class="t-dbd" style="padding:2px 15px 12px;gap:9px">
+          <label class="t-fld">סיבה (נרשמת ביומן הביקורת)<span class="t-in">הוחלף על ידי “בדיקת מהירות גלישה” — v3 ואילך</span></label>
+          <div style="font-size:11.5px;color:#6B7280;line-height:1.6">הפריט ייעלם מהחיפוש, מהספרייה ומגרף הקשרים לנציגים. עורכים ימשיכו לראות אותו עם קו חוצה, וקישורים אליו יסומנו. הגרסאות והקשרים נשמרים.</div>
+        </div>
+        <div class="t-dft" style="padding:10px 15px"><span class="k-btn d">סמן כלא בתוקף</span><span class="k-btn">ביטול</span><span class="t-hint" style="margin-inline-start:auto"><bdi class="k-mono">POST /documents/:id/status</bdi></span></div>
+      </div>
+    </div>
+  </div>
+
+</div></div>
+
+<!-- ══════════ 7g ══════════ -->
+<div class="dv-opt" id="7g">
+<div class="dv-olabel"><a class="dv-oid" href="#7g">7g</a>Mobile 390px — דף נושא עם קבוצות סוג מתקפלות, גיליון משוב תחתון עם 7 הסיבות, והתראה על שינוי במסמך המקור</div>
+<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+
+  <!-- topic page -->
+  <div class="dv-card q-mob" dir="rtl">
+    <div style="background:#fff;padding:11px 14px 10px;border-bottom:1px solid #E2E4E6;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:17px;color:#6B7280">→</span><b style="font-size:16px">מהירות וגלישה</b><span style="margin-inline-start:auto;font-size:17px">🔔</span></div>
+      <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap"><span class="k-chip navy">🔧 תמיכה טכנית</span><span class="k-chip">9 פריטים</span></div>
+      <div style="font-size:11.5px;color:#6B7280;line-height:1.6">מדידה, בידוד בין מכשיר לרשת, פתרונות בשירות עצמי והסלמה לתשתיות.</div>
+      <div style="display:flex;gap:5px;overflow:hidden"><span class="k-chip navy">הכל</span><span class="k-chip">M 2</span><span class="k-chip">R 3</span><span class="k-chip">O 1</span><span class="k-chip">E 1</span></div>
+    </div>
+    <div style="flex:1;padding:11px 14px;display:flex;flex-direction:column;gap:11px;overflow:hidden">
+
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <div style="display:flex;align-items:center;gap:7px"><span class="t-b sm M">M</span><b style="font-size:12.5px">אבחון</b><span class="k-chip">2</span><span style="margin-inline-start:auto;color:#9BA6B2;font-size:13px">⌃</span></div>
+        <div class="k-card" style="padding:10px 12px;display:flex;flex-direction:column;gap:5px"><b style="font-size:13px">בדיקת מהירות גלישה</b><span style="font-size:11px;color:#6B7280">איך למדוד נכון · עודכן 12.9</span><div style="display:flex;gap:5px;flex-wrap:wrap"><span class="k-chip green">פורסם</span><span class="t-tag"># מהירות</span></div></div>
+        <div class="k-card" style="padding:10px 12px;display:flex;flex-direction:column;gap:5px"><b style="font-size:13px">בידוד: מכשיר או רשת</b><span style="font-size:11px;color:#6B7280">שלושה מבחנים · עודכן 8.9</span><div style="display:flex;gap:5px;flex-wrap:wrap"><span class="k-chip green">פורסם</span><span class="k-chip">SIM / eSIM</span></div></div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <div style="display:flex;align-items:center;gap:7px"><span class="t-b sm R">R</span><b style="font-size:12.5px">טיפול</b><span class="k-chip">3</span><span style="margin-inline-start:auto;color:#9BA6B2;font-size:13px">⌃</span></div>
+        <div class="k-card" style="padding:10px 12px;display:flex;flex-direction:column;gap:5px"><b style="font-size:13px">איטיות גלישה</b><span style="font-size:11px;color:#6B7280">15 שלבים · עודכן היום</span><div style="display:flex;gap:5px;flex-wrap:wrap"><span class="k-chip amber">מסמך חלקי</span><span class="t-tag"># גל 2</span></div></div>
+        <div style="font-size:11px;color:#FF3D00;padding-inline-start:2px">עוד 2 בטיפול ⌄</div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:7px;padding-top:2px"><span class="t-b sm O">O</span><b style="font-size:12.5px">תפעול</b><span class="k-chip">1</span><span style="margin-inline-start:auto;color:#9BA6B2;font-size:13px">⌄</span></div>
+      <div style="display:flex;align-items:center;gap:7px"><span class="t-b sm E">E</span><b style="font-size:12.5px">הסלמה</b><span class="k-chip">1</span><span style="margin-inline-start:auto;color:#9BA6B2;font-size:13px">⌄</span></div>
+      <div style="display:flex;align-items:center;gap:7px"><span class="t-b sm S">S</span><b style="font-size:12.5px">מומחה</b><span class="k-chip">1</span><span style="margin-inline-start:auto;color:#9BA6B2;font-size:13px">⌄</span></div>
+      <div style="display:flex;align-items:center;gap:7px"><span class="t-b sm T">T</span><b style="font-size:12.5px">תסריט</b><span class="k-chip">1</span><span style="margin-inline-start:auto;color:#9BA6B2;font-size:13px">⌄</span></div>
+      <div style="display:flex;align-items:center;gap:7px;opacity:.55"><span class="t-b sm I">I</span><b style="font-size:12.5px">מידע</b><span class="k-chip">0</span><span style="margin-inline-start:auto;font-size:10.5px;color:#9BA6B2">אין פריטים</span></div>
+    </div>
+    <div class="q-botnav"><div>📚<span>ספרייה</span></div><div class="on">🗂<span>נושאים</span></div><div>⌕<span>חיפוש</span></div><div>👤<span>אני</span></div></div>
+  </div>
+
+  <!-- feedback bottom sheet -->
+  <div class="dv-card q-mob" dir="rtl" style="position:relative">
+    <div style="background:#fff;padding:11px 14px 10px;border-bottom:1px solid #E2E4E6;display:flex;flex-direction:column;gap:7px;filter:blur(1px);opacity:.6">
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:17px;color:#6B7280">→</span><b style="font-size:15px">איטיות גלישה</b></div>
+      <div style="display:flex;gap:5px"><span class="t-b sm R">R</span><span class="k-chip amber">מסמך חלקי</span><span class="k-chip"><bdi class="k-mono">v8</bdi></span></div>
+    </div>
+    <div style="flex:1;padding:12px 14px;display:flex;flex-direction:column;gap:9px;filter:blur(1px);opacity:.6">
+      <div class="k-card" style="padding:11px 13px"><b style="font-size:13px">שלב 8 · בדיקת מהירות</b><div style="font-size:11.5px;color:#6B7280;margin-top:5px;line-height:1.6">בקש מהלקוח להריץ בדיקה ברשת הסלולרית בלבד…</div></div>
+    </div>
+    <div style="position:absolute;inset:0;background:rgba(31,46,59,.36);display:flex;align-items:flex-end">
+      <div style="width:100%;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -10px 30px rgba(31,46,59,.2);display:flex;flex-direction:column;max-height:92%">
+        <div style="padding:9px 0 4px;display:flex;justify-content:center"><span style="width:38px;height:4px;border-radius:3px;background:#D7DBDF"></span></div>
+        <div style="padding:2px 16px 8px;display:flex;align-items:center;gap:8px"><b style="font-size:15px">דיווח על בעיה / משוב</b><span style="margin-inline-start:auto;color:#9BA6B2;font-size:15px">✕</span></div>
+        <div style="padding:0 16px 8px">
+          <div style="background:#F7F8FA;border:1px solid #E2E4E6;border-radius:10px;padding:8px 11px;display:flex;flex-direction:column;gap:5px">
+            <div class="k-eyebrow">מצורף אוטומטית</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span class="t-b sm R">R</span><b style="font-size:11.5px">איטיות גלישה</b><span class="k-chip navy">תמיכה טכנית</span></div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap"><span class="k-chip"><bdi class="k-mono">v8</bdi></span><span class="k-chip amber">שלב 8</span></div>
+          </div>
+        </div>
+        <div style="flex:1;min-height:0;overflow:hidden;padding:0 16px;display:flex;flex-direction:column;gap:6px">
+          <label class="t-radio"><span class="t-dot"></span>המידע לא מעודכן</label>
+          <label class="t-radio"><span class="t-dot"></span>מצאתי טעות</label>
+          <label class="t-radio"><span class="t-dot"></span>ההנחיה לא ברורה</label>
+          <label class="t-radio"><span class="t-dot"></span>חסר מידע</label>
+          <label class="t-radio on"><span class="t-dot"></span>התהליך לא עובד בפועל</label>
+          <label class="t-radio"><span class="t-dot"></span>לא מצאתי תשובה למקרה שלי</label>
+          <label class="t-radio"><span class="t-dot"></span>אחר</label>
+          <label class="t-fld" style="margin-top:3px">פרטים (לא חובה)
+            <span class="t-in" style="min-height:44px;align-items:flex-start;line-height:1.6">האפליקציה נופלת באנדרואיד 15</span>
+            <span style="display:flex;font-size:10.5px"><span>בלי פרטים מזהים</span><span style="margin-inline-start:auto"><bdi class="k-mono">31 / 1000</bdi></span></span>
+          </label>
+        </div>
+        <div style="padding:11px 16px 16px;display:flex;gap:8px;border-top:1px solid #F0F2F4;margin-top:9px">
+          <span class="k-btn p" style="flex:1;justify-content:center;padding:9px">שלח דיווח</span>
+          <span class="k-btn" style="padding:9px 14px">ביטול</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- source-change notification -->
+  <div class="dv-card q-mob" dir="rtl">
+    <div style="background:#fff;padding:11px 14px 10px;border-bottom:1px solid #E2E4E6;display:flex;align-items:center;gap:8px">
+      <b style="font-size:16px">התראות</b><span class="k-chip red">3</span><span style="margin-inline-start:auto;font-size:11.5px;color:#FF3D00">סמן הכל כנקרא</span>
+    </div>
+
+    <div style="padding:10px 14px 0">
+      <div style="background:#1F2E3B;color:#fff;border-radius:14px;padding:11px 13px;display:flex;gap:10px;box-shadow:0 10px 26px rgba(31,46,59,.28)">
+        <span style="font-size:17px">⚑</span>
+        <div style="flex:1;min-width:0;line-height:1.55">
+          <div style="display:flex;align-items:center;gap:6px"><b style="font-size:12.5px">המקור של פריט שלך השתנה</b><span style="margin-inline-start:auto;font-size:10px;color:rgba(255,255,255,.55)">עכשיו</span></div>
+          <div style="font-size:11.5px;color:rgba(255,255,255,.78)">“איטיות גלישה” · גרסת מקור <bdi class="k-mono">v12</bdi> — נהלי תמיכה טכנית</div>
+          <div style="font-size:11px;color:rgba(255,255,255,.62);margin-top:2px">3 הצעות ממתינות. התצוגה לעבודה לא השתנתה.</div>
+          <div style="display:flex;gap:6px;margin-top:8px"><span class="k-btn p" style="padding:4px 10px;font-size:11px">עבור להצעות</span><span class="k-btn" style="padding:4px 10px;font-size:11px;background:transparent;color:#fff;border-color:rgba(255,255,255,.3)">אחר כך</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;padding:12px 14px;display:flex;flex-direction:column;gap:8px;overflow:hidden">
+      <div class="k-eyebrow">היום</div>
+      <div class="k-card" style="padding:10px 12px;display:flex;gap:9px;border-color:#FFB596;background:#FFF8F5">
+        <span style="font-size:15px">⚑</span>
+        <div style="flex:1;min-width:0;line-height:1.55"><b style="font-size:12.5px">המקור השתנה · איטיות גלישה</b><div style="font-size:11px;color:#6B7280">גרסת מקור <bdi class="k-mono">v12</bdi> · 3 הצעות · WordPress</div><div style="font-size:10.5px;color:#9BA6B2">09:12</div></div>
+        <span style="width:7px;height:7px;border-radius:50%;background:#FF3D00;margin-top:5px;flex-shrink:0"></span>
+      </div>
+      <div class="k-card" style="padding:10px 12px;display:flex;gap:9px">
+        <span style="font-size:15px">💬</span>
+        <div style="flex:1;min-width:0;line-height:1.55"><b style="font-size:12.5px">משוב חדש על פריט שלך</b><div style="font-size:11px;color:#6B7280">“התהליך לא עובד בפועל” · שלב 8 · דני מ.</div><div style="font-size:10.5px;color:#9BA6B2">11:26</div></div>
+        <span style="width:7px;height:7px;border-radius:50%;background:#FF3D00;margin-top:5px;flex-shrink:0"></span>
+      </div>
+      <div class="k-card" style="padding:10px 12px;display:flex;gap:9px">
+        <span style="font-size:15px">🔁</span>
+        <div style="flex:1;min-width:0;line-height:1.55"><b style="font-size:12.5px">דיווח חוזר ×3 ב‑7 ימים</b><div style="font-size:11px;color:#6B7280">“איטיות גלישה” · אותה סיבה</div><div style="font-size:10.5px;color:#9BA6B2">11:30</div></div>
+        <span style="width:7px;height:7px;border-radius:50%;background:#FF3D00;margin-top:5px;flex-shrink:0"></span>
+      </div>
+      <div class="k-eyebrow" style="margin-top:4px">אתמול</div>
+      <div class="k-card" style="padding:10px 12px;display:flex;gap:9px;opacity:.75">
+        <span style="font-size:15px">🗂</span>
+        <div style="flex:1;min-width:0;line-height:1.55"><b style="font-size:12.5px">נושא חדש נוסף</b><div style="font-size:11px;color:#6B7280">“מכשיר והגדרות” בעולם תמיכה טכנית</div><div style="font-size:10.5px;color:#9BA6B2">אתמול 15:44</div></div>
+      </div>
+    </div>
+    <div class="q-botnav"><div>📚<span>ספרייה</span></div><div>🗂<span>נושאים</span></div><div class="on">🔔<span>התראות</span></div><div>👤<span>אני</span></div></div>
+  </div>
+
+</div></div>
+
+</div>
+<p class="dv-next">Try next: למפות 7a–7g למסלולי W1–W6 — <bdi class="k-mono">/admin/taxonomy</bdi> ו‑<bdi class="k-mono">/topic/:id</bdi> ל‑W1, צ׳יפי הממשל ל‑W2, <bdi class="k-mono">/feedback</bdi> ל‑W3, עורך המקור ל‑W4, <bdi class="k-mono">/analytics</bdi> ל‑W5, והרכבת הניווט ל‑W6.</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { world: 'tech', fbTab: 'new', pane: 'split' };
+
+  renderVals() {
+    const self = this;
+
+    const TOPICS = {
+      sim: [
+        { name: 'הפעלה ראשונה', slug: 'sim-activate', desc: 'מכשיר חדש, כרטיס חדש, בדיקת קליטה', items: 3, on: true },
+        { name: 'eSIM', slug: 'sim-esim', desc: 'הנפקה, העברה בין מכשירים, מכשירים נתמכים', items: 3, on: true },
+        { name: 'החלפה ואובדן', slug: 'sim-replace', desc: 'גניבה, נזק והחלפה בחנות', items: 1, on: true },
+        { name: 'ארכיון SIM ישן', slug: 'sim-legacy', desc: 'תהליכים שהוצאו משימוש', items: 0, on: false }
+      ],
+      tech: [
+        { name: 'קליטה ורשת', slug: 'tech-signal', desc: 'אין שירות, קליטה חלשה, תקלות אזוריות', items: 5, on: true },
+        { name: 'מהירות וגלישה', slug: 'tech-speed', desc: 'מדידה, בידוד תקלה והסלמה לתשתיות', items: 9, on: true, flag: '3 משובים פתוחים' },
+        { name: 'מכשיר והגדרות', slug: 'tech-device', desc: 'APN, עדכוני מערכת, Hotspot', items: 4, on: true }
+      ],
+      billing: [
+        { name: 'חשבונית והסברים', slug: 'bill-invoice', desc: 'קריאת חשבונית, חיובים חד־פעמיים', items: 6, on: true },
+        { name: 'זיכויים והחזרים', slug: 'bill-credit', desc: 'מדיניות, סמכות אישור וסכומים', items: 4, on: true },
+        { name: 'אמצעי תשלום', slug: 'bill-pay', desc: 'הוראת קבע, כרטיס שפג תוקפו', items: 1, on: true }
+      ],
+      plans: [],
+      intl: [
+        { name: 'נדידה וחבילות', slug: 'intl-roam', desc: 'רכישה, הפעלה וניתוק אוטומטי', items: 6, on: true },
+        { name: 'ספקים זרים', slug: 'intl-carrier', desc: 'בחירה ידנית ותקלות רומינג', items: 2, on: true }
+      ],
+      ops: [
+        { name: 'זיהוי לקוח', slug: 'ops-ident', desc: 'שאלות אימות ומקרי קצה', items: 2, on: true },
+        { name: 'תיעוד בשיחה', slug: 'ops-log', desc: 'שדות חובה וקודי סיבה', items: 3, on: true },
+        { name: 'סיום ומעקב', slug: 'ops-close', desc: 'סיכום ללקוח וקביעת חזרה', items: 1, on: true }
+      ]
+    };
+
+    const worlds = [
+      { slug: 'sim', name: 'SIM / eSIM', desc: 'הפעלה, החלפה, eSIM ומכשירים נתמכים', items: 7, on: true },
+      { slug: 'tech', name: 'תמיכה טכנית', desc: 'קליטה, מהירות גלישה, מכשיר והגדרות', items: 18, on: true },
+      { slug: 'billing', name: 'חיובים', desc: 'חשבונית, זיכויים והחזרים', items: 11, on: true },
+      { slug: 'plans', name: 'מסלולים', desc: 'שדרוג, הורדה והטבות — עדיין בלי נושאים', items: 11, on: true },
+      { slug: 'intl', name: 'חו"ל ונדידה', desc: 'חבילות, ניתוקים וספקים זרים', items: 8, on: true },
+      { slug: 'ops', name: 'טיפול בשיחה', desc: 'זיהוי, תיעוד וסיום שיחה', items: 6, on: true }
+    ].map((w) => ({
+      slug: w.slug,
+      name: w.name,
+      desc: w.desc,
+      items: w.items,
+      topics: (TOPICS[w.slug] || []).length,
+      tg: w.on ? 'on' : '',
+      cls: self.state.world === w.slug ? 'on' : '',
+      pick: () => self.setState({ world: w.slug })
+    }));
+
+    const current = worlds.find((w) => w.slug === self.state.world) || worlds[0];
+    const list = (TOPICS[current.slug] || []).map((t) => ({
+      name: t.name,
+      slug: t.slug,
+      desc: t.desc,
+      items: t.items,
+      flag: t.flag || '',
+      tg: t.on ? 'on' : '',
+      cls: t.on ? '' : 'off'
+    }));
+
+    const ROWS = {
+      new: [
+        { dt: 'R', title: 'איטיות גלישה', step: 'שלב 8 · בדיקת מהירות', kind: 'התהליך לא עובד', tone: 'red', who: 'דני מ.', owner: '— לא שויך', when: 'לפני יומיים', cls: 'sel', chk: 'on' },
+        { dt: 'R', title: 'חיוב כפול בחשבונית', step: 'שלב 3 · זיהוי החיוב', kind: 'המידע לא מעודכן', tone: 'amber', who: 'מיכל ב.', owner: '— לא שויך', when: 'לפני 3 ימים', cls: '', chk: '' },
+        { dt: 'M', title: 'אין גלישה בחו"ל', step: 'ללא שלב', kind: 'חסר מידע', tone: '', who: 'רות א.', owner: '— לא שויך', when: 'לפני 3 ימים', cls: '', chk: '' },
+        { dt: 'O', title: 'פתיחת תקלת תשתית', step: 'שלב 2 · קוד סיבה', kind: 'ההנחיה לא ברורה', tone: 'blue', who: 'יוסי ק.', owner: '— לא שויך', when: 'לפני 4 ימים', cls: '', chk: '' },
+        { dt: 'T', title: 'הסבר ללקוח: איטיות', step: 'ללא שלב', kind: 'לא מצאתי תשובה', tone: '', who: 'נועה ש.', owner: '— לא שויך', when: 'לפני 5 ימים', cls: '', chk: '' }
+      ],
+      review: [
+        { dt: 'R', title: 'איטיות גלישה', step: 'שלב 11 · הסלמה', kind: 'ההנחיה לא ברורה', tone: 'blue', who: 'מיכל ב.', owner: 'ענבר כהן', when: 'לפני 4 ימים', cls: 'sel', chk: '' },
+        { dt: 'E', title: 'הסלמה לתשתיות', step: 'שלב 1', kind: 'מצאתי טעות', tone: 'red', who: 'דני מ.', owner: 'ענבר כהן', when: 'לפני שבוע', cls: '', chk: '' },
+        { dt: 'I', title: 'טבלת מסלולים 2026', step: 'ללא שלב', kind: 'המידע לא מעודכן', tone: 'amber', who: 'רות א.', owner: 'דנה לוי', when: 'לפני שבוע', cls: '', chk: '' }
+      ],
+      needs: [
+        { dt: 'R', title: 'איטיות גלישה', step: 'שלב 8 · בדיקת מהירות', kind: 'התהליך לא עובד', tone: 'red', who: 'דני מ.', owner: 'ענבר כהן', when: 'לפני יומיים', cls: 'sel', chk: '' },
+        { dt: 'R', title: 'החלפת SIM בחנות', step: 'שלב 5', kind: 'חסר מידע', tone: '', who: 'נועה ש.', owner: 'ענבר כהן', when: 'לפני 9 ימים', cls: '', chk: '' }
+      ],
+      nochange: [],
+      done: [
+        { dt: 'M', title: 'אין קליטה / אין שירות', step: 'שלב 4', kind: 'ההנחיה לא ברורה', tone: 'blue', who: 'יוסי ק.', owner: 'ענבר כהן', when: '2.9 · נסגר ב‑v6', cls: '', chk: '' },
+        { dt: 'R', title: 'Hotspot לא עובד', step: 'שלב 2', kind: 'מצאתי טעות', tone: 'red', who: 'מיכל ב.', owner: 'דנה לוי', when: '29.8 · נסגר ב‑v2', cls: '', chk: '' },
+        { dt: 'O', title: 'נוהל זיכוי ידני', step: 'ללא שלב', kind: 'המידע לא מעודכן', tone: 'amber', who: 'רות א.', owner: 'ענבר כהן', when: '24.8 · נסגר ב‑v4', cls: '', chk: '' },
+        { dt: 'S', title: 'ניתוח לוג רדיו', step: 'ללא שלב', kind: 'אחר', tone: '', who: 'דני מ.', owner: 'דנה לוי', when: '21.8 · ללא שינוי', cls: '', chk: '' }
+      ]
+    };
+
+    const fbTabs = [
+      { id: 'new', name: 'חדש', n: 5, tone: 'red' },
+      { id: 'review', name: 'בבדיקה', n: 3, tone: 'blue' },
+      { id: 'needs', name: 'דורש עדכון', n: 2, tone: 'amber' },
+      { id: 'nochange', name: 'לא נדרש שינוי', n: 1, tone: '' },
+      { id: 'done', name: 'טופל', n: 128, tone: 'green' }
+    ].map((t) => ({
+      name: t.name,
+      n: t.n,
+      tone: t.tone,
+      cls: self.state.fbTab === t.id ? 'on' : '',
+      pick: () => self.setState({ fbTab: t.id })
+    }));
+
+    const fbRows = ROWS[self.state.fbTab] || [];
+
+    const panes = [
+      { id: 'work', name: 'עבודה' },
+      { id: 'src', name: 'מקור' },
+      { id: 'split', name: 'מפוצל' }
+    ].map((p) => ({
+      name: p.name,
+      cls: self.state.pane === p.id ? 'on' : '',
+      pick: () => self.setState({ pane: p.id })
+    }));
+
+    return {
+      worlds,
+      sel: { name: current.name, slug: current.slug, list, empty: list.length === 0 },
+      fbTabs,
+      fbRows,
+      fbCount: fbRows.length,
+      fbEmpty: fbRows.length === 0,
+      panes,
+      showWork: self.state.pane !== 'src',
+      showSrc: self.state.pane !== 'work'
+    };
+  }
+}
+</script>
+</body>
+</html>
+
