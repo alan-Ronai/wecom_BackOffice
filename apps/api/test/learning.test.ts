@@ -78,11 +78,7 @@ run('learning content', () => {
       });
     return c.id as string;
   };
-  const createItem = async (
-    kind: 'briefing' | 'quiz',
-    who = editor,
-    extra: Record<string, unknown> = {},
-  ) =>
+  const createItem = async (kind: 'briefing' | 'quiz', who = editor, extra: Record<string, unknown> = {}) =>
     (
       await app.inject({
         method: 'POST',

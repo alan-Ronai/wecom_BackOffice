@@ -88,12 +88,16 @@ describe('rule-based question generation', () => {
     expect(branch[0].explanation).toBe('איזה מכשיר ללקוח?');
   });
   it('turns a goto outcome into a next-step question with the goto step correct', () => {
-    const q = generateFromDocument(doc, 10).find((x) => x.stepKey === 's1' && x.stem.startsWith('מה השלב הבא'))!;
+    const q = generateFromDocument(doc, 10).find(
+      (x) => x.stepKey === 's1' && x.stem.startsWith('מה השלב הבא'),
+    )!;
     expect(q.options[0]).toEqual({ id: 'o1', text: 'סוג מכשיר', correct: true });
     expect(q.options.map((o) => o.text)).toEqual(['סוג מכשיר', 'איפוס רשת', 'הגדרת APN', 'בדיקת חסימה']);
   });
   it('asks which CRM field with other fields as distractors', () => {
-    const q = generateFromDocument(doc, 10).find((x) => x.stepKey === 's1' && x.stem.startsWith('באיזה שדה'))!;
+    const q = generateFromDocument(doc, 10).find(
+      (x) => x.stepKey === 's1' && x.stem.startsWith('באיזה שדה'),
+    )!;
     expect(q.options.find((o) => o.correct)?.text).toBe('גלישה בארץ');
     expect(q.options.map((o) => o.text)).toContain('APN');
   });

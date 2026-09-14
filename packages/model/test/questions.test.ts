@@ -61,7 +61,9 @@ describe('question generation via Ollama', () => {
   });
   it('returns validated questions on success', async () => {
     const fetchImpl = (async () =>
-      new Response(JSON.stringify({ message: { content: good } }), { status: 200 })) as unknown as typeof fetch;
+      new Response(JSON.stringify({ message: { content: good } }), {
+        status: 200,
+      })) as unknown as typeof fetch;
     const m = new OllamaModel({ url: 'http://x', model: 'm', fetchImpl });
     const qs = await m.generateQuestions!(ctx);
     expect(qs).toHaveLength(1);

@@ -8,12 +8,7 @@
  */
 import type { FastifyBaseLogger } from 'fastify';
 import type { ModelClient, QuestionContext, QuestionContextStep } from '@wecom/model';
-import type {
-  Document,
-  GenerateQuestionsBody,
-  GenerateQuestionsResponse,
-  QuizQuestion,
-} from '@wecom/shared';
+import type { Document, GenerateQuestionsBody, GenerateQuestionsResponse, QuizQuestion } from '@wecom/shared';
 import { httpError } from '../../lib/http.js';
 import { getDocument, loadFieldNames } from '../documents/repo.js';
 import { generateFromDocument, allSteps } from './fallback.js';
@@ -68,7 +63,12 @@ export async function generateQuestions(
       const allowed = new Set(docs.map((d) => d.id));
       modelQs = (await deps.model.generateQuestions(ctx))
         .filter((q) => allowed.has(q.documentId))
-        .map((q) => ({ ...q, generated: true, modelConf: q.modelConf ?? null, explanation: q.explanation ?? '' }));
+        .map((q) => ({
+          ...q,
+          generated: true,
+          modelConf: q.modelConf ?? null,
+          explanation: q.explanation ?? '',
+        }));
       if (modelQs.length) source = 'model';
     } catch (err) {
       deps.log.warn({ err }, 'question generation: model failed, using rules');

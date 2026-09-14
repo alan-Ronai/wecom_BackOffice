@@ -180,14 +180,17 @@ export async function listCards(
   if (query.status) where.push(`li.status = ${p(query.status)}`);
   if (query.world) where.push(`li.world_slug = ${p(query.world)}`);
   if (query.q)
-    where.push(`(li.title ilike '%' || ${p(query.q)} || '%' or li.description ilike '%' || $${params.length} || '%')`);
+    where.push(
+      `(li.title ilike '%' || ${p(query.q)} || '%' or li.description ilike '%' || $${params.length} || '%')`,
+    );
   if (v.user.worldScopes !== null)
     where.push(`(li.world_slug is null and not exists (select 1 from briefing_entries e where e.item_id = li.id union select 1 from quiz_questions x where x.item_id = li.id)
       or li.world_slug = any(${p(v.user.worldScopes)})
       or exists (select 1 from (select item_id, document_id from briefing_entries union select item_id, document_id from quiz_questions) ref
                  join document_worlds dw on dw.document_id = ref.document_id where ref.item_id = li.id and dw.world_slug = any($${params.length})))`);
   const w = ' where ' + where.join(' and ');
-  const total = (await q.query(`select count(*)::int n from learning_items li${w}`, params)).rows[0].n as number;
+  const total = (await q.query(`select count(*)::int n from learning_items li${w}`, params)).rows[0]
+    .n as number;
   params.push(query.pageSize, (query.page - 1) * query.pageSize);
   const r = await q.query(
     `${cardSql}${w} order by li.updated_at desc limit $${params.length - 1} offset $${params.length}`,
