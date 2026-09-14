@@ -25,7 +25,30 @@ describe('events', () => {
       'feedback.updated',
       'source_document.saved',
       'taxonomy.changed',
+      // Wave 5 — appended, never reordered.
+      'learning.assigned',
+      'learning.completed',
+      'learning.refresh_required',
+      'gap.detected',
     ]);
+  });
+  it('validates the wave 5 events', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    expect(
+      EventSchema.parse(
+        makeEvent('learning.completed', { assignmentId: id, userId: id, itemId: id, passed: true }),
+      ).name,
+    ).toBe('learning.completed');
+    expect(EventSchema.parse(makeEvent('gap.detected', { gapId: id, kind: 'zero_results' })).name).toBe(
+      'gap.detected',
+    );
+    expect(
+      EventSchema.safeParse({
+        name: 'learning.refresh_required',
+        payload: { documentId: id, version: 3 }, // affectedUsers missing
+        at: new Date().toISOString(),
+      }).success,
+    ).toBe(false);
   });
   it('validates the wave 4 events', () => {
     const id = '11111111-1111-4111-8111-111111111111';
