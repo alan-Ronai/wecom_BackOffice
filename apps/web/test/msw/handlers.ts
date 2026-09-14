@@ -84,6 +84,15 @@ const draftEnvelope = (id: string, payload: unknown) => ({
   otherEditors: [] as { userId: string; name: string; updatedAt: string }[],
 });
 
+/** `GET|PUT /drafts/new/:draftId` — same envelope, but no document exists yet. */
+const newDraftEnvelope = (draftKey: string, payload: unknown) => ({
+  draftKey,
+  documentId: null,
+  payload,
+  updatedAt: new Date().toISOString(),
+  otherEditors: [] as { userId: string; name: string; updatedAt: string }[],
+});
+
 export const handlers: RequestHandler[] = [
   http.get(`${B}/auth/me`, () => HttpResponse.json({ ...fx.me, preferences: { ...state.preferences } })),
   // Bare provider ids plus a fallback — not `{ id, label }` objects.
@@ -286,6 +295,35 @@ export const handlers: RequestHandler[] = [
     state.drafts.set(id, b.payload);
     return HttpResponse.json(draftEnvelope(id, b.payload));
   }),
+  /**
+   * The server-side draft behind `/edit/new`. Note the different envelope key: `documentId` is
+   * null because the document does not exist yet.
+   */
+  http.get(`${B}/drafts/new/:draftId`, ({ params }) => {
+    const key = `new:${String(params.draftId)}`;
+    const payload = state.drafts.get(key);
+    return payload === undefined ? noContent() : HttpResponse.json(newDraftEnvelope(key, payload));
+  }),
+  http.put(`${B}/drafts/new/:draftId`, async ({ request, params }) => {
+    const key = `new:${String(params.draftId)}`;
+    const { payload } = (await request.json()) as { payload: unknown };
+    state.drafts.set(key, payload);
+    return HttpResponse.json(newDraftEnvelope(key, payload));
+  }),
+  http.delete(`${B}/drafts/new/:draftId`, ({ params }) => {
+    state.drafts.delete(`new:${String(params.draftId)}`);
+    return HttpResponse.json({ auditId: AUDIT });
+  }),
+  http.get(`${B}/drafts`, () =>
+    HttpResponse.json({
+      items: [...state.drafts.keys()].map((k) => ({
+        draftKey: k,
+        documentId: k.startsWith('new:') ? null : k,
+        title: k.startsWith('new:') ? 'פריט ידע חדש' : (state.documents.get(k)?.title ?? ''),
+        updatedAt: new Date().toISOString(),
+      })),
+    }),
+  ),
   http.delete(`${B}/documents/:id/draft`, ({ params }) => {
     state.drafts.delete(String(params.id));
     return noContent();

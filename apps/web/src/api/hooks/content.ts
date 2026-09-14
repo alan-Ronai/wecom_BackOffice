@@ -178,21 +178,36 @@ export const useDeleteNote = (docId: string) => {
 
 /* ── drafts ─────────────────────────────────────────────────────────────── */
 /**
+ * Two draft shapes, one editor.
+ *
+ * An existing document's draft lives at `/documents/:id/draft`. A document that does not exist
+ * yet has nowhere to hang one, so the API keeps it at `/drafts/new/:draftId` — a route that was
+ * shipped in stage 1 and never called (review "missing features"): `/edit/new` lived purely in
+ * React state, so a refresh, a crash or a second machine lost everything typed so far.
+ *
+ * `/edit/new` uses the fixed draft id below, so there is exactly one in-progress new document per
+ * user and reopening the route resumes it.
+ */
+export const NEW_DRAFT_ID = 'new';
+
+/**
  * A document with no saved draft is a normal state, not an error: `unwrapMaybe` maps both 204
  * and 404 to `null` so the editor seeds from the published document instead of parking the
  * query in a permanent error state.
  */
-export const useDraft = (id: string | undefined) =>
+export const useDraft = (id: string | undefined, isNew = false) =>
   useQuery({
-    queryKey: keys.draft(id ?? ''),
+    queryKey: keys.draft(isNew ? `new:${id ?? ''}` : (id ?? '')),
     enabled: !!id,
     retry: false,
     queryFn: async (): Promise<DraftEnvelope | null> =>
-      unwrapMaybe(await api.GET('/documents/{id}/draft', { params: { path: { id: id! } } })),
+      isNew
+        ? unwrapMaybe(await api.GET('/drafts/new/{draftId}', { params: { path: { draftId: id! } } }))
+        : unwrapMaybe(await api.GET('/documents/{id}/draft', { params: { path: { id: id! } } })),
   });
 
 /** Autosave: debounced 600 ms, exposing the "נשמר …" state the editor topbar renders. */
-export function useSaveDraft(id: string, delay = 600) {
+export function useSaveDraft(id: string, delay = 600, isNew = false) {
   const [saving, setSaving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -202,10 +217,12 @@ export function useSaveDraft(id: string, delay = 600) {
     const payload = pending.current;
     if (!payload) return;
     pending.current = null;
-    await api.PUT('/documents/{id}/draft', { params: { path: { id } }, body: { payload } });
+    await (isNew
+      ? api.PUT('/drafts/new/{draftId}', { params: { path: { draftId: id } }, body: { payload } })
+      : api.PUT('/documents/{id}/draft', { params: { path: { id } }, body: { payload } }));
     setSaving(false);
     setLastSavedAt(Date.now());
-  }, [id]);
+  }, [id, isNew]);
 
   const save = useCallback(
     (payload: Record<string, unknown>) => {
@@ -242,5 +259,15 @@ export const useDeleteDraft = (id: string) => {
   return useMutation({
     mutationFn: async () => unwrap(await api.DELETE('/documents/{id}/draft', { params: { path: { id } } })),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.draft(id) }),
+  });
+};
+
+/** Discards the server-side `/edit/new` draft once the document it held has been created. */
+export const useDeleteNewDraft = (draftId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      unwrap(await api.DELETE('/drafts/new/{draftId}', { params: { path: { draftId } } })),
+    onSuccess: () => qc.removeQueries({ queryKey: keys.draft(`new:${draftId}`) }),
   });
 };

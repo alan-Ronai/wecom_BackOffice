@@ -9,7 +9,14 @@ import {
   usePublish,
   useSaveStructure,
 } from '../../api/hooks/documents.js';
-import { useBlocks, useDraft, useFields, useSaveDraft } from '../../api/hooks/content.js';
+import {
+  NEW_DRAFT_ID,
+  useBlocks,
+  useDeleteNewDraft,
+  useDraft,
+  useFields,
+  useSaveDraft,
+} from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
 import { ApiError } from '../../api/unwrap.js';
 import { CATS, CAT_KEYS, PRI, SOURCE_FILES } from '../../lib/constants.js';
@@ -64,11 +71,17 @@ export function EditorPage() {
   const toast = useToast();
 
   const published = useDocument(isNew ? undefined : id);
-  const draft = useDraft(isNew ? undefined : id);
+  /**
+   * `/edit/new` now has a real, server-side draft (`/drafts/new/:draftId`). It used to live only
+   * in React state, so a refresh, a crash or moving to another machine lost everything typed into
+   * a new knowledge item — the one place in the app where "autosaved" was not true.
+   */
+  const draft = useDraft(isNew ? NEW_DRAFT_ID : id, isNew);
   const blocks = useBlocks();
   const fields = useFields();
   const cards = useDocuments({ sort: 'wave' });
-  const autosave = useSaveDraft(id);
+  const autosave = useSaveDraft(isNew ? NEW_DRAFT_ID : id, 600, isNew);
+  const dropNewDraft = useDeleteNewDraft(NEW_DRAFT_ID);
   const publish = usePublish();
   const patch = usePatchDocument(id);
   const saveStructure = useSaveStructure(id);
@@ -81,15 +94,19 @@ export function EditorPage() {
 
   useEffect(() => {
     if (seeded.current === id) return;
+    // The draft query must settle before seeding in *both* modes — seeding early is what
+    // silently discarded a saved draft (I5), and a new document now has one too.
+    if (draft.isPending) return;
+    const fromDraft = draft.data?.payload as Document | undefined;
     if (isNew) {
       seeded.current = id;
-      setDoc(addBasic(emptyDoc('tech'), 'step', null, null));
+      // A resumed draft keeps its steps; a fresh one starts with a single empty step.
+      const base = fromDraft ?? addBasic(emptyDoc('tech'), 'step', null, null);
+      setDoc(structuredClone(base));
+      setSelected(allSteps(base)[0]?.key ?? null);
       return;
     }
-    // Both queries must settle first: the document usually wins the race, and seeding from it
-    // early silently discarded a saved draft (and with it the user's unsaved work).
-    if (draft.isPending || published.isPending) return;
-    const fromDraft = draft.data?.payload as Document | undefined;
+    if (published.isPending) return;
     const base = fromDraft ?? published.data;
     if (!base) return;
     seeded.current = id;
@@ -177,6 +194,9 @@ export function EditorPage() {
         phases: clean.phases,
       });
       targetId = created.id;
+      // The new-document draft has served its purpose; leaving it behind would make the next
+      // "✚ פריט ידע חדש" resume a document that has already been published.
+      await dropNewDraft.mutateAsync().catch(() => {});
     } else {
       // PATCH rotates the document's etag, so the structure save must use the etag the PATCH
       // *returned* — `published.data.etag` is stale by then, and a stale precondition is a 412.
