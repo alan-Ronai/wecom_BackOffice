@@ -836,7 +836,12 @@ export const roles: Role[] = [
 // `GET /admin/users` now answers `AdminUserRowSchema` rows (stage 5) — see `test/msw/stage5.ts`,
 // which owns that fixture so the row shape lives next to the handler that serves it.
 
-export const groupsMap: GroupMap[] = [{ idpGroupId: 'g-leads', idpGroupName: 'KB-Leads', roleId: ROLE_LEAD }];
+// Two rows on purpose: one the nightly `identity.sync` job has stamped, and one added since it
+// last ran. The screen has to tell those apart, and a single-row fixture cannot show that it does.
+export const groupsMap: GroupMap[] = [
+  { idpGroupId: 'g-leads', idpGroupName: 'KB-Leads', roleId: ROLE_LEAD, lastSyncedAt: T },
+  { idpGroupId: 'g-new', idpGroupName: 'KB-New', roleId: ROLE_LEAD, lastSyncedAt: null },
+];
 
 // Real user-agent strings: the screen parses them into "Chrome · Windows", and a fixture that
 // says `Chrome/128` would let that parser rot untested.

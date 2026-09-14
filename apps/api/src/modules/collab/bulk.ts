@@ -126,17 +126,25 @@ async function apply(
       break;
     }
     case 'request-review': {
-      const ins = await tx.query<{ id: string }>(
-        `insert into review_requests(document_id, requested_by, reviewer_ids, note)
-         values ($1,$2,'{}'::uuid[],null)
-         on conflict (document_id) where status = 'open'
-         do update set requested_by = excluded.requested_by, created_at = now()
-         returning id`,
+      // Move the document to `review` first — same order the single-document
+      // `request-review` route uses (`reviews.ts`) — so the baseline recorded below is the
+      // etag/version this request actually reviews, not whatever they were before this
+      // write minted a fresh etag.
+      const moved = await tx.query<{ etag: string; current_version: number }>(
+        `update documents set status='review', updated_by=$2, updated_at=now(),
+                etag=gen_random_uuid()::text
+           where id=$1 returning etag, current_version`,
         [doc.id, user.id],
       );
-      await tx.query(
-        "update documents set status='review', updated_by=$2, updated_at=now(), etag=gen_random_uuid()::text where id=$1",
-        [doc.id, user.id],
+      const baseline = moved.rows[0];
+      const ins = await tx.query<{ id: string }>(
+        `insert into review_requests(document_id, requested_by, reviewer_ids, note, base_version, base_etag)
+         values ($1,$2,'{}'::uuid[],null,$3,$4)
+         on conflict (document_id) where status = 'open'
+         do update set requested_by = excluded.requested_by, created_at = now(),
+                       base_version = excluded.base_version, base_etag = excluded.base_etag
+         returning id`,
+        [doc.id, user.id, baseline.current_version, baseline.etag],
       );
       await notifyMany(
         tx,

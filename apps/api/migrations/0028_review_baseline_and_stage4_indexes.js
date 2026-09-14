@@ -56,9 +56,14 @@ exports.up = (pgm) => {
     base_etag: { type: 'text' },
   });
   for (const [table, column] of INDEXES) pgm.createIndex(table, column, { ifNotExists: true });
+  // `schedule` becomes nullable: `null` is "ללא תזמון" — the connector runs on demand only and
+  // the scheduler unregisters its pg-boss cron (folded from a later migration to stay below 0029).
+  pgm.alterColumn('connectors', 'schedule', { notNull: false });
 };
 
 exports.down = (pgm) => {
+  pgm.sql("update connectors set schedule = '*/15 * * * *' where schedule is null");
+  pgm.alterColumn('connectors', 'schedule', { notNull: true });
   for (const [table, column] of [...INDEXES].reverse()) pgm.dropIndex(table, column, { ifExists: true });
   pgm.dropColumns('review_requests', ['base_version', 'base_etag']);
 };

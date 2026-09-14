@@ -1,7 +1,7 @@
 # wecom KB — design turns
 
 Mockups live in the Claude Design project `wecom KB Redesign` (id `8d3a1b0f-a941-4ceb-add4-7a58dd5a964d`).
-Turns 1–2 are the original redesign (`wecom KB Redesign.dc.html`). Turns 3–6 are authored here:
+Turns 1–2 are the original redesign (`wecom KB Redesign.dc.html`). Turns 3–7 are authored here:
 
 | Local file | Project path (on push) | Turn | Options |
 |---|---|---|---|
@@ -9,6 +9,7 @@ Turns 1–2 are the original redesign (`wecom KB Redesign.dc.html`). Turns 3–6
 | `turn4-connectors-sync.dc.html` | `wecom KB Turn 4 - Connectors & Sync.dc.html` | 4 | 4a registry · 4b WordPress wizard · 4c sync queue · 4d parity report · 4e conflict merge |
 | `turn5-connected-data.dc.html` | `wecom KB Turn 5 - Connected Data.dc.html` | 5 | 5a data explorer · 5b graph · 5c CRM field page · 5d block page · 5e dashboards |
 | `turn6-qol.dc.html` | `wecom KB Turn 6 - QOL.dc.html` | 6 | 6a library · 6b article · 6c editor · 6d notifications · 6e onboarding+palette · 6f accessibility · 6g mobile · 6h dark variants |
+| `turn7-wave4-taxonomy-feedback-source.dc.html` | `wecom KB Turn 7 - Wave 4 Taxonomy, Feedback & Source.dc.html` | 7 | 7a taxonomy admin · 7b topic page · 7c facets + metadata · 7d feedback (modal, queue, publish, analytics) · 7e source editor & pane · 7f usage analytics + governance · 7g mobile |
 
 Rules: one `<section class="dv-turn">` per file, option ids `<turn><letter>`, every card `dir="rtl"`, Hebrew copy, tokens from `_helmet.html`.
 Interactivity: a `DCLogic` class at the bottom of the file; values are bound with `{{ name }}`, lists with `<sc-for list="{{ items }}" as="x">`, conditions with `<sc-if value="{{ flag }}">`.
@@ -55,3 +56,9 @@ Never include `support.js`, `wecom KB Redesign.dc.html` or `wecom KB Wireframes.
 | 6a–6c | L4 | Library, Article, Editor components |
 | 6d–6e | L4 | NotificationCenter, Tour, Palette |
 | 6f–6h | L4 | global styles, responsive layouts, dark tokens |
+| 7a–7b | W1 | `/admin/taxonomy` (`TaxonomyPage.tsx`), `/topic/:id` (`TopicPage.tsx`), `TypeBadge` |
+| 7c | W1 | `TaxonomyFacets`, `MetadataPanel`, `DocCard` badges/tags, compact TipTap for `bodyHtml` |
+| 7d | W3 | feedback modal on article + step, `/feedback` queue & drawer, publish dialog `resolveFeedbackIds`, `/feedback/analytics` |
+| 7e | W4 (+W2) | article pane modes, `SourceEditor` (TipTap), source versions, docx import/export, `source_review_needed` banner |
+| 7f | W5 + W2 | `/analytics` (`AnalyticsPage.tsx`), search-log drill-down, status chips + `POST /documents/:id/status` |
+| 7g | W6 | mobile layouts for topic page, feedback modal, notification center |

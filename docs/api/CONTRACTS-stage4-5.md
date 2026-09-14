@@ -52,6 +52,8 @@ Tables (`0020_collab.js`): `notifications`, `comments`, `comment_likes`, `review
 | GET | `/admin/audit/:id` | — | `AuditEntryDetailSchema` (computed before/after diff rows) | audit.read |
 | GET/PUT | `/admin/identity` | `IdentitySettingsPutSchema` | `IdentitySettingsSchema` (secrets write-only; stored in `app_settings`, env is the fallback) | system.admin |
 | POST | `/admin/identity/test` | `{ provider }` | `IdentityTestResultSchema` (OIDC discovery fetch; Palo Alto op command) | system.admin |
+| GET | `/admin/groups/search` | `GroupSearchQuerySchema` | `GroupSearchResponseSchema` — Graph `startswith(displayName,…)` on the client-credentials token; **503 `OIDC_NOT_CONFIGURED`** with no issuer, **502 `GRAPH_UNAVAILABLE`** on a Graph failure | roles.manage |
+| GET | `/admin/groups-map` | — | `GroupsMapResponseSchema` — each row gains `lastSyncedAt`, stamped by the nightly `identity.sync` job. Null means "saved, not yet applied to anyone". Stored in `system_state` under `identity.groups_map.last_synced_at`, not a `groups_map` column: migrations 0026–0028 were taken by this wave and 0029 by wave 4, leaving no free number for an `alter table` | roles.manage |
 
 ## Stage 5 — connectors & sync UI (existing L6 routes, plus; owner: backend lane B)
 
@@ -63,6 +65,8 @@ Tables (`0020_collab.js`): `notifications`, `comments`, `comment_likes`, `review
 | GET | `/sync/links/:id/conflict` | `ConflictViewSchema` | sources.manage |
 | POST | `/sync/links/:id/resolve` | `ResolveConflictBodySchema` → `SyncLinkRowSchema` | suggestions.apply |
 | POST | `/connectors/:id/run` | `SyncRunResultSchema` | connectors.manage |
+| GET | `/sync/parity?connectorId=` | `ParityResponseSchema` — per link both sides' content hashes (`localHash`, `remoteHash`, `baseRemoteHash`, `remoteUpdatedAt`) plus `unlinked.documents` / `unlinked.remote`. The remote listing is cached 60 s per connector; `remoteAvailable: false` and `unlinkedReason: 'remote_unavailable'` distinguish an outage from a deletion (`'remote_missing'`) | sources.manage |
+| POST | `/sync/links` | `SyncLinkCreateBodySchema` → `SyncLinkRowSchema` (201). Creates the link **unsynced** — no `base_remote_hash`, no `last_synced_at`, state `pending_import` — so the first run establishes the baseline. 409 `ALREADY_LINKED` when either end is taken | sources.manage |
 
 Existing L6 routes keep their paths; where the L6 response differs from these schemas, the backend adapts to these schemas (they are the contract the UI is built against).
 

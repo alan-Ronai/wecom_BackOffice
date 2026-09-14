@@ -17,7 +17,9 @@ import type {
   ConflictView,
   ConnectorRow,
   ConnectorTypeInfo,
+  GroupSearchItem,
   IdentitySettings,
+  ParityConnector,
   RoleMatrix,
   SyncLinkRow,
 } from '../../src/api/stage5.js';
@@ -384,12 +386,90 @@ export const conflict: ConflictView = {
   },
 };
 
+/* ── wave 3: the Entra group directory behind `GET /admin/groups/search` ──── */
+
+/**
+ * `KB-New` is already in `fx.groupsMap`, so the search can show a result that must come back
+ * disabled — offering a group that is already mapped would produce a duplicate row nobody wants.
+ */
+export const directoryGroups: GroupSearchItem[] = [
+  { id: 'g-editors', displayName: 'KB-Editors', description: 'עורכי ידע' },
+  { id: 'g-new', displayName: 'KB-New' },
+  { id: 'g-support', displayName: 'Support-L2', description: 'נציגי רמה 2' },
+];
+
+/* ── wave 3: the parity report (design 4d) ────────────────────────────────── */
+
+export const D_UNLINKED = 'bbbb1111-1111-4111-8111-111111111111';
+export const REMOTE_UNLINKED = '311';
+
+/**
+ * Deliberately not a copy of the queue rows: the report exists to show the three things the queue
+ * cannot — a remote hash that has moved off its baseline, a local fingerprint, and the two lists of
+ * things with no link at all.
+ */
+const initialParity = (): ParityConnector[] => [
+  {
+    connectorId: C_WP,
+    connectorName: 'WordPress',
+    remoteAvailable: true,
+    items: [
+      {
+        ...initialLinks()[0],
+        localHash: 'a91c4f2de0b1c3a4f5e6d7c8b9a0112233445566778899aabbccddeeff001122',
+        remoteHash: '7d02be9aa11bb22cc33dd44ee55ff6600112233445566778899aabbccddeeff0',
+        baseRemoteHash: 'c4480ffaa11bb22cc33dd44ee55ff6600112233445566778899aabbccddeeff0',
+        remoteUpdatedAt: T,
+      },
+      {
+        ...initialLinks()[3],
+        localHash: '92f70de11223344556677889900aabbccddeeff00112233445566778899aabb0',
+        remoteHash: '92f70de11223344556677889900aabbccddeeff00112233445566778899aabb0',
+        baseRemoteHash: '92f70de11223344556677889900aabbccddeeff00112233445566778899aabb0',
+        remoteUpdatedAt: T,
+      },
+    ],
+    unlinked: {
+      documents: [
+        {
+          documentId: D_UNLINKED,
+          title: 'מסמך ללא קישור',
+          category: 'tech',
+          currentVersion: 3,
+          updatedAt: T,
+        },
+      ],
+      remote: [
+        {
+          externalId: REMOTE_UNLINKED,
+          title: 'עמוד שאין לו מסמך',
+          hash: '1fa90c6aa11bb22cc33dd44ee55ff6600112233445566778899aabbccddeeff0',
+          kind: 'page',
+          url: 'https://help.wecom.co.il/page/311',
+          updatedAt: T,
+        },
+      ],
+    },
+  },
+  {
+    connectorId: C_FOLDER,
+    connectorName: 'תיקיית Word',
+    // The folder connector has never run, so its remote side is genuinely unreadable. A fixture
+    // where every connector answers cleanly would never exercise the banner that says so.
+    remoteAvailable: false,
+    items: [],
+    unlinked: { documents: [], remote: [] },
+  },
+];
+
 /* ── mutable state ────────────────────────────────────────────────────────── */
 
 interface Stage5State {
   identity: IdentitySettings;
   connectors: ConnectorRow[];
   links: SyncLinkRow[];
+  parity: ParityConnector[];
+  created: { connectorId: string; documentId: string; externalId: string }[];
   runs: string[];
   resolved: { id: string; resolution: string }[];
   synced: { id: string; direction: string }[];
@@ -400,6 +480,8 @@ const initial = (): Stage5State => ({
   identity: JSON.parse(JSON.stringify(identity)) as IdentitySettings,
   connectors: initialConnectors(),
   links: initialLinks(),
+  parity: initialParity(),
+  created: [],
   runs: [],
   resolved: [],
   synced: [],
@@ -580,6 +662,65 @@ export const stage5Handlers: RequestHandler[] = [
     link.lastSyncedAt = T;
     return HttpResponse.json(link);
   }),
+  /**
+   * Prefix search, as Graph's `startswith(displayName,…)` does it — matching "contains" here would
+   * let a screen pass against a mock the real directory cannot answer.
+   */
+  http.get(`${B}/admin/groups/search`, ({ request }) => {
+    const q = new URL(request.url).searchParams.get('q') ?? '';
+    if (!q.trim())
+      return HttpResponse.json({ code: 'BAD_REQUEST', message: 'נדרש מונח חיפוש' }, { status: 400 });
+    return HttpResponse.json({
+      items: directoryGroups.filter((g) => g.displayName.toLowerCase().startsWith(q.trim().toLowerCase())),
+    });
+  }),
+
+  http.get(`${B}/sync/parity`, ({ request }) => {
+    const connectorId = new URL(request.url).searchParams.get('connectorId');
+    return HttpResponse.json({
+      connectors: connectorId
+        ? stage5State.parity.filter((c) => c.connectorId === connectorId)
+        : stage5State.parity,
+    });
+  }),
+  // Ordered before `/sync/links/:id/…` is irrelevant (different method), but kept beside the queue
+  // handler so the two writes to `sync_links` are read together.
+  http.post(`${B}/sync/links`, async ({ request }) => {
+    const b = (await request.json()) as { connectorId: string; documentId: string; externalId: string };
+    const report = stage5State.parity.find((c) => c.connectorId === b.connectorId);
+    if (!report) return notFound();
+    if (
+      stage5State.created.some((c) => c.externalId === b.externalId || c.documentId === b.documentId) ||
+      report.items.some((i) => i.externalId === b.externalId || i.documentId === b.documentId)
+    )
+      return HttpResponse.json(
+        { code: 'ALREADY_LINKED', message: 'הפריט המרוחק כבר מקושר למסמך אחר' },
+        { status: 409 },
+      );
+    stage5State.created.push(b);
+    const doc = report.unlinked.documents.find((d) => d.documentId === b.documentId);
+    // The server creates the link unsynced; the mock must not invent a baseline the real one
+    // deliberately refuses to write.
+    const row: SyncLinkRow = {
+      id: 'dd999999-9999-4999-8999-999999999999',
+      connectorId: b.connectorId,
+      connectorName: report.connectorName,
+      documentId: b.documentId,
+      title: doc?.title ?? 'מסמך',
+      externalId: b.externalId,
+      remoteUrl: null,
+      state: 'pending_import',
+      baseLocalVersion: 0,
+      currentLocalVersion: doc?.currentVersion ?? 0,
+      remoteChanged: true,
+      localChanged: (doc?.currentVersion ?? 0) !== 0,
+      lastSyncedAt: null,
+    };
+    report.unlinked.documents = report.unlinked.documents.filter((d) => d.documentId !== b.documentId);
+    report.unlinked.remote = report.unlinked.remote.filter((r) => r.externalId !== b.externalId);
+    return HttpResponse.json(row, { status: 201 });
+  }),
+
   http.post(`${B}/sync/links/:id/sync`, async ({ params, request }) => {
     const link = stage5State.links.find((l) => l.id === params.id);
     if (!link) return notFound();

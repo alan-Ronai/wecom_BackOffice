@@ -187,14 +187,34 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
     async (req, reply) => {
       const row = await repo.get(req.params.id);
       if (!row) return reply.status(404).send(notFound(req, 'מחבר לא נמצא'));
+      // `type` is immutable: `repo.update` has no `type` column to write, and the config
+      // below is validated against `row.type`'s schema — silently accepting a different
+      // `type` here would validate `config` against the wrong connector's rules and then
+      // discard the `type` change entirely. Reject rather than silently ignore (N3).
+      if ('type' in req.body && req.body.type !== row.type)
+        return reply.status(400).send({
+          code: 'IMMUTABLE_TYPE',
+          message: 'לא ניתן לשנות את סוג המחבר לאחר יצירתו',
+          requestId: req.id,
+        });
       let config: Record<string, unknown> | undefined;
       if (req.body.config) {
-        // A masked secret (`••••`) round-tripped from the UI means "unchanged" — merging it
-        // in literally would overwrite the real, stored secret with the placeholder itself.
-        const incoming = Object.fromEntries(
-          Object.entries(req.body.config).filter(([, v]) => v !== MASKED_VALUE),
-        );
-        const merged = { ...(repo.config(row) as Record<string, unknown>), ...incoming };
+        // A PATCH sends only the keys it means to change, so absent keys must survive
+        // untouched (including secrets the client was never handed back). Per key:
+        //   - the masked placeholder (`••••`) means "unchanged" — merging it in literally
+        //     would overwrite the real, stored secret with the placeholder itself;
+        //   - an explicit `null` means "clear this key" — delete it from the merged config
+        //     rather than writing a literal null, so the connector's schema can re-apply
+        //     its own default (or reject the now-missing required key with a 400).
+        const merged: Record<string, unknown> = { ...(repo.config(row) as Record<string, unknown>) };
+        for (const [k, v] of Object.entries(req.body.config)) {
+          if (v === MASKED_VALUE) continue;
+          if (v === null) {
+            delete merged[k];
+            continue;
+          }
+          merged[k] = v;
+        }
         const parsed = registry.get(row.type).configSchema.safeParse(merged);
         if (!parsed.success)
           return reply.status(400).send({
@@ -205,9 +225,13 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
           });
         config = parsed.data as Record<string, unknown>;
       }
+      // `schedule` is tri-state: omitted means "leave it alone", so only forward the key
+      // to the repo when the client actually sent it (including an explicit `null`, which
+      // means "ללא תזמון" — clear it). Spreading `req.body.schedule` unconditionally would
+      // always add the key, turning every "not sent" into "clear it".
       const updated = await repo.update(row.id, {
         name: req.body.name,
-        schedule: req.body.schedule,
+        ...('schedule' in req.body ? { schedule: req.body.schedule } : {}),
         enabled: req.body.enabled,
         config,
       });

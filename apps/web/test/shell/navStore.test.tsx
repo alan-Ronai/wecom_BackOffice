@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { NavProvider, useNav } from '../../src/components/shell/navStore.js';
+import { getActiveScope, setActiveScope } from '../../src/lib/keys.js';
 
 const w = ({ children }: { children: ReactNode }) => (
   <MemoryRouter>
@@ -35,6 +36,31 @@ describe('navStore', () => {
     const { result } = renderHook(() => useNav(), { wrapper: w });
     act(() => result.current.openDoc('x', { title: 'X' }));
     expect(JSON.parse(sessionStorage.getItem('kb.tabs')!)).toEqual([{ docId: 'x', title: 'X' }]);
+  });
+
+  /**
+   * m3. The hotkey registry reads the active scope through a module-level value — `dispatch` is a
+   * plain `window` listener outside React — so the store is not the only place it has to be true.
+   */
+  it('opening the split claims the left pane, and closing it hands the keys back', () => {
+    setActiveScope('article');
+    const { result } = renderHook(() => useNav(), { wrapper: w });
+    act(() => result.current.openDoc('a', { title: 'A' }));
+    act(() => result.current.openDoc('b', { title: 'B', newTab: true }));
+
+    act(() => result.current.toggleSplit());
+    expect(result.current.activeScope).toBe('split-left');
+    expect(getActiveScope()).toBe('split-left');
+
+    act(() => result.current.setActiveScope('split-right'));
+    expect(getActiveScope()).toBe('split-right');
+
+    // Without this the keys would stay addressed to a pane that no longer exists, and call mode
+    // would go silent on a screen that looks entirely normal.
+    act(() => result.current.toggleSplit());
+    expect(result.current.split).toBeNull();
+    expect(result.current.activeScope).toBe('article');
+    expect(getActiveScope()).toBe('article');
   });
 
   it('splits only from a document route', () => {

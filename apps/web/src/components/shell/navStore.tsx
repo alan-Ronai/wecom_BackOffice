@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { setActiveScope as publishActiveScope, type ActiveScope } from '../../lib/keys.js';
 
 export interface Tab {
   docId: string;
@@ -34,6 +35,15 @@ export interface Nav {
   canForward: boolean;
   trail: TrailEntry[];
   setTitle: (path: string, title: string) => void;
+  /**
+   * Which mounted surface the keyboard is currently driving — see `lib/keys.ts#ActiveScope`.
+   *
+   * It lives here because it is a navigation fact, not a page-local one: split view is the case
+   * that needs it, split state is already here, and the answer has to survive a keystroke arriving
+   * while no pane holds DOM focus (which is most of a call).
+   */
+  activeScope: ActiveScope;
+  setActiveScope: (scope: ActiveScope) => void;
 }
 
 const Ctx = createContext<Nav | null>(null);
@@ -58,6 +68,7 @@ export function NavProvider({ children }: { children: ReactNode }) {
   const [tabs, setTabs] = useState<Tab[]>(() => load('kb.tabs', [] as Tab[]));
   const [activeTab, setActiveTab] = useState(() => load('kb.activeTab', 0));
   const [split, setSplit] = useState<Split>(null);
+  const [activeScope, setActiveScopeState] = useState<ActiveScope>('article');
   const stack = useRef<TrailEntry[]>([]);
   const pos = useRef(-1);
   const titles = useRef(new Map<string, string>());
@@ -126,18 +137,38 @@ export function NavProvider({ children }: { children: ReactNode }) {
     [tabs, activeTab, nav],
   );
 
+  /**
+   * The registry reads this through a module-level value, not a context: `dispatch` is a plain
+   * `window` listener outside React. Keeping the state here too is what lets a component render
+   * from it (the pane that is driving gets a focus ring), while the effect keeps the two in step.
+   */
+  const setActiveScope = useCallback((scope: ActiveScope) => {
+    setActiveScopeState(scope);
+    publishActiveScope(scope);
+  }, []);
+  useEffect(() => {
+    publishActiveScope(activeScope);
+  }, [activeScope]);
+
   const toggleSplit = useCallback(
     (rightId?: string) => {
       const m = /^\/doc\/([^/]+)/.exec(loc.pathname);
       if (!m) return;
       if (split && !rightId) {
         setSplit(null);
+        // Closing the split leaves one article on screen, and the keys have to follow it back —
+        // otherwise they stay addressed to a pane that no longer exists and nothing responds.
+        setActiveScope('article');
         return;
       }
       const right = rightId ?? tabs.find((t) => t.docId !== m[1])?.docId;
-      if (right) setSplit({ left: m[1], right });
+      if (right) {
+        setSplit({ left: m[1], right });
+        // Opening the split makes the pane you were already reading the active one.
+        setActiveScope('split-left');
+      }
     },
-    [loc.pathname, split, tabs],
+    [loc.pathname, split, tabs, setActiveScope],
   );
 
   const value = useMemo<Nav>(
@@ -159,9 +190,11 @@ export function NavProvider({ children }: { children: ReactNode }) {
         const e = stack.current.find((x) => x.path === p);
         if (e) e.title = t;
       },
+      activeScope,
+      setActiveScope,
     }),
     // `loc.pathname` keeps canBack/canForward/trail in sync with the ref-based stack.
-    [tabs, activeTab, openDoc, closeTab, split, toggleSplit, nav, loc.pathname],
+    [tabs, activeTab, openDoc, closeTab, split, toggleSplit, nav, loc.pathname, activeScope, setActiveScope],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -174,6 +174,121 @@ run('connector routes', () => {
     await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
   });
 
+  // Backend ask #1: `schedule` must be clearable — an explicit `null` on the write side
+  // is "ללא תזמון", distinct from omitting the key (which leaves the schedule alone).
+  it('clears the schedule to null and leaves it alone when the key is omitted', async () => {
+    const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
+    expect(conn.schedule).toBe('*/15 * * * *');
+
+    const cleared = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { schedule: null },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().schedule).toBeNull();
+    const row = await pool.query('select schedule from connectors where id=$1', [conn.id]);
+    expect(row.rows[0].schedule).toBeNull();
+
+    // Omitting `schedule` entirely on the next PATCH must leave it cleared, not
+    // silently restore a default — the tri-state write is the whole point of the ask.
+    const untouched = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { name: 'עוד שם' },
+    });
+    expect(untouched.statusCode).toBe(200);
+    expect(untouched.json().schedule).toBeNull();
+
+    const reset = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { schedule: '*/10 * * * *' },
+    });
+    expect(reset.json().schedule).toBe('*/10 * * * *');
+    await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
+  });
+
+  it('creates a connector with no schedule when the client asks for none up front', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/connectors',
+      payload: { ...body(), schedule: null },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().schedule).toBeNull();
+    await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${created.json().id}` });
+  });
+
+  // Backend ask #2: PATCH merges `config` rather than replacing it.
+  it('merges config on PATCH: partial updates keep other keys, and null clears one', async () => {
+    const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
+
+    // A partial config PATCH (one key) must not disturb the keys it didn't mention.
+    const partial = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { config: { username: 'kb-partial' } },
+    });
+    expect(partial.statusCode).toBe(200);
+    expect(partial.json().config).toMatchObject({
+      username: 'kb-partial',
+      baseUrl: stub.url,
+      postTypes: ['posts'],
+    });
+
+    // Explicit `null` clears a key — `categoryMap` has a schema default ({}), so
+    // clearing it is observable as the config reverting to that default.
+    const beforeClear = await app.inject({ method: 'GET', url: `/api/v1/connectors/${conn.id}` });
+    expect(beforeClear.json().config.categoryMap).toEqual({});
+    const withMap = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { config: { categoryMap: { תמיכה: 'sim' } } },
+    });
+    expect(withMap.json().config.categoryMap).toEqual({ תמיכה: 'sim' });
+    const cleared = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { config: { categoryMap: null } },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().config.categoryMap).toEqual({});
+    // Untouched keys (including the still-masked secrets) survive both PATCHes above.
+    expect(cleared.json().config).toMatchObject({ username: 'kb-partial', baseUrl: stub.url });
+    expect(cleared.json().config.applicationPassword).toBe('••••');
+    await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
+  });
+
+  // N3 (re-review, minor): `type` is immutable — `repo.update` has no column for it, and
+  // `config` is validated against the *stored* type, so a silently-accepted `type` change
+  // would validate config against the wrong schema and then drop the type change anyway.
+  it('rejects a PATCH that tries to change the connector type', async () => {
+    const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
+    const r = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { type: 'json' },
+    });
+    expect(r.statusCode).toBe(400);
+    expect(r.json().code).toBe('IMMUTABLE_TYPE');
+    const fetched = await app.inject({ method: 'GET', url: `/api/v1/connectors/${conn.id}` });
+    expect(fetched.json().type).toBe('wordpress');
+    await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
+  });
+
+  it('a re-sent, unchanged type is not treated as a type change', async () => {
+    const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
+    const r = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { type: 'wordpress', name: 'שם עדכני' },
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ type: 'wordpress', name: 'שם עדכני' });
+    await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
+  });
+
   it('a masked secret round-tripped in a PATCH leaves the stored secret unchanged', async () => {
     const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
     const before = await pool.query('select config_encrypted from connectors where id=$1', [conn.id]);

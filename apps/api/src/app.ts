@@ -21,6 +21,7 @@ import { loggerOptions, REQUEST_ID_HEADER } from './plugins/logging.js';
 import health from './routes/health.js';
 import connectorsModule from './modules/connectors/index.js';
 import { documentsAdapter } from './modules/connectors/documents-adapter.js';
+import syncModule from './modules/sync/routes.js'; // wave 3: parity report + link creation
 import { ErrorEnvelopeSchema } from '@wecom/shared';
 // L5: pipeline
 import multipart from '@fastify/multipart';
@@ -126,6 +127,13 @@ export async function buildApp(
       await v1.register(connectorsModule, {
         revisions: pipeline.revisions,
         documents: documentsAdapter(v1.db),
+      });
+      // Wave 3: the parity report reads the same tables the engine writes, plus each connector's
+      // whole remote listing through its own cache — registered after the module that owns the
+      // repo and registry it borrows, and outside it so a cached read can never back a write.
+      await v1.register(syncModule, {
+        repo: v1.connectors.repo,
+        registry: v1.connectors.registry,
       });
       // Closes the two-way sync loop: L5 applies a connector-backed source's
       // accepted suggestions -> L6 creates/refreshes the `sync_links` row. Runs

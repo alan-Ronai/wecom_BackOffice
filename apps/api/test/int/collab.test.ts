@@ -467,6 +467,103 @@ run('stage 5 — collaboration', () => {
     });
   });
 
+  // N1 (re-review, important): a bulk `request-review` used to insert `review_requests`
+  // with no `base_version`/`base_etag`, so the I5 staleness guard (`reviews.ts:191`) read
+  // `null` as "predates the column" and skipped the check — a bulk-requested review could
+  // be approved after arbitrary edits. It must be exactly as strict as the single-document
+  // route.
+  it('bulk: request-review records a baseline, so an edit before approval is caught as stale', async () => {
+    const doc = await makeDoc('בולק בדיקה — בסיס חדש');
+    const bulk = await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents/bulk',
+      headers: auth(author),
+      payload: { ids: [doc.id], action: 'request-review' },
+    });
+    expect(bulk.statusCode).toBe(200);
+    expect(bulk.json().affected).toBe(1);
+
+    const baseline = await db.pool.query(
+      `select base_version, base_etag from review_requests where document_id=$1 and status='open'`,
+      [doc.id],
+    );
+    // The bug: both columns stayed null, which the approve path treats as "no baseline
+    // to check" rather than "this document has never moved since the request".
+    expect(baseline.rows[0].base_version).not.toBeNull();
+    expect(baseline.rows[0].base_etag).not.toBeNull();
+
+    const fresh = (
+      await app.inject({ method: 'GET', url: `/api/v1/documents/${doc.id}`, headers: auth(author) })
+    ).headers.etag as string;
+    const edited = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${doc.id}/structure`,
+      headers: { ...auth(author), 'if-match': fresh },
+      payload: minimalStructure,
+    });
+    expect(edited.statusCode).toBe(200);
+
+    const approve = await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${doc.id}/review-decision`,
+      headers: auth(lead),
+      payload: { decision: 'approve' },
+    });
+    // Before the fix this was 200: the null baseline let a post-request edit through
+    // unreviewed under the reviewer's approval.
+    expect(approve.statusCode).toBe(409);
+    expect(approve.json().code).toBe('REVIEW_STALE');
+  });
+
+  it('bulk: request-review over an already-open request refreshes the baseline, not inherits it', async () => {
+    const doc = await makeDoc('בולק בדיקה — דריסת בסיס');
+    // Opens a request the single-document way, baselined on v1.
+    const opened = await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${doc.id}/request-review`,
+      headers: auth(author),
+      payload: {},
+    });
+    expect(opened.statusCode).toBe(201);
+
+    // The document moves on while the request is still open — allowed; `reviews.ts`'s own
+    // test above confirms editing during `status: 'review'` succeeds.
+    const fresh = (
+      await app.inject({ method: 'GET', url: `/api/v1/documents/${doc.id}`, headers: auth(author) })
+    ).headers.etag as string;
+    const edited = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${doc.id}/structure`,
+      headers: { ...auth(author), 'if-match': fresh },
+      payload: minimalStructure,
+    });
+    expect(edited.statusCode).toBe(200);
+
+    // A bulk request-review lands on the same still-open row (the partial unique index
+    // matches it), hitting the `on conflict … do update` branch.
+    const bulk = await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents/bulk',
+      headers: auth(author),
+      payload: { ids: [doc.id], action: 'request-review' },
+    });
+    expect(bulk.statusCode).toBe(200);
+    expect(bulk.json().affected).toBe(1);
+
+    // The baseline must now be v2 (the edited document), not the v1 the single-document
+    // request opened with — before the fix the `do update` never touched
+    // base_version/base_etag, so the stale v1 baseline would have survived and wrongly
+    // 409'd this legitimate approval.
+    const approve = await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${doc.id}/review-decision`,
+      headers: auth(lead),
+      payload: { decision: 'approve' },
+    });
+    expect(approve.statusCode).toBe(200);
+    expect(approve.json().status).toBe('approved');
+  });
+
   it('keeps a server-side draft for /edit/new', async () => {
     expect(
       (await app.inject({ method: 'GET', url: '/api/v1/drafts/new', headers: auth(author) })).statusCode,

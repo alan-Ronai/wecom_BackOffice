@@ -37,11 +37,14 @@ import {
   ConflictViewSchema,
   ConnectorRowSchema,
   ConnectorTypeInfoSchema,
+  GroupSearchResponseSchema,
   IdentitySettingsPutSchema,
   IdentitySettingsSchema,
   IdentityTestResultSchema,
+  ParityResponseSchema,
   ResolveConflictBodySchema,
   RoleMatrixSchema,
+  SyncLinkCreateBodySchema,
   SyncLinkRowSchema,
   SyncLinksQuerySchema,
   SyncQueueResponseSchema,
@@ -100,6 +103,13 @@ export type SyncCounts = SyncQueueResponse['counts'];
 export type ConflictView = z.infer<typeof ConflictViewSchema>;
 export type ResolveConflictBody = z.input<typeof ResolveConflictBodySchema>;
 export type SyncRunResult = z.infer<typeof SyncRunResultSchema>;
+export type GroupSearchItem = z.infer<typeof GroupSearchResponseSchema>['items'][number];
+export type ParityResponse = z.infer<typeof ParityResponseSchema>;
+export type ParityConnector = ParityResponse['connectors'][number];
+export type ParityLinkRow = ParityConnector['items'][number];
+export type ParityUnlinkedDocument = ParityConnector['unlinked']['documents'][number];
+export type ParityUnlinkedRemote = ParityConnector['unlinked']['remote'][number];
+export type SyncLinkCreate = z.input<typeof SyncLinkCreateBodySchema>;
 
 /** `configSchema` is a JSON-Schema object; this is the slice the wizard renders. */
 export interface ConfigField {
@@ -179,6 +189,15 @@ export const stage5 = {
     checked(IdentitySettingsSchema, await api.PUT('/admin/identity', { body })),
   testIdentity: async (provider: IdentityProvider): Promise<IdentityTestResult> =>
     checked(IdentityTestResultSchema, await api.POST('/admin/identity/test', { body: { provider } })),
+  /**
+   * Entra group lookup for the group-map screen (design 3d).
+   *
+   * Answers 503 when no issuer is configured and 502 when Graph itself is unreachable; both reach
+   * the caller as an `ApiError` carrying `status`, which is what lets the box say "הגדירו את Entra
+   * ID" for one and "נסו שוב" for the other instead of one shrug for both.
+   */
+  groupSearch: async (q: string): Promise<{ items: GroupSearchItem[] }> =>
+    checked(GroupSearchResponseSchema, await api.GET('/admin/groups/search', { params: { query: { q } } })),
 
   connectorTypes: async (): Promise<{ items: ConnectorTypeInfo[] }> =>
     checked(ConnectorTypesResponseSchema, await api.GET('/connectors/types')),
@@ -229,6 +248,21 @@ export const stage5 = {
       SyncRunResultSchema,
       await api.POST('/sync/links/{id}/sync', { params: { path: { id } }, body: { direction } }),
     ),
+
+  /**
+   * The parity report (design 4d). One request covers every connector; `connectorId` narrows it.
+   *
+   * The server caches each connector's remote listing for 60 s, which is what makes a page that
+   * reads every remote item affordable to open — so this deliberately has no polling of its own.
+   */
+  parity: async (connectorId?: string): Promise<ParityResponse> =>
+    checked(
+      ParityResponseSchema,
+      await api.GET('/sync/parity', { params: { query: connectorId ? { connectorId } : {} } }),
+    ),
+  /** The report's "קשר" on an unlinked document or remote item. 409 when either end is taken. */
+  createSyncLink: async (body: SyncLinkCreate): Promise<SyncLinkRow> =>
+    checked(SyncLinkRowSchema, await api.POST('/sync/links', { body })),
 };
 
 /* ── JSON-Schema → form fields ────────────────────────────────────────────── */

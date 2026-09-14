@@ -21,11 +21,15 @@
  *   E2E_HEADED=1   run Playwright headed
  *   E2E_PG_CONTAINER / E2E_PG_PORT / E2E_API_PORT / E2E_WEB_PORT
  *                  run a second, isolated stack beside one that is already up
+ *   E2E_OIDC=1     also stand up a real OIDC issuer, configure the API against it, and run the
+ *                  SSO login spec. Off by default: the default run is the break-glass path, which
+ *                  is what a deployment with no issuer configured actually does.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { E2E_OIDC_CLIENT, E2E_OIDC_USER } from './e2e-oidc-issuer.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -39,6 +43,8 @@ const CONTAINER = process.env.E2E_PG_CONTAINER ?? 'wecom-e2e-pg';
 const PG_PORT = Number(process.env.E2E_PG_PORT ?? 55432);
 const API_PORT = Number(process.env.E2E_API_PORT ?? 3101);
 const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 4174);
+const OIDC_PORT = Number(process.env.E2E_OIDC_PORT ?? 9401);
+const WITH_OIDC = process.env.E2E_OIDC === '1';
 const PG_PASSWORD = 'e2e-postgres';
 const DATABASE_URL = `postgres://postgres:${PG_PASSWORD}@127.0.0.1:${PG_PORT}/postgres`;
 
@@ -51,6 +57,8 @@ const WEB_URL = `http://127.0.0.1:${WEB_PORT}`;
 /* ── process bookkeeping ──────────────────────────────────────────────────── */
 
 const children = [];
+/** The OIDC issuer's origin, when `E2E_OIDC=1`. The process itself is one of `children`. */
+let issuerUrl = null;
 let tornDown = false;
 
 function run(cmd, args, opts = {}) {
@@ -181,6 +189,7 @@ function assertPortsFree() {
     ['api', API_PORT],
     ['web', WEB_PORT],
     ['postgres', PG_PORT],
+    ...(WITH_OIDC ? [['oidc', OIDC_PORT]] : []),
   ]) {
     const r = spawnSync('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' });
     const pids = (r.stdout ?? '').trim().split('\n').filter(Boolean);
@@ -253,6 +262,50 @@ async function main() {
     if (m) WP_URL = m[1];
   });
   await waitFor('wordpress stub url', () => !!WP_URL);
+  // The issuer has to exist before the API boots: `registerAuth` runs OIDC discovery once at
+  // startup and permanently disables Entra login if it fails, so a later start would leave the
+  // API configured for SSO and refusing it.
+  let oidcEnv = {};
+  if (WITH_OIDC) {
+    console.log('\n── 2c. oidc test issuer ─────────────────────────────────────');
+    const redirectUri = `${WEB_URL}/api/v1/auth/callback`;
+    issuerUrl = `http://127.0.0.1:${OIDC_PORT}`;
+    // Its own process, not this one: every step here runs through `spawnSync`, which blocks this
+    // event loop for the whole of the Playwright run. An in-process issuer answers the discovery
+    // probe and then goes deaf the moment the browser is redirected to it.
+    start('oidc', process.execPath, [
+      resolve(ROOT, 'scripts/e2e-oidc-issuer.mjs'),
+      '--port',
+      String(OIDC_PORT),
+      '--redirect-uri',
+      redirectUri,
+    ]);
+    await waitFor(
+      `oidc issuer discovery at ${issuerUrl}`,
+      httpOk(`${issuerUrl}/.well-known/openid-configuration`),
+    );
+    // The group the id token carries, mapped to the `lead` role — this is the assertion the login
+    // spec ends on, and it is the whole point of routing login through a real issuer.
+    run('docker', [
+      'exec',
+      CONTAINER,
+      'psql',
+      '-U',
+      'postgres',
+      '-d',
+      'postgres',
+      '-c',
+      `insert into groups_map(idp_group_id, idp_group_name, role_id) select '${E2E_OIDC_USER.group}','${E2E_OIDC_USER.group}', id from roles where name='lead'`,
+    ]);
+    oidcEnv = {
+      OIDC_ISSUER: issuerUrl,
+      OIDC_CLIENT_ID: E2E_OIDC_CLIENT.id,
+      OIDC_CLIENT_SECRET: E2E_OIDC_CLIENT.secret,
+      // As the *browser* reaches the callback: through the web origin, not the API's own port.
+      // It is also what the client registration declares, and the two must match exactly.
+      OIDC_REDIRECT_URI: redirectUri,
+    };
+  }
 
   console.log('\n── 3. api (production-like) ─────────────────────────────────');
   start('api', 'pnpm', ['--filter', '@wecom/api', 'exec', 'tsx', 'src/server.ts'], {
@@ -260,9 +313,11 @@ async function main() {
       ...dbEnv,
       NODE_ENV: 'production',
       PORT: String(API_PORT),
-      // No SSO issuer is configured, so the local break-glass account is the only way in —
-      // which is exactly what this gate exercises. `none` means no Palo Alto fallback either.
+      // Without `E2E_OIDC=1` no SSO issuer is configured, so the local break-glass account is the
+      // only way in — which is what the default gate exercises. `none` means no Palo Alto
+      // fallback either, in both modes.
       AUTH_FALLBACK: 'none',
+      ...oidcEnv,
       SESSION_SECRET: 'e2e-session-secret-at-least-16-chars',
       PUBLIC_URL: WEB_URL,
       // Requests arrive straight from Playwright, not through nginx, so there is no forwarded
@@ -319,12 +374,28 @@ async function main() {
         E2E_ADMIN_EMAIL: ADMIN_EMAIL,
         E2E_ADMIN_PASSWORD: ADMIN_PASSWORD,
         E2E_WP_URL: WP_URL,
+        // Read by `playwright.real.config.ts` (to add the SSO project) and by the specs: with an
+        // issuer configured the login screen leads with the Microsoft button and folds the local
+        // form behind a disclosure, so even the break-glass setup takes a different path.
+        ...(WITH_OIDC
+          ? {
+              E2E_OIDC: '1',
+              E2E_OIDC_ISSUER: issuerUrl,
+              E2E_OIDC_USER: E2E_OIDC_USER.id,
+              E2E_OIDC_NAME: E2E_OIDC_USER.name,
+              E2E_OIDC_ROLE: 'lead',
+            }
+          : {}),
         ...(process.env.E2E_HEADED === '1' ? { PWDEBUG: '0' } : {}),
       },
     },
   );
 
-  console.log('\n✓ e2e:real passed against a real Postgres, a real API and the built SPA.\n');
+  console.log(
+    `\n✓ e2e:real passed against a real Postgres, a real API and the built SPA${
+      WITH_OIDC ? ', with a real OIDC issuer' : ''
+    }.\n`,
+  );
 
   // Tear down and exit explicitly. The started children are detached with piped stdio, which
   // keeps this process's event loop alive forever — so on the success path node never exits on

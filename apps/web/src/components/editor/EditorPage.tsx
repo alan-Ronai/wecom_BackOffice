@@ -41,6 +41,7 @@ import {
 } from '../../lib/editorModel.js';
 import { useEditorHistory } from '../../lib/editorHistory.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
+import { useNav } from '../shell/navStore.js';
 import { usePalette } from '../palette/paletteStore.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
@@ -141,6 +142,12 @@ export function EditorPage() {
   const modal = useModal();
   const palette = usePalette();
   const toast = useToast();
+  // Claims the keyboard for the editor while it is mounted. The registry resolves scope order from
+  // this rather than from mount order, so `Escape` reaches the editor's selection before the shell.
+  const { setActiveScope } = useNav();
+  useEffect(() => {
+    setActiveScope('editor');
+  }, [setActiveScope]);
 
   const published = useDocument(isNew ? undefined : id);
   /**

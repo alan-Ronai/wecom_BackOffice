@@ -90,4 +90,30 @@ describe('connector jobs', () => {
     await refresh();
     expect(boss.unschedule).toHaveBeenCalledWith('connector.run.c1');
   });
+
+  // Backend ask #1: a cleared (`null`) schedule is "ללא תזמון" — the connector still
+  // runs, but never on a cron, so its pg-boss schedule has to come off the same way a
+  // disabled connector's does.
+  it('unschedules a connector whose schedule was cleared to null', async () => {
+    const boss = fakeBoss();
+    const rows: { id: string; enabled: boolean; schedule: string | null }[] = [
+      { id: 'c1', enabled: true, schedule: '*/5 * * * *' },
+    ];
+    const repo = { list: vi.fn(async () => rows), setRun: vi.fn() };
+    const deps = {
+      repo: repo as never,
+      registry: {} as never,
+      sync: { runConnector: vi.fn(), handleRemoteChanges: vi.fn() } as never,
+      events: { publish: vi.fn() },
+      log: { info() {}, error() {} },
+    };
+    const refresh = await registerConnectorJobs(boss, deps);
+    expect(boss.schedules).toEqual([['connector.run.c1', '*/5 * * * *']]);
+    rows[0].schedule = null;
+    await refresh();
+    expect(boss.unschedule).toHaveBeenCalledWith('connector.run.c1');
+    // Still enabled — a later re-set schedule must be able to re-register it, so the
+    // job handler stays; only the cron entry is removed.
+    expect(rows[0].enabled).toBe(true);
+  });
 });

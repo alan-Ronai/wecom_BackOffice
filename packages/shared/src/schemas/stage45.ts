@@ -26,7 +26,7 @@ import {
   ScriptSchema,
   VersionSchema,
 } from './content.js';
-import { PermissionSchema, SessionSchema, UserSchema } from './identity.js';
+import { GroupMapSchema, PermissionSchema, SessionSchema, UserSchema } from './identity.js';
 import { SyncLinkStateSchema } from './api.js';
 
 /* ── Stage 4: graph ─────────────────────────────────────────────────────── */
@@ -598,3 +598,108 @@ export {
   ScriptSchema,
   VersionSchema,
 };
+
+/* ── Wave 3 closure: Entra group search, group-map sync bookkeeping ───────── */
+
+/**
+ * `GET /admin/groups/search?q=` — the design's "⌕ חפש קבוצה ב-Entra…" box (3d).
+ *
+ * The search is a prefix match, because that is what Graph's `startswith(displayName,…)` filter
+ * can answer against a directory of any size without a full scan; a "contains" box would have had
+ * to page the whole tenant to be honest about its results.
+ */
+export const GroupSearchQuerySchema = z.object({ q: z.string().trim().min(1).max(100) });
+export const GroupSearchItemSchema = z.object({
+  /** The Entra object id — what `groups_map.idp_group_id` stores and what the `groups` claim carries. */
+  id: z.string(),
+  displayName: z.string(),
+  description: z.string().optional(),
+});
+export const GroupSearchResponseSchema = z.object({ items: z.array(GroupSearchItemSchema) });
+
+/**
+ * A group-map row as `GET /admin/groups-map` now answers it: the mapping plus when the nightly
+ * `identity.sync` job last reconciled that group.
+ *
+ * `null` is "never synced since this mapping was added", which is a real and useful state — a
+ * mapping saved an hour ago genuinely has not been applied to anyone's roles yet, and the screen
+ * must not imply it has.
+ */
+export const GroupMapRowSchema = GroupMapSchema.extend({ lastSyncedAt: IsoDateSchema.nullable() });
+export const GroupsMapResponseSchema = z.object({ entries: z.array(GroupMapRowSchema) });
+
+/* ── Wave 3 closure: the parity report (design 4d) ────────────────────────── */
+
+/**
+ * Why a row's two sides could not be compared. Absent when both hashes are real.
+ *
+ * - `remote_missing` — the link names an `externalId` the connector no longer lists (deleted or
+ *   unpublished on the remote). The link is not broken, but nothing on the other side answers to it.
+ * - `remote_unavailable` — `listRemote` failed for the whole connector, so every row's remote side
+ *   is unknown. Distinct from `remote_missing`: one is a fact about the item, the other about the
+ *   connection, and conflating them would have the report announce a mass deletion during an outage.
+ */
+export const ParityUnlinkedReasonSchema = z.enum(['remote_missing', 'remote_unavailable']);
+
+/**
+ * `GET /sync/parity` — one row per sync link, with the *content fingerprint of each side* rather
+ * than only the state pill the queue already shows.
+ *
+ * The three hashes are what make the row readable: `baseRemoteHash` is the remote content both
+ * sides last agreed on, `remoteHash` is the remote content now, and `localHash` is the published
+ * library document now. `remoteHash !== baseRemoteHash` means the remote moved; `localHash` is
+ * compared against nothing on the server (the two sides hash different content in different
+ * formats) — it is the library's own fingerprint, shown so an operator can tell two runs apart.
+ */
+export const ParityLinkRowSchema = SyncLinkRowSchema.extend({
+  localHash: z.string(),
+  remoteHash: z.string().nullable(),
+  baseRemoteHash: z.string().nullable(),
+  remoteUpdatedAt: IsoDateSchema.nullable(),
+  unlinkedReason: ParityUnlinkedReasonSchema.optional(),
+});
+/** A published library document in one of the connector's categories that no link points at. */
+export const ParityUnlinkedDocumentSchema = z.object({
+  documentId: IdSchema,
+  title: z.string(),
+  category: CategorySchema,
+  currentVersion: z.number().int(),
+  updatedAt: IsoDateSchema.nullable(),
+});
+/** A remote item the connector lists that no link points at. */
+export const ParityUnlinkedRemoteSchema = z.object({
+  externalId: z.string(),
+  title: z.string(),
+  hash: z.string(),
+  kind: z.string(),
+  url: z.string().nullable(),
+  updatedAt: IsoDateSchema.nullable(),
+});
+export const ParityConnectorSchema = z.object({
+  connectorId: IdSchema,
+  connectorName: z.string(),
+  /** False when `listRemote` failed: every row's `remoteHash` is then null, not "deleted". */
+  remoteAvailable: z.boolean(),
+  items: z.array(ParityLinkRowSchema),
+  unlinked: z.object({
+    documents: z.array(ParityUnlinkedDocumentSchema),
+    remote: z.array(ParityUnlinkedRemoteSchema),
+  }),
+});
+export const ParityQuerySchema = z.object({ connectorId: IdSchema.optional() });
+export const ParityResponseSchema = z.object({ connectors: z.array(ParityConnectorSchema) });
+
+/** `POST /sync/links` — the parity report's "קשר" action on an unlinked document or remote item. */
+export const SyncLinkCreateBodySchema = z.object({
+  connectorId: IdSchema,
+  documentId: IdSchema,
+  externalId: z.string().min(1).max(500),
+});
+
+export type GroupSearchItem = z.infer<typeof GroupSearchItemSchema>;
+export type GroupMapRow = z.infer<typeof GroupMapRowSchema>;
+export type ParityLinkRow = z.infer<typeof ParityLinkRowSchema>;
+export type ParityConnector = z.infer<typeof ParityConnectorSchema>;
+export type ParityResponse = z.infer<typeof ParityResponseSchema>;
+export type ParityUnlinkedDocument = z.infer<typeof ParityUnlinkedDocumentSchema>;
+export type ParityUnlinkedRemote = z.infer<typeof ParityUnlinkedRemoteSchema>;

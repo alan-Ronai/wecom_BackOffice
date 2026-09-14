@@ -47,6 +47,51 @@ import { isTyping, normalizeKey } from './keyboard.js';
 export const SCOPES = ['overlay', 'editor', 'article', 'library', 'global'] as const;
 export type Scope = (typeof SCOPES)[number];
 
+/**
+ * **Which** of the mounted surfaces the keystroke is for, as opposed to `Scope`, which is *what
+ * kind* of surface it is.
+ *
+ * The two are different questions and conflating them is what left m3 open. Split view mounts the
+ * article page twice; both panes are the `article` scope, and scope order alone cannot say which
+ * pane an `ArrowDown` belongs to — so it always reached the left one, whichever pane the operator
+ * had just clicked.
+ *
+ * The obvious fix, resolving it from `document.activeElement` containment, is worse than the bug.
+ * For most of a call nothing inside either pane is focused — the agent is reading, not tabbing —
+ * so focus sits on `<body>`, which is inside neither container, and a containment check would
+ * silently disable call-mode keys altogether. That failure is invisible to a click-then-type test,
+ * which is exactly why this needed an *explicit* scope rather than an inferred one.
+ *
+ * `navStore` owns the value (it already owns split state) and pushes it here through
+ * `setActiveScope`; it changes on a click or focus within a pane, and when a route mounts.
+ */
+export const ACTIVE_SCOPES = ['article', 'split-left', 'split-right', 'editor', 'library'] as const;
+export type ActiveScope = (typeof ACTIVE_SCOPES)[number];
+
+/** Which `Scope` an active scope lives in — both split panes are the article scope. */
+const SCOPE_OF: Record<ActiveScope, Scope> = {
+  article: 'article',
+  'split-left': 'article',
+  'split-right': 'article',
+  editor: 'editor',
+  library: 'library',
+};
+
+/** The route scopes, in their default order; `overlay` and `global` always bracket them. */
+const ROUTE_SCOPES = ['editor', 'article', 'library'] as const;
+
+let active: ActiveScope = 'article';
+
+/**
+ * Module-level rather than React state on purpose: `dispatch` is a plain `window` listener that
+ * runs outside React, and a context read there would be a render-time value captured at bind time —
+ * the same staleness `useHotkeys` reads its map through a ref to avoid.
+ */
+export function setActiveScope(scope: ActiveScope): void {
+  active = scope;
+}
+export const getActiveScope = (): ActiveScope => active;
+
 export interface KeyBinding {
   scope: Scope;
   /** Every chord string the dispatcher may see for this binding (see `comboFor`). */
@@ -153,8 +198,23 @@ export type HotkeyMap = Record<string, HotkeyHandler>;
 
 interface Entry {
   ref: { current: HotkeyMap };
+  /** When set, this binding only answers while `getActiveScope()` names it. */
+  pane: { current: ActiveScope | undefined };
 }
 const registry = new Map<Scope, Set<Entry>>(SCOPES.map((s) => [s, new Set<Entry>()]));
+
+/**
+ * `SCOPES`, with the route scope the active surface belongs to pulled to the front.
+ *
+ * Without this, scope order alone decides between two *different* route scopes that happen to be
+ * mounted together, and the arrows reach the article even when the library list is the thing the
+ * operator is driving. `overlay` stays first (a dialog owns `Escape` regardless of what is behind
+ * it) and `global` stays last (the shell is behind everything).
+ */
+function dispatchOrder(): readonly Scope[] {
+  const first = SCOPE_OF[active];
+  return ['overlay', first, ...ROUTE_SCOPES.filter((s) => s !== first), 'global'];
+}
 
 /** The chord string a keystroke is looked up by: `'ctrl+k'`, `'alt+ArrowLeft'`, `'j'`, `'Escape'`. */
 export function comboFor(e: KeyboardEvent): string {
@@ -177,8 +237,12 @@ function dispatch(e: KeyboardEvent): void {
   if (bare && e.key !== 'Escape' && isTyping()) return;
   const combo = comboFor(e);
 
-  for (const scope of SCOPES) {
-    for (const { ref } of registry.get(scope)!) {
+  for (const scope of dispatchOrder()) {
+    for (const { ref, pane } of registry.get(scope)!) {
+      // A pane-scoped binding declines every keystroke that is not addressed to it. Bindings with
+      // no pane (the shell, the overlay, a single-pane route) answer regardless, so nothing that
+      // predates split view had to learn about panes to keep working.
+      if (pane.current && pane.current !== active) continue;
       // The un-normalised `e.key` fallback is what lets a binding ask for the shifted spelling
       // (`R`, `?`) that `normalizeKey` would have lower-cased away.
       const fn = ref.current[combo] ?? (bare ? ref.current[e.key] : undefined);
@@ -208,7 +272,7 @@ function bind(): () => void {
  * `[scope, ...deps]` — a variable-length dependency list, which React warns about and which
  * re-runs unpredictably the moment a caller's array changes length. Nothing was gained by it.
  */
-export function useHotkeys(scope: Scope, map: HotkeyMap): void {
+export function useHotkeys(scope: Scope, map: HotkeyMap, pane?: ActiveScope): void {
   if (import.meta.env.DEV) {
     const allowed = declared.get(scope)!;
     const undeclared = Object.keys(map).filter((k) => !allowed.has(k));
@@ -221,16 +285,20 @@ export function useHotkeys(scope: Scope, map: HotkeyMap): void {
   }
 
   const ref = useRef(map);
+  // `pane` is read live at dispatch time for the same reason the map is: the article page's pane
+  // changes from `article` to `split-left` when the split opens, without remounting.
+  const paneRef = useRef(pane);
   // In an effect, not during render. A render React discards — StrictMode's double-invoke, a
   // concurrent pass that gets interrupted — would otherwise leave the ref holding handlers that
   // close over state from a pass that never committed, and the next keystroke would act on it.
   // Effects only run for committed renders, and they run before any keystroke can be dispatched.
   useEffect(() => {
     ref.current = map;
+    paneRef.current = pane;
   });
 
   useEffect(() => {
-    const entry: Entry = { ref };
+    const entry: Entry = { ref, pane: paneRef };
     const set = registry.get(scope)!;
     set.add(entry);
     const unbind = bind();

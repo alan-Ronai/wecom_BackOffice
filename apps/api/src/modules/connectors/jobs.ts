@@ -63,7 +63,9 @@ export async function refreshSchedules(
   scheduled: Set<string>,
 ): Promise<void> {
   const rows = await deps.repo.list();
-  const wanted = new Map(rows.filter((r) => r.enabled).map((r) => [runQueueOf(r.id), r]));
+  // A `null` schedule ("ללא תזמון") is a connector that runs on demand only — it must
+  // drop out of `wanted` just like a disabled one, so the loop below unschedules its cron.
+  const wanted = new Map(rows.filter((r) => r.enabled && r.schedule).map((r) => [runQueueOf(r.id), r]));
   for (const name of [...scheduled])
     if (!wanted.has(name)) {
       await boss.unschedule(name);
@@ -80,9 +82,10 @@ export async function refreshSchedules(
       );
     }
     // singletonKey keeps a slow connector from overlapping with its next tick.
+    // `wanted` was filtered to `r.schedule` truthy above, so the non-null assertion is safe.
     await boss.schedule(
       name,
-      r.schedule,
+      r.schedule!,
       { connectorId: r.id },
       { tz: 'Asia/Jerusalem', singletonKey: r.id },
     );

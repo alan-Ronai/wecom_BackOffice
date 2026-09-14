@@ -68,8 +68,22 @@ export const useSaveGroupsMap = () => {
   const qc = useQueryClient();
   return useMutation({
     // Returns `{ ok, auditId }`; the refreshed entries come from the invalidated query.
+    //
+    // The three mapping fields are sent and nothing else. `lastSyncedAt` rides along on the read
+    // shape, but it is the nightly job's bookkeeping, not part of the mapping: echoing it back
+    // would be the client asserting a sync time it did not observe.
     mutationFn: async (entries: GroupMap[]) =>
-      unwrap(await api.PUT('/admin/groups-map', { body: { entries } })),
+      unwrap(
+        await api.PUT('/admin/groups-map', {
+          body: {
+            entries: entries.map(({ idpGroupId, idpGroupName, roleId }) => ({
+              idpGroupId,
+              idpGroupName,
+              roleId,
+            })),
+          },
+        }),
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.admin.groups }),
   });
 };

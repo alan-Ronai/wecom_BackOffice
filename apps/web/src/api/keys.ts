@@ -60,6 +60,8 @@ export const keys = {
     users: (q: unknown = '*') => ['admin', 'users', q] as const,
     roles: ['admin', 'roles'] as const,
     groups: ['admin', 'groups'] as const,
+    /** Under `admin.groups`, so saving the map also drops the search results built from it. */
+    groupSearch: (q: string) => ['admin', 'groups', 'search', q] as const,
     sessions: ['admin', 'sessions'] as const,
     audit: (q: unknown = '*') => ['admin', 'audit', q] as const,
     auditEntry: (id: string) => ['admin', 'audit', 'entry', id] as const,
@@ -77,4 +79,6 @@ export const keys = {
   connectorTypes: ['connectors', 'types'] as const,
   syncLinks: (q: unknown = '*') => ['sync', 'links', q] as const,
   conflict: (id: string) => ['sync', 'conflict', id] as const,
+  /** Under `sync`, so creating a link or resolving a conflict invalidates the parity report too. */
+  parity: (connectorId: string = '*') => ['sync', 'parity', connectorId] as const,
 };

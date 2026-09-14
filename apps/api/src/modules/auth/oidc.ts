@@ -9,6 +9,18 @@ export type OidcConfig = {
   graphUrl?: string;
 };
 export type LoginStart = { url: string; state: string; codeVerifier: string; nonce: string };
+export type DirectoryGroup = { id: string; displayName: string; description?: string };
+
+/**
+ * Escapes a value for an OData string literal: the only metacharacter inside `'…'` is the quote
+ * itself, which is escaped by doubling it.
+ *
+ * Without this, a group name containing an apostrophe (`O'Brien's team` — or a deliberate
+ * `x') or startswith(displayName,'`) closes the literal and the rest of the operator's text is
+ * parsed as filter syntax against the whole directory. The value is also length-capped by
+ * `GroupSearchQuerySchema` before it reaches here.
+ */
+export const escapeODataString = (v: string): string => v.replace(/'/g, "''");
 export type LoginResult = {
   subject: string;
   email: string | null;
@@ -31,6 +43,7 @@ export class OidcProvider {
       clientId: c.OIDC_CLIENT_ID!,
       clientSecret: c.OIDC_CLIENT_SECRET!,
       redirectUri: c.OIDC_REDIRECT_URI!,
+      ...(c.OIDC_GRAPH_URL ? { graphUrl: c.OIDC_GRAPH_URL.replace(/\/+$/, '') } : {}),
     });
   }
 
@@ -121,6 +134,25 @@ export class OidcProvider {
     });
     if (!res.ok) throw new Error(`graph ${res.status} for ${path}`);
     return (await res.json()) as T;
+  }
+
+  /**
+   * `GET /groups?$filter=startswith(displayName,'…')` — the admin screen's group picker.
+   *
+   * One page, not the pagination loop `fetchGroupsFromGraph` runs: this answers a box somebody is
+   * typing into, and a search that walks a 10 000-group tenant before rendering its first result is
+   * not a search. `$top` bounds it; a narrower prefix is how an operator reaches a group past it.
+   */
+  async searchGroups(q: string, top = 25): Promise<DirectoryGroup[]> {
+    const filter = `startswith(displayName,'${escapeODataString(q)}')`;
+    const page = await this.graphGet<{ value: DirectoryGroup[] }>(
+      `/groups?$filter=${encodeURIComponent(filter)}&$select=id,displayName,description&$top=${top}`,
+    );
+    return page.value.map((g) => ({
+      id: g.id,
+      displayName: g.displayName,
+      ...(g.description ? { description: g.description } : {}),
+    }));
   }
 
   async fetchGroupsFromGraph(subject: string): Promise<string[]> {

@@ -20,13 +20,24 @@ import {
   ConflictViewSchema,
   ConnectorRowSchema,
   ConnectorTypeInfoSchema,
+  GroupSearchResponseSchema,
   IdentitySettingsSchema,
+  ParityResponseSchema,
   RoleMatrixSchema,
+  SyncLinkRowSchema,
   SyncQueueResponseSchema,
   SyncRunResultSchema,
   paginated,
 } from '@wecom/shared';
-import { C_FOLDER, C_WP, LINK_CONFLICT, LINK_IMPORT, AUDIT_1 } from './stage5.js';
+import {
+  C_FOLDER,
+  C_WP,
+  D_UNLINKED,
+  LINK_CONFLICT,
+  LINK_IMPORT,
+  REMOTE_UNLINKED,
+  AUDIT_1,
+} from './stage5.js';
 
 const B = 'http://kb.test/api/v1';
 const get = async (path: string) => (await fetch(`${B}${path}`)).json();
@@ -130,5 +141,39 @@ describe('stage-5 handlers answer the published envelopes', () => {
 
   it('POST /sync/links/{id}/sync', async () => {
     SyncRunResultSchema.parse(await send('POST', `/sync/links/${LINK_IMPORT}/sync`, { direction: 'import' }));
+  });
+
+  it('GET /admin/groups/search is a prefix match, as Graph startswith() is', async () => {
+    const body = GroupSearchResponseSchema.parse(await get('/admin/groups/search?q=KB'));
+    expect(body.items.map((g) => g.displayName)).toEqual(['KB-Editors', 'KB-New']);
+    // "contains" here would let a screen pass against a mock the real directory cannot answer.
+    expect(GroupSearchResponseSchema.parse(await get('/admin/groups/search?q=Editors')).items).toEqual([]);
+  });
+
+  it('GET /sync/parity carries both sides per row and the two unlinked lists', async () => {
+    const body = ParityResponseSchema.parse(await get('/sync/parity'));
+    const wp = body.connectors.find((c) => c.connectorId === C_WP)!;
+    expect(wp.items.every((i) => i.localHash && i.remoteHash)).toBe(true);
+    // One row has moved off its baseline and one has not — the report is useless if every row
+    // agrees, because then nothing distinguishes "in step" from "not compared".
+    expect(wp.items.filter((i) => i.remoteHash !== i.baseRemoteHash)).toHaveLength(1);
+    expect(wp.unlinked.documents).toHaveLength(1);
+    expect(wp.unlinked.remote).toHaveLength(1);
+    // An unreadable remote is a state the report carries, not an error it throws.
+    expect(body.connectors.some((c) => !c.remoteAvailable)).toBe(true);
+  });
+
+  it('POST /sync/links answers a link with no baseline, and drops it from both lists', async () => {
+    const row = SyncLinkRowSchema.parse(
+      await send('POST', '/sync/links', {
+        connectorId: C_WP,
+        documentId: D_UNLINKED,
+        externalId: REMOTE_UNLINKED,
+      }),
+    );
+    expect(row).toMatchObject({ state: 'pending_import', lastSyncedAt: null });
+    const after = ParityResponseSchema.parse(await get(`/sync/parity?connectorId=${C_WP}`));
+    expect(after.connectors[0].unlinked.documents).toHaveLength(0);
+    expect(after.connectors[0].unlinked.remote).toHaveLength(0);
   });
 });
