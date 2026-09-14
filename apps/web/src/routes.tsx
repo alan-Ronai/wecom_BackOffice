@@ -32,6 +32,7 @@ import { ConnectorsPage } from './components/admin/ConnectorsPage.js';
 import { ConnectorWizard } from './components/admin/ConnectorWizard.js';
 import { SystemPage } from './components/admin/SystemPage.js';
 import { TopicPage } from './components/taxonomy/TopicPage.js';
+import { TaxonomyPage } from './components/admin/TaxonomyPage.js';
 
 /** Routes mirror the legacy hashes one-to-one (spec §5). */
 export const routeObjects: RouteObject[] = [
@@ -90,6 +91,7 @@ export const routeObjects: RouteObject[] = [
           // `new` before `:id`, or the wizard would try to load a connector called "new".
           { path: 'connectors/new', element: <ConnectorWizard /> },
           { path: 'connectors/:id', element: <ConnectorWizard /> },
+          { path: 'taxonomy', element: <TaxonomyPage /> },
           { path: 'system', element: <SystemPage /> },
         ],
       },
