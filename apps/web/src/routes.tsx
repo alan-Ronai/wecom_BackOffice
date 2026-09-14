@@ -10,6 +10,7 @@ import { EditorPage } from './components/editor/EditorPage.js';
 import { HistoryPage } from './components/history/HistoryPage.js';
 import { TrashPage } from './components/trash/TrashPage.js';
 import { SourcesPage } from './components/sources/SourcesPage.js';
+import { DataPage } from './components/data/DataPage.js';
 import { AdminLayout } from './components/admin/AdminLayout.js';
 import { UsersPage } from './components/admin/UsersPage.js';
 import { RolesPage } from './components/admin/RolesPage.js';
@@ -45,6 +46,8 @@ export const routeObjects: RouteObject[] = [
       { path: 'trash', element: <TrashPage /> },
       { path: 'sources', element: <SourcesPage /> },
       { path: 'sources/:id', element: <SourcesPage /> },
+      { path: 'data', element: <DataPage /> },
+      { path: 'data/:sourceId', element: <DataPage /> },
       {
         path: 'admin',
         element: <AdminLayout />,

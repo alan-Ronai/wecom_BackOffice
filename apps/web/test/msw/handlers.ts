@@ -14,6 +14,7 @@ import { http, HttpResponse, type RequestHandler } from 'msw';
 import type { Document, Note, Suggestion } from '@wecom/shared';
 import * as fixtures from './fixtures.js';
 import { fx } from './fixtures.js';
+import { resetStage4State, stage4Handlers } from './stage4.js';
 import type { TrashItem } from '../../src/api/types.js';
 
 const B = '/api/v1';
@@ -53,6 +54,7 @@ export const state: State = initial();
 
 export function resetState(): void {
   Object.assign(state, initial());
+  resetStage4State();
 }
 
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
@@ -513,6 +515,10 @@ export const handlers: RequestHandler[] = [
     );
   }),
   http.get(`${B}/system/health`, () => HttpResponse.json(fx.health)),
+
+  // Stage 4 — connected data (`test/msw/stage4.ts`), kept in its own module so the two stages
+  // can be reviewed apart. Registered last; the patterns are disjoint from everything above.
+  ...stage4Handlers,
 ];
 
 /** Override `/auth/me` for permission tests. */

@@ -23,6 +23,14 @@ export const keys = {
   sources: ['sources'] as const,
   revision: (id: string, rev: string) => ['revision', id, rev] as const,
   suggestions: (q: unknown = '*') => ['suggestions', q] as const,
+  /* stage 4 — connected data */
+  graph: (q: unknown = '*') => ['graph', q] as const,
+  impact: (nodeId: string) => ['impact', nodeId] as const,
+  fieldPage: (name: string) => ['fieldPage', name] as const,
+  blockPage: (id: string) => ['blockPage', id] as const,
+  dataFiles: ['dataFiles'] as const,
+  dataPreview: (id: string, limit: number) => ['dataPreview', id, limit] as const,
+  dashboards: ['dashboards'] as const,
   admin: {
     users: (q: unknown = '*') => ['admin', 'users', q] as const,
     roles: ['admin', 'roles'] as const,
