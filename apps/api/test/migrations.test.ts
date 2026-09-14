@@ -134,6 +134,32 @@ run('migrations', () => {
     expect(grants).not.toContain('agent:docs.read_unpublished');
     expect(grants).not.toContain('editor:taxonomy.manage');
   });
+  it('adds the wave 4 governance columns and the status check', async () => {
+    const cols = await pool.query(
+      `select column_name from information_schema.columns where table_name='documents'
+         and column_name in ('owner_id','editor_id','approver_id','published_at','source_review_needed','source_review_reason','source_review_at')
+       order by 1`,
+    );
+    expect(cols.rows.map((r) => r.column_name)).toEqual([
+      'approver_id',
+      'editor_id',
+      'owner_id',
+      'published_at',
+      'source_review_at',
+      'source_review_needed',
+      'source_review_reason',
+    ]);
+    const sv = await pool.query(
+      "select 1 from information_schema.columns where table_name='document_versions' and column_name='source_version'",
+    );
+    expect(sv.rowCount).toBe(1);
+    await expect(
+      pool.query(
+        "insert into documents(slug,title,category,wave,priority,status) values ('bad-status','x','sim',1,'m','bogus')",
+      ),
+    ).rejects.toThrow(/documents_status_check/);
+  });
+
   it('rolls back cleanly', async () => {
     await runner({
       databaseUrl: c.getConnectionUri(),
