@@ -23,6 +23,7 @@ import {
   ScriptSchema,
   VersionSchema,
 } from './content.js';
+import { TaxonomyFilterSchema } from './wave4.js';
 import { SuggestionPayloadSchema } from './pipeline.js';
 import { PermissionSchema, PreferencesSchema } from './identity.js';
 
@@ -39,7 +40,7 @@ export const ListDocumentsQuerySchema = PaginationQuerySchema.extend({
   drafts: bool.optional(),
   updatedSince: IsoDateSchema.optional(),
   sort: z.enum(['wave', 'updated', 'title', 'views']).default('wave'),
-});
+}).merge(TaxonomyFilterSchema);
 export const ListDocumentsResponseSchema = paginated(DocumentCardSchema);
 
 export const CreateDocumentBodySchema = DocumentSchema.pick({
@@ -70,6 +71,7 @@ export const StructureBodySchema = z.object({
 export const PublishBodySchema = z.object({
   label: z.string().min(1).max(200),
   markPartial: z.boolean().optional(),
+  resolveFeedbackIds: z.array(IdSchema).max(50).optional(),
 });
 export const DiffQuerySchema = z.object({
   from: z.coerce.number().int().min(0),
@@ -98,7 +100,7 @@ export const SearchQuerySchema = z.object({
   q: z.string().default(''),
   types: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(40),
-});
+}).merge(TaxonomyFilterSchema);
 export const SearchResponseSchema = z.object({
   groups: z.array(
     z.object({

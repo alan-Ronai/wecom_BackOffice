@@ -103,3 +103,35 @@ export const TopicViewSchema = z.object({
   groups: z.array(z.object({ docType: DocTypeSchema, items: z.array(TopicItemSchema) })),
 });
 export type TopicView = z.infer<typeof TopicViewSchema>;
+
+/* ── Governance (W2) ───────────────────────────────────────────────────── */
+export const UNPUBLISHED_STATUSES = ['draft', 'review', 'invalid', 'archived'] as const;
+/** Additive document fields. Everything optional/defaulted so pre-wave-4 rows still validate. */
+export const DocumentWave4FieldsSchema = z.object({
+  docType: DocTypeSchema.optional(),
+  tags: z.array(z.string().min(1).max(40)).default([]),
+  worlds: z.array(WorldSlugSchema).default([]), // primary first
+  topics: z.array(IdSchema).default([]),
+  ownerId: IdSchema.nullable().optional(),
+  ownerName: z.string().nullable().optional(),
+  editorId: IdSchema.nullable().optional(),
+  editorName: z.string().nullable().optional(),
+  approverId: IdSchema.nullable().optional(),
+  approverName: z.string().nullable().optional(),
+  publishedAt: IsoDateSchema.nullable().optional(),
+  sourceReviewNeeded: z.boolean().default(false),
+  sourceReviewReason: z.string().nullable().optional(),
+  bodyHtml: z.string().optional(), // kind 'text' only
+});
+export const SetStatusBodySchema = z.object({
+  status: z.enum(['invalid', 'archived', 'draft']),
+  reason: z.string().min(1).max(500),
+});
+export const SourceReviewClearBodySchema = z.object({ note: z.string().min(1).max(500) });
+const oneOrMany = z.union([z.string(), z.array(z.string())]).transform((v) => (Array.isArray(v) ? v : [v]));
+export const TaxonomyFilterSchema = z.object({
+  world: WorldSlugSchema.optional(),
+  topic: IdSchema.optional(),
+  docType: DocTypeSchema.optional(),
+  tag: oneOrMany.optional(),
+});

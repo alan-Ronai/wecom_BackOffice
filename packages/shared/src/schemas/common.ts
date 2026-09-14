@@ -6,8 +6,15 @@ export const PrioritySchema = z.enum(['hh', 'h', 'm', 'l']);
 export type Priority = z.infer<typeof PrioritySchema>;
 export const WaveSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
 export type Wave = z.infer<typeof WaveSchema>;
-export const DocumentKindSchema = z.enum(['steps', 'retention']);
-export const DocumentStatusSchema = z.enum(['draft', 'review', 'published', 'partial', 'archived']);
+export const DocumentKindSchema = z.enum(['steps', 'retention', 'text']);
+export const DocumentStatusSchema = z.enum([
+  'draft',
+  'review',
+  'published',
+  'partial',
+  'invalid',
+  'archived',
+]);
 export type DocumentStatus = z.infer<typeof DocumentStatusSchema>;
 
 export const IdSchema = z.string().uuid();

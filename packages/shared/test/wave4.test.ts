@@ -93,3 +93,93 @@ describe('wave4 taxonomy schemas', () => {
     expect(v.groups[0].items[0].tags).toEqual(['esim']);
   });
 });
+
+import {
+  DocumentStatusSchema,
+  DocumentKindSchema,
+  UNPUBLISHED_STATUSES,
+  DocumentSchema,
+  DocumentCardSchema,
+  ListDocumentsQuerySchema,
+  SearchQuerySchema,
+  PublishBodySchema,
+  SetStatusBodySchema,
+} from '../src/index.js';
+
+describe('wave4 governance extensions', () => {
+  it('widens status and kind enums', () => {
+    expect(DocumentStatusSchema.options).toEqual([
+      'draft',
+      'review',
+      'published',
+      'partial',
+      'invalid',
+      'archived',
+    ]);
+    expect(DocumentKindSchema.options).toEqual(['steps', 'retention', 'text']);
+    expect([...UNPUBLISHED_STATUSES]).toEqual(['draft', 'review', 'invalid', 'archived']);
+  });
+  it('keeps old documents valid and defaults the new fields', () => {
+    const d = DocumentSchema.parse({
+      id: U,
+      slug: 'r-01',
+      title: 'מסמך',
+      description: '',
+      category: 'sim',
+      wave: 1,
+      priority: 'h',
+      kind: 'steps',
+      status: 'published',
+      currentVersion: 1,
+      phases: [],
+      createdAt: T,
+      updatedAt: T,
+    });
+    expect(d.tags).toEqual([]);
+    expect(d.worlds).toEqual([]);
+    expect(d.topics).toEqual([]);
+    expect(d.sourceReviewNeeded).toBe(false);
+    expect(d.docType).toBeUndefined();
+    const c = DocumentCardSchema.parse({
+      id: U,
+      slug: 'r-01',
+      title: 'מסמך',
+      description: '',
+      category: 'sim',
+      wave: 1,
+      priority: 'h',
+      kind: 'steps',
+      status: 'published',
+      currentVersion: 1,
+      updatedAt: T,
+      stepCount: 0,
+      linksOut: 0,
+      linksIn: 0,
+      views: 0,
+      crmFields: [],
+      hasSharedBlocks: false,
+      pinned: false,
+    });
+    expect(c.tags).toEqual([]);
+  });
+  it('accepts taxonomy filters on list and search', () => {
+    const q = ListDocumentsQuerySchema.parse({
+      world: 'sim',
+      topic: U,
+      docType: 'R',
+      tag: ['esim', 'apn'],
+    });
+    expect(q.tag).toEqual(['esim', 'apn']);
+    expect(ListDocumentsQuerySchema.parse({ tag: 'esim' }).tag).toEqual(['esim']);
+    expect(SearchQuerySchema.parse({ q: 'x', docType: 'O' }).docType).toBe('O');
+  });
+  it('lets publish close feedback and validates status changes', () => {
+    expect(PublishBodySchema.parse({ label: 'v', resolveFeedbackIds: [U] }).resolveFeedbackIds).toEqual([
+      U,
+    ]);
+    expect(SetStatusBodySchema.safeParse({ status: 'published', reason: 'x' }).success).toBe(false);
+    expect(SetStatusBodySchema.parse({ status: 'invalid', reason: 'הוחלף בנוהל חדש' }).status).toBe(
+      'invalid',
+    );
+  });
+});

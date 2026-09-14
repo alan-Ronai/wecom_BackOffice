@@ -9,6 +9,8 @@ import {
   SlugSchema,
   WaveSchema,
 } from './common.js';
+// Wave 4 additive document fields. `wave4.ts` imports only from `common.js`, so this is not a cycle.
+import { DocumentWave4FieldsSchema } from './wave4.js';
 
 export const ActionSchema = z.object({ id: z.string().min(1), text: z.string() });
 export type Action = z.infer<typeof ActionSchema>;
@@ -105,7 +107,7 @@ export const DocumentSchema = z.object({
   createdBy: IdSchema.optional(),
   updatedBy: IdSchema.optional(),
   etag: z.string().optional(),
-});
+}).merge(DocumentWave4FieldsSchema);
 export type Document = z.infer<typeof DocumentSchema>;
 
 /** Library card: what the list endpoint returns. */
@@ -130,7 +132,7 @@ export const DocumentCardSchema = DocumentSchema.pick({
   hasSharedBlocks: z.boolean(),
   pinned: z.boolean(),
   authorName: z.string().optional(),
-});
+}).merge(DocumentWave4FieldsSchema.omit({ bodyHtml: true }));
 export type DocumentCard = z.infer<typeof DocumentCardSchema>;
 
 export const BlockSchema = z.object({
