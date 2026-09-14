@@ -14,6 +14,7 @@ import { http, HttpResponse, type RequestHandler } from 'msw';
 import type { Document, Note, Suggestion } from '@wecom/shared';
 import * as fixtures from './fixtures.js';
 import { fx } from './fixtures.js';
+import { resetStage5, stage5Handlers } from './stage5.js';
 import type { TrashItem } from '../../src/api/types.js';
 
 const B = '/api/v1';
@@ -53,6 +54,7 @@ export const state: State = initial();
 
 export function resetState(): void {
   Object.assign(state, initial());
+  resetStage5();
 }
 
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
@@ -465,9 +467,7 @@ export const handlers: RequestHandler[] = [
     return HttpResponse.json(state.preferences);
   }),
 
-  http.get(`${B}/admin/users`, () =>
-    HttpResponse.json({ items: fx.users, total: fx.users.length, page: 1, pageSize: 50 }),
-  ),
+  // `GET /admin/users` lives in `stage5.ts` — stage 5 changed its row shape and added filters.
   // `{ ok, auditId }` — the caller re-reads the user from the invalidated list.
   http.patch(`${B}/admin/users/:id`, () => HttpResponse.json({ ok: true, auditId: AUDIT })),
   http.get(`${B}/admin/roles`, () => HttpResponse.json({ items: fx.roles })),
@@ -513,6 +513,8 @@ export const handlers: RequestHandler[] = [
     );
   }),
   http.get(`${B}/system/health`, () => HttpResponse.json(fx.health)),
+
+  ...stage5Handlers,
 ];
 
 /** Override `/auth/me` for permission tests. */

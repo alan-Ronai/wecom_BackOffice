@@ -40,7 +40,31 @@ import {
   VersionSchema,
   paginated,
 } from '@wecom/shared';
-import { fx, D_BROWSING, SUG_1 } from './fixtures.js';
+import {
+  AdminUserRowSchema,
+  AuditEntryDetailSchema,
+  ConflictViewSchema,
+  ConnectorRowSchema,
+  ConnectorTypeInfoSchema,
+  IdentitySettingsSchema,
+  IdentityTestResultSchema,
+  RoleMatrixSchema,
+  SyncLinkRowSchema,
+  SyncQueueResponseSchema,
+  SyncRunResultSchema,
+} from '@wecom/shared';
+import { fx, D_BROWSING, SUG_1, U1 } from './fixtures.js';
+import {
+  C_WP,
+  LINK_CONFLICT,
+  LINK_IMPORT,
+  adminUsers,
+  auditDetail,
+  conflict,
+  connectorTypes,
+  identity,
+  roleMatrix,
+} from './stage5.js';
 import { state } from './handlers.js';
 
 const B = 'http://kb.test/api/v1';
@@ -78,10 +102,25 @@ describe('fixtures validate against shared schemas', () => {
     fx.trash.forEach((t) => TrashItemSchema.parse(t));
   });
   it('admin', () => {
-    fx.users.forEach((u) => UserSchema.parse(u));
     fx.roles.forEach((r) => RoleSchema.parse(r));
     fx.sessions.forEach((s) => SessionSchema.parse(s));
     fx.audit.forEach((a) => AuditEntrySchema.parse(a));
+  });
+  it('stage 5 — identity, admin rows, connectors, sync', () => {
+    adminUsers.forEach((u) => AdminUserRowSchema.parse(u));
+    // A source of each kind, so the screen's badges and its `source` filter both have something
+    // to render; and a user with no role, which is what "ללא תפקיד" has to survive.
+    expect(new Set(adminUsers.map((u) => u.source))).toEqual(new Set(['entra', 'paloalto', 'local']));
+    expect(adminUsers.some((u) => !u.roles.length)).toBe(true);
+    expect(adminUsers.some((u) => u.roles[0]?.categoryScope?.length)).toBe(true);
+    IdentitySettingsSchema.parse(identity);
+    RoleMatrixSchema.parse(roleMatrix);
+    AuditEntryDetailSchema.parse(auditDetail);
+    connectorTypes.forEach((t) => ConnectorTypeInfoSchema.parse(t));
+    ConflictViewSchema.parse(conflict);
+    // The merge screen is only interesting when both sides moved off the base.
+    expect(conflict.link.state).toBe('conflict');
+    expect(conflict.theirs.paragraphs.length).toBeGreaterThan(1);
   });
 });
 
@@ -214,12 +253,8 @@ const cases: Case[] = [
 
   ['GET /me/preferences', GET(`${B}/me/preferences`), PreferencesSchema],
 
-  [
-    'GET /admin/users',
-    GET(`${B}/admin/users`),
-    paginated(UserSchema.extend({ roles: z.array(UserRoleSchema) })),
-  ],
-  ['PATCH /admin/users/:id', PATCH(`${B}/admin/users/${fx.users[0].id}`, { active: true }), okAudit],
+  ['GET /admin/users', GET(`${B}/admin/users`), paginated(AdminUserRowSchema)],
+  ['PATCH /admin/users/:id', PATCH(`${B}/admin/users/${U1}`, { active: true }), okAudit],
   ['GET /admin/roles', GET(`${B}/admin/roles`), z.object({ items: z.array(RoleSchema) })],
   [
     'POST /admin/roles',
@@ -248,6 +283,54 @@ const cases: Case[] = [
 
   ['POST /notes/:id/like', POST(`${B}/notes/${fx.notes[0].id}/like`), NoteLikeResponseSchema],
   ['DELETE /notes/:id', DEL(`${B}/notes/${fx.notes[0].id}`), null],
+
+  /* ── stage 5: admin & identity ─────────────────────────────────────────── */
+  ['GET /admin/roles/matrix', GET(`${B}/admin/roles/matrix`), RoleMatrixSchema],
+  ['GET /admin/audit/:id', GET(`${B}/admin/audit/${fx.audit[0].id}`), AuditEntryDetailSchema],
+  ['GET /admin/identity', GET(`${B}/admin/identity`), IdentitySettingsSchema],
+  [
+    'PUT /admin/identity',
+    PUT(`${B}/admin/identity`, { sessionHours: 12, oidc: { clientSecret: 'new-secret' } }),
+    IdentitySettingsSchema,
+  ],
+  [
+    'POST /admin/identity/test',
+    POST(`${B}/admin/identity/test`, { provider: 'oidc' }),
+    IdentityTestResultSchema,
+  ],
+
+  /* ── stage 5: connectors & sync ────────────────────────────────────────── */
+  [
+    'GET /connectors/types',
+    GET(`${B}/connectors/types`),
+    z.object({ items: z.array(ConnectorTypeInfoSchema) }),
+  ],
+  ['GET /connectors', GET(`${B}/connectors`), z.object({ items: z.array(ConnectorRowSchema) })],
+  ['GET /connectors/:id', GET(`${B}/connectors/${C_WP}`), ConnectorRowSchema],
+  ['PATCH /connectors/:id', PATCH(`${B}/connectors/${C_WP}`, { enabled: false }), ConnectorRowSchema],
+  ['POST /connectors/:id/run', POST(`${B}/connectors/${C_WP}/run`), SyncRunResultSchema],
+  [
+    'POST /connectors/:id/test',
+    POST(`${B}/connectors/${C_WP}/test`),
+    z.object({ ok: z.boolean(), message: z.string() }),
+  ],
+  [
+    'POST /connectors/test',
+    POST(`${B}/connectors/test`, { type: 'wordpress', config: { baseUrl: 'https://x.example' } }),
+    z.object({ ok: z.boolean(), message: z.string() }),
+  ],
+  ['GET /sync/links', GET(`${B}/sync/links`), SyncQueueResponseSchema],
+  ['GET /sync/links/:id/conflict', GET(`${B}/sync/links/${LINK_CONFLICT}/conflict`), ConflictViewSchema],
+  [
+    'POST /sync/links/:id/sync',
+    POST(`${B}/sync/links/${LINK_IMPORT}/sync`, { direction: 'import' }),
+    SyncRunResultSchema,
+  ],
+  [
+    'POST /sync/links/:id/resolve',
+    POST(`${B}/sync/links/${LINK_CONFLICT}/resolve`, { resolution: 'ours' }),
+    SyncLinkRowSchema,
+  ],
 ];
 
 describe('msw handlers answer the published response envelopes', () => {

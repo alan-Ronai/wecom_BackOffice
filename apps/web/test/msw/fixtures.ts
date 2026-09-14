@@ -23,7 +23,7 @@ import type {
   Version,
 } from '@wecom/shared';
 import { PERMISSIONS } from '@wecom/shared';
-import type { AdminUser, GroupMap, Session, TrashItem } from '../../src/api/types.js';
+import type { GroupMap, Session, TrashItem } from '../../src/api/types.js';
 
 export const U1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
 export const U2 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2';
@@ -42,7 +42,7 @@ export const SUG_1 = '88888888-8888-4888-8888-888888888881';
 export const ROLE_LEAD = '99999999-9999-4999-8999-999999999991';
 export const ROLE_ADMIN = '99999999-9999-4999-8999-999999999992';
 
-const T = '2025-06-12T12:48:00.000Z';
+export const T = '2025-06-12T12:48:00.000Z';
 
 /** Fills the schema defaults TypeScript still demands on the output type. */
 const step = (s: Partial<Step> & Pick<Step, 'key' | 'num' | 'title'>): Step => ({
@@ -785,43 +785,8 @@ export const roles: Role[] = [
   },
 ];
 
-// `GET /admin/users` returns users *with* their role grants (`UserRoleSchema` rows — note the
-// `userId`/`grantedBy`/`grantedAt` fields the port's hand-written shape omitted).
-export const users: AdminUser[] = [
-  {
-    ...me.user,
-    roles: [
-      {
-        userId: U1,
-        roleId: ROLE_LEAD,
-        roleName: 'lead',
-        categoryScope: null,
-        grantedBy: null,
-        grantedAt: T,
-      },
-    ],
-  },
-  {
-    id: U2,
-    subject: 'dana@wecom.co.il',
-    source: 'entra',
-    email: 'dana@wecom.co.il',
-    displayName: 'דנה ר.',
-    initials: 'ד',
-    active: true,
-    lastLoginAt: T,
-    roles: [
-      {
-        userId: U2,
-        roleId: ROLE_LEAD,
-        roleName: 'lead',
-        categoryScope: ['ops'],
-        grantedBy: U1,
-        grantedAt: T,
-      },
-    ],
-  },
-];
+// `GET /admin/users` now answers `AdminUserRowSchema` rows (stage 5) — see `test/msw/stage5.ts`,
+// which owns that fixture so the row shape lives next to the handler that serves it.
 
 export const groupsMap: GroupMap[] = [{ idpGroupId: 'g-leads', idpGroupName: 'KB-Leads', roleId: ROLE_LEAD }];
 
@@ -902,7 +867,6 @@ export const fx = {
   revision,
   suggestions,
   trash,
-  users,
   roles,
   groupsMap,
   sessions,
