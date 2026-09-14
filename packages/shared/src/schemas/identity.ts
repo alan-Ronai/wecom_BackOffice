@@ -98,6 +98,15 @@ export const PreferencesSchema = z.object({
   lastSeen: z.record(z.string()).optional(),
   /** The first-login tour has been completed or skipped. */
   tourDone: z.boolean().optional(),
+  /**
+   * W4: which pane the article page opens in — working view, source document, or both.
+   *
+   * Additive and *optional* (ADR 0001): preference rows written before wave 4 validate unchanged,
+   * and the object literals across the app that build a `Preferences` keep compiling. The
+   * effective default lives in `apps/web/src/lib/prefs.ts` (`DEFAULT_PREFERENCES.paneMode`), so
+   * read it as `preferences.paneMode ?? 'work'`.
+   */
+  paneMode: z.enum(['work', 'source', 'split']).optional(),
 });
 export type Preferences = z.infer<typeof PreferencesSchema>;
 
@@ -105,7 +114,19 @@ export const MeSchema = z.object({
   user: UserSchema,
   roles: z.array(z.string()),
   permissions: z.array(PermissionSchema),
-  categoryScopes: z.array(CategorySchema).nullable(),
+  /**
+   * @deprecated W1 renamed this to `worldScopes`; read that instead. Still emitted for one
+   * release (`auth/routes.ts`, `auth/permissions.ts` and `plugins/testUser.ts` all derive both
+   * from one `resolvedScopes`), removed after wave 4.
+   */
+  categoryScopes: z.array(CategorySchema).nullable().optional(),
+  /**
+   * The caller's world scope: `null` means unscoped — every world — and an array is the
+   * intersection set. Required-and-nullable rather than optional, so there are two states to
+   * handle and not three; the API has always emitted it, and the optionality only pointed new
+   * consumers at the deprecated spelling (C-I2).
+   */
+  worldScopes: z.array(CategorySchema).nullable(),
   preferences: PreferencesSchema,
 });
 export type Me = z.infer<typeof MeSchema>;

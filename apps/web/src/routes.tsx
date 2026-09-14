@@ -15,6 +15,7 @@ import { ReviewsPage } from './components/review/ReviewsPage.js';
 import { NotificationsPage } from './components/notifications/NotificationsPage.js';
 import { FieldPage } from './components/library/FieldPage.js';
 import { BlockPage } from './components/library/BlockPage.js';
+import { TopicPage } from './components/taxonomy/TopicPage.js';
 
 /**
  * ## What is in the entry chunk, and why
@@ -75,6 +76,26 @@ const ConnectorWizard = () =>
 const SystemPage = () => import('./components/admin/SystemPage.js').then((m) => ({ default: m.SystemPage }));
 
 /**
+ * Wave 4. `TopicPage` is eager with the rest of the reading path — the sidebar's world rows open
+ * it mid-call. The three below are deliberate destinations: the source editor is a writing tool,
+ * the feedback queue and the usage analytics are an editor's or a lead's screen, and the taxonomy
+ * admin lives behind the admin console's own gate.
+ */
+const SourceEditPage = () =>
+  import('./components/source/SourceEditPage.js').then((m) => ({ default: m.SourceEditPage }));
+const FeedbackPage = () =>
+  import('./components/feedback/FeedbackPage.js').then((m) => ({ default: m.FeedbackPage }));
+/** The analytics tab is the same module with one prop, so it shares the chunk. */
+const FeedbackAnalyticsPage = () =>
+  import('./components/feedback/FeedbackPage.js').then((m) => ({
+    default: () => <m.FeedbackPage tab="analytics" />,
+  }));
+const AnalyticsPage = () =>
+  import('./components/analytics/AnalyticsPage.js').then((m) => ({ default: m.AnalyticsPage }));
+const TaxonomyPage = () =>
+  import('./components/admin/TaxonomyPage.js').then((m) => ({ default: m.TaxonomyPage }));
+
+/**
  * One boundary around the whole lazy area rather than one per route.
  *
  * `Suspense` resolves to the nearest boundary above the suspending component, so a single wrapper
@@ -116,7 +137,9 @@ export const routeObjects: RouteObject[] = [
       { path: 'scripts', element: <ScriptsPage /> },
       { path: 'doc/:id', element: <ArticlePage /> },
       { path: 'doc/:id/:step', element: <ArticlePage /> },
+      { path: 'topic/:id', element: <TopicPage /> },
       { path: 'edit/:id', element: <EditorPage /> },
+      { path: 'edit/:id/source', element: split(SourceEditPage) },
       { path: 'history', element: <HistoryPage /> },
       { path: 'history/:id', element: <HistoryPage /> },
       { path: 'history/:id/:v', element: <HistoryPage /> },
@@ -132,6 +155,13 @@ export const routeObjects: RouteObject[] = [
       { path: 'sync', element: split(SyncQueuePage) },
       { path: 'sync/parity', element: split(ParityPage) },
       { path: 'sync/conflicts/:id', element: split(ConflictPage) },
+      // wave 4 (W3) — `analytics` before `:id`, or the drawer would try to load a report called
+      // "analytics".
+      { path: 'feedback', element: split(FeedbackPage) },
+      { path: 'feedback/analytics', element: split(FeedbackAnalyticsPage) },
+      { path: 'feedback/:id', element: split(FeedbackPage) },
+      // W5. The sidebar entry that leads here is W6's mount; the route stands on its own.
+      { path: 'analytics', element: split(AnalyticsPage) },
       {
         path: 'admin',
         element: split(AdminLayout),
@@ -147,6 +177,7 @@ export const routeObjects: RouteObject[] = [
           // `new` before `:id`, or the wizard would try to load a connector called "new".
           { path: 'connectors/new', element: split(ConnectorWizard) },
           { path: 'connectors/:id', element: split(ConnectorWizard) },
+          { path: 'taxonomy', element: split(TaxonomyPage) },
           { path: 'system', element: split(SystemPage) },
         ],
       },

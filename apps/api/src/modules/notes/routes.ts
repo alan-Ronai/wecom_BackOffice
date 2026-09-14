@@ -12,6 +12,7 @@ import { forbidden, notFound } from '../../lib/http.js';
 import { withTransaction } from '../../lib/sql.js';
 import { requireUser } from '../../lib/user.js';
 import { getDocument } from '../documents/repo.js';
+import { assertVisibleDocument } from '../../lib/visibility.js';
 import * as repo from './repo.js';
 
 const DocParams = z.object({ id: IdSchema });
@@ -25,7 +26,9 @@ export default async function routes(app: FastifyInstance) {
     },
     async (req) => {
       const user = requireUser(req);
-      return { items: await repo.listNotes(app.db, (req.params as { id: string }).id, user.id) };
+      const id = (req.params as { id: string }).id;
+      await assertVisibleDocument(app.db, id, user);
+      return { items: await repo.listNotes(app.db, id, user.id) };
     },
   );
 

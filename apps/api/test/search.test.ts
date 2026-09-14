@@ -159,4 +159,91 @@ run('search', () => {
     const { reindexAll } = await import('../src/modules/search/repo.js');
     expect(await reindexAll(db.pool)).toBeGreaterThan(0);
   });
+
+  it('filters by docType/world/tag and returns a tags group', async () => {
+    const d = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/documents',
+        headers: auth(u),
+        payload: {
+          title: 'איפוס נתב',
+          category: 'tech',
+          wave: 1,
+          priority: 'h',
+          kind: 'steps',
+          docType: 'O',
+          tags: ['router', 'reset'],
+        },
+      })
+    ).json();
+    const byTag = await app.inject({ method: 'GET', url: '/api/v1/search?q=router', headers: auth(u) });
+    const tags = byTag.json().groups.find((g: { type: string }) => g.type === 'tags');
+    expect(tags.hits.map((h: { documentId: string }) => h.documentId)).toEqual([d.id]);
+    expect(tags.hits[0].meta).toContain('תגית');
+    const typed = await app.inject({
+      method: 'GET',
+      url: '/api/v1/search?q=נתב&docType=R',
+      headers: auth(u),
+    });
+    expect(JSON.stringify(typed.json())).not.toContain(d.id);
+    const world = await app.inject({
+      method: 'GET',
+      url: '/api/v1/search?q=נתב&world=tech',
+      headers: auth(u),
+    });
+    expect(JSON.stringify(world.json())).toContain(d.id);
+  });
+
+  it('serves the scripts group from type-T documents', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/scripts',
+      headers: auth(u),
+      payload: { title: 'סיווג תקלה', text: 'אתה לא גולש בכלל?', tags: [] },
+    });
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/v1/search?q=גולש&types=scripts',
+      headers: auth(u),
+    });
+    const g = r.json().groups.find((x: { type: string }) => x.type === 'scripts');
+    expect(g.hits[0]).toMatchObject({ type: 'script', title: 'סיווג תקלה', snippet: 'אתה לא גולש בכלל?' });
+  });
+
+  it('logs each search with its result count without delaying the response', async () => {
+    await db.pool.query('delete from search_log');
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/v1/search?q=' + encodeURIComponent('אין-כזה-מונח') + '&types=documents',
+      headers: auth(u),
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().total).toBe(0);
+    /**
+     * C-M9: the insert is deliberately fire-and-forget, so the row lands after the response.
+     * A fixed `setTimeout(50)` was a flake waiting for CI load — and it would have failed
+     * looking like a search-logging regression. Poll to a deadline instead: fast when the
+     * insert has already landed, and only slow when something is genuinely wrong.
+     */
+    const q = 'select user_id, q, filters, results from search_log where q=$1';
+    let rows = await db.pool.query(q, ['אין-כזה-מונח']);
+    for (const deadline = Date.now() + 5000; !rows.rowCount && Date.now() < deadline;) {
+      await new Promise((res) => setTimeout(res, 10));
+      rows = await db.pool.query(q, ['אין-כזה-מונח']);
+    }
+    expect(rows.rows).toEqual([
+      { user_id: u.id, q: 'אין-כזה-מונח', filters: { types: 'documents' }, results: 0 },
+    ]);
+  });
+
+  it('still answers when the search log cannot be written', async () => {
+    await db.pool.query('alter table search_log rename to search_log_off');
+    try {
+      const r = await app.inject({ method: 'GET', url: '/api/v1/search?q=sim', headers: auth(u) });
+      expect(r.statusCode).toBe(200);
+    } finally {
+      await db.pool.query('alter table search_log_off rename to search_log');
+    }
+  });
 });

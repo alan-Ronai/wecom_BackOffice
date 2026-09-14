@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import type { Category, Permission } from '@wecom/shared';
+import type { Permission } from '@wecom/shared';
 import { useDocuments, usePinnedIds } from '../../api/hooks/documents.js';
 import { useFields, useScripts } from '../../api/hooks/content.js';
 import { useSources } from '../../api/hooks/pipeline.js';
@@ -8,7 +9,9 @@ import { useTrash } from '../../api/hooks/trash.js';
 import { useCan, useMe } from '../../api/hooks/me.js';
 import { useSyncLinks } from '../../api/hooks/stage5.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
-import { CATS, CAT_KEYS, SOURCE_FILES } from '../../lib/constants.js';
+import { cat, SOURCE_FILES } from '../../lib/constants.js';
+import { useWorlds, useTopics } from '../../api/hooks/taxonomy.js';
+import { useFeedbackList } from '../../api/hooks/feedback.js';
 import { usePalette } from '../palette/paletteStore.js';
 import { useSettings } from '../settings/SettingsDialog.js';
 import { NotificationBell } from '../notifications/NotificationBell.js';
@@ -72,9 +75,25 @@ export function Sidebar({
   const fields = useFields();
   const scripts = useScripts();
 
+  /**
+   * Wave 4: the sidebar's world list is data, not the six `CATS` keys — an admin can add a world
+   * from `/admin/taxonomy` and it has to appear without a deploy. `CATS` survives as the icon /
+   * colour table for the six seeded slugs, with a fallback for everything else.
+   */
+  const worlds = useWorlds();
+  const [openWorld, setOpenWorld] = useState<string | null>(null);
+  const topics = useTopics(openWorld ?? undefined);
+  const mayFeedback = can('feedback.manage');
+  // One row, fetched only for its `counts`; the badge is the editor's actionable backlog.
+  const feedback = useFeedbackList({ pageSize: 1 }, mayFeedback);
+  const openFeedback = mayFeedback
+    ? (feedback.data?.counts.new ?? 0) + (feedback.data?.counts.in_review ?? 0)
+    : 0;
+
   const cards = all.data?.items ?? [];
-  const counts = CAT_KEYS.reduce<Record<string, number>>((acc, c) => {
-    acc[c] = cards.filter((x) => x.category === c).length;
+  const worldRows = worlds.data ?? [];
+  const counts = worldRows.reduce<Record<string, number>>((acc, w) => {
+    acc[w.slug] = w.itemCount;
     return acc;
   }, {});
   const pendingSrc = (sources.data ?? []).filter((s) => s.syncState === 'pending').length;
@@ -193,7 +212,8 @@ export function Sidebar({
         </span>
         <span className="tag">מאגר ידע פנימי</span>
         <NotificationBell onOpenFull={() => go('/notifications')} />
-        {!railMode && /^\/(doc|edit|history|sources|data|graph)\b/.test(loc.pathname) ? (
+        {!railMode &&
+        /^\/(doc|edit|history|sources|data|graph|topic|feedback\/|analytics)\b/.test(loc.pathname) ? (
           <span
             className="rail-btn"
             style={{ width: 28, height: 28 }}
@@ -239,6 +259,8 @@ export function Sidebar({
           {item('קבצי נתונים', '/data', unmappedFiles || null, true)}
           {item('גרף קשרים', '/graph')}
           {item('לוחות בקרה', '/dashboards')}
+          {mayFeedback ? item('משוב', '/feedback', openFeedback || null, true) : null}
+          {can('analytics.read') ? item('נתוני שימוש', '/analytics') : null}
         </nav>
 
         <div className="sec-title">מקורות נתונים</div>
@@ -302,20 +324,47 @@ export function Sidebar({
           </>
         ) : null}
 
-        <div className="sec-title">קטגוריות</div>
+        <div className="sec-title">עולמות תוכן</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, padding: '0 10px' }}>
-          {CAT_KEYS.map((c: Category) => (
-            <div
-              key={c}
-              className={'cat-row' + (loc.pathname === `/library/${c}` ? ' on' : '')}
-              role="button"
-              tabIndex={0}
-              onClick={() => go(`/library/${c}`)}
-            >
-              <span>{CATS[c].label}</span>
-              <span>{String(counts[c] ?? 0)}</span>
+          {worldRows.map((w) => (
+            <div key={w.slug}>
+              <div
+                className={'cat-row' + (loc.pathname === `/library/${w.slug}` ? ' on' : '')}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setOpenWorld((cur) => (cur === w.slug ? null : w.slug));
+                  go(`/library/${w.slug}`);
+                }}
+              >
+                <span>
+                  <span aria-hidden="true">{cat(w.slug).icon} </span>
+                  <span className="world-name">{w.name}</span>
+                </span>
+                <span>{String(counts[w.slug] ?? 0)}</span>
+              </div>
+              {openWorld === w.slug
+                ? (topics.data ?? []).map((t) => (
+                    <div
+                      key={t.id}
+                      className={'cat-row sub' + (loc.pathname === `/topic/${t.id}` ? ' on' : '')}
+                      role="button"
+                      tabIndex={0}
+                      style={{ paddingInlineStart: 22 }}
+                      onClick={() => go(`/topic/${t.id}`)}
+                    >
+                      <span>{t.name}</span>
+                      <span>{String(t.itemCount)}</span>
+                    </div>
+                  ))
+                : null}
             </div>
           ))}
+          {can('taxonomy.manage') ? (
+            <div className="src-add" role="button" tabIndex={0} onClick={() => go('/admin/taxonomy')}>
+              ⚙ ניהול עולמות ונושאים
+            </div>
+          ) : null}
         </div>
       </div>
 

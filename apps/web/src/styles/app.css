@@ -13,6 +13,7 @@
   --ok: #1A7A4A; --ok-bg: #EDFAF3; --ok-border: #B7E8CE; --ok-mark: #D8F5E5;
   --warn: #B86A00; --warn-bg: #FFF8EE; --warn-border: #F5D8A5; --warn-mark: #FFF3D6;
   --info: #1D45B4; --info-bg: #EBF1FF;
+  --purple: #5B2FB8; --purple-bg: #F2ECFF;
   --del-mark: #FFE0E0;
   --shadow-sm: 0 1px 2px rgba(31,46,59,.04); --shadow: 0 12px 30px rgba(31,46,59,.18); --shadow-lg: 0 30px 80px rgba(0,0,0,.45);
   --r-xs: 4px; --r-sm: 6px; --r: 8px; --r-md: 10px; --r-lg: 12px; --r-xl: 14px;
@@ -30,6 +31,7 @@ html[data-theme="dark"] {
   --ok: #6FD39A; --ok-bg: rgba(26,122,74,.2); --ok-border: rgba(111,211,154,.3); --ok-mark: rgba(26,122,74,.35);
   --warn: #FFC466; --warn-bg: rgba(184,106,0,.2); --warn-border: rgba(255,196,102,.3); --warn-mark: rgba(184,106,0,.35);
   --info: #9DB8FF; --info-bg: rgba(93,140,255,.18);
+  --purple: #C3A8FF; --purple-bg: rgba(109,63,209,.22);
   --del-mark: rgba(192,40,0,.35);
   --shadow-sm: 0 1px 2px rgba(0,0,0,.3); --shadow: 0 12px 30px rgba(0,0,0,.5);
   --sidebar-bg: #0B1015;
@@ -72,6 +74,7 @@ mark { background: var(--red-mark); color: inherit; padding: 0 2px; border-radiu
 .chip-gray { background: var(--surface-2); color: var(--muted); }
 .chip-blue { background: var(--info-bg); color: var(--info); }
 .chip-green { background: var(--ok-bg); color: var(--ok); }
+.chip-purple { background: var(--purple-bg); color: var(--purple); }
 .chip-navy { background: var(--navy); color: #fff; }
 html[data-theme="dark"] .chip-navy { background: var(--surface-3); color: var(--text); }
 .chip-solid { background: var(--red); color: #fff; }
@@ -1235,3 +1238,215 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
   content: ''; position: absolute; inset-block: 0; inset-inline-start: 0; width: 3px;
   background: var(--info); pointer-events: none; z-index: 1;
 }
+
+/* ══ wave 4 — taxonomy, governance, feedback, source documents, usage ══════
+   Placement and visual language follow `design/turn7-wave4-taxonomy-feedback-source.dc.html`
+   (7a–7g). Everything below is written against the existing custom properties, so these screens
+   inherit the dark theme rather than sitting on a white rectangle inside it.
+
+   Why this block exists at all: through wave 4 each lane was forbidden to edit this shared
+   stylesheet, so the new screens shipped with correct structure and inline `style={{}}` objects
+   for layout. That constraint ended at the W6 merge; this is the debt being collected. */
+
+/* ── page shell shared by the wave-4 routes ─────────────────────────────── */
+.page { padding: 22px 28px 40px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.page-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.page-head h1 { font-size: 20px; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+/* The spacer every wave-4 header uses to push trailing actions to the far edge. */
+.grow { flex: 1 1 auto; min-width: 0; }
+/* A control that reads as a link: used for the ✕ that clears a filter chip. */
+.linklike {
+  border: 0; background: none; padding: 0; margin: 0; font: inherit; color: inherit;
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
+.linklike:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; border-radius: var(--r-xs); }
+
+/* Long-form HTML — the source document, a text-kind item body, a version preview. */
+.prose { font-size: 13.5px; line-height: 1.8; color: var(--text); overflow-wrap: anywhere; }
+.prose h1, .prose h2, .prose h3, .prose h4 { margin: 14px 0 6px; line-height: 1.4; }
+.prose h1 { font-size: 19px; } .prose h2 { font-size: 16.5px; }
+.prose h3 { font-size: 14.5px; } .prose h4 { font-size: 13.5px; }
+.prose p { margin: 0 0 9px; }
+.prose ul, .prose ol { margin: 0 0 9px; padding-inline-start: 22px; }
+.prose li { margin-bottom: 3px; }
+.prose blockquote {
+  margin: 0 0 10px; padding: 6px 12px; border-inline-start: 3px solid var(--red-mid);
+  background: var(--red-soft); border-radius: 0 var(--r) var(--r) 0; color: var(--text-2);
+}
+.prose pre {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 10px 12px; overflow-x: auto; font-family: var(--mono); font-size: 12px; direction: ltr;
+}
+.prose code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 1px 5px; border-radius: var(--r-xs); }
+.prose pre code { background: none; padding: 0; }
+.prose img { max-width: 100%; height: auto; border-radius: var(--r); }
+.prose table { border-collapse: collapse; width: 100%; margin: 0 0 10px; font-size: 12.5px; }
+.prose th, .prose td { border: 1px solid var(--border); padding: 6px 9px; text-align: start; }
+.prose th { background: var(--surface-2); font-weight: 600; }
+.prose a { color: var(--info); }
+
+/* §5.5 — a link whose target is no longer valid. Editors only; the API hides these from readers. */
+.link-invalid { text-decoration: line-through; opacity: .65; }
+
+/* ── W4 · the source document editor ────────────────────────────────────── */
+.source-edit-page { gap: 12px; }
+.source-editor {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+  overflow: hidden; min-width: 0;
+}
+.toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
+  padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--surface-2);
+}
+.toolbar .grow { min-width: 8px; }
+.toolbar .muted { font-size: 11.5px; }
+/* `.tb` is the only keyboard surface in the editor, so the focus ring is load-bearing. */
+.tb {
+  min-width: 26px; height: 26px; box-sizing: border-box; display: inline-flex; align-items: center;
+  justify-content: center; gap: 4px; padding: 0 7px; border: 1px solid transparent; border-radius: var(--r-sm);
+  background: transparent; color: var(--text-2); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap;
+}
+.tb:hover { background: var(--surface-3); }
+.tb.on { background: var(--navy); color: #fff; }
+.tb:focus-visible { outline: 2px solid var(--red); outline-offset: 1px; }
+.toolbar .vsep { width: 1px; height: 16px; background: var(--border-2); margin: 0 4px; }
+.source-editor .ProseMirror { padding: 14px 16px; min-height: 320px; outline: none; }
+.source-editor .ProseMirror:focus-visible { outline: 2px solid var(--red); outline-offset: -2px; }
+.rich-text .ProseMirror { min-height: 180px; }
+
+/* The read-only pane on the article, and its header strip. */
+.source-pane {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+  display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+}
+.source-pane-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: 12px;
+}
+.source-html { padding: 14px 16px; overflow-y: auto; }
+.source-review-strip { margin-bottom: 10px; }
+
+/* Version history under the editor. */
+.source-history-wrap { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); }
+.source-history-wrap > summary { padding: 10px 14px; cursor: pointer; font-size: 13px; font-weight: 600; }
+.source-history { display: grid; grid-template-columns: 260px 1fr; gap: 14px; padding: 0 14px 14px; min-width: 0; }
+.version-list { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow-y: auto; list-style: none; margin: 0; padding: 0; }
+.version-list > li {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; text-align: start;
+  padding: 7px 10px; border: 1px solid transparent; border-radius: var(--r);
+  color: var(--text); font-size: 12.5px;
+}
+.version-list > li > .linklike { flex: 1 1 auto; min-width: 0; text-align: start; }
+.version-list > li:hover { background: var(--surface-2); }
+.version-list > li.on {
+  background: var(--red-soft); box-shadow: inset 3px 0 0 var(--red); border-color: var(--red-mid);
+}
+.version-list .muted { font-size: 11px; }
+
+/* Article pane switch (`PaneModeToggle`). */
+.seg-btn {
+  padding: 5px 11px; border: 0; background: transparent; color: var(--muted);
+  font: inherit; font-size: 11.5px; cursor: pointer;
+}
+.seg-btn.on { background: var(--navy); color: #fff; font-weight: 500; }
+.seg-btn:disabled { opacity: .45; cursor: not-allowed; }
+.seg-btn:focus-visible { outline: 2px solid var(--red); outline-offset: -2px; }
+
+/* Work view / source side by side. Below 1000px two columns squeeze RTL prose to an unreadable
+   measure and the topic-nav buttons (which carry full titles) stop fitting, so both give way. */
+.split-panes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-width: 0; }
+.topic-nav { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+@media (max-width: 1000px) { .split-panes { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .source-history { grid-template-columns: 1fr; } }
+
+/* ── W1 · taxonomy admin and the topic page ─────────────────────────────── */
+.taxonomy-admin { display: grid; grid-template-columns: 320px 1fr; gap: 18px; align-items: start; min-width: 0; }
+.world-list, .topics-pane ul { list-style: none; margin: 0; padding: 0; }
+.world-list > li, .topics-pane li {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0;
+  padding: 9px 12px; border-bottom: 1px solid var(--border-soft); font-size: 12.5px;
+}
+.world-list > li.on { background: var(--red-soft); box-shadow: inset 3px 0 0 var(--red); }
+.world-list > li.inactive, .topics-pane li.inactive { color: var(--muted-2); }
+.world-list small, .topics-pane small { color: var(--muted); font-size: 11px; }
+.world-list .row-actions, .topics-pane .row-actions { margin-inline-start: auto; }
+.world-list, .topics-pane {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden;
+}
+.topics-pane { padding: 14px; }
+.topics-pane h2 { font-size: 15px; margin-bottom: 8px; }
+.topics-pane .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+@media (max-width: 900px) { .taxonomy-admin { grid-template-columns: 1fr; } }
+
+.topic-page { display: flex; flex-direction: column; gap: 18px; padding: 22px 28px 40px; min-width: 0; }
+.topic-group { display: flex; flex-direction: column; gap: 10px; }
+.topic-group h2 { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.topic-group h2 .muted { font-size: 12px; font-weight: 400; }
+/* The label half of a type badge, addressable on its own for tests and screen readers. */
+.type-badge { gap: 6px; }
+.type-label { font-weight: 400; }
+
+/* ── W2 · governance ────────────────────────────────────────────────────── */
+.status-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.owner-fields { display: flex; gap: 12px; flex-wrap: wrap; }
+.owner-fields label {
+  display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--muted);
+  min-width: 180px; flex: 1 1 180px;
+}
+.source-review {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px;
+  padding: 7px 12px; border: 1px solid var(--warn-border); background: var(--warn-bg);
+  color: var(--text); border-radius: var(--r);
+}
+
+/* ── W3 · the feedback queue ────────────────────────────────────────────── */
+.feedback-page { gap: 14px; }
+.feedback-page.with-drawer { padding-inline-end: calc(var(--panel-w) + 28px); }
+.feedback-page .facets { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.feedback-page .facets label.small { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11.5px; }
+.feedback-table { width: 100%; }
+.feedback-table tr.sel > td { background: var(--red-soft); }
+.feedback-drawer {
+  position: fixed; inset-block: 0; inset-inline-end: 0; width: min(var(--panel-w), 92vw);
+  background: var(--surface); border-inline-start: 1px solid var(--border); box-shadow: var(--shadow);
+  padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; z-index: 30;
+}
+.feedback-drawer .hd { display: flex; align-items: center; gap: 8px; }
+.feedback-drawer .hd .x {
+  margin-inline-start: auto; border: 0; background: none; color: var(--muted);
+  font: inherit; font-size: 15px; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: var(--r-sm);
+}
+.feedback-drawer .hd .x:hover { background: var(--surface-2); color: var(--text); }
+.feedback-drawer .hd .x:focus-visible { outline: 2px solid var(--red); outline-offset: 1px; }
+.feedback-form, .feedback-context { display: flex; flex-direction: column; gap: 8px; }
+.feedback-context { font-size: 12px; color: var(--muted); }
+.feedback-resolve { border-top: 1px dashed var(--border); padding-top: 10px; margin-top: 4px; }
+.feedback-text {
+  margin: 0; padding: 8px 12px; background: var(--surface-2); border-inline-start: 3px solid var(--border-2);
+  border-radius: 0 var(--r) var(--r) 0; font-size: 12.5px; line-height: 1.7; overflow-wrap: anywhere;
+}
+.publish-feedback { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+.publish-feedback label { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; }
+@media (max-width: 900px) { .feedback-page.with-drawer { padding-inline-end: 28px; } }
+
+/* ── W5 · usage analytics ───────────────────────────────────────────────── */
+.analytics { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.analytics-grid {
+  display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  margin-top: 16px; min-width: 0;
+}
+.analytics-grid > .card { padding: 14px 16px; min-width: 0; overflow-x: auto; }
+.analytics-grid h2 { font-size: 14.5px; margin-bottom: 8px; }
+
+/* ── editor · the wave-4 panels ─────────────────────────────────────────── */
+.metadata-panel { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.metadata-panel label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--muted); }
+.tags-edit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.check-row, .radio-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+.check-row label, .radio-row label { display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
+.taxonomy-facets { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.facet-input { min-width: 140px; }
+.ed-body-html { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ed-body-head { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
+.ed-body-head .lbl { font-weight: 600; }
+.ed-body-html textarea { font-family: var(--mono); font-size: 12px; direction: ltr; }

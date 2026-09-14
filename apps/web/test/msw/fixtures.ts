@@ -19,8 +19,11 @@ import type {
   SourceRevision,
   Step,
   Suggestion,
+  Topic,
+  TopicView,
   User,
   Version,
+  World,
 } from '@wecom/shared';
 import { PERMISSIONS } from '@wecom/shared';
 import type { GroupMap, Session, TrashItem } from '../../src/api/types.js';
@@ -70,7 +73,20 @@ export const me: Me = {
   roles: ['admin'],
   permissions: [...PERMISSIONS],
   categoryScopes: null,
+  worldScopes: null,
   preferences: { theme: null, font: 'plex', panel: true, callMode: true, sidebarExpanded: false },
+};
+
+/**
+ * Wave 4 made `tags`, `worlds`, `topics` and `sourceReviewNeeded` required on the *output* type of
+ * `DocumentSchema` / `DocumentCardSchema` (they carry zod `.default()`s). Fixtures state the
+ * defaults explicitly so the literals still satisfy the type.
+ */
+const W4 = {
+  tags: [] as string[],
+  worlds: [] as string[],
+  topics: [] as string[],
+  sourceReviewNeeded: false,
 };
 
 export const docBrowsing: Document = {
@@ -84,6 +100,7 @@ export const docBrowsing: Document = {
   priority: 'hh',
   kind: 'steps',
   status: 'published',
+  ...W4,
   currentVersion: 7,
   worlds: ['tech'],
   tags: [],
@@ -465,6 +482,7 @@ export const cards: DocumentCard[] = [
     priority: 'hh',
     kind: 'steps',
     status: 'published',
+    ...W4,
     currentVersion: 7,
     worlds: ['tech'],
     tags: [],
@@ -490,6 +508,7 @@ export const cards: DocumentCard[] = [
     priority: 'h',
     kind: 'steps',
     status: 'published',
+    ...W4,
     currentVersion: 4,
     worlds: ['intl'],
     tags: [],
@@ -515,6 +534,7 @@ export const cards: DocumentCard[] = [
     priority: 'hh',
     kind: 'retention',
     status: 'published',
+    ...W4,
     currentVersion: 4,
     worlds: ['ops'],
     tags: [],
@@ -540,6 +560,7 @@ export const cards: DocumentCard[] = [
     priority: 'hh',
     kind: 'steps',
     status: 'published',
+    ...W4,
     currentVersion: 3,
     worlds: ['sim'],
     tags: [],
@@ -564,6 +585,7 @@ export const cards: DocumentCard[] = [
     priority: 'h',
     kind: 'steps',
     status: 'partial',
+    ...W4,
     currentVersion: 2,
     worlds: ['billing'],
     tags: [],
@@ -588,6 +610,7 @@ export const cards: DocumentCard[] = [
     priority: 'l',
     kind: 'steps',
     status: 'draft',
+    ...W4,
     currentVersion: 0,
     worlds: ['plans'],
     tags: [],
@@ -612,6 +635,7 @@ export const cards: DocumentCard[] = [
     priority: 'm',
     kind: 'steps',
     status: 'published',
+    ...W4,
     currentVersion: 1,
     worlds: ['intl'],
     tags: [],
@@ -636,6 +660,7 @@ export const cards: DocumentCard[] = [
     priority: 'h',
     kind: 'steps',
     status: 'published',
+    ...W4,
     currentVersion: 6,
     worlds: ['ops'],
     tags: [],
@@ -928,11 +953,163 @@ export const health = {
   lastBackupOk: true,
 };
 
+/* ── Wave 4 — taxonomy (W1) ────────────────────────────────────────────────
+ * Content worlds replace the hard-coded six categories; the six seeded slugs keep the same
+ * labels so every stage-1 fixture (`category: 'tech'`) still resolves to a world.
+ */
+const TAXO_NOW = '2026-09-14T10:00:00.000Z';
+const W = (slug: string, name: string, position: number): World => ({
+  id: `aaaaaaaa-aaaa-4aaa-8aaa-00000000000${position}`,
+  slug,
+  name,
+  description: '',
+  position,
+  active: true,
+  topicCount: slug === 'tech' ? 2 : 0,
+  itemCount: 3,
+  createdAt: TAXO_NOW,
+  updatedAt: TAXO_NOW,
+});
+
+export const worlds: World[] = [
+  W('sim', 'SIM / eSIM', 0),
+  W('tech', 'תמיכה טכנית', 1),
+  W('billing', 'חיובים', 2),
+  W('plans', 'מסלולים', 3),
+  W('intl', 'חו"ל ונדידה', 4),
+  W('ops', 'טיפול בשיחה', 5),
+];
+
+export const topics: Topic[] = [
+  {
+    id: 'bbbbbbbb-bbbb-4bbb-8bbb-000000000001',
+    worldSlug: 'tech',
+    slug: 'browsing',
+    name: 'תקלות גלישה',
+    description: 'אבחון וטיפול',
+    position: 0,
+    active: true,
+    itemCount: 2,
+  },
+  {
+    id: 'bbbbbbbb-bbbb-4bbb-8bbb-000000000002',
+    worldSlug: 'tech',
+    slug: 'apn',
+    name: 'הגדרות APN',
+    description: '',
+    position: 1,
+    active: true,
+    itemCount: 1,
+  },
+];
+
+export const topicView: TopicView = {
+  topic: topics[0]!,
+  world: worlds[1]!,
+  groups: [
+    {
+      docType: 'M',
+      items: [
+        {
+          id: docBrowsing.id,
+          slug: docBrowsing.slug,
+          title: 'אבחון גלישה',
+          docType: 'M',
+          kind: 'steps',
+          status: 'published',
+          worlds: ['tech'],
+          description: 'נקודת כניסה',
+          tags: ['browsing'],
+          updatedAt: TAXO_NOW,
+        },
+      ],
+    },
+    {
+      docType: 'O',
+      items: [
+        {
+          id: docIntl.id,
+          slug: docIntl.slug,
+          title: 'איפוס APN',
+          docType: 'O',
+          kind: 'steps',
+          status: 'published',
+          worlds: ['tech', 'sim'],
+          description: '',
+          tags: ['apn'],
+          updatedAt: TAXO_NOW,
+        },
+      ],
+    },
+  ],
+};
+
+/* ── wave 4 · usage analytics (W5) ─────────────────────────────────────────
+ * Shapes are `UsageAnalyticsSchema` / `SearchLogResponseSchema`; `fixtures.test.ts` parses both.
+ */
+export const usageAnalytics = {
+  from: '2026-08-15T00:00:00.000Z',
+  to: '2026-09-14T00:00:00.000Z',
+  itemViews: [
+    {
+      documentId: docBrowsing.id,
+      title: 'גלישה איטית / חוסר גלישה',
+      docType: 'R',
+      views: 12,
+      viewers: 4,
+      lastViewedAt: '2026-09-13T09:00:00.000Z',
+    },
+  ],
+  topItems: [{ documentId: docBrowsing.id, title: 'גלישה איטית / חוסר גלישה', views: 12 }],
+  topTopics: [
+    { topicId: '66666666-6666-4666-8666-666666666666', name: 'הפעלת eSIM', worldSlug: 'sim', views: 7 },
+  ],
+  viewers: [{ userId: me.user.id, displayName: me.user.displayName, views: 5 }],
+  zeroResultTerms: [{ q: 'zzz-none', count: 3, lastAt: '2026-09-13T09:00:00.000Z' }],
+  staleness: [
+    {
+      documentId: docBrowsing.id,
+      title: 'גלישה איטית / חוסר גלישה',
+      ownerName: null,
+      updatedAt: '2026-07-01T00:00:00.000Z',
+      publishedAt: null,
+      daysSinceUpdate: 75,
+    },
+  ],
+};
+
+export const tags = [
+  { tag: 'apn', count: 3 },
+  { tag: 'browsing', count: 2 },
+];
+
+export const searchLog = {
+  items: [
+    {
+      id: '77777777-7777-4777-8777-777777777777',
+      userId: me.user.id,
+      userName: me.user.displayName,
+      q: 'zzz-none',
+      filters: {},
+      results: 0,
+      tookMs: 3,
+      at: '2026-09-13T09:00:00.000Z',
+    },
+  ],
+  total: 1,
+  page: 1,
+  pageSize: 50,
+};
+
 export const fx = {
   me,
   docBrowsing,
   docIntl,
   cards,
+  worlds,
+  topics,
+  topicView,
+  tags,
   blocks,
   fields,
   scripts,
@@ -948,6 +1125,8 @@ export const fx = {
   audit,
   health,
   system,
+  usageAnalytics,
+  searchLog,
 };
 
 export type Fixtures = typeof fx;

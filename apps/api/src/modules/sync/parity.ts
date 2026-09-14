@@ -1,6 +1,6 @@
 import type pg from 'pg';
 import type { ConnectorRegistry, RemoteItem } from '@wecom/connectors';
-import { CategorySchema, type ParityConnector, type ParityLinkRow } from '@wecom/shared';
+import type { ParityConnector, ParityLinkRow } from '@wecom/shared';
 import type { ConnectorRow, ConnectorsRepo } from '../connectors/repo.js';
 import { localContentHash } from './hash.js';
 import type { RemoteCache } from './remote-cache.js';
@@ -44,23 +44,32 @@ const iso = (v: Date | string | null | undefined): string | null =>
   v == null ? null : new Date(v).toISOString();
 
 /**
- * Which KB categories a connector owns, and therefore which published documents "should" have a
+ * Which content worlds a connector owns, and therefore which published documents "should" have a
  * link to it.
  *
  * A WordPress connector declares this directly: `categoryMap` maps each remote category slug onto a
- * KB category, so its values *are* the answer. Connector types that declare nothing (the JSON file
- * connector maps a column, not a fixed category) fall back to the categories of the documents
- * already linked to this connector — an observation rather than a declaration, but a correct one,
- * and far better than the alternative of treating "no declaration" as "the whole library", which
- * would list every unrelated document as missing a link.
+ * KB world, so its values *are* the answer. Connector types that declare nothing (the JSON file
+ * connector maps a column, not a fixed world) fall back to the worlds of the documents already
+ * linked to this connector — an observation rather than a declaration, but a correct one, and far
+ * better than the alternative of treating "no declaration" as "the whole library", which would
+ * list every unrelated document as missing a link.
+ *
+ * `known` is the set of world slugs that exist. Wave 4 turned worlds into rows, so a declared
+ * value can no longer be validated against a static enum — a typo in `categoryMap` would
+ * otherwise widen the report to a world nobody has, and the operator would read the noise as a
+ * missing link. Pass `null` to accept whatever is declared (the caller has no list).
  */
-export function connectorCategories(config: Record<string, unknown>, linked: string[]): string[] {
+export function connectorCategories(
+  config: Record<string, unknown>,
+  linked: string[],
+  known: readonly string[] | null = null,
+): string[] {
   const declared = config.categoryMap;
+  const ok = (v: unknown): v is string =>
+    typeof v === 'string' && v.length > 0 && (!known || known.includes(v));
   const fromConfig =
     declared && typeof declared === 'object' && !Array.isArray(declared)
-      ? Object.values(declared as Record<string, unknown>).filter(
-          (v): v is string => CategorySchema.safeParse(v).success,
-        )
+      ? Object.values(declared as Record<string, unknown>).filter(ok)
       : [];
   const source = fromConfig.length ? fromConfig : linked;
   return [...new Set(source)].sort();
@@ -131,6 +140,7 @@ export async function parityFor(deps: ParityDeps, connector: ConnectorRow): Prom
         [connector.id],
       )
     ).rows.map((r) => r.category),
+    (await deps.db.query<{ slug: string }>('select slug from worlds')).rows.map((r) => r.slug),
   );
 
   const documents = categories.length

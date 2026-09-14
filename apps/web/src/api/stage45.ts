@@ -60,3 +60,28 @@ export function checked<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, res: Fet
     );
   return parsed.data;
 }
+
+/**
+ * Same, but "the resource is absent" is `null` rather than a contract violation.
+ *
+ * 204 and 404 both mean it: a knowledge item that has never had a source document written for it
+ * has no source document, and a document nobody has edited has no autosave draft. Neither is an
+ * error, and neither has a body to parse.
+ *
+ * A 404 carrying a *code* is a different answer and is rethrown. `GET /documents/:id/source`
+ * answers 404 both for "no source yet" and for `NOT_PUBLISHED` — a reader who may not see the
+ * document at all (spec §5.5). Collapsing the second into `null` showed that reader an empty
+ * source pane instead of the unavailable page the document query renders correctly.
+ */
+export function checkedMaybe<T>(
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+  res: FetchResult<unknown>,
+): T | null {
+  if (res.response.status === 204) return null;
+  if (res.response.status === 404) {
+    const code = (res.error as { code?: string } | undefined)?.code;
+    if (!code || code === 'NOT_FOUND') return null;
+    // Falls through to `checked`, whose `unwrap` throws the typed `ApiError` the caller expects.
+  }
+  return checked(schema, res);
+}

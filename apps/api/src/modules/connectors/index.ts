@@ -7,6 +7,7 @@ import routes from './routes.js';
 import syncUiRoutes from './sync-ui.js'; // stage 5: connectors & sync UI read models
 import { bossAdapter, registerConnectorJobs } from './jobs.js';
 import { documentsOf, eventsOf, hasPermission, revisionsOf, userOf, type Enqueue } from './context.js';
+import { getAsset } from '../sourcedocs/assets.js'; // W4: asset bytes for WordPress media upload
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -67,6 +68,20 @@ export default fp(async (app: FastifyInstance, opts: ConnectorsModuleOptions = {
     revisions: opts.revisions ?? revisionsOf(app),
     documents: opts.documents ?? documentsOf(app),
     events: opts.events ?? eventsOf(app),
+    // W4: asset images in the source HTML are re-hosted on the remote during a push.
+    assets: async (assetId) => {
+      const a = await getAsset(app.db, assetId);
+      return a
+        ? {
+            bytes: new Uint8Array(a.bytes),
+            mime: a.mime,
+            width: a.width ?? undefined,
+            height: a.height ?? undefined,
+          }
+        : null;
+    },
+    // W4/B-I6: per-connector memory of what a push already uploaded.
+    mediaCache: (connectorId) => repo.mediaCache(connectorId),
   });
   const enqueue: Enqueue =
     opts.enqueue ??

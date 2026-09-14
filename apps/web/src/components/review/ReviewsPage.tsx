@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useReviewDecision, useReviews, type ReviewRow } from '../../api/hooks/collab.js';
 import { useCan } from '../../api/hooks/me.js';
 import { useDocument } from '../../api/hooks/documents.js';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 import { ago, fmtDate } from '../../lib/format.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { useModal } from '../ui/Modal.js';
@@ -40,7 +40,7 @@ function ReviewCard({
   return (
     <div className="tcard review-card">
       <div className="chips">
-        <span className="chip chip-gray">{CATS[row.category].label}</span>
+        <span className="chip chip-gray">{cat(row.category).label}</span>
         <span
           className={
             'chip ' +

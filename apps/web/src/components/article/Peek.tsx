@@ -3,8 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useDocument } from '../../api/hooks/documents.js';
 import { useNav } from '../shell/navStore.js';
 import { useEntityDialogs } from '../library/dialogs.js';
-import { CATS } from '../../lib/constants.js';
-import { PRI } from '../../lib/constants.js';
+import { cat, PRI } from '../../lib/constants.js';
 
 interface PeekState {
   docId: string;
@@ -107,7 +106,7 @@ export function Peek() {
       <div className="eyebrow">תצוגה מקדימה · ריחוף על קישור</div>
       <div className="t">{doc.title}</div>
       <div className="m">
-        {CATS[doc.category].label} · {stepCount} שלבים · {PRI[doc.priority].label} · v{doc.currentVersion}
+        {cat(doc.category).label} · {stepCount} שלבים · {PRI[doc.priority].label} · v{doc.currentVersion}
       </div>
       <div className="s">{doc.description}</div>
       <div className="b">

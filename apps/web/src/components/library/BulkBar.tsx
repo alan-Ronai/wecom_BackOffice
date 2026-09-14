@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Category, Priority, Wave } from '@wecom/shared';
-import { CATS, CAT_KEYS, PRI } from '../../lib/constants.js';
+import { useWorlds } from '../../api/hooks/taxonomy.js';
+import { cat, PRI } from '../../lib/constants.js';
 import type { BulkBody } from '../../api/hooks/collab.js';
 
 /**
@@ -24,6 +25,9 @@ export function BulkBar({
   onClear: () => void;
 }) {
   const [menu, setMenu] = useState<null | 'wave' | 'priority' | 'category'>(null);
+  /* The world menu is data, not the six seeded slugs: "move to world" has to be able to target a
+     world an admin created after deploy. Shares the `useWorlds()` cache with the sidebar. */
+  const worlds = useWorlds();
   if (!count) return null;
 
   const close = () => setMenu(null);
@@ -89,9 +93,9 @@ export function BulkBar({
             </button>
             {menu === 'category' ? (
               <div className="menu">
-                {CAT_KEYS.map((c) => (
-                  <button key={c} onClick={() => pick('set-category', { category: c as Category })}>
-                    {CATS[c].label}
+                {(worlds.data ?? []).map((w) => (
+                  <button key={w.slug} onClick={() => pick('set-category', { category: w.slug as Category })}>
+                    {w.name || cat(w.slug).label}
                   </button>
                 ))}
               </div>

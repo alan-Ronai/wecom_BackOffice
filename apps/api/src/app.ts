@@ -94,9 +94,16 @@ export async function buildApp(
     const body = ErrorEnvelopeSchema.parse({
       code: (err as { code?: string }).code ?? (status === 500 ? 'INTERNAL' : 'ERROR'),
       message: status === 500 ? 'שגיאה פנימית' : (err as Error).message,
+      /**
+       * A 400 from Fastify's schema layer carries `validation`; a 400 an application raised
+       * through `httpError` carries `details`. Preferring `validation` and *falling back* to
+       * `details` keeps both: before, an application 400 silently dropped its payload, so
+       * `TOPIC_OUT_OF_WORLD`'s `{ topicId, worldSlug }` and `UNKNOWN_WORLD` never reached the
+       * client that has to act on them. Every other status keeps `details` as before.
+       */
       details:
         status === 400
-          ? (err as { validation?: unknown }).validation
+          ? ((err as { validation?: unknown }).validation ?? (err as { details?: unknown }).details)
           : (err as { details?: unknown }).details, // L3: identity — HttpError details
       requestId: req.id,
     });

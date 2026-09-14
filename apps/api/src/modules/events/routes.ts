@@ -73,7 +73,7 @@ export default async function routes(app: FastifyInstance) {
         'x-accel-buffering': 'no',
       });
       res.write(': connected\n\n');
-      const scopes = user.categoryScopes;
+      const scopes = user.worldScopes;
       const off = app.events.subscribe((e) => {
         void (async () => {
           // A per-recipient event goes to that recipient's connections and to no others,

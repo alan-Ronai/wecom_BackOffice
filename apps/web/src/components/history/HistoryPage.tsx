@@ -11,7 +11,7 @@ import {
 import { useBlocks } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
 import { useMe } from '../../api/hooks/me.js';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 import { download, fmtDate } from '../../lib/format.js';
 import type { Blame } from '../../lib/diffSteps.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
@@ -54,7 +54,7 @@ function Picker() {
                 onClick={() => go(`/history/${d.id}`)}
               >
                 <div className="chips">
-                  <span className="chip chip-blue">{CATS[d.category].short}</span>
+                  <span className="chip chip-blue">{cat(d.category).short}</span>
                   <span className="chip chip-gray">v{d.currentVersion}</span>
                 </div>
                 <div className="title">{d.title}</div>

@@ -52,3 +52,5 @@ Each affected plan carries the same list under "Cross-lane reconciliation"; when
 | W6 Integration | `2026-09-14-W6-integration.md` | W1–W5 + wave 3 merged | mounts, seams (0035), real e2e flows, acceptance matrix |
 
 Run order: W0 alone on `main`; W1–W5 in parallel worktrees branched after W0 lands; W6 last. Shared-file rules and the migration numbers are in W0's contract document.
+
+Acceptance: `docs/wave4-acceptance.md` · Merge log: `docs/wave4-merge-log.md`

@@ -16,6 +16,8 @@ import {
   PatchDocumentBodySchema,
   PublishBodySchema,
   PublishResponseSchema,
+  SetStatusBodySchema,
+  SourceReviewClearBodySchema,
   StructureBodySchema,
   VersionListSchema,
   makeEvent,
@@ -24,12 +26,81 @@ import { withTransaction } from '../../lib/sql.js';
 import { audit } from '../../lib/audit.js';
 import { forbidden, httpError, notFound } from '../../lib/http.js';
 import { hasScope, requireUser } from '../../lib/user.js';
+import { canReadUnpublished } from '../../lib/visibility.js';
 import * as repo from './repo.js';
 import { annotateBlame, diffDocuments, diffStats } from './diff.js';
 import { inboundFor } from '../graph/repo.js';
+import { clearSourceReview } from './sourceReview.js';
 import { updateEmbedding } from '../search/repo.js';
+import { resolveFeedback } from '../feedback/repo.js'; // W3: close reports with the published version
 
 const Params = z.object({ id: IdSchema });
+
+/**
+ * `body.worlds` and `body.topics` are full replacements, not additions: `syncMemberships`
+ * deletes every `document_worlds` row outside `{category} ∪ worlds`, and every
+ * `document_topics` row outside `topics`. Checking only the memberships being *added*
+ * therefore let an editor scoped to one world send `worlds: []` and strip a document out of a
+ * world they cannot see — that team loses it from their list, topic view, search and graph.
+ *
+ * The check is on the **difference**, in both directions, and never on a membership the write
+ * leaves alone. Requiring scope on every world in the resulting set instead would be
+ * over-restriction, and a worse bug than the one it fixes: a `sim`-scoped editor patching only
+ * `topics` on a `{billing(primary), sim}` document would be refused for a world they are not
+ * touching, even though `config.scope: 'document'` and the caller's `hasScope(user,
+ * before.worlds)` intersection have already established that they may edit this document.
+ *
+ * `body.topics` was not checked at all before. Beyond the add/remove scope rule, every topic
+ * the caller *names* must live in the document's resulting world set — a topic in a third
+ * world would pull the item onto a topic page nobody expected it on. That is a 400 about the
+ * request rather than a permission, so it is checked over all named topics and answered first.
+ */
+async function assertTaxonomyScope(
+  tx: Parameters<typeof audit>[0],
+  user: ReturnType<typeof requireUser>,
+  before: { category: string; worlds: string[]; topics: string[] },
+  body: { category?: string; worlds?: string[]; topics?: string[] },
+): Promise<void> {
+  if (body.category === undefined && body.worlds === undefined && body.topics === undefined) return;
+  const primary = body.category ?? before.category;
+  const resulting = new Set([primary, ...(body.worlds ?? before.worlds)]);
+  /** Only what this write actually changes; a retained membership is not the caller's to justify. */
+  const changed = <T>(a: Iterable<T>, b: ReadonlySet<T>) => [...a].filter((x) => !b.has(x));
+  const beforeWorlds = new Set(before.worlds);
+  for (const w of [...changed(resulting, beforeWorlds), ...changed(before.worlds, resulting)])
+    if (!hasScope(user, w)) throw forbidden();
+
+  if (body.topics === undefined) return;
+  const named = body.topics;
+  const beforeTopics = new Set(before.topics);
+  const resultingTopics = new Set(named);
+  const touched = [...changed(named, beforeTopics), ...changed(before.topics, resultingTopics)];
+  if (!named.length && !touched.length) return;
+  const worldOf = new Map(
+    (
+      await tx.query<{ id: string; world_slug: string }>(
+        'select t.id, w.slug world_slug from topics t join worlds w on w.id = t.world_id where t.id = any($1::uuid[])',
+        [[...new Set([...named, ...touched])]],
+      )
+    ).rows.map((x) => [x.id, x.world_slug]),
+  );
+  for (const t of named) {
+    const world = worldOf.get(t);
+    if (!world) throw httpError(400, 'UNKNOWN_TOPIC', 'הנושא אינו קיים', { topicId: t });
+    if (!resulting.has(world))
+      throw httpError(400, 'TOPIC_OUT_OF_WORLD', 'הנושא שייך לעולם תוכן שהפריט אינו נמצא בו', {
+        topicId: t,
+        worldSlug: world,
+      });
+  }
+  // A topic being added or removed is a membership change, so it takes the same scope rule as a
+  // world; a topic the write keeps is left alone, for the same reason a retained world is.
+  for (const t of touched) {
+    const world = worldOf.get(t);
+    if (world && !hasScope(user, world)) throw forbidden();
+  }
+}
+
 /** Stage 4 `/documents/:id/backlinks`; the contract spells this response inline. */
 const BacklinksResponseSchema = z.object({
   items: z.array(
@@ -91,7 +162,13 @@ export default async function routes(app: FastifyInstance) {
     async (req) => {
       const user = requireUser(req);
       const q = req.query as z.infer<typeof ListDocumentsQuerySchema>;
-      const { items, total } = await repo.listCards(app.db, q, user.id, user.categoryScopes);
+      const { items, total } = await repo.listCards(
+        app.db,
+        q,
+        user.id,
+        user.worldScopes,
+        canReadUnpublished(user),
+      );
       return { items, total, page: q.page, pageSize: q.pageSize };
     },
   );
@@ -103,8 +180,8 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['documents'], params: Params, response: { 200: DocumentSchema } },
     },
     async (req, reply) => {
-      requireUser(req);
-      const doc = await repo.getDocument(app.db, (req.params as { id: string }).id);
+      const user = requireUser(req);
+      const doc = await repo.getVisibleDocument(app.db, (req.params as { id: string }).id, user);
       if (!doc) throw notFound('המסמך');
       reply.header('etag', doc.etag!);
       return doc;
@@ -120,8 +197,9 @@ export default async function routes(app: FastifyInstance) {
     async (req, reply) => {
       const user = requireUser(req);
       const body = req.body as z.infer<typeof CreateDocumentBodySchema>;
-      if (!hasScope(user, body.category)) throw forbidden();
       const doc = await withTransaction(app.db, async (tx) => {
+        // A create has no prior memberships, so every world and topic in the body is an addition.
+        await assertTaxonomyScope(tx, user, { category: body.category, worlds: [], topics: [] }, body);
         const d = await repo.insertDocument(tx, body, user.id);
         await audit(tx, {
           actorId: user.id,
@@ -158,8 +236,8 @@ export default async function routes(app: FastifyInstance) {
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.category) || (body.category && !hasScope(user, body.category)))
-          throw forbidden();
+        if (!hasScope(user, before.worlds)) throw forbidden();
+        await assertTaxonomyScope(tx, user, before, body);
         const after = await repo.patchDocument(
           tx,
           id,
@@ -172,8 +250,26 @@ export default async function routes(app: FastifyInstance) {
           action: 'docs.edit',
           entityType: 'document',
           entityId: id,
-          before: { title: before.title, wave: before.wave, category: before.category },
-          after: { title: after.title, wave: after.wave, category: after.category },
+          // `worlds`/`topics` are in the payload because a membership change is otherwise
+          // invisible in the audit — a document silently leaving a team's world left no trace.
+          before: {
+            title: before.title,
+            wave: before.wave,
+            category: before.category,
+            docType: before.docType,
+            tags: before.tags,
+            worlds: before.worlds,
+            topics: before.topics,
+          },
+          after: {
+            title: after.title,
+            wave: after.wave,
+            category: after.category,
+            docType: after.docType,
+            tags: after.tags,
+            worlds: after.worlds,
+            topics: after.topics,
+          },
           requestId: req.id,
           ip: req.ip,
         });
@@ -208,7 +304,7 @@ export default async function routes(app: FastifyInstance) {
       const doc = await withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.category)) throw forbidden();
+        if (!hasScope(user, before.worlds)) throw forbidden();
         const after = await repo.saveStructure(
           tx,
           id,
@@ -255,12 +351,20 @@ export default async function routes(app: FastifyInstance) {
       const result = await withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.category)) throw forbidden();
+        if (!hasScope(user, before.worlds)) throw forbidden();
         const { doc, version } = await repo.publishDocument(tx, id, {
           actorId: user.id,
           label: body.label,
           markPartial: body.markPartial,
         });
+        if (body.resolveFeedbackIds?.length) {
+          const closed = await resolveFeedback(tx, body.resolveFeedbackIds, id, version, user.id);
+          for (const fid of closed)
+            await app.events.publish(
+              tx,
+              makeEvent('feedback.updated', { feedbackId: fid, documentId: id, status: 'done' }),
+            );
+        }
         const auditId = await audit(tx, {
           actorId: user.id,
           action: 'docs.publish',
@@ -288,6 +392,85 @@ export default async function routes(app: FastifyInstance) {
     },
   );
 
+  app.post(
+    '/documents/:id/status',
+    {
+      config: { requires: ['docs.publish'], scope: 'document' },
+      schema: {
+        tags: ['documents'],
+        params: Params,
+        body: SetStatusBodySchema,
+        response: { 200: DocumentSchema },
+      },
+    },
+    async (req) => {
+      const user = requireUser(req);
+      const { id } = req.params as { id: string };
+      const body = req.body as z.infer<typeof SetStatusBodySchema>;
+      return withTransaction(app.db, async (tx) => {
+        const before = await repo.getDocument(tx, id);
+        if (!before) throw notFound('המסמך');
+        if (!hasScope(user, before.worlds)) throw forbidden();
+        const after = await repo.setStatus(tx, id, body.status, user.id);
+        await audit(tx, {
+          actorId: user.id,
+          action: 'docs.status',
+          entityType: 'document',
+          entityId: id,
+          before: { status: before.status },
+          after: { status: after.status, reason: body.reason },
+          requestId: req.id,
+          ip: req.ip,
+        });
+        await app.events.publish(
+          tx,
+          makeEvent('document.updated', { documentId: id, actorId: user.id, etag: after.etag }),
+        );
+        return after;
+      });
+    },
+  );
+
+  app.post(
+    '/documents/:id/source-review/clear',
+    {
+      config: { requires: ['docs.edit'], scope: 'document' },
+      schema: {
+        tags: ['documents'],
+        params: Params,
+        body: SourceReviewClearBodySchema,
+        response: { 200: DocumentSchema },
+      },
+    },
+    async (req) => {
+      const user = requireUser(req);
+      const { id } = req.params as { id: string };
+      const { note } = req.body as z.infer<typeof SourceReviewClearBodySchema>;
+      return withTransaction(app.db, async (tx) => {
+        const before = await repo.getDocument(tx, id);
+        if (!before) throw notFound('המסמך');
+        if (!hasScope(user, before.worlds)) throw forbidden();
+        await clearSourceReview(tx, id);
+        await audit(tx, {
+          actorId: user.id,
+          action: 'docs.source_review_cleared',
+          entityType: 'document',
+          entityId: id,
+          before: { reason: before.sourceReviewReason ?? null },
+          after: { note },
+          requestId: req.id,
+          ip: req.ip,
+        });
+        const after = (await repo.getDocument(tx, id))!;
+        await app.events.publish(
+          tx,
+          makeEvent('document.updated', { documentId: id, actorId: user.id, etag: after.etag }),
+        );
+        return after;
+      });
+    },
+  );
+
   app.get(
     '/documents/:id/versions',
     {
@@ -295,8 +478,10 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['documents'], params: Params, response: { 200: VersionListSchema } },
     },
     async (req) => {
-      requireUser(req);
-      return { items: await repo.listVersions(app.db, (req.params as { id: string }).id) };
+      const user = requireUser(req);
+      const { id } = req.params as { id: string };
+      if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
+      return { items: await repo.listVersions(app.db, id) };
     },
   );
 
@@ -307,8 +492,9 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['documents'], params: VersionParams, response: { 200: DocumentSchema } },
     },
     async (req) => {
-      requireUser(req);
+      const user = requireUser(req);
       const { id, v } = req.params as { id: string; v: number };
+      if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
       const doc = await repo.getVersion(app.db, id, v);
       if (!doc) throw notFound('הגרסה');
       return doc;
@@ -327,10 +513,10 @@ export default async function routes(app: FastifyInstance) {
       },
     },
     async (req) => {
-      requireUser(req);
+      const user = requireUser(req);
       const { id } = req.params as { id: string };
       const { from, to } = req.query as z.infer<typeof DiffQuerySchema>;
-      const current = await repo.getDocument(app.db, id);
+      const current = await repo.getVisibleDocument(app.db, id, user);
       if (!current) throw notFound('המסמך');
       const oldDoc = await repo.getVersion(app.db, id, from);
       if (!oldDoc) throw notFound('הגרסה');
@@ -367,7 +553,7 @@ export default async function routes(app: FastifyInstance) {
       const result = await withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.category)) throw forbidden();
+        if (!hasScope(user, before.worlds)) throw forbidden();
         const { doc, version } = await repo.restoreVersion(tx, id, v, user.id);
         const auditId = await audit(tx, {
           actorId: user.id,
@@ -407,7 +593,14 @@ export default async function routes(app: FastifyInstance) {
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.category)) throw forbidden();
+        if (!hasScope(user, before.worlds)) throw forbidden();
+        if (await repo.hasPublishedVersion(tx, id))
+          throw httpError(
+            409,
+            'ONCE_PUBLISHED',
+            'פריט שפורסם בעבר אינו נמחק; העבר אותו ל"לא בתוקף" או לארכיון',
+            { allowed: ['invalid', 'archived'] },
+          );
         await repo.softDelete(tx, id, user.id);
         const restoreUntil = new Date(Date.now() + app.config.TRASH_DAYS * 86400_000).toISOString();
         const auditId = await audit(tx, {
@@ -442,7 +635,7 @@ export default async function routes(app: FastifyInstance) {
     async (req, reply) => {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
-      if (!(await repo.getDocument(app.db, id))) throw notFound('המסמך');
+      if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
       await repo.setPin(app.db, user.id, id, true);
       reply.code(204);
       return null;
@@ -472,7 +665,7 @@ export default async function routes(app: FastifyInstance) {
     async (req, reply) => {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
-      if (!(await repo.getDocument(app.db, id))) throw notFound('המסמך');
+      if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
       await repo.recordView(app.db, user.id, id);
       reply.code(204);
       return null;
@@ -486,8 +679,10 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['documents'], params: Params, response: { 200: LinksResponseSchema } },
     },
     async (req) => {
-      requireUser(req);
-      return repo.linksFor(app.db, (req.params as { id: string }).id);
+      const user = requireUser(req);
+      const { id } = req.params as { id: string };
+      if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
+      return repo.linksFor(app.db, id, canReadUnpublished(user));
     },
   );
 
@@ -498,10 +693,10 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['documents'], params: Params, response: { 200: RelatedResponseSchema } },
     },
     async (req) => {
-      requireUser(req);
-      const doc = await repo.getDocument(app.db, (req.params as { id: string }).id);
+      const user = requireUser(req);
+      const doc = await repo.getVisibleDocument(app.db, (req.params as { id: string }).id, user);
       if (!doc) throw notFound('המסמך');
-      return { items: await repo.relatedFor(app.db, doc) };
+      return { items: await repo.relatedFor(app.db, doc, canReadUnpublished(user)) };
     },
   );
 
@@ -516,10 +711,18 @@ export default async function routes(app: FastifyInstance) {
     async (req) => {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
-      if (!(await repo.getDocument(app.db, id))) throw notFound('המסמך');
+      if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
       // `config.scope` above gates the *subject* document; the inbound titles are other
-      // documents, so they carry the caller's scope of their own.
-      return { items: await inboundFor(app.db, { kind: 'document', key: id }, user.categoryScopes) };
+      // documents, so they carry the caller's world scope — and, for a reader, the
+      // published-only visibility rule (W2) — of their own.
+      return {
+        items: await inboundFor(
+          app.db,
+          { kind: 'document', key: id },
+          user.worldScopes,
+          canReadUnpublished(user),
+        ),
+      };
     },
   );
 }

@@ -117,6 +117,114 @@ run('trash', () => {
     ).toEqual([]);
   });
 
+  /**
+   * A-C1 — `purgeExpired` has carried PRD §10 since wave 2, but `purge()` (which both
+   * operator-facing routes call) did not, so `DELETE /trash/:type/:id` and `DELETE /trash`
+   * hard-deleted published documents together with their whole version history. No undo, and
+   * the audit records the action but not the content.
+   */
+  it('A-C1: the manual purge routes never hard-delete a once-published document', async () => {
+    const mk = async (title: string) => {
+      const d = (
+        await app.inject({
+          method: 'POST',
+          url: '/api/v1/documents',
+          headers: auth(u),
+          payload: { title, category: 'ops', wave: 1, priority: 'm', kind: 'steps' },
+        })
+      ).json();
+      await db.pool.query(
+        `insert into document_versions(document_id, version, snapshot, kind, label) values ($1,1,'{}','published','v1')`,
+        [d.id],
+      );
+      // Soft-delete directly: DELETE /documents/:id already refuses a once-published item, so
+      // this reproduces a row that reached the trash before it was published (or via 0030).
+      await db.pool.query('update documents set deleted_at=now() where id=$1', [d.id]);
+      return d.id as string;
+    };
+    const protectedId = await mk('פורסם פעם');
+
+    const one = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/trash/document/${protectedId}`,
+      headers: auth(u),
+    });
+    expect(one.statusCode).toBe(409);
+    expect(one.json().code).toBe('ONCE_PUBLISHED');
+
+    // Empty-trash skips it rather than 409ing on the first row, and says how many stayed.
+    const disposable = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/documents',
+        headers: auth(u),
+        payload: { title: 'טיוטה למחיקה', category: 'ops', wave: 1, priority: 'm', kind: 'steps' },
+      })
+    ).json();
+    await app.inject({ method: 'DELETE', url: `/api/v1/documents/${disposable.id}`, headers: auth(u) });
+
+    const e = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/trash',
+      headers: { ...auth(u), 'x-confirm': 'empty' },
+    });
+    expect(e.json().purged).toBeGreaterThan(0);
+    expect(e.json().skipped).toBe(1);
+    // Still there, with its version history.
+    expect((await db.pool.query('select 1 from documents where id=$1', [protectedId])).rowCount).toBe(1);
+    expect(
+      (await db.pool.query('select 1 from document_versions where document_id=$1', [protectedId])).rowCount,
+    ).toBe(1);
+    expect((await db.pool.query('select 1 from documents where id=$1', [disposable.id])).rowCount).toBe(0);
+    await db.pool.query('delete from document_versions where document_id=$1', [protectedId]);
+    await db.pool.query('delete from documents where id=$1', [protectedId]);
+  });
+
+  /**
+   * The by-id half of A-M12. `GET /trash` is world-scoped, but restore and purge take an id, so
+   * without the same check a scoped user with an id from anywhere — a stale tab, an audit row,
+   * a guess — could still act on an item their own trash no longer lists.
+   */
+  it('A-M12: restore and purge by id are world-scoped too', async () => {
+    const scoped = await makeUser(db.pool, { name: 'מוגבל', scopes: ['sim'] });
+    const other = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/documents',
+        headers: auth(u),
+        payload: { title: 'של חיובים', category: 'billing', wave: 1, priority: 'm', kind: 'steps' },
+      })
+    ).json();
+    await app.inject({ method: 'DELETE', url: `/api/v1/documents/${other.id}`, headers: auth(u) });
+
+    // Not in their list…
+    const list = await app.inject({ method: 'GET', url: '/api/v1/trash', headers: auth(scoped) });
+    expect(list.json().items.map((x: { id: string }) => x.id)).not.toContain(other.id);
+    // …and not actionable by id either. 404, the same answer as a missing id, so the route
+    // cannot be used to confirm the item exists.
+    for (const [method, url] of [
+      ['POST', `/api/v1/trash/document/${other.id}/restore`],
+      ['DELETE', `/api/v1/trash/document/${other.id}`],
+      ['DELETE', `/api/v1/trash/script/${other.id}`],
+    ] as const) {
+      const r = await app.inject({ method, url, headers: auth(scoped) });
+      expect(r.statusCode, `${method} ${url}`).toBe(404);
+    }
+    // Still there, and the unrestricted user can still act on it.
+    expect(
+      (await db.pool.query('select deleted_at from documents where id=$1', [other.id])).rows[0].deleted_at,
+    ).not.toBeNull();
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/v1/trash/document/${other.id}/restore`,
+          headers: auth(u),
+        })
+      ).statusCode,
+    ).toBe(200);
+  });
+
   it('purgeExpired removes rows older than the window', async () => {
     const c = (
       await app.inject({
@@ -129,5 +237,21 @@ run('trash', () => {
     await db.pool.query("update documents set deleted_at = now() - interval '31 days' where id=$1", [c.id]);
     const { purgeExpired } = await import('../src/modules/trash/repo.js');
     expect(await purgeExpired(db.pool, 30)).toBe(1);
+  });
+
+  it('purgeExpired never removes a document that has a published version', async () => {
+    const r = await db.pool.query(
+      `insert into documents(slug,title,category,wave,priority,status,current_version,deleted_at)
+       values ('once-pub','x','sim',1,'m','archived',1, now() - interval '400 days') returning id`,
+    );
+    const id = r.rows[0].id as string;
+    await db.pool.query(
+      `insert into document_versions(document_id, version, snapshot, kind, label) values ($1,1,'{}','published','v1')`,
+      [id],
+    );
+    const { purgeExpired } = await import('../src/modules/trash/repo.js');
+    await purgeExpired(db.pool, 30);
+    const still = await db.pool.query('select 1 from documents where id=$1', [id]);
+    expect(still.rowCount).toBe(1);
   });
 });

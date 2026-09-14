@@ -51,8 +51,10 @@ const CACHE_TTL_MS = 60_000;
  */
 const PUBLIC_PATHS = new Set(['/api/v1/system/health', '/api/docs/json']);
 
-export function checkScope(user: AuthUser, category: string): boolean {
-  return user.categoryScopes == null || user.categoryScopes.includes(category);
+export function checkScope(user: AuthUser, worlds: string | readonly string[]): boolean {
+  if (user.worldScopes == null) return true;
+  const list = typeof worlds === 'string' ? [worlds] : worlds;
+  return list.some((w) => user.worldScopes!.includes(w));
 }
 
 export default fp(async (app) => {
@@ -130,15 +132,18 @@ export default fp(async (app) => {
     for (const p of cfg.requires ?? []) if (!req.user.permissions.has(p)) throw forbidden(p);
     if (cfg.scope === 'document') {
       const id = (req.params as { id?: string }).id;
-      const r = await app.db.query<{ category: string }>(
-        `select category from documents where id=$1 and deleted_at is null`,
+      const r = await app.db.query<{ worlds: string[] | null }>(
+        `select (select array_agg(dw.world_slug order by (dw.world_slug = d.category) desc, dw.world_slug)
+                   from document_worlds dw where dw.document_id = d.id) worlds
+           from documents d where d.id = $1 and d.deleted_at is null`,
         [id],
       );
       if (!r.rows[0]) throw new HttpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
-      if (!checkScope(req.user, r.rows[0].category))
-        throw new HttpError(403, 'SCOPE_DENIED', 'ההרשאה שלך מוגבלת לקטגוריות אחרות', {
-          category: r.rows[0].category,
-          scopes: req.user.categoryScopes,
+      const worlds = r.rows[0].worlds ?? [];
+      if (!checkScope(req.user, worlds))
+        throw new HttpError(403, 'SCOPE_DENIED', 'ההרשאה שלך מוגבלת לעולמות תוכן אחרים', {
+          worlds,
+          scopes: req.user.worldScopes,
         });
     }
   });

@@ -2,7 +2,9 @@ import type { ModelClient } from '@wecom/model';
 import type { SearchHit, SearchQuery, SearchResponse } from '@wecom/shared';
 import type pg from 'pg';
 import { getDocument, recomputeDerived, type Q } from '../documents/repo.js';
-import { withTransaction } from '../../lib/sql.js';
+import { htmlToText } from '../scripts/html.js';
+import { LIKE_ESCAPE, likeEscape, withTransaction } from '../../lib/sql.js';
+import { visibleWhere } from '../../lib/visibility.js';
 
 /** Hebrew category labels, mirroring the legacy `KB.CATS`. */
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -17,15 +19,15 @@ export const CATEGORY_LABELS: Record<string, string> = {
 export const sourceFile = (category: string) => (category === 'intl' ? 'intl-roaming.json' : 'topics.json');
 
 export type SearchGroupType = SearchResponse['groups'][number]['type'];
-const GROUP_ORDER: SearchGroupType[] = ['blocks', 'steps', 'documents', 'fields', 'scripts'];
+const GROUP_ORDER: SearchGroupType[] = ['blocks', 'steps', 'documents', 'tags', 'fields', 'scripts'];
 const ALL_TYPES = new Set(GROUP_ORDER);
 
 const words = (q: string) => q.trim().split(/\s+/).filter(Boolean);
 
 const wordClause = (cols: string[], w: string, params: unknown[]): string => {
   params.push(w);
-  const i = '$' + params.length;
-  return '(' + cols.map((c) => `${c} ilike '%' || ${i} || '%'`).join(' or ') + ')';
+  const i = likeEscape('$' + params.length);
+  return '(' + cols.map((c) => `${c} ilike '%' || ${i} || '%'${LIKE_ESCAPE}`).join(' or ') + ')';
 };
 /** Documents and steps must contain every word: "ריענון sim" is one step, not two results. */
 const allWords = (cols: string[], ws: string[], params: unknown[]): string =>
@@ -35,17 +37,20 @@ const anyWord = (cols: string[], ws: string[], params: unknown[]): string =>
   ws.map((w) => wordClause(cols, w, params)).join(' or ');
 
 /**
- * `categoryScopes` is the caller's `user_roles.category_scope` union (null = every
- * category) and narrows the two document-bearing groups. Blocks, CRM fields and
- * scripts are catalogue-wide and carry no category, so they are not narrowed.
+ * `worldScopes` is the caller's `user_roles.world_scope` union (null = every world) and
+ * narrows every document-bearing group by INTERSECTION with `document_worlds`. Blocks and
+ * CRM fields are catalogue-wide and carry no world, so they are not narrowed.
  */
 export async function search(
   q: Q,
   query: SearchQuery,
   model: ModelClient | null = null,
-  categoryScopes: readonly string[] | null = null,
+  worldScopes: readonly string[] | null = null,
+  readUnpublished = true,
 ): Promise<SearchResponse> {
   const started = Date.now();
+  /** W2 visibility: a read-only role never sees unpublished documents (or their steps). */
+  const visTerm = visibleWhere(readUnpublished);
   const text = query.q.trim();
   const requested = query.types
     ? new Set(query.types.split(',').map((t) => t.trim()) as SearchGroupType[])
@@ -55,11 +60,36 @@ export async function search(
   if (!text) return { groups: [], total: 0, tookMs: Date.now() - started, files: 0 };
   const ws = words(text);
   const files = new Set<string>();
-  /** Appends `and d.category = any($n)` when the caller is category-scoped. */
+  /** Appends the world-scope intersection term when the caller is scoped. */
   const scopeTerm = (params: unknown[]): string => {
-    if (!categoryScopes) return '';
-    params.push([...categoryScopes]);
-    return ` and d.category = any($${params.length})`;
+    if (!worldScopes) return '';
+    params.push([...worldScopes]);
+    return ` and exists (select 1 from document_worlds sw where sw.document_id = d.id and sw.world_slug = any($${params.length}))`;
+  };
+  /** The `TaxonomyFilterSchema` facets, as SQL over `d`. */
+  const taxTerm = (params: unknown[]): string => {
+    const t: string[] = [];
+    if (query.world) {
+      params.push(query.world);
+      t.push(
+        `exists (select 1 from document_worlds fw where fw.document_id = d.id and fw.world_slug = $${params.length})`,
+      );
+    }
+    if (query.topic) {
+      params.push(query.topic);
+      t.push(
+        `exists (select 1 from document_topics ft where ft.document_id = d.id and ft.topic_id = $${params.length})`,
+      );
+    }
+    if (query.docType) {
+      params.push(query.docType);
+      t.push(`d.doc_type = $${params.length}`);
+    }
+    if (query.tag?.length) {
+      params.push(query.tag);
+      t.push(`d.tags @> $${params.length}::text[]`);
+    }
+    return t.length ? ' and ' + t.join(' and ') : '';
   };
 
   // steps -------------------------------------------------------------------
@@ -78,6 +108,7 @@ export async function search(
       params,
     );
     const stepScope = scopeTerm(params);
+    const stepTax = taxTerm(params);
     params.push(limit);
     const r = await q.query(
       `select s.document_id, d.title doc_title, d.category, s.step_key, s.num, s.title, p.label phase_label,
@@ -85,7 +116,7 @@ export async function search(
               (select a.text from step_actions a where a.step_id=s.id order by a.position limit 1) first_action
        from steps s join documents d on d.id=s.document_id join phases p on p.id=s.phase_id
        left join blocks b on b.id=s.block_id
-       where d.deleted_at is null and (${cond})${stepScope}
+       where d.deleted_at is null and (${cond})${stepScope}${stepTax}${visTerm}
        order by d.title, s.position limit $${params.length}`,
       params,
     );
@@ -122,6 +153,7 @@ export async function search(
     const params: unknown[] = [text];
     const cond = allWords(['d.title', "coalesce(d.description,'')", "coalesce(d.code,'')"], ws, params);
     const docScope = scopeTerm(params);
+    const docTax = taxTerm(params);
     // Prefix-match the last word (palette-friendly incremental search), so the palette ranks
     // "רענ" as a hit for "ריענון" before the whole word is typed. `kb_tsquery_prefix`
     // (migration 0027) tokenises and strips stopwords through exactly the pipeline the
@@ -132,7 +164,7 @@ export async function search(
     const r = await q.query(
       `select d.id, d.title, d.description, d.category, d.current_version,
               ${rankExpr} + similarity(d.title, $1) score
-       from documents d where d.deleted_at is null and (${cond})${docScope}
+       from documents d where d.deleted_at is null and (${cond})${docScope}${docTax}${visTerm}
        order by score desc, d.title limit $${params.length}`,
       params,
     );
@@ -156,6 +188,33 @@ export async function search(
       });
     }
     if (model?.embed && text.length > 3 && docHits.length > 1) await rerank(q, docHits, text, model);
+  }
+
+  // tags --------------------------------------------------------------------
+  const tagHits: SearchHit[] = [];
+  if (want('tags')) {
+    const params: unknown[] = [ws];
+    const scope = scopeTerm(params);
+    const tax = taxTerm(params);
+    params.push(limit);
+    const r = await q.query(
+      `select d.id, d.title, d.category, d.tags from documents d
+        where d.deleted_at is null and d.tags && $1::text[]${scope}${tax}${visTerm} order by d.title limit $${params.length}`,
+      params,
+    );
+    for (const x of r.rows) {
+      files.add(sourceFile(x.category as string));
+      const matched = (x.tags as string[]).filter((t) => ws.includes(t));
+      tagHits.push({
+        type: 'document',
+        id: x.id as string,
+        title: x.title as string,
+        snippet: (x.tags as string[]).join(' · '),
+        meta: 'תגית: ' + matched.join(', '),
+        score: 1,
+        documentId: x.id as string,
+      });
+    }
   }
 
   // blocks ------------------------------------------------------------------
@@ -218,10 +277,16 @@ export async function search(
   const scriptHits: SearchHit[] = [];
   if (want('scripts')) {
     const params: unknown[] = [];
-    const cond = anyWord(['s.title', 's.text'], ws, params);
+    const cond = anyWord(['d.title', "coalesce(d.body_html,'')"], ws, params);
+    const scope = scopeTerm(params);
+    // A-M2: the facets apply here too. Scripts are type-T documents since 0030, so they carry
+    // worlds, topics and tags like every other document — `?world=`/`?topic=`/`?tag=` used to
+    // narrow every group except this one, and `?docType=M` still returned script hits.
+    const tax = taxTerm(params);
     params.push(limit);
     const r = await q.query(
-      `select s.id, s.title, s.text from scripts s where s.deleted_at is null and (${cond}) order by s.title limit $${params.length}`,
+      `select d.id, d.title, coalesce(d.body_html,'') body from documents d
+        where d.deleted_at is null and d.doc_type = 'T' and d.kind = 'text' and (${cond})${scope}${visTerm}${tax} order by d.title limit $${params.length}`,
       params,
     );
     for (const x of r.rows) {
@@ -230,7 +295,7 @@ export async function search(
         type: 'script',
         id: x.id as string,
         title: x.title as string,
-        snippet: x.text as string,
+        snippet: htmlToText(x.body as string),
         meta: 'scripts.json',
         score: 1,
       });
@@ -243,6 +308,7 @@ export async function search(
     documents: docHits,
     fields: fieldHits,
     scripts: scriptHits,
+    tags: tagHits,
     actions: [],
   };
   const groups = GROUP_ORDER.filter((t) => byType[t].length).map((type) => ({ type, hits: byType[type] }));

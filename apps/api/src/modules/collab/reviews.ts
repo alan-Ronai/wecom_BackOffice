@@ -268,10 +268,18 @@ export default async function reviewRoutes(instance: FastifyInstance) {
         params.push(status);
         cond.push(`rr.status = $${params.length}`);
       }
-      // A category-scoped lead sees only the documents they may actually publish.
-      if (user.categoryScopes) {
-        params.push(user.categoryScopes);
-        cond.push(`d.category = any($${params.length}::text[])`);
+      /**
+       * A world-scoped lead sees only the documents they may actually publish. §2.1 defines
+       * this as an intersection with the document's world *set*: this call site was renamed
+       * from `categoryScopes` and left comparing the primary world, so a lead lost review
+       * requests for any document whose extra world they cover — a silent under-count in a
+       * queue people work from, inconsistent with the same user's /dashboards numbers.
+       */
+      if (user.worldScopes) {
+        params.push([...user.worldScopes]);
+        cond.push(
+          `exists (select 1 from document_worlds dw where dw.document_id = d.id and dw.world_slug = any($${params.length}::text[]))`,
+        );
       }
       const where = cond.length ? 'where ' + cond.join(' and ') : '';
       const total = await app.db.query<{ n: string }>(

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { DocumentCard } from '@wecom/shared';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 import { ago } from '../../lib/format.js';
 
 /**
@@ -116,7 +116,7 @@ export function DocList({
               ) : null}
               <span className="v">v{c.currentVersion}</span>
             </span>
-            <span role="gridcell">{CATS[c.category].label}</span>
+            <span role="gridcell">{cat(c.category).label}</span>
             <span role="gridcell">גל {c.wave}</span>
             <span role="gridcell">
               {c.status === 'partial' ? 'חלקי' : c.status === 'draft' ? 'טיוטה' : 'מלא'}

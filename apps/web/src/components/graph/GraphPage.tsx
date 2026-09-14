@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useGraph, useImpact } from '../../api/hooks/stage4.js';
 import type { GraphNode, GraphResponse } from '../../api/stage4.js';
-import { CATS, LINK_TYPES, LINK_TYPE_LABEL, NODE_KINDS, NODE_KIND_KEYS } from '../../lib/constants.js';
+import { cat, LINK_TYPES, LINK_TYPE_LABEL, NODE_KINDS, NODE_KIND_KEYS } from '../../lib/constants.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { LoadError } from '../ui/index.js';
 import { ImpactPanel } from './ImpactPanel.js';
@@ -14,7 +14,7 @@ const H = 640;
 const WARMUP = 160;
 
 const colourOf = (n: GraphNode): string =>
-  n.kind === 'document' && n.category ? CATS[n.category].color : NODE_KINDS[n.kind].color;
+  n.kind === 'document' && n.category ? cat(n.category).color : NODE_KINDS[n.kind].color;
 
 const radiusOf = (n: GraphNode): number => Math.min(20, 8 + Math.sqrt(n.degree) * 2.6);
 

@@ -1,5 +1,6 @@
 import type { GraphEdge, GraphNode } from '@wecom/shared';
 import type { Q } from '../documents/repo.js';
+import { visibleWhere } from '../../lib/visibility.js';
 
 /** `@wecom/shared` exports `LinkTypeSchema` but no inferred alias; the edge carries it. */
 export type LinkType = GraphEdge['type'];
@@ -48,7 +49,7 @@ export interface GraphFilter {
   kinds?: NodeKind[];
   category?: string;
   /**
-   * The caller's `user.categoryScopes` — `null`/absent means every category.
+   * The caller's `user.worldScopes` — `null`/absent means every world.
    *
    * Category scope is the product's only tenancy boundary, and `config.scope: 'document'`
    * can only enforce it where the scoped entity *is* `params.id`. A cross-cutting read model
@@ -56,6 +57,11 @@ export interface GraphFilter {
    * joins `documents` takes it, and a caller that forgets it is visible at the call site.
    */
   scopes?: string[] | null;
+  /**
+   * W2 §10: a reader sees published items only. Like `scopes` this is a repo argument rather
+   * than something the graph can infer, and every documents-joining query below takes it.
+   */
+  readUnpublished?: boolean;
 }
 
 /**
@@ -63,7 +69,10 @@ export interface GraphFilter {
  * it a no-op, so an unrestricted caller sees exactly what they saw before.
  */
 const scopeClause = (alias: string, param: string) =>
-  `(${param}::text[] is null or ${alias}.category = any(${param}))`;
+  `(${param}::text[] is null or exists (select 1 from document_worlds dws where dws.document_id=${alias}.id and dws.world_slug = any(${param})))`;
+
+/** The status half of the same boundary. Empty for a caller who may read unpublished items. */
+const visibleClause = visibleWhere;
 
 export interface GraphData {
   nodes: Map<string, GraphNode>;
@@ -76,25 +85,32 @@ const edgeKey = (e: GraphEdge) => `${e.from}|${e.to}|${e.type}|${e.fromStepKey ?
 /**
  * The whole connected-data graph, assembled from the derived tables L2 already maintains:
  * `document_links` (explicit + detected), `steps.block_id`/`steps.block_refs`,
- * `step_field_refs`, `documents.source_id` and `script_refs`. Everything is loaded once and
+ * `step_field_refs`, `documents.source_id` and the explicit links into type-T (script)
+ * documents. Everything is loaded once and
  * traversed in memory — this is a single-tenant LAN KB, so the whole graph is a few
  * thousand rows and a per-request round trip per BFS level would cost far more.
  */
 export async function loadGraph(q: Q, filter: GraphFilter = {}): Promise<GraphData> {
   const scopes = filter.scopes ?? null;
+  const readUnpublished = filter.readUnpublished ?? true;
   const p = [scopes];
-  const inScope = scopeClause('d', '$1');
+  const inScope = scopeClause('d', '$1') + visibleClause(readUnpublished, 'd');
   const [documents, blocks, fields, sources, scripts, links, blockUse, fieldUse, docSources, scriptUse] =
     await Promise.all([
       q.query(
         `select d.id, d.title, d.category, d.status from documents d
-          where d.deleted_at is null and ${inScope}`,
+          where d.deleted_at is null and not (d.doc_type = 'T' and d.kind = 'text') and ${inScope}`,
         p,
       ),
       q.query('select id, title from blocks where deleted_at is null'),
       q.query('select name, status from crm_fields where deleted_at is null'),
       q.query('select id, title, kind from sources where deleted_at is null'),
-      q.query('select id, title from scripts where deleted_at is null'),
+      // Scripts are type-T `text` documents since 0030; they stay their own node kind here.
+      q.query(
+        `select d.id, d.title from documents d
+          where d.deleted_at is null and d.doc_type = 'T' and d.kind = 'text' and ${inScope}`,
+        p,
+      ),
       q.query(
         `select l.from_document_id, l.from_step_key, l.to_document_id, l.to_block_id, l.to_field_name,
                 l.to_source_id, l.type, l.origin
@@ -125,10 +141,12 @@ export async function loadGraph(q: Q, filter: GraphFilter = {}): Promise<GraphDa
         p,
       ),
       q.query(
-        `select r.document_id, r.step_key, r.script_id
-           from script_refs r
-           join documents d on d.id = r.document_id and d.deleted_at is null
-          where ${inScope}`,
+        `select l.from_document_id document_id, l.from_step_key step_key, l.to_document_id script_id
+           from document_links l
+           join documents d on d.id = l.from_document_id and d.deleted_at is null
+           join documents s on s.id = l.to_document_id and s.deleted_at is null
+                           and s.doc_type = 'T' and s.kind = 'text'
+          where l.type = 'link' and l.origin = 'explicit' and ${inScope}`,
         p,
       ),
     ]);
@@ -224,12 +242,20 @@ export async function loadGraph(q: Q, filter: GraphFilter = {}): Promise<GraphDa
       'explicit',
     );
 
-  // A block, field, source or script is only in the graph because documents use it. When the
-  // documents that used it are out of the caller's scope, every edge to it has already been
-  // dropped above — keeping the bare node would still disclose its label *and* let the BFS in
-  // `selectGraph` walk through it, so it goes too. Unscoped callers keep the old behaviour,
-  // where an unused catalogue entry is a legitimate isolated node.
-  if (scopes) {
+  /**
+   * A block, field, source or script is only in the graph because documents use it. When the
+   * documents that used it are outside the caller's boundary, every edge to it has already
+   * been dropped above — keeping the bare node would still disclose its label *and* let the
+   * BFS in `selectGraph` walk through it, so it goes too. A caller with no boundary at all
+   * keeps the old behaviour, where an unused catalogue entry is a legitimate isolated node.
+   *
+   * `!readUnpublished` is part of the gate, not just `scopes`. W4 gives every source document
+   * a `sources` row titled after its document, so an unscoped *reader* was being handed
+   * `source:<id>` nodes labelled with the titles of drafts. Found by the wave-4 rows added to
+   * `scope-leak.test.ts`; the status half of the boundary needs the same treatment as the
+   * world half.
+   */
+  if (scopes || !readUnpublished) {
     const touched = new Set<string>();
     for (const e of edges) {
       touched.add(e.from);
@@ -317,11 +343,16 @@ export interface InboundRow {
 
 /**
  * Every live document *the caller may see* that points at the node, however the reference is
- * recorded. `scopes` is `user.categoryScopes`; `null` means every category.
+ * recorded. `scopes` is `user.worldScopes`; `null` means every world.
  */
-export async function inboundFor(q: Q, ref: NodeRef, scopes: string[] | null = null): Promise<InboundRow[]> {
+export async function inboundFor(
+  q: Q,
+  ref: NodeRef,
+  scopes: string[] | null = null,
+  readUnpublished = true,
+): Promise<InboundRow[]> {
   const parts: { sql: string; params: unknown[] }[] = [];
-  const inScope = `and ${scopeClause('d', '$2')}`;
+  const inScope = `and ${scopeClause('d', '$2')}${visibleClause(readUnpublished, 'd')}`;
   const linkColumn = {
     document: 'to_document_id',
     block: 'to_block_id',
@@ -359,9 +390,9 @@ export async function inboundFor(q: Q, ref: NodeRef, scopes: string[] | null = n
     });
   if (ref.kind === 'script')
     parts.push({
-      sql: `select d.id, d.title, r.step_key, 'link' as type
-              from script_refs r join documents d on d.id = r.document_id and d.deleted_at is null
-             where r.script_id = $1 ${inScope}`,
+      sql: `select d.id, d.title, l.from_step_key as step_key, 'link' as type
+              from document_links l join documents d on d.id = l.from_document_id and d.deleted_at is null
+             where l.to_document_id = $1 and l.type = 'link' and l.origin = 'explicit' ${inScope}`,
       params: [ref.key, scopes],
     });
 
@@ -385,7 +416,12 @@ export async function inboundFor(q: Q, ref: NodeRef, scopes: string[] | null = n
  * References recorded against a step key that no longer exists in the referring document —
  * the links that are already dangling and would stay dangling if the node went away.
  */
-export async function brokenLinkCount(q: Q, ref: NodeRef, scopes: string[] | null = null): Promise<number> {
+export async function brokenLinkCount(
+  q: Q,
+  ref: NodeRef,
+  scopes: string[] | null = null,
+  readUnpublished = true,
+): Promise<number> {
   const column = {
     document: 'to_document_id',
     block: 'to_block_id',
@@ -399,7 +435,7 @@ export async function brokenLinkCount(q: Q, ref: NodeRef, scopes: string[] | nul
   const r = await q.query(
     `select count(*)::int n from document_links l
        join documents d on d.id = l.from_document_id and d.deleted_at is null
-      where l.${column} = $1 and l.from_step_key is not null and ${scopeClause('d', '$2')}
+      where l.${column} = $1 and l.from_step_key is not null and ${scopeClause('d', '$2')}${visibleClause(readUnpublished, 'd')}
         and not exists (select 1 from steps s where s.document_id = l.from_document_id and s.step_key = l.from_step_key)`,
     [ref.key, scopes],
   );

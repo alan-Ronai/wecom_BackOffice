@@ -147,7 +147,7 @@ export async function blockUsageRows(
             case when s.block_id = $1 then 'embedded' else 'reference' end mode
        from steps s join documents d on d.id = s.document_id and d.deleted_at is null
       where (s.block_id = $1 or $1 = any(s.block_refs))
-        and ($2::text[] is null or d.category = any($2))
+        and ($2::text[] is null or exists (select 1 from document_worlds dws where dws.document_id=d.id and dws.world_slug = any($2)))
       order by d.title, s.position`,
     [id, scopes],
   );

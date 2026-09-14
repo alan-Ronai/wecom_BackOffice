@@ -39,7 +39,7 @@ export default async function routes(app: FastifyInstance) {
     async (req) => {
       const user = requireUser(req);
       const name = decodeName((req.params as { name: string }).name);
-      return { items: await repo.fieldUsage(app.db, name, user.categoryScopes) };
+      return { items: await repo.fieldUsage(app.db, name, user.worldScopes) };
     },
   );
 
@@ -58,7 +58,7 @@ export default async function routes(app: FastifyInstance) {
       const page = await repo.fieldPage(
         app.db,
         decodeName((req.params as { name: string }).name),
-        user.categoryScopes,
+        user.worldScopes,
       );
       if (!page) throw notFound('השדה');
       return page;
@@ -82,7 +82,7 @@ export default async function routes(app: FastifyInstance) {
       const body = req.body as z.infer<typeof FieldRenameBodySchema>;
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getField(tx, name);
-        const { result, affected } = await repo.renameField(tx, name, body, user.id, user.categoryScopes);
+        const { result, affected } = await repo.renameField(tx, name, body, user.id, user.worldScopes);
         await audit(tx, {
           actorId: user.id,
           action: 'fields.rename',

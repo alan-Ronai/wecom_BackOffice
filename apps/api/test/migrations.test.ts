@@ -54,8 +54,6 @@ run('migrations', () => {
       'block_versions',
       'crm_fields',
       'step_field_refs',
-      'scripts',
-      'script_refs',
       'document_links',
       'notes',
       'note_likes',
@@ -71,6 +69,10 @@ run('migrations', () => {
       'connectors',
       'sync_links',
       'telemetry_events',
+      'worlds',
+      'topics',
+      'document_worlds',
+      'document_topics',
     ])
       expect(names, t).toContain(t);
     // Stage 4 columns the data explorer reads back.
@@ -131,6 +133,142 @@ run('migrations', () => {
     expect(grants).not.toContain('agent:docs.read_unpublished');
     expect(grants).not.toContain('editor:taxonomy.manage');
   });
+  it('adds the wave 4 governance columns and the status check', async () => {
+    const cols = await pool.query(
+      `select column_name from information_schema.columns where table_name='documents'
+         and column_name in ('owner_id','editor_id','approver_id','published_at','source_review_needed','source_review_reason','source_review_at')
+       order by 1`,
+    );
+    expect(cols.rows.map((r) => r.column_name)).toEqual([
+      'approver_id',
+      'editor_id',
+      'owner_id',
+      'published_at',
+      'source_review_at',
+      'source_review_needed',
+      'source_review_reason',
+    ]);
+    const sv = await pool.query(
+      "select 1 from information_schema.columns where table_name='document_versions' and column_name='source_version'",
+    );
+    expect(sv.rowCount).toBe(1);
+    await expect(
+      pool.query(
+        "insert into documents(slug,title,category,wave,priority,status) values ('bad-status','x','sim',1,'m','bogus')",
+      ),
+    ).rejects.toThrow(/documents_status_check/);
+  });
+
+  it('creates the wave 4 source document tables and backfills from accepted revisions', async () => {
+    const t = await pool.query(
+      "select table_name from information_schema.tables where table_schema='public' and table_name in ('source_documents','source_document_versions','assets') order by 1",
+    );
+    expect(t.rows.map((r) => r.table_name)).toEqual([
+      'assets',
+      'source_document_versions',
+      'source_documents',
+    ]);
+    const u = await pool.query(
+      "select indexname from pg_indexes where tablename='assets' and indexdef ilike '%unique%(sha256)%'",
+    );
+    expect(u.rowCount).toBe(1);
+  });
+
+  it('creates the feedback tables with their check constraints', async () => {
+    const cols = await pool.query(
+      `select column_name from information_schema.columns where table_name='feedback' order by ordinal_position`,
+    );
+    expect(cols.rows.map((r) => r.column_name)).toEqual([
+      'id',
+      'document_id',
+      'document_version',
+      'doc_type',
+      'world_slug',
+      'step_key',
+      'kind',
+      'text',
+      'status',
+      'user_id',
+      'created_at',
+      'assignee_id',
+      'decision_note',
+      'decided_by',
+      'decided_at',
+      'resolved_version',
+    ]);
+    const alerts = await pool.query(`select to_regclass('feedback_alerts') as t`);
+    expect(alerts.rows[0].t).toBe('feedback_alerts');
+    await expect(
+      pool.query(`insert into feedback(document_id, document_version, world_slug, kind, user_id)
+                  values (gen_random_uuid(), 1, 'sim', 'bogus', gen_random_uuid())`),
+    ).rejects.toThrow(/feedback_kind_check|violates check constraint/);
+  });
+  it('creates the wave 4 usage tables and the zero-result partial index', async () => {
+    const t = await pool.query(
+      "select table_name from information_schema.tables where table_schema='public' and table_name in ('search_log','topic_views') order by 1",
+    );
+    expect(t.rows.map((r) => r.table_name)).toEqual(['search_log', 'topic_views']);
+    const idx = await pool.query(
+      "select indexname, indexdef from pg_indexes where tablename='search_log' and indexname='search_log_zero_idx'",
+    );
+    expect(idx.rowCount).toBe(1);
+    expect(idx.rows[0].indexdef).toMatch(/WHERE \(results = 0\)/);
+    const fk = await pool.query(
+      "select count(*)::int n from information_schema.table_constraints where table_name='topic_views' and constraint_type='FOREIGN KEY'",
+    );
+    // only users; deliberately no FK to topics (W1's table)
+    expect(fk.rows[0].n).toBe(1);
+  });
+  it('0035 keeps both the tags term and the Hebrew stopword filter in the search vector', async () => {
+    // 0030 added tags but dropped 0027's stopword filter; 0035 is the one definition with both.
+    await pool.query(
+      `insert into documents(slug, title, description, category, wave, priority, tags)
+       values ('w6-vec','מסמך על גלישה','', 'tech', 1, 'm', array['apnfix'])`,
+    );
+    const vec = (await pool.query(`select search_vector::text v from documents where slug='w6-vec'`)).rows[0]
+      .v as string;
+    expect(vec).toMatch(/'apnfix':/);
+    expect(vec).not.toMatch(/'על':/);
+    await pool.query(`delete from documents where slug='w6-vec'`);
+  });
+  it('a wave-4-only rollback leaves 0027 in force on both sides of the stopword rule', async () => {
+    // A-I8: 0030.down used to restore *0007*'s definition, not the one that was live when it
+    // ran (0027's). Rolling back only wave 4 — down through 0035…0030, exactly what a bad
+    // wave-4 deploy does — would then leave `kb_tsquery`/`kb_tsquery_prefix` stripping Hebrew
+    // stopwords at query time while the index side stopped stripping them: the two halves
+    // 0027 exists to keep in step, out of step again, with no test noticing.
+    const move = (direction: 'up' | 'down', count?: number) =>
+      runner({
+        databaseUrl: c.getConnectionUri(),
+        dir: 'migrations',
+        direction,
+        count,
+        migrationsTable: 'pgmigrations',
+        ignorePattern: 'package\\.json',
+        log: () => undefined,
+      });
+    const wave4 = (await readdir('migrations')).filter((f) => /^00(3[0-9])_/.test(f)).length;
+    await move('down', wave4);
+    await pool.query(
+      `insert into documents(slug, title, description, category, wave, priority)
+       values ('w6-stop','חוב של לקוח','', 'tech', 1, 'm')`,
+    );
+    const vec = (await pool.query(`select search_vector::text v from documents where slug='w6-stop'`)).rows[0]
+      .v as string;
+    expect(vec).toMatch(/'חוב':/);
+    expect(vec).toMatch(/'לקוח':/);
+    expect(vec).not.toMatch(/'של':/); // 0027's ts_delete(…, kb_stopwords()) is still in force
+    expect(
+      (
+        await pool.query(
+          `select 1 from documents where slug='w6-stop' and search_vector @@ kb_tsquery('חוב של לקוח')`,
+        )
+      ).rowCount,
+    ).toBe(1);
+    await pool.query(`delete from documents where slug='w6-stop'`);
+    await move('up');
+  }, 120000);
+
   it('rolls back cleanly', async () => {
     await runner({
       databaseUrl: c.getConnectionUri(),

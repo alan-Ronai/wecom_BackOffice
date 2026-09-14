@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { stripFmt } from '@wecom/shared';
+import { DOC_TYPE_LABELS, stripFmt } from '@wecom/shared';
 import {
   useDocRefs,
   useDocument,
@@ -14,7 +14,7 @@ import { useCan } from '../../api/hooks/me.js';
 import { ApiError } from '../../api/unwrap.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
 import { useUiPrefs } from '../../api/hooks/uiPrefs.js';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 import { copy } from '../../lib/format.js';
 import { useHotkeys, type ActiveScope } from '../../lib/keys.js';
 import { resolvedSteps } from '../../lib/steps.js';
@@ -32,6 +32,15 @@ import { useCall } from './useCall.js';
 import { StepCollab } from './StepCollab.js';
 import { QuickSwitch } from './QuickSwitch.js';
 import { PrintFrame } from './PrintFrame.js';
+import { TypeBadge } from '../taxonomy/TypeBadge.js';
+import { useTopicView } from '../../api/hooks/taxonomy.js';
+import { StatusChip } from '../governance/StatusChip.js';
+import { SourceReviewBadge } from '../governance/SourceReviewBadge.js';
+import { UnavailablePage } from '../governance/UnavailablePage.js';
+import { FeedbackButton } from '../feedback/FeedbackButton.js';
+import { PaneModeToggle, type PaneMode } from '../source/PaneModeToggle.js';
+import { SourcePane } from '../source/SourcePane.js';
+import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 import type { FieldInfo } from '../../lib/format.js';
 import type { ScriptRow } from '../../api/types.js';
 
@@ -72,6 +81,40 @@ export function ArticlePage() {
   const showPanel = prefs.data?.panel !== false;
   const call = useCall(doc, steps, callMode);
   const [summaryExtras, setSummaryExtras] = useState<string[]>([]);
+
+  /**
+   * W4 pane modes. `Preferences.paneMode` is optional (a row written before wave 4 has no such
+   * key), so the effective default lives here; the toggle writes it back so the choice follows
+   * the agent to the next machine.
+   */
+  const [paneMode, setPaneMode] = useState<PaneMode | null>(null);
+  const source = useSourceDocument(id);
+  /**
+   * `paneMode` is a *global* preference but whether a document has a source is per-document, so
+   * the wanted mode is clamped to what this one supports. Without the clamp an agent who switched
+   * to "מקור" on one item opened the next one to the source pane's empty state instead of the
+   * article — mid-call, reading as "the document is empty". `isPending` keeps the clamp from
+   * firing (and the toggle from flashing disabled) while the source query is still in flight.
+   */
+  const hasSource = !!source.data || source.isPending;
+  const wantedPane: PaneMode = paneMode ?? prefs.data?.paneMode ?? 'work';
+  const effectivePane: PaneMode = hasSource ? wantedPane : 'work';
+  /**
+   * W1: the topic view is what "previous / next in this topic" means (PRD §4).
+   *
+   * `record: false` because this is not a topic browse. The route records a topic view by
+   * default, and an article open is not one — counting it would make `/analytics`'s "נושאים
+   * נצפים" measure "articles opened that happen to sit in a topic" instead.
+   */
+  const topicView = useTopicView(doc?.topics?.[0], { record: false });
+  const topicNeighbours = useMemo(() => {
+    const flat = (topicView.data?.groups ?? []).flatMap((g) => g.items);
+    const i = flat.findIndex((x) => x.id === doc?.id);
+    return {
+      prev: i > 0 ? flat[i - 1]! : null,
+      next: i >= 0 && i < flat.length - 1 ? flat[i + 1]! : null,
+    };
+  }, [topicView.data, doc?.id]);
 
   /**
    * 6b telemetry. Every event is buffered by `useTelemetry` and flushed in batches — an outcome
@@ -255,6 +298,8 @@ export function ArticlePage() {
   // Category scope is enforced per document, so "you may not see this" is a distinct outcome
   // from "this is gone" — telling an agent to check the trash for a document they simply lack
   // scope for sends them the wrong way.
+  // W2: "exists but is not published for you" is its own answer — not 404, not 403.
+  if (docQ.error instanceof ApiError && docQ.error.code === 'NOT_PUBLISHED') return <UnavailablePage />;
   if (docQ.error instanceof ApiError && docQ.error.status === 403)
     return (
       <div className="empty">
@@ -310,6 +355,17 @@ export function ArticlePage() {
         </span>
       ) : null;
     },
+    renderStepFeedback: (s) => (
+      <FeedbackButton
+        size="xs"
+        documentId={doc.id}
+        documentVersion={doc.currentVersion}
+        stepKey={s.key}
+        documentTitle={doc.title}
+        docType={doc.docType}
+        worldSlug={doc.category}
+      />
+    ),
     renderFooter: (s) => (
       <StepCollab
         documentId={doc.id}
@@ -334,6 +390,82 @@ export function ArticlePage() {
     ),
   };
 
+  const workView = (
+    <article className="doc">
+      <div className="doc-head">
+        <div className="meta">
+          {doc.docType ? <TypeBadge docType={doc.docType} /> : null}
+          <span className="chip chip-blue">
+            {doc.kind === 'retention' ? 'שימור לקוחות' : `תפעולי – ${cat(doc.category).short}`}
+          </span>
+          <span className="chip chip-gray">v{doc.currentVersion}</span>
+          <span className="chip chip-gray">{steps.length} שלבים</span>
+          {/* Status and the source-review flag are editor information: a reader only ever sees
+              published items, so a chip saying so would be noise. */}
+          {can('docs.read_unpublished') ? <StatusChip status={doc.status} /> : null}
+          {(doc.tags ?? []).map((t) => (
+            <span
+              key={t}
+              className="chip chip-gray tag-chip"
+              role="button"
+              tabIndex={0}
+              title={`סנן לפי ${t}`}
+              onClick={() => go(`/library?tag=${encodeURIComponent(t)}`)}
+            >
+              #{t}
+            </span>
+          ))}
+        </div>
+        <h1>{doc.title}</h1>
+        <p>{doc.description}</p>
+        {topicNeighbours.prev || topicNeighbours.next ? (
+          <div className="topic-nav">
+            {topicNeighbours.prev ? (
+              <button className="btn xs" onClick={() => go(`/doc/${topicNeighbours.prev!.id}`)}>
+                → הקודם בנושא: {topicNeighbours.prev.title} ({DOC_TYPE_LABELS[topicNeighbours.prev.docType]})
+              </button>
+            ) : null}
+            {topicNeighbours.next ? (
+              <button className="btn xs" onClick={() => go(`/doc/${topicNeighbours.next!.id}`)}>
+                הבא בנושא: {topicNeighbours.next.title} ({DOC_TYPE_LABELS[topicNeighbours.next.docType]}) ←
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <DocBody doc={doc} ctx={ctx} steps={steps} />
+    </article>
+  );
+
+  const paneBody =
+    effectivePane === 'source' ? (
+      <SourcePane documentId={doc.id} canEdit={can('docs.edit', doc)} sourceId={doc.sourceId} />
+    ) : effectivePane === 'split' ? (
+      <div className="split-panes">
+        {workView}
+        <SourcePane documentId={doc.id} canEdit={can('docs.edit', doc)} sourceId={doc.sourceId} />
+      </div>
+    ) : (
+      workView
+    );
+
+  /**
+   * §5.1: the working view, the source document, or both side by side — with the source-review
+   * flag *above* the switch rather than inside the working view's meta row. The flag is about
+   * the source having changed, so it is exactly the reader who has switched to the source pane
+   * who must still see it (and still be able to clear it).
+   */
+  const workOrSource = (
+    <>
+      {can('docs.edit', doc) ? (
+        <div className="source-review-strip">
+          <SourceReviewBadge doc={doc} />
+        </div>
+      ) : null}
+      {paneBody}
+    </>
+  );
+
   const pct = Math.round((call.done / Math.max(1, steps.length)) * 100);
   const ai = steps.findIndex((s) => s.key === call.activeKey);
   const railSteps = steps.filter((s) => !s.phase.route || s.phase.id === active?.phase.id);
@@ -350,7 +482,7 @@ export function ArticlePage() {
           </a>
           <span className="sep">/</span>
           <a role="button" tabIndex={0} onClick={() => go(`/library/${doc.category}`)}>
-            {CATS[doc.category].label}
+            {cat(doc.category).label}
           </a>
           <span className="sep">/</span>
           <b>{doc.title}</b>
@@ -408,6 +540,30 @@ export function ArticlePage() {
               </span>
             ) : null}
           </span>
+          <FeedbackButton
+            documentId={doc.id}
+            documentVersion={doc.currentVersion}
+            documentTitle={doc.title}
+            docType={doc.docType}
+            worldSlug={doc.category}
+          />
+          <PaneModeToggle
+            value={effectivePane}
+            hasSource={hasSource}
+            onChange={(m) => {
+              setPaneMode(m);
+              savePrefs.mutate({
+                ...(prefs.data ?? {
+                  theme: null,
+                  font: 'plex',
+                  panel: true,
+                  callMode: true,
+                  sidebarExpanded: false,
+                }),
+                paneMode: m,
+              });
+            }}
+          />
           <button className="btn sm" title="Ctrl P" onClick={() => window.print()}>
             🖨 הדפסה
           </button>
@@ -499,20 +655,7 @@ export function ArticlePage() {
           <div className={'doc-layout' + (showPanel ? '' : ' no-panel')}>
             <div className="doc-main">
               <div className={'doc-scroll' + (callMode ? '' : ' no-aside')}>
-                <article className="doc">
-                  <div className="doc-head">
-                    <div className="meta">
-                      <span className="chip chip-blue">
-                        {doc.kind === 'retention' ? 'שימור לקוחות' : `תפעולי – ${CATS[doc.category].short}`}
-                      </span>
-                      <span className="chip chip-gray">v{doc.currentVersion}</span>
-                      <span className="chip chip-gray">{steps.length} שלבים</span>
-                    </div>
-                    <h1>{doc.title}</h1>
-                    <p>{doc.description}</p>
-                  </div>
-                  <DocBody doc={doc} ctx={ctx} steps={steps} />
-                </article>
+                {workOrSource}
                 {callMode ? (
                   <aside className="callaside">
                     <div className="card">

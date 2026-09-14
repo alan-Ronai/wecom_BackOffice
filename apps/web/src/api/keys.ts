@@ -41,6 +41,21 @@ export const keys = {
   views: ['views'] as const,
   templates: ['templates'] as const,
   presence: (id: string) => ['presence', id] as const,
+  /* wave 4 — taxonomy (W1) */
+  worlds: (inactive = false) => ['worlds', inactive] as const,
+  topics: (world: string) => ['topics', world] as const,
+  topic: (id: string) => ['topic', id] as const,
+  tags: (q = '') => ['tags', q] as const,
+  /* wave 4 — source documents (W4) */
+  source: (id: string) => ['source', id] as const,
+  sourceVersions: (id: string) => ['sourceVersions', id] as const,
+  sourceVersion: (id: string, v: number) => ['sourceVersion', id, v] as const,
+  sourceDraft: (id: string) => ['sourceDraft', id] as const,
+  /* wave 4 — W3 feedback (typed from the zod contract — see `src/api/hooks/feedback.ts`) */
+  feedback: (q: unknown = '*') => ['feedback', q] as const,
+  feedbackItem: (id: string) => ['feedback', 'item', id] as const,
+  feedbackAnalytics: (q: unknown = '*') => ['feedback', 'analytics', q] as const,
+  docFeedback: (id: string) => ['docFeedback', id] as const,
   admin: {
     users: (q: unknown = '*') => ['admin', 'users', q] as const,
     roles: ['admin', 'roles'] as const,
@@ -53,6 +68,11 @@ export const keys = {
     matrix: ['admin', 'roles', 'matrix'] as const,
     identity: ['admin', 'identity'] as const,
     system: ['admin', 'system'] as const,
+  },
+  /* wave 4 — usage analytics (W5) */
+  analytics: {
+    usage: (q: unknown = '*') => ['analytics', 'usage', q] as const,
+    searchLog: (q: unknown = '*') => ['analytics', 'searchLog', q] as const,
   },
   connectors: ['connectors'] as const,
   connector: (id: string) => ['connectors', id] as const,

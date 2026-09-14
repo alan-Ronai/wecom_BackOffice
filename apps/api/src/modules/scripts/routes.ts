@@ -5,20 +5,28 @@ import { audit } from '../../lib/audit.js';
 import { notFound } from '../../lib/http.js';
 import { withTransaction } from '../../lib/sql.js';
 import { requireUser } from '../../lib/user.js';
+import { canReadUnpublished } from '../../lib/visibility.js';
 import * as repo from './repo.js';
 
 const Params = z.object({ id: IdSchema });
+
+/** Deprecated adapter over type-T documents (W1). Removed after wave 4; use /documents?docType=T. */
 
 export default async function routes(app: FastifyInstance) {
   app.get(
     '/scripts',
     {
       config: { requires: ['docs.read'] },
-      schema: { tags: ['scripts'], response: { 200: ScriptListSchema } },
+      schema: { deprecated: true, tags: ['scripts'], response: { 200: ScriptListSchema } },
     },
     async (req) => {
-      requireUser(req);
-      return { items: await repo.listScripts(app.db) };
+      const user = requireUser(req);
+      return {
+        items: await repo.listScripts(app.db, {
+          worldScopes: user.worldScopes,
+          readUnpublished: canReadUnpublished(user),
+        }),
+      };
     },
   );
 
@@ -26,7 +34,12 @@ export default async function routes(app: FastifyInstance) {
     '/scripts',
     {
       config: { requires: ['scripts.edit'] },
-      schema: { tags: ['scripts'], body: UpsertScriptBodySchema, response: { 200: ScriptSchema } },
+      schema: {
+        deprecated: true,
+        tags: ['scripts'],
+        body: UpsertScriptBodySchema,
+        response: { 200: ScriptSchema },
+      },
     },
     async (req) => {
       const user = requireUser(req);
@@ -51,8 +64,10 @@ export default async function routes(app: FastifyInstance) {
   app.put(
     '/scripts/:id',
     {
-      config: { requires: ['scripts.edit'] },
+      // These rows are documents (0030); the world half of the boundary is the plugin's job.
+      config: { requires: ['scripts.edit'], scope: 'document' },
       schema: {
+        deprecated: true,
         tags: ['scripts'],
         params: Params,
         body: UpsertScriptBodySchema,
@@ -85,8 +100,13 @@ export default async function routes(app: FastifyInstance) {
   app.delete(
     '/scripts/:id',
     {
-      config: { requires: ['scripts.edit'] },
-      schema: { tags: ['scripts'], params: Params, response: { 200: z.object({ auditId: z.string() }) } },
+      config: { requires: ['scripts.edit'], scope: 'document' },
+      schema: {
+        deprecated: true,
+        tags: ['scripts'],
+        params: Params,
+        response: { 200: z.object({ auditId: z.string() }) },
+      },
     },
     async (req) => {
       const user = requireUser(req);

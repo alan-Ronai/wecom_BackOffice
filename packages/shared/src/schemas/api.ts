@@ -23,7 +23,7 @@ import {
   ScriptSchema,
   VersionSchema,
 } from './content.js';
-import { TaxonomyFilterSchema } from './wave4.js';
+import { DocTypeSchema, TaxonomyFilterSchema, WorldSlugSchema } from './wave4.js';
 import { SuggestionPayloadSchema } from './pipeline.js';
 import { PermissionSchema, PreferencesSchema } from './identity.js';
 
@@ -43,6 +43,14 @@ export const ListDocumentsQuerySchema = PaginationQuerySchema.extend({
 }).merge(TaxonomyFilterSchema);
 export const ListDocumentsResponseSchema = paginated(DocumentCardSchema);
 
+/** W1: taxonomy fields every write body carries. `worlds` are the EXTRA worlds; the primary is `category`. */
+const TaxonomyWriteFields = z.object({
+  docType: DocTypeSchema.optional(),
+  tags: z.array(z.string().min(1).max(40)).max(30).default([]),
+  worlds: z.array(WorldSlugSchema).max(20).default([]), // extra worlds; the primary is `category`
+  topics: z.array(IdSchema).max(50).default([]),
+  bodyHtml: z.string().max(200_000).optional(), // kind 'text' only
+});
 export const CreateDocumentBodySchema = DocumentSchema.pick({
   title: true,
   description: true,
@@ -50,11 +58,12 @@ export const CreateDocumentBodySchema = DocumentSchema.pick({
   wave: true,
   priority: true,
   kind: true,
-}).extend({
-  slug: z.string().optional(),
-  topicId: z.number().int().optional(),
-  phases: z.array(PhaseSchema).optional(),
-});
+})
+  .extend({
+    slug: z.string().optional(),
+    phases: z.array(PhaseSchema).optional(),
+  })
+  .merge(TaxonomyWriteFields);
 export const PatchDocumentBodySchema = DocumentSchema.pick({
   title: true,
   description: true,
@@ -63,7 +72,13 @@ export const PatchDocumentBodySchema = DocumentSchema.pick({
   priority: true,
   code: true,
   sourceRef: true,
-}).partial();
+})
+  .merge(TaxonomyWriteFields)
+  .partial()
+  .extend({
+    ownerId: IdSchema.nullable().optional(), // W2
+    editorId: IdSchema.nullable().optional(), // W2
+  });
 export const StructureBodySchema = z.object({
   phases: z.array(PhaseSchema).min(1),
   related: DocumentSchema.shape.related.optional(),
@@ -106,7 +121,7 @@ export const SearchQuerySchema = z
 export const SearchResponseSchema = z.object({
   groups: z.array(
     z.object({
-      type: z.enum(['documents', 'steps', 'blocks', 'fields', 'scripts', 'actions']),
+      type: z.enum(['documents', 'steps', 'blocks', 'fields', 'scripts', 'actions', 'tags']),
       hits: z.array(SearchHitSchema),
     }),
   ),
@@ -279,6 +294,15 @@ export const SyncLinkSchema = z.object({
   baseLocalVersion: z.number().int(),
   lastSyncedAt: IsoDateSchema.nullable(),
   conflict: z.unknown().nullable(),
+  /**
+   * W4/B-C2: images the last inbound sync could not bring across. The sanitizer drops an
+   * `<img>` whose `src` is not a local asset, so without this the loss would be invisible —
+   * and the next push would write the image-free body back to the remote.
+   */
+  mediaErrors: z
+    .array(z.object({ url: z.string(), error: z.string() }))
+    .nullable()
+    .default(null),
 });
 export const SyncResolveBodySchema = z.object({
   resolution: z.enum(['ours', 'theirs', 'merged']),

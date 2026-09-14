@@ -20,15 +20,17 @@ import {
   type Suggestion,
 } from '@wecom/shared';
 import * as fixtures from './fixtures.js';
-import { fx } from './fixtures.js';
+import { fx, REV_1 } from './fixtures.js';
 import { resetStage4State, stage4Handlers } from './stage4.js';
 import { resetStage5, stage5Handlers } from './stage5.js';
 import { resetStage45, stage45Handlers } from './stage45.js';
+import { initialTaxonomy, taxonomyHandlers, type TaxonomyState } from './taxonomy.js';
+import { feedbackHandlers, resetFeedbackState } from './feedback-handlers.js';
 import type { TrashItem } from '../../src/api/types.js';
 
 const B = '/api/v1';
 
-interface State {
+interface State extends TaxonomyState {
   pins: Set<string>;
   notes: Note[];
   suggestions: Suggestion[];
@@ -42,6 +44,24 @@ interface State {
   processed: string[];
   publishedSources: string[];
   preferences: typeof fx.me.preferences;
+  /* wave 4 · W2 governance */
+  statusChanges: { id: string; status: string; reason: string }[];
+  sourceReviewCleared: { id: string; note: string }[];
+  /* wave 4 — source documents (W4) */
+  sourceDocs: Map<
+    string,
+    {
+      html: string;
+      text: string;
+      version: number;
+      etag: string;
+      versions: { version: number; label: string; html: string }[];
+      /** Set for an imported source; the raw-docx download hangs off it. */
+      latestRevisionId?: string | null;
+    }
+  >;
+  assets: string[];
+  sourceDrafts: Map<string, { html: string; updatedAt: string }>;
 }
 
 const initial = (): State => ({
@@ -61,6 +81,12 @@ const initial = (): State => ({
   processed: [],
   publishedSources: [],
   preferences: { ...fx.me.preferences },
+  ...initialTaxonomy(),
+  statusChanges: [],
+  sourceReviewCleared: [],
+  sourceDocs: new Map(),
+  assets: [],
+  sourceDrafts: new Map(),
 });
 
 export const state: State = initial();
@@ -70,6 +96,7 @@ export function resetState(): void {
   resetStage4State();
   resetStage5();
   resetStage45();
+  resetFeedbackState();
 }
 
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
@@ -98,6 +125,8 @@ const newDraftEnvelope = (draftKey: string, payload: unknown) => ({
 });
 
 export const handlers: RequestHandler[] = [
+  // First, so `/feedback/analytics` is matched before any generic `:id` route another lane adds.
+  ...feedbackHandlers,
   http.get(`${B}/auth/me`, () => HttpResponse.json({ ...fx.me, preferences: { ...state.preferences } })),
   // Bare provider ids plus a fallback — not `{ id, label }` objects.
   http.get(`${B}/auth/providers`, () =>
@@ -480,10 +509,13 @@ export const handlers: RequestHandler[] = [
     state.trash = [];
     return HttpResponse.json({ restored });
   }),
+  // A-C1: the route now answers `{ purged, skipped }` — a once-published item is never purged by
+  // hand, so "empty the bin" cannot promise it emptied. Nothing in the fixture is skipped; a test
+  // that wants the skipped path overrides this handler.
   http.delete(`${B}/trash`, () => {
     const purged = state.trash.length;
     state.trash = [];
-    return HttpResponse.json({ purged });
+    return HttpResponse.json({ purged, skipped: 0 });
   }),
 
   http.get(`${B}/sources`, () => HttpResponse.json({ items: fx.sources })),
@@ -608,12 +640,231 @@ export const handlers: RequestHandler[] = [
   }),
   http.get(`${B}/system/health`, () => HttpResponse.json(fx.health)),
 
+  // Wave 4 · usage analytics (W5). `?world=` narrows to that world's items; the fixture has none
+  // outside `tech`, so a filtered request answers with the item tables empty.
+  http.get(`${B}/analytics/usage`, ({ request }) => {
+    const world = new URL(request.url).searchParams.get('world');
+    return HttpResponse.json(
+      world ? { ...fx.usageAnalytics, itemViews: [], topItems: [] } : fx.usageAnalytics,
+    );
+  }),
+  http.get(`${B}/analytics/search-log`, () => HttpResponse.json(fx.searchLog)),
+
   // Stage 4 — connected data (`test/msw/stage4.ts`), kept in its own module so the two stages
   // can be reviewed apart. Registered last; the patterns are disjoint from everything above.
   ...stage4Handlers,
   ...stage5Handlers,
   /* Stage 4–5 routes, typed from the zod contract — see `test/msw/stage45.ts`. */
   ...stage45Handlers,
+  /* Wave 4 — taxonomy (W1), typed from the zod contract — see `test/msw/taxonomy.ts`. */
+  ...taxonomyHandlers(state),
+
+  /* ── wave 4 · W2 governance (appended) ─────────────────────────────────
+   * `POST /documents/:id/status` and `POST /documents/:id/source-review/clear` per
+   * `docs/api/CONTRACTS-wave4.md`. Both answer the full updated document, and both record the
+   * request on `state` so component tests can assert what was actually sent. Registered after the
+   * stage handlers; the patterns are disjoint from everything above.
+   * `GET /users/mentionable`, which `OwnerFields` reads, is already served by `stage45Handlers`. */
+  http.post(`${B}/documents/:id/status`, async ({ params, request }) => {
+    const b = (await request.json()) as { status: Document['status']; reason: string };
+    const id = params.id as string;
+    const doc = state.documents.get(id);
+    if (!doc) return notFound();
+    state.statusChanges.push({ id, status: b.status, reason: b.reason });
+    const next: Document = { ...doc, status: b.status, etag: nextEtag() };
+    state.documents.set(id, next);
+    return HttpResponse.json(next);
+  }),
+  http.post(`${B}/documents/:id/source-review/clear`, async ({ params, request }) => {
+    const b = (await request.json()) as { note: string };
+    const id = params.id as string;
+    const doc = state.documents.get(id);
+    if (!doc) return notFound();
+    state.sourceReviewCleared.push({ id, note: b.note });
+    const next: Document = {
+      ...doc,
+      sourceReviewNeeded: false,
+      sourceReviewReason: null,
+      etag: nextEtag(),
+    };
+    state.documents.set(id, next);
+    return HttpResponse.json(next);
+  }),
+
+  /* ── wave 4 · source documents (W4) ───────────────────────────────────────
+   * Shapes are `SourceDocumentSchema` / `SourceDocumentVersionsResponseSchema` / `AssetSchema`
+   * from `@wecom/shared` — see `test/source/sourcedocs-contract.test.ts`, which parses each of
+   * these responses so the mock cannot drift from `docs/api/CONTRACTS-wave4.md`. */
+  http.get(`${B}/documents/:id/source`, ({ params }) => {
+    const s = state.sourceDocs.get(String(params.id));
+    if (!s) return noContent();
+    return HttpResponse.json(
+      {
+        documentId: params.id,
+        html: s.html,
+        text: s.text,
+        version: s.version,
+        etag: s.etag,
+        updatedById: fx.me.user.id,
+        updatedByName: fx.me.user.displayName,
+        updatedAt: '2026-09-14T10:00:00.000Z',
+        // W4: the revision behind the current version, which is what makes the raw docx
+        // download reachable. Null for a source authored in the editor rather than imported.
+        latestRevisionId: s.latestRevisionId ?? null,
+      },
+      { headers: { etag: s.etag } },
+    );
+  }),
+  http.put(`${B}/documents/:id/source`, async ({ params, request }) => {
+    const id = String(params.id);
+    const body = (await request.json()) as { html: string; label?: string };
+    const cur = state.sourceDocs.get(id);
+    const ifMatch = request.headers.get('if-match');
+    // B-I3: on an *existing* source the header is mandatory, so a client that forgets it gets a
+    // 428 rather than silently clobbering someone else's version.
+    if (cur && !ifMatch)
+      return HttpResponse.json({ code: 'IF_MATCH_REQUIRED', message: 'if-match required' }, { status: 428 });
+    if (cur && ifMatch !== cur.etag)
+      return HttpResponse.json({ code: 'ETAG_MISMATCH', message: 'stale' }, { status: 412 });
+    const version = (cur?.version ?? 0) + 1;
+    const next = {
+      html: body.html,
+      text: body.html.replace(/<[^>]+>/g, ''),
+      version,
+      etag: 'e' + version,
+      versions: [...(cur?.versions ?? []), { version, label: body.label ?? '', html: body.html }],
+      latestRevisionId: cur?.latestRevisionId ?? null,
+    };
+    state.sourceDocs.set(id, next);
+    state.sourceDrafts.delete(id); // a saved version clears the autosave
+    return HttpResponse.json(
+      {
+        documentId: id,
+        html: next.html,
+        text: next.text,
+        version,
+        etag: next.etag,
+        updatedById: fx.me.user.id,
+        updatedByName: fx.me.user.displayName,
+        updatedAt: '2026-09-14T10:00:00.000Z',
+        latestRevisionId: next.latestRevisionId,
+      },
+      { headers: { etag: next.etag } },
+    );
+  }),
+  http.get(`${B}/documents/:id/source/versions`, ({ params }) =>
+    HttpResponse.json({
+      items: (state.sourceDocs.get(String(params.id))?.versions ?? [])
+        .map((v) => ({
+          documentId: params.id,
+          version: v.version,
+          label: v.label,
+          authorId: fx.me.user.id,
+          authorName: fx.me.user.displayName,
+          createdAt: '2026-09-14T10:00:00.000Z',
+          sourceRevisionId: null,
+        }))
+        .reverse(),
+    }),
+  ),
+  http.get(`${B}/documents/:id/source/versions/:v`, ({ params }) => {
+    const v = state.sourceDocs.get(String(params.id))?.versions.find((x) => x.version === Number(params.v));
+    if (!v) return notFound();
+    return HttpResponse.json({
+      documentId: params.id,
+      html: v.html,
+      text: v.html.replace(/<[^>]+>/g, ''),
+      version: v.version,
+      etag: 'e' + v.version,
+      updatedById: null,
+      updatedByName: null,
+      updatedAt: '2026-09-14T10:00:00.000Z',
+      latestRevisionId: null,
+    });
+  }),
+  http.post(`${B}/documents/:id/source/restore/:v`, ({ params }) => {
+    const id = String(params.id);
+    const cur = state.sourceDocs.get(id);
+    const from = cur?.versions.find((x) => x.version === Number(params.v));
+    if (!cur || !from) return notFound();
+    const version = cur.version + 1;
+    const next = {
+      html: from.html,
+      text: from.html.replace(/<[^>]+>/g, ''),
+      version,
+      etag: 'e' + version,
+      versions: [...cur.versions, { version, label: `שוחזר מגרסה ${from.version}`, html: from.html }],
+      latestRevisionId: cur.latestRevisionId ?? null,
+    };
+    state.sourceDocs.set(id, next);
+    return HttpResponse.json({
+      documentId: id,
+      html: next.html,
+      text: next.text,
+      version,
+      etag: next.etag,
+      updatedById: fx.me.user.id,
+      updatedByName: fx.me.user.displayName,
+      updatedAt: '2026-09-14T10:00:00.000Z',
+      latestRevisionId: next.latestRevisionId,
+    });
+  }),
+  http.post(`${B}/documents/:id/source/import`, async ({ params, request }) => {
+    const id = String(params.id);
+    const form = await request.formData();
+    const file = form.get('file');
+    if (!(file instanceof File))
+      return HttpResponse.json({ code: 'BAD_DOCX', message: 'קובץ חסר' }, { status: 400 });
+    const cur = state.sourceDocs.get(id);
+    const version = (cur?.version ?? 0) + 1;
+    const html = `<h1>${file.name.replace(/\.docx$/i, '')}</h1>`;
+    const next = {
+      html,
+      text: html.replace(/<[^>]+>/g, ''),
+      version,
+      etag: 'e' + version,
+      versions: [...(cur?.versions ?? []), { version, label: 'יובא מ-Word', html }],
+      // An import is exactly the case that has a raw revision behind it.
+      latestRevisionId: REV_1,
+    };
+    state.sourceDocs.set(id, next);
+    return HttpResponse.json({
+      documentId: id,
+      html: next.html,
+      text: next.text,
+      version,
+      etag: next.etag,
+      updatedById: fx.me.user.id,
+      updatedByName: fx.me.user.displayName,
+      updatedAt: '2026-09-14T10:00:00.000Z',
+      latestRevisionId: next.latestRevisionId,
+    });
+  }),
+  http.post(`${B}/assets`, () => {
+    const id = crypto.randomUUID();
+    state.assets.push(id);
+    return HttpResponse.json({
+      id,
+      url: '/api/v1/assets/' + id,
+      mime: 'image/png',
+      size: 3,
+      width: null,
+      height: null,
+    });
+  }),
+  http.get(`${B}/documents/:id/source/draft`, ({ params }) => {
+    const d = state.sourceDrafts.get(String(params.id));
+    return d ? HttpResponse.json(d) : noContent();
+  }),
+  http.put(`${B}/documents/:id/source/draft`, async ({ params, request }) => {
+    const b = (await request.json()) as { html: string };
+    state.sourceDrafts.set(String(params.id), { html: b.html, updatedAt: new Date().toISOString() });
+    return noContent();
+  }),
+  http.delete(`${B}/documents/:id/source/draft`, ({ params }) => {
+    state.sourceDrafts.delete(String(params.id));
+    return noContent();
+  }),
 ];
 
 /** Override `/auth/me` for permission tests. */

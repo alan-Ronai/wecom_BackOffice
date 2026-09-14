@@ -1,6 +1,7 @@
 import type { Dashboard } from '@wecom/shared';
 import type { Q } from '../documents/repo.js';
 import { iso } from '../documents/repo.js';
+import { visibleStatusSql, visibleWhere } from '../../lib/visibility.js';
 
 const int = (v: unknown): number => Number(v ?? 0);
 
@@ -9,16 +10,24 @@ const int = (v: unknown): number => Number(v ?? 0);
  * freshness from `documents`, usage from `recent_views` + `telemetry_events`, pipeline from
  * `suggestions` and sync from `sync_links`. Nothing here is estimated or cached in a table.
  *
- * `scopes` is the caller's `user.categoryScopes`. The five aggregates that read `documents`
+ * `scopes` is the caller's `user.worldScopes`. The five aggregates that read `documents`
  * take it: `coverage.byCategory` and `freshness.byCategory` used to enumerate categories the
  * caller cannot read, and `usage.topDocuments` returned *titles* from any of them. The
  * pipeline and sync panels stay org-wide — they count suggestions, source revisions and sync
  * links, none of which are category-bearing, and a lead watching the sync queue needs the
  * whole queue.
  */
-export async function computeDashboard(q: Q, scopes: string[] | null = null): Promise<Dashboard> {
+export async function computeDashboard(
+  q: Q,
+  scopes: string[] | null = null,
+  readUnpublished = true,
+): Promise<Dashboard> {
   const p1 = [scopes];
-  const inScope = '($1::text[] is null or d.category = any($1))';
+  // W2 §10: an agent's dashboard counts and lists only what an agent may open, so the status
+  // half of the boundary rides along with the world half in the same fragment.
+  const inScope =
+    '($1::text[] is null or exists (select 1 from document_worlds dws where dws.document_id=d.id and dws.world_slug = any($1)))' +
+    visibleWhere(readUnpublished);
   const [
     coverage,
     coverageByCategory,
@@ -33,7 +42,7 @@ export async function computeDashboard(q: Q, scopes: string[] | null = null): Pr
   ] = await Promise.all([
     q.query(
       `select count(*)::int cards,
-                count(*) filter (where d.status in ('published','partial'))::int with_document,
+                count(*) filter (where ${visibleStatusSql()})::int with_document,
                 count(*) filter (where d.status = 'partial')::int partial,
                 count(*) filter (where d.status = 'draft')::int drafts
            from documents d where d.deleted_at is null and ${inScope}`,
@@ -41,7 +50,7 @@ export async function computeDashboard(q: Q, scopes: string[] | null = null): Pr
     ),
     q.query(
       `select d.category, count(*)::int cards,
-                count(*) filter (where d.status in ('published','partial'))::int with_document
+                count(*) filter (where ${visibleStatusSql()})::int with_document
            from documents d where d.deleted_at is null and ${inScope}
           group by d.category order by d.category`,
       p1,

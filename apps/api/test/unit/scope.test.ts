@@ -6,6 +6,7 @@ const u = (scopes: string[] | null) => ({
   displayName: 'u',
   roles: [],
   permissions: new Set<string>(),
+  worldScopes: scopes,
   categoryScopes: scopes,
   sessionId: null,
 });
@@ -16,5 +17,15 @@ describe('checkScope', () => {
   it('allows listed categories only', () => {
     expect(checkScope(u(['intl', 'tech']), 'intl')).toBe(true);
     expect(checkScope(u(['intl']), 'billing')).toBe(false);
+  });
+});
+
+const w = (scopes: string[] | null) => ({ ...u(scopes), worldScopes: scopes });
+describe('checkScope (worlds)', () => {
+  it('passes when any of the document worlds is in scope', () => {
+    expect(checkScope(w(['sim']), ['tech', 'sim'])).toBe(true);
+    expect(checkScope(w(['sim']), ['tech'])).toBe(false);
+    expect(checkScope(w(null), ['tech'])).toBe(true);
+    expect(checkScope(w(['sim']), [])).toBe(false);
   });
 });

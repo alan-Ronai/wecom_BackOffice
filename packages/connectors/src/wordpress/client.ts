@@ -34,6 +34,14 @@ export class WpClient {
     };
   }
 
+  /**
+   * Auth only, no `content-type`: for GETting a media file off the site. A private or
+   * password-protected upload needs the credentials, and a public one ignores them.
+   */
+  mediaHeaders(): Record<string, string> {
+    return { authorization: this.headers().authorization! };
+  }
+
   private async req<T>(method: string, path: string, body?: unknown): Promise<{ data: T; headers: Headers }> {
     const res = await this.fetchImpl(this.cfg.baseUrl + path, {
       method,
@@ -42,6 +50,26 @@ export class WpClient {
     });
     if (!res.ok) throw new WpError(res.status, `WordPress ${method} ${path} → ${res.status}`);
     return { data: (await res.json()) as T, headers: res.headers };
+  }
+
+  /** Uploads one binary to the media library; WordPress wants raw bytes + Content-Disposition, not JSON. */
+  async uploadMedia(
+    bytes: Uint8Array,
+    mime: string,
+    filename: string,
+  ): Promise<{ id: number; source_url: string }> {
+    const res = await this.fetchImpl(this.cfg.baseUrl + '/wp-json/wp/v2/media', {
+      method: 'POST',
+      headers: {
+        authorization: this.headers().authorization,
+        'content-type': mime,
+        'content-disposition': `attachment; filename="${filename.replace(/["\r\n]/g, '')}"`,
+      },
+      // `fetch` types accept a BufferSource; Uint8Array<ArrayBufferLike> needs the narrowing cast.
+      body: bytes as unknown as BodyInit,
+    });
+    if (!res.ok) throw new WpError(res.status, `WordPress POST media → ${res.status}`);
+    return (await res.json()) as { id: number; source_url: string };
   }
 
   async ping(): Promise<void> {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Category, DocumentCard } from '@wecom/shared';
 import { useDocuments } from '../../api/hooks/documents.js';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 
 /**
  * Card 6b's breadcrumb quick-switch: the category crumb opens the sibling documents so an agent
@@ -45,19 +45,19 @@ export function QuickSwitch({
         className="qs-trigger"
         aria-expanded={open}
         aria-haspopup="listbox"
-        aria-label={`מסמכים אחרים ב${CATS[category].label}`}
+        aria-label={`מסמכים אחרים ב${cat(category).label}`}
         onClick={() => {
           setOpen((v) => !v);
           setActive(0);
         }}
       >
-        {CATS[category].label} ▾
+        {cat(category).label} ▾
       </button>
       {open ? (
         <div
           className="qs-menu"
           role="listbox"
-          aria-label={`מסמכים אחרים ב${CATS[category].label}`}
+          aria-label={`מסמכים אחרים ב${cat(category).label}`}
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') {
               e.preventDefault();
@@ -74,7 +74,7 @@ export function QuickSwitch({
             }
           }}
         >
-          <div className="eyebrow">מסמכים אחרים ב{CATS[category].label} · ↑↓</div>
+          <div className="eyebrow">מסמכים אחרים ב{cat(category).label} · ↑↓</div>
           {!items.length ? <div className="muted small">אין מסמכים נוספים בקטגוריה</div> : null}
           {items.map((c, i) => (
             <button

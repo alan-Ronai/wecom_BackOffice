@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import type { Category, DocumentCard } from '@wecom/shared';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import type { Category, DocType, DocumentCard } from '@wecom/shared';
 import {
   useDeleteDocument,
   useDocuments,
@@ -23,6 +23,9 @@ import { DocCard } from './DocCard.js';
 import { Facets, type FacetValue } from './Facets.js';
 import { AutoCrmCard } from './AutoCrmCard.js';
 import { CardMenu, type MenuItem } from './CardMenu.js';
+import { TaxonomyFacets, type TaxonomyFacetValue } from '../taxonomy/TaxonomyFacets.js';
+import { useWorlds } from '../../api/hooks/taxonomy.js';
+import { useStatusMenuItems } from '../governance/StatusMenu.js';
 import { LibraryToolbar } from './LibraryToolbar.js';
 import { DocList } from './DocList.js';
 import { BulkBar } from './BulkBar.js';
@@ -34,7 +37,12 @@ const MONTH_MS = 30 * 864e5;
 
 export function LibraryPage({ mode }: { mode: LibraryMode }) {
   const { category } = useParams<{ category?: string }>();
-  const cat = mode === 'library' && category && category in CATS ? (category as Category) : undefined;
+  /**
+   * `/library/:category` is a *world* slug now, and a world is a row an admin can add — so the
+   * old `category in CATS` guard silently dropped the filter for every world beyond the seeded
+   * six, which is exactly the case the sidebar's world rows create.
+   */
+  const cat = mode === 'library' && category ? (category as Category) : undefined;
   const go = useNavigate();
   const nav = useNav();
   const can = useCan();
@@ -47,6 +55,26 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
   const modal = useModal();
   const toast = useToast();
   const [facets, setFacets] = useState<FacetValue>({ wave: 'all', flag: null });
+  /**
+   * Wave 4 filters live in the URL, not in component state: the sidebar's world rows, the article
+   * header's tag chips and the topic page all navigate *to* a filtered library, and a shared link
+   * has to reproduce what the sender saw.
+   */
+  const [params, setParams] = useSearchParams();
+  const tax: TaxonomyFacetValue = {
+    docType: (params.get('docType') as DocType | null) ?? null,
+    tags: params.getAll('tag'),
+  };
+  const world = params.get('world') ?? undefined;
+  const topic = params.get('topic') ?? undefined;
+  const setTax = (next: TaxonomyFacetValue) => {
+    const p = new URLSearchParams(params);
+    p.delete('docType');
+    p.delete('tag');
+    if (next.docType) p.set('docType', next.docType);
+    for (const t of next.tags) p.append('tag', t);
+    setParams(p, { replace: true });
+  };
   const [menu, setMenu] = useState<{ card: DocumentCard; anchor: HTMLElement } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -66,11 +94,16 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
     ...(mode === 'pinned' ? { pinned: true } : {}),
     ...(mode === 'recent' ? { recent: true } : {}),
     ...(mode === 'drafts' ? { drafts: true } : {}),
+    ...(world ? { world } : {}),
+    ...(topic ? { topic } : {}),
+    ...(tax.docType ? { docType: tax.docType } : {}),
+    ...(tax.tags.length ? { tag: tax.tags } : {}),
   };
   const docs = useDocuments(query);
   const blocks = useBlocks();
   const fields = useFields();
   const scripts = useScripts();
+  const worlds = useWorlds();
   const togglePin = useTogglePin();
   const remove = useDeleteDocument();
   const create = useCreateDocument();
@@ -187,7 +220,7 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
         : mode === 'drafts'
           ? 'טיוטות'
           : cat
-            ? CATS[cat].label
+            ? (worlds.data?.find((w) => w.slug === cat)?.name ?? cat)
             : 'ספריית ידע';
   const srcFile = cat === 'intl' ? 'intl-roaming.json' : 'topics.json';
   const lastUpd = items
@@ -197,6 +230,9 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
   const waves = new Set(items.map((c) => c.wave)).size;
 
   const openCard = (c: DocumentCard) => nav.openDoc(c.id, { title: c.title });
+
+  /** W2's status actions, `[]` for anyone who cannot publish this document. */
+  const statusItems = useStatusMenuItems();
 
   const menuItems = (c: DocumentCard): MenuItem[] => {
     const list: MenuItem[] = [];
@@ -210,6 +246,7 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
       label: c.pinned ? '☆ בטל הצמדה' : '★ הצמד',
       run: () => togglePin.mutate({ id: c.id, pinned: !c.pinned }),
     });
+    list.push(...statusItems(c));
     if (can('docs.delete', c))
       list.push({
         label: '🗑 מחק',
@@ -399,7 +436,10 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
                       : 'עריכות שלא פורסמו'}
               </p>
             </div>
-            <Facets value={facets} onChange={setFacets} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <Facets value={facets} onChange={setFacets} />
+              <TaxonomyFacets value={tax} onChange={setTax} />
+            </div>
           </div>
 
           <LibraryToolbar

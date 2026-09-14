@@ -20,7 +20,7 @@ type FieldRenameResult = z.infer<typeof FieldRenameResultSchema>;
  * `params.id`, so `config.scope: 'document'` cannot reach them — scope is a repo argument.
  */
 const scopeClause = (alias: string, param: string) =>
-  `(${param}::text[] is null or ${alias}.category = any(${param}))`;
+  `(${param}::text[] is null or exists (select 1 from document_worlds dws where dws.document_id=${alias}.id and dws.world_slug = any(${param})))`;
 
 const toField = (r: Record<string, unknown>): CrmField => ({
   name: r.name as string,
@@ -230,7 +230,7 @@ const escapeReplacement = (s: string) => s.replace(/\\/g, '\\\\');
  * `renamed -> newName` so nothing dangles, and (when `updateReferences`) the step text that
  * references it is rewritten.
  *
- * `scopes` is the caller's `user.categoryScopes`. A rename is a *write* counterpart to the
+ * `scopes` is the caller's `user.worldScopes`. A rename is a *write* counterpart to the
  * read leak C1 fixed: `fields.edit` alone used to let a narrowly scoped editor rewrite step
  * text in every category. The rewrite now covers only documents the caller can open; the
  * catalogue rename itself is global, because a field is one object and leaving it renamed for

@@ -11,8 +11,11 @@ export const requireUser = (req: FastifyRequest): ReqUser => {
   return req.user;
 };
 
-/** `categoryScopes === null` means "every category". */
-export const hasScope = (user: ReqUser, category: string): boolean =>
-  user.categoryScopes === null || user.categoryScopes.includes(category);
+/** Scope = intersection: `worlds` is the document's world list (or one slug). null scopes = every world. */
+export const hasScope = (user: ReqUser, worlds: string | readonly string[]): boolean => {
+  if (user.worldScopes === null) return true;
+  const list = typeof worlds === 'string' ? [worlds] : worlds;
+  return list.some((w) => user.worldScopes!.includes(w));
+};
 
 export const hasPerm = (user: ReqUser, permission: string): boolean => user.permissions.has(permission);

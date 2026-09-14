@@ -117,4 +117,126 @@ describe('push', () => {
     expect(ref.externalId).toBe('posts:7');
     expect(stub.posts.get('posts:7')?.content.rendered).toBe('<p>ידני</p>');
   });
+  it('pushes source html, uploading asset images to wp/v2/media and rewriting src', async () => {
+    const c = new WordPressConnector();
+    const A = '11111111-1111-4111-8111-111111111111';
+    const png = Uint8Array.from([137, 80, 78, 71]);
+    const ref = await c.push(cfg(), 'posts:7', {
+      ...content(),
+      html: `<h2>מקור</h2><p><img src="/api/v1/assets/${A}" alt="x"></p>`,
+      assets: async (id) => (id === A ? { bytes: png, mime: 'image/png' } : null),
+    });
+    const put = stub.puts.filter((p) => p.type === 'posts' && p.id === 7).pop()!;
+    expect((put.body as { content: string }).content).toContain('<h2>מקור</h2>');
+    expect((put.body as { content: string }).content).toContain('/wp-content/uploads/');
+    expect((put.body as { content: string }).content).not.toContain('/api/v1/assets/');
+    expect(stub.media.length).toBe(1);
+    expect(stub.media[0].mime).toBe('image/png');
+    expect(ref.externalId).toBe('posts:7');
+  });
+});
+
+/**
+ * B-C2 — the pull side of §5.1. Before this, `fetch` handed the remote body straight to
+ * `saveSourceDocument`, whose sanitizer keeps a `src` only when it is `/api/v1/assets/<uuid>`,
+ * so every WordPress image was stripped on the way in — and the *next* push then wrote that
+ * image-free HTML back with `updatePost`, deleting the images from the customer's post too.
+ */
+describe('absorbMedia (pull-side rewrite)', () => {
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489', 'hex');
+  const A = '22222222-2222-4222-8222-222222222222';
+  const doc = () => ({
+    document: { ...(JSON.parse(JSON.stringify(docFixture)) as Document), title: 'עם תמונה' },
+    blocks: [] as Block[],
+  });
+
+  it('survives a push → pull → push round trip with exactly one asset image', async () => {
+    const c = new WordPressConnector();
+    const stored = new Map<string, { bytes: Uint8Array; mime: string }>([
+      [A, { bytes: new Uint8Array(png), mime: 'image/png' }],
+    ]);
+
+    // 1. push: the asset becomes a WordPress media item and the src is rewritten to it.
+    await c.push(cfg(), 'posts:7', {
+      ...doc(),
+      html: `<p><img src="/api/v1/assets/${A}" alt="x"></p>`,
+      assets: async (id) => stored.get(id) ?? null,
+    });
+    const pushed = stub.posts.get('posts:7')!.content.rendered;
+    expect(pushed).toMatch(/\/wp-content\/uploads\/\d+\.png/);
+
+    // 2. pull: the remote body's media URL comes back as a local asset.
+    const content = await c.fetch(cfg(), 'posts:7');
+    const seen: { mime: string; bytes: Uint8Array }[] = [];
+    const absorbed = await c.absorbMedia(cfg(), content.raw!, async (bytes, mime) => {
+      const id = `3333333${seen.length}-3333-4333-8333-333333333333`;
+      seen.push({ mime, bytes });
+      stored.set(id, { bytes, mime });
+      return { src: '/api/v1/assets/' + id };
+    });
+    expect(absorbed.dropped).toEqual([]);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].mime).toBe('image/png');
+    expect(Buffer.from(seen[0].bytes).equals(png)).toBe(true);
+    expect(absorbed.html.match(/\/api\/v1\/assets\//g)).toHaveLength(1);
+    expect(absorbed.html).not.toContain('/wp-content/uploads/');
+
+    // 3. push again: the image is still there, so the remote keeps it.
+    await c.push(cfg(), 'posts:7', {
+      ...doc(),
+      html: absorbed.html,
+      assets: async (id) => stored.get(id) ?? null,
+    });
+    expect(stub.posts.get('posts:7')!.content.rendered).toMatch(/\/wp-content\/uploads\/\d+\.png/);
+  });
+
+  it('drops an image it cannot fetch and reports it rather than failing silently', async () => {
+    const c = new WordPressConnector();
+    const html = `<p><img src="${stub.url}/wp-content/uploads/9999.png" alt="gone"></p>`;
+    const absorbed = await c.absorbMedia(cfg(), html, async () => ({ src: '/api/v1/assets/x' }));
+    expect(absorbed.dropped).toHaveLength(1);
+    expect(absorbed.dropped[0].url).toContain('9999.png');
+    expect(absorbed.html).toBe(html); // left as-is; the sanitizer drops it, the report does not
+  });
+
+  it('refuses a remote image outside the host allowlist', async () => {
+    const c = new WordPressConnector(fetch, { hostAllowlist: ['127.0.0.1'] });
+    const absorbed = await c.absorbMedia(cfg(), '<p><img src="http://evil.example/x.png"></p>', async () => ({
+      src: '/api/v1/assets/x',
+    }));
+    expect(absorbed.dropped).toHaveLength(1);
+    expect(absorbed.dropped[0].error).toMatch(/host not allowed/);
+  });
+
+  it('reuses a recorded media item instead of re-uploading it (B-I6)', async () => {
+    const c = new WordPressConnector();
+    const png2 = new Uint8Array(png);
+    const cache = new Map<string, { remoteMediaId: string; remoteUrl: string }>();
+    const media = {
+      get: async (id: string) => cache.get(id) ?? null,
+      put: async (id: string, remoteMediaId: string, remoteUrl: string) => {
+        cache.set(id, { remoteMediaId, remoteUrl });
+      },
+      forget: async (id: string) => {
+        cache.delete(id);
+      },
+    };
+    const body = {
+      ...doc(),
+      html: `<p><img src="/api/v1/assets/${A}" alt="x"></p>`,
+      assets: async () => ({ bytes: png2, mime: 'image/png' }),
+      media,
+    };
+    const before = stub.media.length;
+    await c.push(cfg(), 'posts:7', body);
+    expect(stub.media.length).toBe(before + 1);
+    await c.push(cfg(), 'posts:7', body);
+    await c.push(cfg(), 'posts:7', body);
+    expect(stub.media.length).toBe(before + 1); // no second or third copy of the same bytes
+
+    // A media item deleted on the remote is detected by the HEAD and re-uploaded.
+    stub.deleteMedia(Number(cache.get(A)!.remoteMediaId));
+    await c.push(cfg(), 'posts:7', body);
+    expect(stub.media.length).toBe(before + 2);
+  });
 });

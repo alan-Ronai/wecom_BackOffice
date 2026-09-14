@@ -2,7 +2,7 @@ import type pg from 'pg';
 import type { TrashItem } from '@wecom/shared';
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
-import { getDocument, iso, recomputeDerived, type Q } from '../documents/repo.js';
+import { getDocument, hasPublishedVersion, iso, recomputeDerived, type Q } from '../documents/repo.js';
 import { CATEGORY_LABELS, sourceFile } from '../search/repo.js';
 
 export type TrashType = TrashItem['type'];
@@ -13,14 +13,27 @@ const purgeAt = (deletedAt: Date | string, days: number) =>
 
 const emptyImpact = { brokenLinks: 0, documents: [] as { id: string; title: string }[] };
 
-export async function listTrash(q: Q, days: number): Promise<TrashItem[]> {
+/**
+ * A-M12: the trash was the last unscoped document read model in the package — any `docs.read`
+ * user got the titles and doc types of every deleted document in every world. Scope is a
+ * membership intersection like everywhere else. Blocks and fields are catalogue entries with no
+ * world of their own, so they are unfiltered, as they are on every other page.
+ */
+export async function listTrash(
+  q: Q,
+  days: number,
+  worldScopes: readonly string[] | null = null,
+): Promise<TrashItem[]> {
   const items: TrashItem[] = [];
 
   const docs = await q.query(
-    `select d.id, d.title, d.category, d.topic_id, d.current_version, d.deleted_at, u.display_name deleted_by,
+    `select d.id, d.title, d.category, d.doc_type, d.current_version, d.deleted_at, u.display_name deleted_by,
             (select count(*)::int from steps s where s.document_id=d.id) steps
      from documents d left join users u on u.id=d.deleted_by
-     where d.deleted_at is not null order by d.deleted_at desc`,
+     where d.deleted_at is not null
+       and ($1::text[] is null or exists (select 1 from document_worlds dw where dw.document_id = d.id and dw.world_slug = any($1)))
+     order by d.deleted_at desc`,
+    [worldScopes ? [...worldScopes] : null],
   );
   for (const d of docs.rows) {
     const links = await q.query(
@@ -33,8 +46,9 @@ export async function listTrash(q: Q, days: number): Promise<TrashItem[]> {
       id: d.id,
       title: d.title,
       meta: [
+        sourceFile(d.category as string),
         CATEGORY_LABELS[d.category as string] ?? d.category,
-        sourceFile(d.category as string) + '#' + (d.topic_id ?? ''),
+        d.doc_type,
         'v' + d.current_version,
         d.steps + ' שלבים',
       ].join(' · '),
@@ -89,21 +103,7 @@ export async function listTrash(q: Q, days: number): Promise<TrashItem[]> {
       impact: emptyImpact,
     });
 
-  const scripts = await q.query(
-    `select s.id, s.title, s.deleted_at, u.display_name deleted_by from scripts s
-     left join users u on u.id=s.deleted_by where s.deleted_at is not null order by s.deleted_at desc`,
-  );
-  for (const s of scripts.rows)
-    items.push({
-      type: 'script',
-      id: s.id,
-      title: s.title,
-      meta: 'scripts.json',
-      deletedBy: s.deleted_by ?? 'מערכת',
-      deletedAt: iso(s.deleted_at)!,
-      purgeAt: purgeAt(s.deleted_at, days),
-      impact: emptyImpact,
-    });
+  // Scripts are type-T documents since 0030, so they are already listed above as documents.
 
   return items.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
 }
@@ -112,8 +112,35 @@ const TABLE: Record<TrashType, { table: string; key: string }> = {
   document: { table: 'documents', key: 'id' },
   block: { table: 'blocks', key: 'id' },
   field: { table: 'crm_fields', key: 'name' },
-  script: { table: 'scripts', key: 'id' },
+  /** Scripts are documents since 0030; old /trash/script/:id links keep working. */
+  script: { table: 'documents', key: 'id' },
 };
+
+/**
+ * The by-id half of A-M12. `GET /trash` is world-scoped, so a scoped user is not shown another
+ * world's deleted documents — but `POST /trash/:type/:id/restore` and `DELETE /trash/:type/:id`
+ * take an id, and without this an id from anywhere (a stale tab, a guess, an audit row) still
+ * restored or purged. 404 rather than 403, and the same answer as a genuinely missing id, so the
+ * route cannot be used to confirm that an out-of-scope item exists.
+ *
+ * Blocks and fields are catalogue entries with no world of their own; `listTrash` does not filter
+ * them either, so neither does this.
+ */
+export async function assertTrashScope(
+  q: Q,
+  type: TrashType,
+  id: string,
+  worldScopes: readonly string[] | null,
+): Promise<void> {
+  if (!worldScopes || (type !== 'document' && type !== 'script')) return;
+  const r = await q.query(
+    `select 1 from documents d
+      where d.id = $1 and d.deleted_at is not null
+        and exists (select 1 from document_worlds dw where dw.document_id = d.id and dw.world_slug = any($2))`,
+    [id, [...worldScopes]],
+  );
+  if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'הפריט לא נמצא בסל המיחזור');
+}
 
 export async function restore(tx: Tx, type: TrashType, id: string, userId: string): Promise<void> {
   const t = TABLE[type];
@@ -122,7 +149,10 @@ export async function restore(tx: Tx, type: TrashType, id: string, userId: strin
     [id],
   );
   if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'הפריט לא נמצא בסל המיחזור');
-  if (type === 'document') {
+  // A-M11: `script` maps onto `documents` in TABLE above, so it needs the same bookkeeping —
+  // restoring through the legacy `/trash/script/:id` link used to skip the version row and
+  // `recomputeDerived` entirely.
+  if (type === 'document' || type === 'script') {
     const doc = await getDocument(tx, id);
     if (doc) {
       // Version number unchanged: restoring is not a new edition, only a bookkeeping entry.
@@ -150,7 +180,37 @@ export async function restore(tx: Tx, type: TrashType, id: string, userId: strin
   }
 }
 
-export async function purge(tx: Tx, type: TrashType, id: string): Promise<void> {
+/**
+ * PRD §10 / spec §2.2: an item that was ever published is never hard-deleted, even from the
+ * trash. `purgeExpired` has carried this rule since wave 2; the two operator-facing routes
+ * (`DELETE /trash/:type/:id`, `DELETE /trash`) did not, which made them a route to permanent,
+ * unrecoverable loss of published content and its whole `document_versions` history.
+ *
+ * `script` maps onto `documents` (0030), so it is guarded too.
+ */
+export const isOncePublished = async (q: Q, type: TrashType, id: string): Promise<boolean> =>
+  (type === 'document' || type === 'script') && (await hasPublishedVersion(q, id));
+
+export const oncePublishedError = () =>
+  httpError(409, 'ONCE_PUBLISHED', 'פריט שפורסם בעבר אינו נמחק לצמיתות; הוא נשאר בסל המיחזור', {
+    allowed: ['invalid', 'archived'],
+  });
+
+/**
+ * Hard-delete one trashed item. Returns false when the once-published rule skipped it, which
+ * only happens under `{ skipOncePublished: true }` — empty-trash passes it so one protected
+ * document does not abort the whole operation; the single-item route lets the 409 through.
+ */
+export async function purge(
+  tx: Tx,
+  type: TrashType,
+  id: string,
+  opts: { skipOncePublished?: boolean } = {},
+): Promise<boolean> {
+  if (await isOncePublished(tx, type, id)) {
+    if (opts.skipOncePublished) return false;
+    throw oncePublishedError();
+  }
   const t = TABLE[type];
   if (type === 'block') {
     await tx.query('update steps set block_id=null where block_id=$1', [id]);
@@ -163,6 +223,7 @@ export async function purge(tx: Tx, type: TrashType, id: string): Promise<void> 
     [id],
   );
   if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'הפריט לא נמצא בסל המיחזור');
+  return true;
 }
 
 /** Hard delete everything whose retention window has elapsed. Returns the number of rows removed. */
@@ -179,9 +240,14 @@ export async function purgeExpired(pool: pg.Pool, days: number): Promise<number>
       [b.id],
     );
   }
-  for (const table of ['documents', 'blocks', 'crm_fields', 'scripts']) {
+  for (const table of ['documents', 'blocks', 'crm_fields']) {
+    // PRD §10: an item that was ever published is never hard-deleted, even from the trash.
+    const guard =
+      table === 'documents'
+        ? ` and not exists (select 1 from document_versions v where v.document_id=documents.id and v.kind='published')`
+        : '';
     const r = await pool.query(
-      `delete from ${table} where deleted_at is not null and deleted_at < ${cutoff}`,
+      `delete from ${table} where deleted_at is not null and deleted_at < ${cutoff}${guard}`,
     );
     n += r.rowCount ?? 0;
   }

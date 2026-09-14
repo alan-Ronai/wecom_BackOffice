@@ -19,6 +19,8 @@
  * Usage: pnpm e2e:real [-- --grep <pattern>]
  *   KEEP_STACK=1   leave the container and servers up after the run (for debugging)
  *   E2E_HEADED=1   run Playwright headed
+ *   E2E_PG_CONTAINER / E2E_PG_PORT / E2E_API_PORT / E2E_WEB_PORT
+ *                  run a second, isolated stack beside one that is already up
  *   E2E_OIDC=1     also stand up a real OIDC issuer, configure the API against it, and run the
  *                  SSO login spec. Off by default: the default run is the break-glass path, which
  *                  is what a deployment with no issuer configured actually does.
@@ -31,7 +33,13 @@ import { E2E_OIDC_CLIENT, E2E_OIDC_USER } from './e2e-oidc-issuer.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-const CONTAINER = 'wecom-e2e-pg';
+/**
+ * Overridable because two worktrees do run this gate at once: without it the second run's
+ * `docker rm -f` takes the first run's Postgres out from under it, and the failure reads as
+ * "terminating connection due to unexpected postmaster exit" a minute later, nowhere near the
+ * cause. The ports are already overridable for the same reason.
+ */
+const CONTAINER = process.env.E2E_PG_CONTAINER ?? 'wecom-e2e-pg';
 const PG_PORT = Number(process.env.E2E_PG_PORT ?? 55432);
 const API_PORT = Number(process.env.E2E_API_PORT ?? 3101);
 const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 4174);
@@ -67,7 +75,7 @@ function run(cmd, args, opts = {}) {
  * leaked an API holding port 3101, so a later run's health check passed against a zombie pointing
  * at a database that no longer existed. Teardown signals the whole group.
  */
-function start(label, cmd, args, opts = {}) {
+function start(label, cmd, args, opts = {}, onLine) {
   const child = spawn(cmd, args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], detached: true, ...opts });
   children.push({ label, child });
   const pipe = (stream, to) => {
@@ -76,7 +84,13 @@ function start(label, cmd, args, opts = {}) {
       buf += d.toString();
       const lines = buf.split('\n');
       buf = lines.pop() ?? '';
-      for (const l of lines) if (l.trim()) to.write(`  [${label}] ${l}\n`);
+      for (const l of lines) {
+        if (!l.trim()) continue;
+        // The reader has to sit inside the pipe: attaching a second `data` listener afterwards
+        // races the one above, which has already consumed the first chunk.
+        onLine?.(l);
+        to.write(`  [${label}] ${l}\n`);
+      }
     });
   };
   pipe(child.stdout, process.stdout);
@@ -239,12 +253,21 @@ async function main() {
     { env: dbEnv },
   );
 
+  console.log('\n── 2b. wordpress stub ───────────────────────────────────────');
+  // The real connector talks to a real HTTP server here — the same stub the connector unit tests
+  // use — so W4-E2E-3 exercises fetch, auth, pagination and the push, not a mock of them.
+  let WP_URL = '';
+  start('wp', 'pnpm', ['--filter', '@wecom/api', 'exec', 'tsx', '../../scripts/wp-stub.mjs'], {}, (line) => {
+    const m = /WP_STUB_URL=(\S+)/.exec(line);
+    if (m) WP_URL = m[1];
+  });
+  await waitFor('wordpress stub url', () => !!WP_URL);
   // The issuer has to exist before the API boots: `registerAuth` runs OIDC discovery once at
   // startup and permanently disables Entra login if it fails, so a later start would leave the
   // API configured for SSO and refusing it.
   let oidcEnv = {};
   if (WITH_OIDC) {
-    console.log('\n── 2b. oidc test issuer ─────────────────────────────────────');
+    console.log('\n── 2c. oidc test issuer ─────────────────────────────────────');
     const redirectUri = `${WEB_URL}/api/v1/auth/callback`;
     issuerUrl = `http://127.0.0.1:${OIDC_PORT}`;
     // Its own process, not this one: every step here runs through `spawnSync`, which blocks this
@@ -307,6 +330,9 @@ async function main() {
       MODEL_DISABLED: 'true',
       MIGRATE_ON_START: 'false',
       BACKUP_DIR: '/tmp/wecom-e2e-backups',
+      // The stub is on loopback, and an empty allowlist would let a connector reach anything —
+      // so the gate also proves the allowlist admits a host it is told to admit.
+      CONNECTOR_HOST_ALLOWLIST: '127.0.0.1,localhost',
     },
   });
   await waitFor(`api healthy at ${API_URL}/api/v1/system/health`, httpOk(`${API_URL}/api/v1/system/health`));
@@ -347,6 +373,7 @@ async function main() {
         E2E_REAL_BASE_URL: WEB_URL,
         E2E_ADMIN_EMAIL: ADMIN_EMAIL,
         E2E_ADMIN_PASSWORD: ADMIN_PASSWORD,
+        E2E_WP_URL: WP_URL,
         // Read by `playwright.real.config.ts` (to add the SSO project) and by the specs: with an
         // issuer configured the login screen leads with the Microsoft button and folds the local
         // form behind a disclosure, so even the break-glass setup takes a different path.

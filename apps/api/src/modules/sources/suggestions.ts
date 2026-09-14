@@ -11,6 +11,7 @@ import {
 import type { ProposedSuggestion } from '@wecom/model';
 import { audit } from '../../lib/audit.js';
 import type { ContentApi, ContentClient } from './content-api.js';
+import { documentsForSource } from '../documents/sourceReview.js';
 
 type Status = Suggestion['status'];
 
@@ -193,6 +194,35 @@ export class SuggestionService {
         [id, status, status === 'pending' ? null : actorId],
       );
       const s = row(r.rows[0]);
+      if (status === 'rejected') {
+        // Every suggestion of this revision decided and none accepted/applied → the editor judged the
+        // working view unaffected; the source-review flag on the targeted documents comes down.
+        const left = await client.query(
+          `select count(*) filter (where status='pending') pending,
+                  count(*) filter (where status in ('accepted','applied')) kept
+             from suggestions where source_revision_id=$1`,
+          [cur.sourceRevisionId],
+        );
+        const row0 = left.rows[0] as { pending: string; kept: string };
+        if (Number(row0.pending) === 0 && Number(row0.kept) === 0) {
+          /**
+           * B-M6: the flag was raised by `onIngested` for every document the source feeds, not
+           * only the ones this revision produced a suggestion for, so clearing over
+           * `target_document_id` left the rest flagged with no user action that could clear
+           * them. Clear over the same set that was raised.
+           */
+          const srcRow = await client.query<{ source_id: string }>(
+            'select source_id from source_revisions where id=$1',
+            [cur.sourceRevisionId],
+          );
+          const sourceId = srcRow.rows[0]?.source_id;
+          for (const d of sourceId ? await documentsForSource(client, sourceId) : [])
+            await client.query(
+              `update documents set source_review_needed=false, source_review_reason=null, source_review_at=null where id=$1`,
+              [d],
+            );
+        }
+      }
       await this.events.publish(
         client,
         makeEvent('suggestion.decided', { suggestionId: id, status, actorId }),
@@ -259,6 +289,10 @@ export class SuggestionService {
             phases: p.phases,
             sourceId,
             sourceRef: s.anchor,
+            // W1 taxonomy defaults: the suggestion only names a primary world.
+            tags: [],
+            worlds: [],
+            topics: [],
           },
           actorId,
         );

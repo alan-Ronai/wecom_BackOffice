@@ -39,5 +39,16 @@ setup('signs in with the break-glass local account', async ({ page }) => {
   await expect(page).toHaveURL(/\/library/);
   await expect(page.getByTestId('library-grid')).toBeVisible();
 
+  /**
+   * The first-login tour ("סיור היכרות") is a panel that sits over the library and swallows
+   * clicks aimed at anything beneath it. Its completion is a *preference*, so dismissing it once
+   * here settles it for every spec and every context this account signs in from — and asserting
+   * on it means the tour itself stays covered rather than quietly disabled.
+   */
+  const tour = page.getByRole('dialog', { name: 'סיור היכרות' });
+  await expect(tour).toBeVisible();
+  await tour.getByRole('button', { name: 'דלג על הסיור' }).click();
+  await expect(tour).toHaveCount(0);
+
   await page.context().storageState({ path: STORAGE_STATE });
 });
