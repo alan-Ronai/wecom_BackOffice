@@ -62,7 +62,9 @@ let issuerUrl = null;
 let tornDown = false;
 
 function run(cmd, args, opts = {}) {
-  const r = spawnSync(cmd, args, { cwd: ROOT, stdio: 'inherit', ...opts });
+  // `input` needs a piped stdin; everything else keeps inheriting the terminal.
+  const stdio = opts.input === undefined ? 'inherit' : ['pipe', 'inherit', 'inherit'];
+  const r = spawnSync(cmd, args, { cwd: ROOT, stdio, ...opts });
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} exited ${r.status ?? r.signal}`);
   return r;
 }
@@ -237,20 +239,13 @@ async function main() {
   run('pnpm', ['--filter', '@wecom/api', 'migrate'], { env: dbEnv });
   run('pnpm', ['--filter', '@wecom/api', 'seed'], { env: dbEnv });
   // No `--` separator: pnpm forwards these already, and a literal `--` reaches `parseArgs`.
+  // The password goes in on stdin, not the command line: pnpm echoes the resolved command, so
+  // `--password …` printed it to the log (acceptance review O-6) — and the CLI no longer has
+  // that flag at all.
   run(
     'pnpm',
-    [
-      '--filter',
-      '@wecom/api',
-      'create-admin',
-      '--email',
-      ADMIN_EMAIL,
-      '--password',
-      ADMIN_PASSWORD,
-      '--name',
-      'E2E Admin',
-    ],
-    { env: dbEnv },
+    ['--filter', '@wecom/api', 'create-admin', '--email', ADMIN_EMAIL, '--password-stdin', '--name', 'E2E Admin'],
+    { env: dbEnv, input: ADMIN_PASSWORD },
   );
 
   console.log('\n── 2b. wordpress stub ───────────────────────────────────────');

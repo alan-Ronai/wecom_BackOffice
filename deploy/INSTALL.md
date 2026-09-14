@@ -15,7 +15,23 @@ Target: one VMware VM, Ubuntu 22.04/24.04, 4 vCPU, 16 GB RAM, 80 GB disk, Docker
    (`waiting for the model tag '<tag>' to be pulled`) instead of at the first suggestion job. It
    also asserts the five security response headers on `GET /`. Run it with
    `SMOKE_REQUIRE_MODEL=false deploy/smoke.sh …` if you are deliberately running without a model.
-7. Create the break-glass admin (`--password` is required; the command exits with a usage message without it): `docker compose -f deploy/docker-compose.yml exec api pnpm --filter @wecom/api create-admin --email admin@wecom.local --password '<a strong password>' --name 'מנהל'`.
+7. Create the break-glass admin. There is no `--password` flag: `pnpm` echoes the resolved command
+   line, so a password given there lands in the terminal transcript and in your shell history
+   (acceptance review O-6). Either answer the prompt on a terminal —
+   ```bash
+   docker compose -f deploy/docker-compose.yml exec api \
+     pnpm --filter @wecom/api create-admin --email admin@wecom.local --name 'מנהל'
+   ```
+   (`exec` allocates a TTY, and the typed characters are not echoed; you are asked to repeat it)
+   — or pipe it in for an unattended install, with `exec -T` so stdin reaches the command:
+   ```bash
+   printf '%s' '<a strong password>' | docker compose -f deploy/docker-compose.yml exec -T api \
+     pnpm --filter @wecom/api create-admin --email admin@wecom.local --name 'מנהל' --password-stdin
+   ```
+   (a leading space keeps that line out of history in bash/zsh with `HISTCONTROL=ignorespace` /
+   `setopt histignorespace`; a password file read with `<` avoids the question entirely).
+   Minimum length is 12 characters. Re-running the command rotates the password of the existing
+   account rather than creating a second one.
 8. Seed the initial library: `docker compose -f deploy/docker-compose.yml exec api pnpm --filter @wecom/api seed` (lane L2).
 
 ## Upgrade
@@ -41,8 +57,12 @@ deploy/smoke.sh https://<host>
 
 **Restore drill (non-destructive — leaves the real database untouched):**
 ```bash
-docker compose -f deploy/docker-compose.yml exec -e DATABASE_URL=postgres://kb:$POSTGRES_PASSWORD@db:5432/kb backup restore-drill.sh
+docker compose -f deploy/docker-compose.yml exec backup restore-drill.sh
 ```
+Pass no `-e DATABASE_URL=…`: compose already gives the `backup` container the right one. The
+older spelling interpolated `$POSTGRES_PASSWORD` in the **host** shell, where it is unset unless
+you sourced `deploy/.env` first, and silently became `postgres://kb:@db:5432/kb` (O-3). The script
+now refuses an empty-password URL with that explanation instead of a bare authentication error.
 Restores the newest `kb-*.dump` into a throwaway `kb_restore_drill_*` database on the same server, counts `documents`, then drops the scratch database. This is what actually proves a backup is restorable rather than merely present — run it after every change to the backup/retention config, and periodically (e.g. monthly) as its own check independent of the quarterly full restore above. The `system.backup-check` worker's own result (age of the *latest* dump, not whether it restores) is visible at `GET /api/v1/admin/system` → `backup.lastBackupAt` / `backup.lastBackupOk`, and on `GET /api/v1/system/health`.
 
 ## Reverse proxy and client IPs

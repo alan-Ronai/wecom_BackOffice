@@ -56,8 +56,16 @@ identify them:
 Local accounts exist for the case where Entra and the firewall are both unavailable.
 
 ```
-pnpm --filter @wecom/api create-admin --email root@wecom.co.il --password '<at least 12 chars>' --name 'Admin'
+# on a terminal: prompts twice, does not echo what you type
+pnpm --filter @wecom/api create-admin --email root@wecom.co.il --name 'Admin'
+
+# unattended: the password arrives on stdin, never on the command line
+printf '%s' '<at least 12 chars>' | pnpm --filter @wecom/api create-admin \
+  --email root@wecom.co.il --name 'Admin' --password-stdin
 ```
+
+There is deliberately no `--password` flag: `pnpm` echoes the resolved command line, so one would
+put the new admin password in the terminal transcript and in shell history (acceptance review O-6).
 
 The CLI upserts a `source='local'` user (subject = email), stores an argon2id hash, grants the `admin` role and
 writes an `admin.create_admin` audit row. Re-running it rotates the password. Sign in at the web app's local

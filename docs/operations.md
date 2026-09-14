@@ -33,10 +33,14 @@ database on the same Postgres server, counts `documents`, then drops the scratch
 it never touches the real `kb` database:
 
 ```bash
-docker compose -f deploy/docker-compose.yml exec \
-  -e DATABASE_URL=postgres://kb:$POSTGRES_PASSWORD@db:5432/kb \
-  backup restore-drill.sh
+docker compose -f deploy/docker-compose.yml exec backup restore-drill.sh
 ```
+
+Pass **no** `-e DATABASE_URL=…`: compose already sets a correct one inside the `backup` container.
+The older spelling expanded `$POSTGRES_PASSWORD` in the *host* shell — unset there unless you ran
+`set -a; . deploy/.env; set +a` first — so it silently became `postgres://kb:@db:5432/kb` and died
+at authentication (acceptance review O-3). `restore-drill.sh` now rejects an empty-password URL
+with that explanation rather than the raw Postgres error.
 
 Run it:
 - after any change to the backup/retention configuration,
