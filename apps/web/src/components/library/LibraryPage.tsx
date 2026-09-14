@@ -62,15 +62,23 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
    */
   const [params, setParams] = useSearchParams();
   const tax: TaxonomyFacetValue = {
+    world: params.get('world'),
+    topic: params.get('topic'),
     docType: (params.get('docType') as DocType | null) ?? null,
     tags: params.getAll('tag'),
   };
-  const world = params.get('world') ?? undefined;
-  const topic = params.get('topic') ?? undefined;
+  const world = tax.world ?? undefined;
+  const topic = tax.topic ?? undefined;
   const setTax = (next: TaxonomyFacetValue) => {
     const p = new URLSearchParams(params);
+    p.delete('world');
+    p.delete('topic');
     p.delete('docType');
     p.delete('tag');
+    // The facet row writes the same two parameters the sidebar and the topic page navigate with,
+    // so a link still reproduces exactly what the sender was looking at.
+    if (next.world) p.set('world', next.world);
+    if (next.topic) p.set('topic', next.topic);
     if (next.docType) p.set('docType', next.docType);
     for (const t of next.tags) p.append('tag', t);
     setParams(p, { replace: true });
