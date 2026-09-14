@@ -543,9 +543,10 @@ export const handlers: RequestHandler[] = [
   }),
 
   http.get(`${B}/me/preferences`, () => HttpResponse.json(state.preferences)),
-  // The route validates with `PreferencesPutSchema`, and zod **strips** unknown keys — so the
-  // mock strips them too. Without this the QOL preferences (density, saved view, last-seen map)
-  // would appear to round-trip in tests while being dropped in production.
+  // The route validates with `PreferencesSchema`, and zod strips whatever the schema does not
+  // declare — so the mock parses with the same schema and cannot round-trip a key production
+  // would drop. `PreferencesSchema` now carries the QOL keys (density, libraryView, savedViewId,
+  // lastSeen, tourDone), so those do survive here, exactly as they survive on the server.
   http.put(`${B}/me/preferences`, async ({ request }) => {
     const body = (await request.json()) as Record<string, unknown>;
     state.preferences = PreferencesSchema.parse(body);
