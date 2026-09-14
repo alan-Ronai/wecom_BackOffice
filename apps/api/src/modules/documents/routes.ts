@@ -24,6 +24,7 @@ import { withTransaction } from '../../lib/sql.js';
 import { audit } from '../../lib/audit.js';
 import { forbidden, httpError, notFound } from '../../lib/http.js';
 import { hasScope, requireUser } from '../../lib/user.js';
+import { canReadUnpublished } from '../../lib/visibility.js';
 import * as repo from './repo.js';
 import { annotateBlame, diffDocuments, diffStats } from './diff.js';
 import { inboundFor } from '../graph/repo.js';
@@ -91,7 +92,13 @@ export default async function routes(app: FastifyInstance) {
     async (req) => {
       const user = requireUser(req);
       const q = req.query as z.infer<typeof ListDocumentsQuerySchema>;
-      const { items, total } = await repo.listCards(app.db, q, user.id, user.categoryScopes);
+      const { items, total } = await repo.listCards(
+        app.db,
+        q,
+        user.id,
+        user.categoryScopes,
+        canReadUnpublished(user),
+      );
       return { items, total, page: q.page, pageSize: q.pageSize };
     },
   );
@@ -103,8 +110,8 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['documents'], params: Params, response: { 200: DocumentSchema } },
     },
     async (req, reply) => {
-      requireUser(req);
-      const doc = await repo.getDocument(app.db, (req.params as { id: string }).id);
+      const user = requireUser(req);
+      const doc = await repo.getVisibleDocument(app.db, (req.params as { id: string }).id, user);
       if (!doc) throw notFound('המסמך');
       reply.header('etag', doc.etag!);
       return doc;
@@ -295,8 +302,10 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['documents'], params: Params, response: { 200: VersionListSchema } },
     },
     async (req) => {
-      requireUser(req);
-      return { items: await repo.listVersions(app.db, (req.params as { id: string }).id) };
+      const user = requireUser(req);
+      const { id } = req.params as { id: string };
+      if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
+      return { items: await repo.listVersions(app.db, id) };
     },
   );
 
@@ -307,8 +316,9 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['documents'], params: VersionParams, response: { 200: DocumentSchema } },
     },
     async (req) => {
-      requireUser(req);
+      const user = requireUser(req);
       const { id, v } = req.params as { id: string; v: number };
+      if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
       const doc = await repo.getVersion(app.db, id, v);
       if (!doc) throw notFound('הגרסה');
       return doc;
@@ -327,10 +337,10 @@ export default async function routes(app: FastifyInstance) {
       },
     },
     async (req) => {
-      requireUser(req);
+      const user = requireUser(req);
       const { id } = req.params as { id: string };
       const { from, to } = req.query as z.infer<typeof DiffQuerySchema>;
-      const current = await repo.getDocument(app.db, id);
+      const current = await repo.getVisibleDocument(app.db, id, user);
       if (!current) throw notFound('המסמך');
       const oldDoc = await repo.getVersion(app.db, id, from);
       if (!oldDoc) throw notFound('הגרסה');
@@ -442,7 +452,7 @@ export default async function routes(app: FastifyInstance) {
     async (req, reply) => {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
-      if (!(await repo.getDocument(app.db, id))) throw notFound('המסמך');
+      if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
       await repo.setPin(app.db, user.id, id, true);
       reply.code(204);
       return null;
@@ -472,7 +482,7 @@ export default async function routes(app: FastifyInstance) {
     async (req, reply) => {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
-      if (!(await repo.getDocument(app.db, id))) throw notFound('המסמך');
+      if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
       await repo.recordView(app.db, user.id, id);
       reply.code(204);
       return null;
@@ -486,8 +496,10 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['documents'], params: Params, response: { 200: LinksResponseSchema } },
     },
     async (req) => {
-      requireUser(req);
-      return repo.linksFor(app.db, (req.params as { id: string }).id);
+      const user = requireUser(req);
+      const { id } = req.params as { id: string };
+      if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
+      return repo.linksFor(app.db, id, canReadUnpublished(user));
     },
   );
 
@@ -498,10 +510,10 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['documents'], params: Params, response: { 200: RelatedResponseSchema } },
     },
     async (req) => {
-      requireUser(req);
-      const doc = await repo.getDocument(app.db, (req.params as { id: string }).id);
+      const user = requireUser(req);
+      const doc = await repo.getVisibleDocument(app.db, (req.params as { id: string }).id, user);
       if (!doc) throw notFound('המסמך');
-      return { items: await repo.relatedFor(app.db, doc) };
+      return { items: await repo.relatedFor(app.db, doc, canReadUnpublished(user)) };
     },
   );
 
@@ -514,10 +526,21 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['documents'], params: Params, response: { 200: BacklinksResponseSchema } },
     },
     async (req) => {
-      requireUser(req);
+      const user = requireUser(req);
       const { id } = req.params as { id: string };
-      if (!(await repo.getDocument(app.db, id))) throw notFound('המסמך');
-      return { items: await inboundFor(app.db, { kind: 'document', key: id }) };
+      if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
+      const items = await inboundFor(app.db, { kind: 'document', key: id });
+      if (canReadUnpublished(user)) return { items };
+      const ids = [...new Set(items.map((i) => i.documentId))];
+      const ok = new Set(
+        (
+          await app.db.query(
+            `select id from documents where id = any($1) and status in ('published','partial')`,
+            [ids],
+          )
+        ).rows.map((r) => r.id as string),
+      );
+      return { items: items.filter((i) => ok.has(i.documentId)) };
     },
   );
 }

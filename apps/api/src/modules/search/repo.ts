@@ -59,8 +59,11 @@ export async function search(
   query: SearchQuery,
   model: ModelClient | null = null,
   categoryScopes: readonly string[] | null = null,
+  readUnpublished = true,
 ): Promise<SearchResponse> {
   const started = Date.now();
+  /** W2 visibility: a read-only role never sees unpublished documents (or their steps). */
+  const visTerm = readUnpublished ? '' : " and d.status in ('published','partial')";
   const text = query.q.trim();
   const requested = query.types
     ? new Set(query.types.split(',').map((t) => t.trim()) as SearchGroupType[])
@@ -100,7 +103,7 @@ export async function search(
               (select a.text from step_actions a where a.step_id=s.id order by a.position limit 1) first_action
        from steps s join documents d on d.id=s.document_id join phases p on p.id=s.phase_id
        left join blocks b on b.id=s.block_id
-       where d.deleted_at is null and (${cond})${stepScope}
+       where d.deleted_at is null and (${cond})${stepScope}${visTerm}
        order by d.title, s.position limit $${params.length}`,
       params,
     );
@@ -150,7 +153,7 @@ export async function search(
     const r = await q.query(
       `select d.id, d.title, d.description, d.category, d.current_version,
               ${rankExpr} + similarity(d.title, $1) score
-       from documents d where d.deleted_at is null and (${cond})${docScope}
+       from documents d where d.deleted_at is null and (${cond})${docScope}${visTerm}
        order by score desc, d.title limit $${params.length}`,
       params,
     );

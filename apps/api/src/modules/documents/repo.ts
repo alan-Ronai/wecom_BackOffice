@@ -15,9 +15,12 @@ import {
   type Phase,
   type Step,
   type StructureBody,
+  UNPUBLISHED_STATUSES,
 } from '@wecom/shared';
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
+import { canReadUnpublished } from '../../lib/visibility.js';
+import type { ReqUser } from '../../lib/user.js';
 
 export type Q = pg.Pool | Tx;
 
@@ -154,6 +157,19 @@ export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Doc
 export const getDocument = async (q: Q, id: string): Promise<Document | null> =>
   (await assembleMany(q, [id])).get(id) ?? null;
 
+/** `getDocument` plus the reader rule: an unpublished document is a 404 for users without `docs.read_unpublished`. */
+export async function getVisibleDocument(
+  q: Q,
+  id: string,
+  user: Pick<ReqUser, 'permissions'>,
+): Promise<Document | null> {
+  const doc = await getDocument(q, id);
+  if (!doc) return null;
+  if (!canReadUnpublished(user) && (UNPUBLISHED_STATUSES as readonly string[]).includes(doc.status))
+    throw httpError(404, 'NOT_PUBLISHED', 'פריט זה אינו זמין כרגע');
+  return doc;
+}
+
 /**
  * `categoryScopes` is the caller's `user_roles.category_scope` union (null = every
  * category). Route-level `config.scope` only guards `/documents/:id`; without the
@@ -164,6 +180,7 @@ export async function listCards(
   query: ListDocumentsQuery,
   userId: string,
   categoryScopes: readonly string[] | null = null,
+  readUnpublished = true,
 ): Promise<{ items: DocumentCard[]; total: number }> {
   const params: unknown[] = [userId];
   const p = (v: unknown) => {
@@ -171,6 +188,7 @@ export async function listCards(
     return '$' + params.length;
   };
   const where: string[] = ['d.deleted_at is null'];
+  if (!readUnpublished) where.push(`d.status in ('published','partial')`);
   if (categoryScopes) where.push(`d.category = any(${p([...categoryScopes])})`);
   if (query.category) where.push(`d.category = ${p(query.category)}`);
   if (query.wave) where.push(`d.wave = ${p(query.wave)}`);
@@ -694,11 +712,15 @@ const mapLink = (r: Record<string, unknown>) => ({
   origin: r.origin as string,
 });
 
-export async function linksFor(q: Q, id: string) {
+export async function linksFor(q: Q, id: string, readUnpublished = true) {
+  const vis = readUnpublished
+    ? ''
+    : " and (l.to_document_id is null or exists (select 1 from documents t where t.id=l.to_document_id and t.status in ('published','partial')))";
+  const visIn = readUnpublished ? '' : " and d.status in ('published','partial')";
   const [out, incoming] = await Promise.all([
-    q.query('select * from document_links where from_document_id=$1', [id]),
+    q.query(`select l.* from document_links l where l.from_document_id=$1${vis}`, [id]),
     q.query(
-      'select l.* from document_links l join documents d on d.id=l.from_document_id where l.to_document_id=$1 and d.deleted_at is null',
+      `select l.* from document_links l join documents d on d.id=l.from_document_id where l.to_document_id=$1 and d.deleted_at is null${visIn}`,
       [id],
     ),
   ]);
@@ -706,7 +728,7 @@ export async function linksFor(q: Q, id: string) {
 }
 
 /** Explicit related + linked docs + docs sharing a block + docs sharing ≥2 CRM fields (max 6). */
-export async function relatedFor(q: Q, doc: Document) {
+export async function relatedFor(q: Q, doc: Document, readUnpublished = true) {
   const out = new Map<string, string>();
   for (const r of doc.related) out.set(r.documentId, r.why);
   for (const l of (
@@ -738,7 +760,9 @@ export async function relatedFor(q: Q, doc: Document) {
   const ids = [...out.keys()].slice(0, 6);
   if (!ids.length) return [];
   const docs = await q.query(
-    'select id, title, category from documents where id = any($1) and deleted_at is null',
+    `select id, title, category from documents where id = any($1) and deleted_at is null${
+      readUnpublished ? '' : " and status in ('published','partial')"
+    }`,
     [ids],
   );
   return docs.rows.map((d) => ({
