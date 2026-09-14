@@ -8,7 +8,7 @@ import {
 import swagger from '@fastify/swagger';
 import type pg from 'pg';
 import { ErrorEnvelopeSchema } from '@wecom/shared';
-import { loadConfig } from '../../../src/config.js';
+import { loadConfig, type Config } from '../../../src/config.js';
 import connectorsModule, { type ConnectorsModuleOptions } from '../../../src/modules/connectors/index.js';
 import syncModule from '../../../src/modules/sync/routes.js';
 import type { RemoteCache } from '../../../src/modules/sync/remote-cache.js';
@@ -30,9 +30,17 @@ export async function buildL6TestApp(
     testUser?: L6TestUser;
     /** Wave 3: injected so the parity report's 60 s remote-listing window can be driven in tests. */
     remoteCache?: RemoteCache;
+    /** Extra env for `loadConfig`, so a flag like `WEBHOOK_REQUIRE_NONCE` can be driven in tests. */
+    env?: Record<string, string>;
   } & ConnectorsModuleOptions,
 ): Promise<FastifyInstance> {
-  const config = loadConfig({ DATABASE_URL: opts.databaseUrl, NODE_ENV: 'test' });
+  // `env` values arrive as raw strings, the way `process.env` supplies them; `ConfigSchema`
+  // coerces them (`boolEnv` accepts `'true'`), so the cast is only about the input type.
+  const config = loadConfig({
+    DATABASE_URL: opts.databaseUrl,
+    NODE_ENV: 'test',
+    ...opts.env,
+  } as unknown as Partial<Config>);
   const app = Fastify({ logger: false }).withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);

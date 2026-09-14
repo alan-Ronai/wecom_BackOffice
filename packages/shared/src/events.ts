@@ -28,6 +28,8 @@ export const EVENTS = [
   'learning.completed',
   'learning.refresh_required',
   'gap.detected',
+  // pipeline fan-out — a sync link that already points elsewhere is kept, never re-pointed.
+  'sync.link_skipped',
 ] as const;
 export type EventName = (typeof EVENTS)[number];
 
@@ -129,6 +131,18 @@ const payloads = {
     affectedUsers: z.number().int(),
   }),
   'gap.detected': z.object({ gapId: IdSchema, kind: z.string() }),
+  /**
+   * `afterSuggestionsApplied` found a link for this (connector, external item) that already
+   * points at another document and left it alone. `documentId` is the one the link keeps;
+   * `skippedDocumentId` is the document that would silently have taken it over — and whose
+   * predecessor would then have been orphaned from sync and from the source-document flow.
+   */
+  'sync.link_skipped': z.object({
+    connectorId: IdSchema,
+    externalId: z.string(),
+    documentId: IdSchema,
+    skippedDocumentId: IdSchema,
+  }),
 } as const;
 export type EventPayloads = { [K in EventName]: z.infer<(typeof payloads)[K]> };
 

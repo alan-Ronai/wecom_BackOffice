@@ -7,6 +7,7 @@ import type {
 } from './contract.js';
 import { buildMessages, parseProposals, RESPONSE_FORMAT } from './prompt.js';
 import { buildQuestionMessages, parseQuestions, QUESTIONS_RESPONSE_FORMAT } from './questions.js';
+import { enforceSectionCards } from './sections.js';
 
 export interface OllamaOptions {
   url: string;
@@ -88,7 +89,9 @@ export class OllamaModel implements ModelClient {
         const parsed = parseProposals(data.message?.content ?? '');
         if (parsed.ok) {
           this.lastRun = { used: 'ollama', attempts: attempt, ms: Date.now() - started };
-          return parsed.items;
+          // The prompt asks for one card per section, but the section rule is an invariant of
+          // the pipeline, not a request: hold it whatever the model returned.
+          return enforceSectionCards(ctx, parsed.items);
         }
         lastError = parsed.error;
       } catch (e) {

@@ -326,14 +326,15 @@ run('migrations', () => {
         ignorePattern: 'package\\.json',
         log: () => undefined,
       });
-    // Everything numbered 0030 and up: rolling "only wave 4" means coming down *through* 0030,
-    // so the count must follow the top of the stack as later waves add migrations. Counting only
+    // Everything from 0030 up — wave 4 and whatever later waves added on top of it — so the
+    // rollback really stops at 0029 whatever the highest number currently is. Counting only
     // `003x` silently stopped short once wave 5 added 0040+, leaving 0030 — the migration that
     // drops 0027's Hebrew stopword filter — still applied, and the assertion below failing.
-    const wave4 = (await readdir('migrations')).filter(
-      (f) => /^\d{4}_.*\.js$/.test(f) && Number(f.slice(0, 4)) >= 30,
-    ).length;
-    await move('down', wave4);
+    const fromWave4 = (await readdir('migrations')).filter((f) => {
+      const n = Number(/^(\d{4})_/.exec(f)?.[1] ?? NaN);
+      return n >= 30;
+    }).length;
+    await move('down', fromWave4);
     await pool.query(
       `insert into documents(slug, title, description, category, wave, priority)
        values ('w6-stop','חוב של לקוח','', 'tech', 1, 'm')`,

@@ -5,6 +5,8 @@ import { QUEUES } from '../plugins/boss.js';
 import { withTransaction } from '../lib/sql.js';
 import { purgeExpired } from '../modules/trash/repo.js';
 import { purgeTelemetry } from '../modules/dashboards/repo.js';
+import { purgeDashboardCache } from '../modules/dashboards/cache.js';
+import { purgeWebhookNonces } from '../modules/connectors/nonces.js';
 import { reindexAll } from '../modules/search/repo.js';
 
 /** Publish `job.failed` so the system screen and SSE clients see a failed background run. */
@@ -51,9 +53,16 @@ export async function startJobs(app: FastifyInstance): Promise<void> {
       // `presence` expiry is a read-time filter, so rows accumulated one per (document, user)
       // forever. `presence_last_seen_at_index` existed and nothing used it; now it does.
       const p = await app.db.query(`delete from presence where last_seen_at < now() - interval '1 day'`);
+      // I7: the webhook replay store only has to remember a delivery for as long as one could
+      // still be replayed (`MAX_WEBHOOK_SKEW_MS`, five minutes). Without this it would grow one
+      // row per post save, forever.
+      const w = await purgeWebhookNonces(app.db);
+      // Dashboard snapshots are keyed by scope-and-visibility, so a deleted role would otherwise
+      // leave its row in `system_state` forever.
+      const d = await purgeDashboardCache(app.db);
       app.log.info(
-        { n, sessions: s.rowCount, telemetry: t, presence: p.rowCount },
-        'housekeeping: trash, sessions, telemetry, presence',
+        { n, sessions: s.rowCount, telemetry: t, presence: p.rowCount, webhookNonces: w, dashboards: d },
+        'housekeeping: trash, sessions, telemetry, presence, webhook nonces, dashboard cache',
       );
     } catch (err) {
       await reportFailure(app, QUEUES.trashPurge, err);

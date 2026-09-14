@@ -30,7 +30,23 @@ describe('events', () => {
       'learning.completed',
       'learning.refresh_required',
       'gap.detected',
+      // Pipeline fan-out — appended, never reordered.
+      'sync.link_skipped',
     ]);
+  });
+  it('validates the sync.link_skipped payload', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const other = '22222222-2222-4222-8222-222222222222';
+    const e = EventSchema.parse(
+      makeEvent('sync.link_skipped', {
+        connectorId: id,
+        externalId: 'posts:101',
+        documentId: id,
+        skippedDocumentId: other,
+      }),
+    );
+    expect(e.name).toBe('sync.link_skipped');
+    expect(e.payload).toMatchObject({ externalId: 'posts:101', skippedDocumentId: other });
   });
   it('validates the wave 5 events', () => {
     const id = '11111111-1111-4111-8111-111111111111';

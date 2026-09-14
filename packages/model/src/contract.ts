@@ -10,7 +10,17 @@ export interface LinkedStep {
   blockId?: string;
 }
 export interface ProposalContext {
-  source: { id: string; title: string };
+  source: {
+    id: string;
+    title: string;
+    /**
+     * The source is ONE remote item (a WordPress post, a JSON/CSV row-group) rather than a
+     * multi-topic document, so on the "no matching document" path its sections become the
+     * phases of a single card instead of a card each — one item, one document, one sync link.
+     * Absent (docx/text uploads) means "one card per section".
+     */
+    singleDocument?: boolean;
+  };
   diffs: ParagraphDiff[];
   paragraphs: Paragraph[];
   linkedSteps: LinkedStep[];
