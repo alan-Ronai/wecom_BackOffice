@@ -101,6 +101,112 @@ run('connector routes', () => {
     expect(r.json().code).toBe('INVALID_CONFIG');
   });
 
+  // Stage-5 contract: the wizard's step-3 dry run, before the connector has an id.
+  it('dry-runs a connector test without persisting anything', async () => {
+    const before = (await app.inject({ method: 'GET', url: '/api/v1/connectors' })).json().items.length;
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/v1/connectors/test',
+      payload: { type: 'wordpress', config: body().config },
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().ok).toBe(true);
+    expect(typeof r.json().message).toBe('string');
+    const after = (await app.inject({ method: 'GET', url: '/api/v1/connectors' })).json().items.length;
+    expect(after).toBe(before);
+  });
+
+  it('a bad dry-run config is a 400, not a stored connector', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/v1/connectors/test',
+      payload: { type: 'wordpress', config: { baseUrl: 'nope' } },
+    });
+    expect(r.statusCode).toBe(400);
+    expect(r.json().code).toBe('INVALID_CONFIG');
+  });
+
+  it('an unknown connector type on a dry run is a 400', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/v1/connectors/test',
+      payload: { type: 'no-such-type', config: {} },
+    });
+    expect(r.statusCode).toBe(400);
+    expect(r.json().code).toBe('UNKNOWN_TYPE');
+  });
+
+  it('PATCH accepts a body carrying only enabled, only name, or only schedule', async () => {
+    const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
+    const onlyEnabled = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { enabled: false },
+    });
+    expect(onlyEnabled.statusCode).toBe(200);
+    expect(onlyEnabled.json()).toMatchObject({ enabled: false, name: conn.name });
+
+    const onlyName = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { name: 'שם אחר' },
+    });
+    expect(onlyName.statusCode).toBe(200);
+    expect(onlyName.json()).toMatchObject({ name: 'שם אחר', enabled: false });
+
+    const onlySchedule = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { schedule: '*/5 * * * *' },
+    });
+    expect(onlySchedule.statusCode).toBe(200);
+    expect(onlySchedule.json()).toMatchObject({ schedule: '*/5 * * * *', name: 'שם אחר' });
+    // None of the three PATCHes carried a config, so the stored secret survived untouched.
+    expect(onlySchedule.json().configMasked.applicationPassword).toBe('••••');
+    await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
+  });
+
+  it('a masked secret round-tripped in a PATCH leaves the stored secret unchanged', async () => {
+    const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
+    const before = await pool.query('select config_encrypted from connectors where id=$1', [conn.id]);
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: {
+        config: {
+          // Unchanged: the UI would normally omit these, but the server must not
+          // trust a client that sends the placeholder back literally either.
+          applicationPassword: '••••',
+          webhookSecret: '••••',
+          // The one field actually being changed.
+          username: 'kb2',
+        },
+      },
+    });
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().configMasked).toMatchObject({
+      applicationPassword: '••••',
+      webhookSecret: '••••',
+      username: 'kb2',
+    });
+    const after = await pool.query('select config_encrypted from connectors where id=$1', [conn.id]);
+    // username changed, so the ciphertext blob as a whole differs from before — the real
+    // assertion is what it decrypts to.
+    expect(Buffer.compare(before.rows[0].config_encrypted, after.rows[0].config_encrypted)).not.toBe(0);
+    const row = await app.connectors.repo.get(conn.id);
+    const decrypted = app.connectors.repo.config<{
+      applicationPassword: string;
+      webhookSecret: string;
+      username: string;
+    }>(row!);
+    // The literal mask was never written over the real secret — it decrypts to the
+    // original value the connector was created with, not '••••'.
+    expect(decrypted.applicationPassword).toBe(body().config.applicationPassword);
+    expect(decrypted.webhookSecret).toBe(body().config.webhookSecret);
+    expect(decrypted.username).toBe('kb2');
+    await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
+  });
+
   // Stage-5 contract: "run now" answers with what the run did (`SyncRunResultSchema`),
   // not a job id — the operator pressing it is watching for those numbers.
   it('runs a connector and reports the result', async () => {
@@ -147,6 +253,15 @@ run('connector routes', () => {
       documents: sqlDocumentsService(pool),
     });
     expect((await noPerm.inject({ method: 'GET', url: '/api/v1/connectors' })).statusCode).toBe(403);
+    expect(
+      (
+        await noPerm.inject({
+          method: 'POST',
+          url: '/api/v1/connectors/test',
+          payload: { type: 'wordpress', config: body().config },
+        })
+      ).statusCode,
+    ).toBe(403);
     await noPerm.close();
   });
 

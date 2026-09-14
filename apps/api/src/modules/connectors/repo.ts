@@ -31,9 +31,12 @@ export interface SyncLinkRow {
 
 const SECRET_KEYS = /password|secret|token|key/i;
 
+/** The placeholder a masked secret round-trips as; a PATCH sending it back means "unchanged". */
+export const MASKED_VALUE = '••••';
+
 /** Never return a decrypted secret to a client: mask by key name. */
 export const maskConfig = (c: Record<string, unknown>): Record<string, unknown> =>
-  Object.fromEntries(Object.entries(c).map(([k, v]) => [k, SECRET_KEYS.test(k) ? '••••' : v]));
+  Object.fromEntries(Object.entries(c).map(([k, v]) => [k, SECRET_KEYS.test(k) ? MASKED_VALUE : v]));
 
 export class ConnectorsRepo {
   constructor(

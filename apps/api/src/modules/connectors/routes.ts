@@ -6,6 +6,7 @@ import {
   ConnectorPatchBodySchema,
   ConnectorRowSchema,
   ConnectorSchema,
+  ConnectorTestBodySchema,
   ErrorEnvelopeSchema,
   IdSchema,
   SyncLinkSchema,
@@ -15,7 +16,13 @@ import {
   type Permission,
 } from '@wecom/shared';
 import type { ConnectorRegistry } from '@wecom/connectors';
-import { maskConfig, type ConnectorRow, type ConnectorsRepo, type SyncLinkRow } from './repo.js';
+import {
+  MASKED_VALUE,
+  maskConfig,
+  type ConnectorRow,
+  type ConnectorsRepo,
+  type SyncLinkRow,
+} from './repo.js';
 import type { SyncService } from './sync.js';
 import { auditOf, userOf, type Enqueue } from './context.js';
 
@@ -176,7 +183,12 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
       if (!row) return reply.status(404).send(notFound(req, 'מחבר לא נמצא'));
       let config: Record<string, unknown> | undefined;
       if (req.body.config) {
-        const merged = { ...(repo.config(row) as Record<string, unknown>), ...req.body.config };
+        // A masked secret (`••••`) round-tripped from the UI means "unchanged" — merging it
+        // in literally would overwrite the real, stored secret with the placeholder itself.
+        const incoming = Object.fromEntries(
+          Object.entries(req.body.config).filter(([, v]) => v !== MASKED_VALUE),
+        );
+        const merged = { ...(repo.config(row) as Record<string, unknown>), ...incoming };
         const parsed = registry.get(row.type).configSchema.safeParse(merged);
         if (!parsed.success)
           return reply.status(400).send({
@@ -219,6 +231,41 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
       await audit(req, 'connectors.delete', 'connector', req.params.id, null, null);
       await refresh();
       return reply.status(204).send(null);
+    },
+  );
+
+  /**
+   * The wizard's step-3 dry run: no connector exists yet, so there is no id to test
+   * against and nothing is persisted (no row, no `lastTest` health write).
+   */
+  app.post(
+    '/connectors/test',
+    {
+      config: manage,
+      schema: {
+        tags: ['connectors'],
+        body: ConnectorTestBodySchema,
+        response: { 200: z.object({ ok: z.boolean(), message: z.string() }), 400: E, 403: E },
+      },
+    },
+    async (req, reply) => {
+      if (!registry.list().some((t) => t.id === req.body.type))
+        return reply.status(400).send({
+          code: 'UNKNOWN_TYPE',
+          message: 'סוג מחבר לא ידוע',
+          requestId: req.id,
+        });
+      const conn = registry.get(req.body.type);
+      const parsed = conn.configSchema.safeParse(req.body.config);
+      if (!parsed.success)
+        return reply.status(400).send({
+          code: 'INVALID_CONFIG',
+          message: 'הגדרות המחבר אינן תקינות',
+          details: parsed.error.flatten(),
+          requestId: req.id,
+        });
+      const res = await conn.testConnection(parsed.data as never);
+      return reply.send(res);
     },
   );
 
