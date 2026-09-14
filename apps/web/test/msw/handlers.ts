@@ -42,6 +42,19 @@ interface State {
   processed: string[];
   publishedSources: string[];
   preferences: typeof fx.me.preferences;
+  /* wave 4 — source documents (W4) */
+  sourceDocs: Map<
+    string,
+    {
+      html: string;
+      text: string;
+      version: number;
+      etag: string;
+      versions: { version: number; label: string; html: string }[];
+    }
+  >;
+  assets: string[];
+  sourceDrafts: Map<string, { html: string; updatedAt: string }>;
 }
 
 const initial = (): State => ({
@@ -61,6 +74,9 @@ const initial = (): State => ({
   processed: [],
   publishedSources: [],
   preferences: { ...fx.me.preferences },
+  sourceDocs: new Map(),
+  assets: [],
+  sourceDrafts: new Map(),
 });
 
 export const state: State = initial();
@@ -613,6 +629,166 @@ export const handlers: RequestHandler[] = [
   ...stage5Handlers,
   /* Stage 4–5 routes, typed from the zod contract — see `test/msw/stage45.ts`. */
   ...stage45Handlers,
+
+  /* ── wave 4 · source documents (W4) ───────────────────────────────────────
+   * Shapes are `SourceDocumentSchema` / `SourceDocumentVersionsResponseSchema` / `AssetSchema`
+   * from `@wecom/shared` — see `test/source/sourcedocs-contract.test.ts`, which parses each of
+   * these responses so the mock cannot drift from `docs/api/CONTRACTS-wave4.md`. */
+  http.get(`${B}/documents/:id/source`, ({ params }) => {
+    const s = state.sourceDocs.get(String(params.id));
+    if (!s) return noContent();
+    return HttpResponse.json(
+      {
+        documentId: params.id,
+        html: s.html,
+        text: s.text,
+        version: s.version,
+        etag: s.etag,
+        updatedById: fx.me.user.id,
+        updatedByName: fx.me.user.displayName,
+        updatedAt: '2026-09-14T10:00:00.000Z',
+      },
+      { headers: { etag: s.etag } },
+    );
+  }),
+  http.put(`${B}/documents/:id/source`, async ({ params, request }) => {
+    const id = String(params.id);
+    const body = (await request.json()) as { html: string; label?: string };
+    const cur = state.sourceDocs.get(id);
+    const ifMatch = request.headers.get('if-match');
+    if (cur && ifMatch && ifMatch !== cur.etag)
+      return HttpResponse.json({ code: 'ETAG_MISMATCH', message: 'stale' }, { status: 412 });
+    const version = (cur?.version ?? 0) + 1;
+    const next = {
+      html: body.html,
+      text: body.html.replace(/<[^>]+>/g, ''),
+      version,
+      etag: 'e' + version,
+      versions: [...(cur?.versions ?? []), { version, label: body.label ?? '', html: body.html }],
+    };
+    state.sourceDocs.set(id, next);
+    state.sourceDrafts.delete(id); // a saved version clears the autosave
+    return HttpResponse.json(
+      {
+        documentId: id,
+        html: next.html,
+        text: next.text,
+        version,
+        etag: next.etag,
+        updatedById: fx.me.user.id,
+        updatedByName: fx.me.user.displayName,
+        updatedAt: '2026-09-14T10:00:00.000Z',
+      },
+      { headers: { etag: next.etag } },
+    );
+  }),
+  http.get(`${B}/documents/:id/source/versions`, ({ params }) =>
+    HttpResponse.json({
+      items: (state.sourceDocs.get(String(params.id))?.versions ?? [])
+        .map((v) => ({
+          documentId: params.id,
+          version: v.version,
+          label: v.label,
+          authorId: fx.me.user.id,
+          authorName: fx.me.user.displayName,
+          createdAt: '2026-09-14T10:00:00.000Z',
+          sourceRevisionId: null,
+        }))
+        .reverse(),
+    }),
+  ),
+  http.get(`${B}/documents/:id/source/versions/:v`, ({ params }) => {
+    const v = state.sourceDocs.get(String(params.id))?.versions.find((x) => x.version === Number(params.v));
+    if (!v) return notFound();
+    return HttpResponse.json({
+      documentId: params.id,
+      html: v.html,
+      text: v.html.replace(/<[^>]+>/g, ''),
+      version: v.version,
+      etag: 'e' + v.version,
+      updatedById: null,
+      updatedByName: null,
+      updatedAt: '2026-09-14T10:00:00.000Z',
+    });
+  }),
+  http.post(`${B}/documents/:id/source/restore/:v`, ({ params }) => {
+    const id = String(params.id);
+    const cur = state.sourceDocs.get(id);
+    const from = cur?.versions.find((x) => x.version === Number(params.v));
+    if (!cur || !from) return notFound();
+    const version = cur.version + 1;
+    const next = {
+      html: from.html,
+      text: from.html.replace(/<[^>]+>/g, ''),
+      version,
+      etag: 'e' + version,
+      versions: [...cur.versions, { version, label: `שוחזר מגרסה ${from.version}`, html: from.html }],
+    };
+    state.sourceDocs.set(id, next);
+    return HttpResponse.json({
+      documentId: id,
+      html: next.html,
+      text: next.text,
+      version,
+      etag: next.etag,
+      updatedById: fx.me.user.id,
+      updatedByName: fx.me.user.displayName,
+      updatedAt: '2026-09-14T10:00:00.000Z',
+    });
+  }),
+  http.post(`${B}/documents/:id/source/import`, async ({ params, request }) => {
+    const id = String(params.id);
+    const form = await request.formData();
+    const file = form.get('file');
+    if (!(file instanceof File))
+      return HttpResponse.json({ code: 'BAD_DOCX', message: 'קובץ חסר' }, { status: 400 });
+    const cur = state.sourceDocs.get(id);
+    const version = (cur?.version ?? 0) + 1;
+    const html = `<h1>${file.name.replace(/\.docx$/i, '')}</h1>`;
+    const next = {
+      html,
+      text: html.replace(/<[^>]+>/g, ''),
+      version,
+      etag: 'e' + version,
+      versions: [...(cur?.versions ?? []), { version, label: 'יובא מ-Word', html }],
+    };
+    state.sourceDocs.set(id, next);
+    return HttpResponse.json({
+      documentId: id,
+      html: next.html,
+      text: next.text,
+      version,
+      etag: next.etag,
+      updatedById: fx.me.user.id,
+      updatedByName: fx.me.user.displayName,
+      updatedAt: '2026-09-14T10:00:00.000Z',
+    });
+  }),
+  http.post(`${B}/assets`, () => {
+    const id = crypto.randomUUID();
+    state.assets.push(id);
+    return HttpResponse.json({
+      id,
+      url: '/api/v1/assets/' + id,
+      mime: 'image/png',
+      size: 3,
+      width: null,
+      height: null,
+    });
+  }),
+  http.get(`${B}/documents/:id/source/draft`, ({ params }) => {
+    const d = state.sourceDrafts.get(String(params.id));
+    return d ? HttpResponse.json(d) : noContent();
+  }),
+  http.put(`${B}/documents/:id/source/draft`, async ({ params, request }) => {
+    const b = (await request.json()) as { html: string };
+    state.sourceDrafts.set(String(params.id), { html: b.html, updatedAt: new Date().toISOString() });
+    return noContent();
+  }),
+  http.delete(`${B}/documents/:id/source/draft`, ({ params }) => {
+    state.sourceDrafts.delete(String(params.id));
+    return noContent();
+  }),
 ];
 
 /** Override `/auth/me` for permission tests. */
