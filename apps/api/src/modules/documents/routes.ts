@@ -59,7 +59,7 @@ async function assertTaxonomyScope(
   for (const w of before.worlds) if (!resulting.has(w) && !hasScope(user, w)) throw forbidden();
   if (body.topics?.length) {
     const r = await tx.query<{ id: string; world_slug: string }>(
-      'select id, world_slug from topics where id = any($1::uuid[])',
+      'select t.id, w.slug world_slug from topics t join worlds w on w.id = t.world_id where t.id = any($1::uuid[])',
       [body.topics],
     );
     const found = new Map(r.rows.map((x) => [x.id, x.world_slug]));

@@ -220,12 +220,18 @@ run('search', () => {
     });
     expect(r.statusCode).toBe(200);
     expect(r.json().total).toBe(0);
-    // fire-and-forget: give the insert a tick
-    await new Promise((res) => setTimeout(res, 50));
-    // Scoped to this query: earlier cases in this file search too, and every search is logged.
-    const rows = await db.pool.query('select user_id, q, filters, results from search_log where q=$1', [
-      'אין-כזה-מונח',
-    ]);
+    /**
+     * C-M9: the insert is deliberately fire-and-forget, so the row lands after the response.
+     * A fixed `setTimeout(50)` was a flake waiting for CI load — and it would have failed
+     * looking like a search-logging regression. Poll to a deadline instead: fast when the
+     * insert has already landed, and only slow when something is genuinely wrong.
+     */
+    const q = 'select user_id, q, filters, results from search_log where q=$1';
+    let rows = await db.pool.query(q, ['אין-כזה-מונח']);
+    for (const deadline = Date.now() + 5000; !rows.rowCount && Date.now() < deadline; ) {
+      await new Promise((res) => setTimeout(res, 10));
+      rows = await db.pool.query(q, ['אין-כזה-מונח']);
+    }
     expect(rows.rows).toEqual([
       { user_id: u.id, q: 'אין-כזה-מונח', filters: { types: 'documents' }, results: 0 },
     ]);

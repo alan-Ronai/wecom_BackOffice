@@ -5,6 +5,7 @@ import {
   detectFieldRefs,
   detectLinks,
   htmlToText,
+  sanitizeHtml,
   stepText,
   type Block,
   type CreateDocumentBody,
@@ -385,6 +386,20 @@ export async function listCards(
 /** `slugify` ends in 5 random base-36 chars against a unique constraint: retry rather than 500. */
 const SLUG_ATTEMPTS = 5;
 
+/**
+ * C-C2 — spec §2.1 defines the column as "`documents.body_html text` (**sanitized HTML**, used
+ * by kind `text`)", and nothing on this path sanitized: `TaxonomyWriteFields` accepted the
+ * string and both writes put it straight into the column. It is the canonical body for kind
+ * `text`, and the 0030 fold means every type-T document lives in it, so the store was already
+ * populated at scale — and the neighbouring content model for the same authoring surface
+ * (`source_documents.html`) *is* rendered with `dangerouslySetInnerHTML`.
+ *
+ * Sanitizing at the repo boundary rather than in the routes means no caller can forget, the
+ * same way `saveSourceDocument` does it for the source pane.
+ */
+const cleanBody = (html: string | null | undefined): string | null =>
+  html == null ? (html ?? null) : sanitizeHtml(html);
+
 export async function insertDocument(
   tx: Tx,
   body: CreateDocumentBody,
@@ -402,7 +417,7 @@ export async function insertDocument(
     'draft',
     docType,
     body.tags ?? [],
-    body.bodyHtml ?? null,
+    cleanBody(body.bodyHtml),
     userId,
   ];
   const sql = `insert into documents(slug, title, description, category, wave, priority, kind, status, doc_type, tags, body_html, created_by, updated_by)
@@ -485,7 +500,7 @@ export async function patchDocument(
   for (const [key, col] of Object.entries(PATCH_COLUMNS)) {
     const v = body[key as keyof PatchDocumentBody];
     if (v !== undefined) {
-      params.push(v);
+      params.push(key === 'bodyHtml' ? cleanBody(v as string | null) : v);
       sets.push(`${col} = $${params.length}`);
     }
   }

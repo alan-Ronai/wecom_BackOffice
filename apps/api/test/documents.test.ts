@@ -473,4 +473,45 @@ run('documents', () => {
         .statusCode,
     ).toBe(403);
   });
+  it('sanitizes bodyHtml on create and on patch (C-C2)', async () => {
+    // Spec §2.1: `documents.body_html` is *sanitized* HTML. It reached the column raw, and the
+    // 0030 fold means every type-T document lives in it — a populated store of unsanitized
+    // markup one `dangerouslySetInnerHTML` away from being a live stored-XSS.
+    const dirty = '<p onclick="x()">a<script>alert(1)</script></p>';
+    const created = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/documents',
+        headers: auth(u),
+        payload: {
+          title: 'גוף מסוכן',
+          category: 'tech',
+          wave: 1,
+          priority: 'm',
+          kind: 'text',
+          bodyHtml: dirty,
+        },
+      })
+    ).json();
+    expect(created.bodyHtml).toBe('<p>a</p>');
+
+    const patched = (
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/documents/${created.id}`,
+        headers: auth(u),
+        payload: { bodyHtml: '<p><img src="javascript:1" onerror="y()">b</p>' },
+      })
+    ).json();
+    expect(patched.bodyHtml).toBe('<p>b</p>');
+    expect(patched.bodyHtml).not.toContain('onerror');
+
+    // A-I7: and the body is now what makes a text document findable.
+    const found = await app.inject({
+      method: 'GET',
+      url: '/api/v1/documents?q=' + encodeURIComponent('b'),
+      headers: auth(u),
+    });
+    expect(found.statusCode).toBe(200);
+  });
 });

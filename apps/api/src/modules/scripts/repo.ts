@@ -1,4 +1,4 @@
-import type { Script, UpsertScriptBody } from '@wecom/shared';
+import { sanitizeHtml, type Script, type UpsertScriptBody } from '@wecom/shared';
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
 import { visibleWhere } from '../../lib/visibility.js';
@@ -71,7 +71,7 @@ export async function createScript(tx: Tx, body: UpsertScriptBody, userId: strin
   const r = await tx.query(
     `insert into documents(slug, title, description, category, wave, priority, kind, status, doc_type, tags, body_html, current_version, created_by, updated_by)
      values ('script-' || left(replace(gen_random_uuid()::text, '-', ''), 8), $1, '', 'ops', 3, 'm', 'text', 'published', 'T', $2, $3, 1, $4, $4) returning *`,
-    [body.title, body.tags, textToHtml(body.text), userId],
+    [body.title, body.tags, sanitizeHtml(textToHtml(body.text)), userId],
   );
   await tx.query(
     `insert into document_worlds(document_id, world_slug) values ($1, 'ops') on conflict do nothing`,
@@ -105,7 +105,7 @@ export async function updateScript(
   const r = await tx.query(
     `update documents d set title = $2, body_html = $3, tags = $4, updated_by = $5, updated_at = now(), etag = gen_random_uuid()::text
       where d.id = $1 and ${T} returning *`,
-    [id, body.title, textToHtml(body.text), body.tags, userId],
+    [id, body.title, sanitizeHtml(textToHtml(body.text)), body.tags, userId],
   );
   if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'התסריט לא נמצא');
   return toScript(r.rows[0]);

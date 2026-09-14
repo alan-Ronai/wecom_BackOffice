@@ -45,7 +45,15 @@ const DROP = new Set([
   'meta',
 ]);
 const VOID = new Set(['img', 'br', 'hr']);
-export const ASSET_SRC_RE = /^\/api\/v1\/assets\/[0-9a-f-]{36}$/;
+/**
+ * C-M1: a real UUID, not 36 characters of hex and hyphens — 36 hyphens used to pass. Never
+ * exploitable (no `/` or `.`, so the path stays same-origin and traversal was already refused),
+ * but a malformed src survived into stored HTML and then `resolveAsset` answered null in
+ * `htmlToDocx` and the WordPress push, and the image silently disappeared with no error.
+ * `htmlToDocx.ts` imports this constant, so the two stay in step.
+ */
+export const ASSET_SRC_RE =
+  /^\/api\/v1\/assets\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const HTTP_RE = /^https?:\/\//i;
 
 const ATTRS: Record<string, (name: string, value: string) => string | null> = {
@@ -61,16 +69,25 @@ const ATTRS: Record<string, (name: string, value: string) => string | null> = {
 const escText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escAttr = (s: string) => escText(s).replace(/"/g, '&quot;');
 
+/**
+ * C-M2: one pass, so the decoder never re-reads its own output. Chained `.replace()` calls
+ * decoded `&amp;` first and `&lt;`/`&gt;` after, so a user who literally wrote `&lt;script&gt;`
+ * — stored as `&amp;lt;script&amp;gt;` — got `<script>` back as rendered text. Not a security
+ * hole (the output is re-escaped and stable under re-sanitization), but this is the system of
+ * record and it was a one-shot content mutation on save.
+ */
+const ENTITIES: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&nbsp;': ' ',
+};
+const decodeText = (s: string) => s.replace(/&(?:amp|lt|gt|quot|nbsp);/g, (e) => ENTITIES[e]!);
+
 function render(node: Node): string {
   if (node.nodeType === NodeType.TEXT_NODE)
-    return escText(
-      (node as HTMLElement).rawText
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&nbsp;/g, ' '),
-    );
+    return escText(decodeText((node as HTMLElement).rawText));
   if (node.nodeType !== NodeType.ELEMENT_NODE) return '';
   const el = node as HTMLElement;
   const tag = el.tagName?.toLowerCase();
@@ -86,7 +103,9 @@ function render(node: Node): string {
       if (v !== null) attrs.push(` ${name.toLowerCase()}="${escAttr(v)}"`);
     }
   if (tag === 'img' && !attrs.some((a) => a.startsWith(' src='))) return '';
-  if (tag === 'a') attrs.push(' rel="noopener"');
+  // C-M6: `target` is stripped, so `noopener` is inert on its own; `noreferrer` is the half
+  // that does something — no `Referer` leak to a third-party link from an internal KB.
+  if (tag === 'a') attrs.push(' rel="noopener noreferrer"');
   const open = `<${tag}${attrs.join('')}>`;
   return VOID.has(tag) ? open : `${open}${inner}</${tag}>`;
 }
