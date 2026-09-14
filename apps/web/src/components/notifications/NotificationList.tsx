@@ -16,7 +16,8 @@ const TABS: [Tab, string][] = [
 ];
 
 // Exhaustive over `NotificationKindSchema`, so widening the contract is a compile error here
-// rather than a blank glyph in the bell. `feedback` and `source` arrive with wave 4.
+// rather than a blank glyph in the bell. `feedback` and `source` arrive with wave 4,
+// `learning` and `gap` with wave 5 (V0 contracts; V4a wires the bell through to /learning).
 const ICON: Record<Notification['kind'], string> = {
   suggestion: '💡',
   sync: '⟳',
@@ -26,6 +27,8 @@ const ICON: Record<Notification['kind'], string> = {
   system: '🗄',
   feedback: '💬',
   source: '📄',
+  learning: '🎓',
+  gap: '🧭',
 };
 
 /**

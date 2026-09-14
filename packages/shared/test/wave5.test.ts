@@ -4,6 +4,9 @@ import {
   LearningVersionSchema,
   WorkflowSettingsSchema,
   SourceVersionSchema,
+  PlayerQuestionSchema,
+  StartAttemptResponseSchema,
+  DocumentLearningSchema,
   WORKFLOW_SETTINGS_KEY,
   type LearningItemCreate,
   type Gap,
@@ -51,6 +54,35 @@ describe('wave5 schemas (approved spec)', () => {
     expect(s.learning.defaultPassMark).toBe(80);
     expect(s.requireApprover).toBe(false);
     expect(WORKFLOW_SETTINGS_KEY).toBe('workflow');
+  });
+  it('gives the web player the ids it keys on', () => {
+    // The agent-web lanes key the answer map by question id and link the article banner
+    // straight at the open refresh assignment, so neither may be absent from the contract.
+    expect(
+      PlayerQuestionSchema.safeParse({
+        documentId: U,
+        stem: 's',
+        kind: 'single',
+        options: [{ id: 'a', text: 'a' }],
+      }).success,
+    ).toBe(false); // id missing
+    const q = PlayerQuestionSchema.parse({
+      id: U,
+      documentId: U,
+      stem: 's',
+      kind: 'single',
+      options: [{ id: 'a', text: 'a' }],
+    });
+    expect(q.id).toBe(U);
+    expect(StartAttemptResponseSchema.parse({ attemptId: U, attemptNo: 2 }).attemptNo).toBe(2);
+    expect(
+      DocumentLearningSchema.parse({
+        items: [],
+        refreshRequired: false,
+        refreshAssignmentId: null,
+        lastSignificantChange: null,
+      }).refreshAssignmentId,
+    ).toBeNull();
   });
   it('exports type aliases (compile-time check)', () => {
     const c: LearningItemCreate = { kind: 'briefing', title: 'b' } as LearningItemCreate;

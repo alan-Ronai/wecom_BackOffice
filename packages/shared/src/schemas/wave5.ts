@@ -167,12 +167,16 @@ export const MyLearningResponseSchema = z.object({
   completed: z.array(AssignmentSchema),
   invalidated: z.array(AssignmentSchema),
 });
-/** Player payload: the item as the agent sees it (no correct flags on options). */
+/**
+ * Player payload: the item as the agent sees it (no correct flags on options).
+ * `id` is required here even though it is optional on `QuizQuestionSchema` (drafts have
+ * unsaved questions): the player keys its answer map by it.
+ */
 export const PlayerQuestionSchema = QuizQuestionSchema.omit({
   options: true,
   generated: true,
   modelConf: true,
-}).extend({ options: z.array(QuestionOptionSchema.omit({ correct: true })) });
+}).extend({ id: IdSchema, options: z.array(QuestionOptionSchema.omit({ correct: true })) });
 export const PlayerItemSchema = z.object({
   assignment: AssignmentSchema,
   item: LearningItemSchema.pick({
@@ -205,6 +209,11 @@ export const AttemptAnswersSchema = z.object({
       text: z.string().optional(),
     }),
   ),
+});
+/** 201 of `POST /learning/my/:assignmentId/attempts`; the answers then go to `PUT /learning/attempts/:id`. */
+export const StartAttemptResponseSchema = z.object({
+  attemptId: IdSchema,
+  attemptNo: z.number().int(),
 });
 export const AttemptResultSchema = z.object({
   attemptId: IdSchema,
@@ -283,6 +292,8 @@ export const LearningDashboardSchema = z.object({
 export const DocumentLearningSchema = z.object({
   items: z.array(LearningItemCardSchema),
   refreshRequired: z.boolean(),
+  /** The calling user's open refresh assignment for this document, so the banner links exactly. */
+  refreshAssignmentId: IdSchema.nullable(),
   lastSignificantChange: z
     .object({ version: z.number().int(), at: IsoDateSchema, reasons: z.array(z.string()) })
     .nullable(),
@@ -383,6 +394,7 @@ export type MyLearningResponse = z.infer<typeof MyLearningResponseSchema>;
 export type PlayerQuestion = z.infer<typeof PlayerQuestionSchema>;
 export type PlayerItem = z.infer<typeof PlayerItemSchema>;
 export type AttemptAnswers = z.infer<typeof AttemptAnswersSchema>;
+export type StartAttemptResponse = z.infer<typeof StartAttemptResponseSchema>;
 export type AttemptResult = z.infer<typeof AttemptResultSchema>;
 export type CompletionRow = z.infer<typeof CompletionRowSchema>;
 export type CompletionResponse = z.infer<typeof CompletionResponseSchema>;
