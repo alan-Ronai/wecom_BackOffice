@@ -24,12 +24,7 @@ describe('admin', () => {
     expect(screen.getByLabelText('docs.publish · admin')).toBeEnabled();
   });
 
-  it('lists users with their roles and scope', async () => {
-    asAdmin();
-    renderWithProviders(<App />, { route: '/admin/users' });
-    expect(await screen.findByText('ענבר ל.')).toBeInTheDocument();
-    expect(await screen.findByText(/טיפול בשיחה/)).toBeInTheDocument();
-  });
+  // The users screen has its own suite — `test/admin/Users.test.tsx`.
 
   it('renders the operator diagnostics from /admin/system', async () => {
     asAdmin();

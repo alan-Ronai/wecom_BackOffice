@@ -2,20 +2,28 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap } from '../unwrap.js';
-import type { AdminUserPatch, AuditQuery, GroupMap, RoleUpsert } from '../types.js';
+import type { AdminUserCreate, AdminUserPatch, AuditQuery, GroupMap, RoleUpsert } from '../types.js';
 
-export const useUsers = (q: { q?: string; page?: number; pageSize?: number } = {}) =>
-  useQuery({
-    queryKey: keys.admin.users(q),
-    queryFn: async () => unwrap(await api.GET('/admin/users', { params: { query: q } })),
-  });
-
+/** `GET /admin/users` moved to the stage-5 row shape — see `hooks/stage5.ts#useAdminUsers`. */
 export const usePatchUser = () => {
   const qc = useQueryClient();
   return useMutation({
     // Returns `{ ok, auditId }` — the caller must re-read the user from the invalidated list.
     mutationFn: async ({ id, ...body }: AdminUserPatch & { id: string }) =>
       unwrap(await api.PATCH('/admin/users/{id}', { params: { path: { id } }, body })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  });
+};
+
+/**
+ * `POST /admin/users` creates the local, non-federated login: a break-glass admin, or a service
+ * account for an integration. Federated users appear on their own at first sign-in and are never
+ * created here.
+ */
+export const useCreateUser = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: AdminUserCreate) => unwrap(await api.POST('/admin/users', { body })),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
   });
 };

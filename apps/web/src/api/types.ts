@@ -7,6 +7,7 @@
  */
 import type { z } from 'zod';
 import type {
+  AdminUserCreateSchema,
   AdminUserPatchSchema,
   AuditQuerySchema,
   CreateDocumentBodySchema,
@@ -61,6 +62,7 @@ export type UpsertBlockBody = z.input<typeof UpsertBlockBodySchema>;
 export type UpsertFieldBody = z.input<typeof UpsertFieldBodySchema>;
 export type UpsertScriptBody = z.input<typeof UpsertScriptBodySchema>;
 export type AdminUserPatch = z.input<typeof AdminUserPatchSchema>;
+export type AdminUserCreate = z.input<typeof AdminUserCreateSchema>;
 export type RoleUpsert = z.input<typeof RoleUpsertSchema>;
 export type GroupMapPut = z.input<typeof GroupMapPutSchema>;
 export type AuditQuery = z.input<typeof AuditQuerySchema>;
@@ -84,7 +86,7 @@ export type DocumentDiff = Res<'/documents/{id}/diff', 'get'>;
 export type PublishResult = Res<'/documents/{id}/publish', 'post'>;
 export type GroupMap = Res<'/admin/groups-map', 'get'>['entries'][number];
 export type Session = ItemOf<Res<'/admin/sessions', 'get'>>;
-export type AdminUser = ItemOf<Res<'/admin/users', 'get'>>;
+/** Stage 5 replaced the `/admin/users` row with `AdminUserRow` — see `src/api/stage5.ts`. */
 export type UploadSourceResult = Res<'/sources/upload', 'post'>;
 export type ProcessSourceResult = Res<'/sources/{id}/process', 'post'>;
 export type TrashRefType = NonNullable<paths['/trash/{type}/{id}']['delete']['parameters']['path']>['type'];

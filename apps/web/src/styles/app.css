@@ -804,3 +804,9 @@ html[data-theme="dark"] .sug .ft .bt span.p { background: var(--red); border-col
 .auto-id { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); }
 .auto-id .who b { font-size: 13.5px; }
 .auto-id .avatar { width: 34px; height: 34px; font-size: 14px; }
+
+/* ── stage 5: admin tables ─────────────────────────────────────────────── */
+.cat-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 12.5px; color: var(--text); }
+.lib-head .facets input, .lib-head .facets select { font-size: 12px; padding: 5px 10px; }
+.table .chip + .chip { margin-inline-start: 4px; }
+.pill-toggle { margin-bottom: 12px; }
