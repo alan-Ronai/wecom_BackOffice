@@ -1,10 +1,11 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import type { Category } from '@wecom/shared';
+import type { Category, Permission } from '@wecom/shared';
 import { useDocuments } from '../../api/hooks/documents.js';
 import { useFields, useScripts } from '../../api/hooks/content.js';
 import { useSources } from '../../api/hooks/pipeline.js';
 import { useTrash } from '../../api/hooks/trash.js';
-import { useMe } from '../../api/hooks/me.js';
+import { useCan, useMe } from '../../api/hooks/me.js';
+import { useSyncLinks } from '../../api/hooks/stage5.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
 import { CATS, CAT_KEYS, SOURCE_FILES } from '../../lib/constants.js';
 import { usePalette } from '../palette/paletteStore.js';
@@ -29,8 +30,34 @@ export function Sidebar({
   const palette = usePalette();
   const settings = useSettings();
   const me = useMe();
+  const can = useCan();
   const prefs = usePreferences();
   const savePrefs = useSavePreferences();
+
+  /**
+   * The admin section's entries, each gated on the permission its route needs, so the nav lists
+   * what this operator can actually open. The sync queue is listed here too — it is an operator's
+   * worklist, not a reader's.
+   */
+  const adminLinks: [label: string, to: string, needs: Permission][] = [
+    ['משתמשים', '/admin/users', 'users.manage'],
+    ['תפקידים והרשאות', '/admin/roles', 'roles.manage'],
+    ['מיפוי קבוצות', '/admin/groups', 'roles.manage'],
+    ['חיבורים פעילים', '/admin/sessions', 'users.manage'],
+    ['יומן פעולות', '/admin/audit', 'audit.read'],
+    ['זהות וכניסה', '/admin/identity', 'system.admin'],
+    ['מחברים', '/admin/connectors', 'connectors.manage'],
+    ['מצב מערכת', '/admin/system', 'system.admin'],
+  ];
+  const visibleAdmin = adminLinks.filter(([, , needs]) => can(needs));
+  const maySync = can('sources.manage') || can('suggestions.apply');
+  // Only fetched for someone who can see the queue, and only for its counts.
+  const syncLinks = useSyncLinks({ pageSize: 1 }, { enabled: maySync });
+  const pendingSync = maySync
+    ? (syncLinks.data?.counts.pendingImport ?? 0) +
+      (syncLinks.data?.counts.pendingPush ?? 0) +
+      (syncLinks.data?.counts.conflict ?? 0)
+    : 0;
 
   const all = useDocuments({ sort: 'wave' });
   const pinned = useDocuments({ pinned: true, sort: 'wave' });
@@ -218,6 +245,27 @@ export function Sidebar({
             + הוסף מקור (JSON / CSV)
           </div>
         </div>
+
+        {visibleAdmin.length || maySync ? (
+          <>
+            <div className="sec-title">ניהול</div>
+            <nav>
+              {maySync ? item('תור סנכרון', '/sync', pendingSync || null, true) : null}
+              {visibleAdmin.map(([label, to]) => (
+                <div
+                  key={to}
+                  className={'snav' + (on(to) ? ' on' : '')}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => go(to)}
+                >
+                  <span className="dot" />
+                  {label}
+                </div>
+              ))}
+            </nav>
+          </>
+        ) : null}
 
         <div className="sec-title">קטגוריות</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, padding: '0 10px' }}>

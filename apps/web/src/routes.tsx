@@ -10,6 +10,9 @@ import { EditorPage } from './components/editor/EditorPage.js';
 import { HistoryPage } from './components/history/HistoryPage.js';
 import { TrashPage } from './components/trash/TrashPage.js';
 import { SourcesPage } from './components/sources/SourcesPage.js';
+import { SyncQueuePage } from './components/sync/SyncQueuePage.js';
+import { ParityPage } from './components/sync/ParityPage.js';
+import { ConflictPage } from './components/sync/ConflictPage.js';
 import { AdminLayout } from './components/admin/AdminLayout.js';
 import { UsersPage } from './components/admin/UsersPage.js';
 import { RolesPage } from './components/admin/RolesPage.js';
@@ -48,6 +51,9 @@ export const routeObjects: RouteObject[] = [
       { path: 'trash', element: <TrashPage /> },
       { path: 'sources', element: <SourcesPage /> },
       { path: 'sources/:id', element: <SourcesPage /> },
+      { path: 'sync', element: <SyncQueuePage /> },
+      { path: 'sync/parity', element: <ParityPage /> },
+      { path: 'sync/conflicts/:id', element: <ConflictPage /> },
       {
         path: 'admin',
         element: <AdminLayout />,

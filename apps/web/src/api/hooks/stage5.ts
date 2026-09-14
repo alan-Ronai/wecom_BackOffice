@@ -115,8 +115,16 @@ export const useTestConnector = () =>
 
 /* ── sync ─────────────────────────────────────────────────────────────────── */
 
-export const useSyncLinks = (q: SyncLinksQuery) =>
-  useQuery({ queryKey: keys.syncLinks(q), queryFn: () => stage5.syncLinks(q) });
+/**
+ * `enabled` matters here: the sidebar reads this for a badge count, and `GET /sync/links` requires
+ * `sources.manage` — firing it for every reader would be one guaranteed 403 per page load.
+ */
+export const useSyncLinks = (q: SyncLinksQuery, opts: { enabled?: boolean } = {}) =>
+  useQuery({
+    queryKey: keys.syncLinks(q),
+    queryFn: () => stage5.syncLinks(q),
+    enabled: opts.enabled ?? true,
+  });
 
 export const useConflict = (id: string | undefined) =>
   useQuery({

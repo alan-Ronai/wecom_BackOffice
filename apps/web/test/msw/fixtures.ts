@@ -64,23 +64,11 @@ export const me: Me = {
     active: true,
     lastLoginAt: T,
   },
-  roles: ['lead'],
-  permissions: [
-    'docs.read',
-    'docs.create',
-    'docs.edit',
-    'docs.publish',
-    'docs.delete',
-    'docs.restore',
-    'blocks.edit',
-    'fields.edit',
-    'scripts.edit',
-    'notes.write',
-    'notes.moderate',
-    'suggestions.review',
-    'suggestions.apply',
-    'sources.manage',
-  ],
+  // The demo persona is the administrator the design draws ("ענבר ל. · מנהלת"), so the mock-backed
+  // build can actually reach the operator screens. Tests that need a narrower user swap `/auth/me`
+  // with `withMe`.
+  roles: ['admin'],
+  permissions: [...PERMISSIONS],
   categoryScopes: null,
   preferences: { theme: null, font: 'plex', panel: true, callMode: true, sidebarExpanded: false },
 };

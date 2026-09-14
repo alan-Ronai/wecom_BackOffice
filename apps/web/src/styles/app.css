@@ -841,3 +841,15 @@ html[data-theme="dark"] .sug .ft .bt span.p { background: var(--red); border-col
 .wizard-steps li.done .linkish { color: var(--ok); }
 .copy-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; }
 .copy-row bdi { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* ── stage 5: sync queue, parity, three-way merge ──────────────────────── */
+.parity-group { margin-bottom: 26px; }
+.merge-head, .merge-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.merge-head { padding: 0 12px 6px; }
+.merge-row { border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px; margin-bottom: 10px; background: var(--surface); }
+.merge-row.contested { border-color: var(--red-mid); }
+.merge-ref { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; margin-bottom: 8px; flex-wrap: wrap; }
+.merge-col { border: 1px solid var(--border); border-radius: var(--r); padding: 10px; font-size: 12.5px; line-height: 1.6; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.merge-col.base { background: var(--surface-2); color: var(--muted); }
+.merge-col.chosen { border-color: var(--ok); box-shadow: inset 0 0 0 1px var(--ok); }
+@media (max-width: 900px) { .merge-head { display: none; } .merge-cols { grid-template-columns: 1fr; } }

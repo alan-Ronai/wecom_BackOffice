@@ -44,7 +44,8 @@ describe('hooks', () => {
     expect(
       can({ ...result.current.data!, categoryScopes: ['intl'] }, 'docs.publish', { category: 'tech' }),
     ).toBe(false);
-    expect(can(result.current.data, 'users.manage')).toBe(false);
+    // A permission the user simply does not hold.
+    expect(can({ ...result.current.data!, permissions: ['docs.read'] }, 'users.manage')).toBe(false);
     expect(can(undefined, 'docs.read')).toBe(false);
   });
 

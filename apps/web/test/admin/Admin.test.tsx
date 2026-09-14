@@ -10,6 +10,8 @@ const asAdmin = () => server.use(withMe({ roles: ['admin'], permissions: [...PER
 
 describe('admin', () => {
   it('blocks non-admins', async () => {
+    // The demo persona is an administrator, so this needs an explicitly narrower user.
+    server.use(withMe({ roles: ['agent'], permissions: ['docs.read', 'notes.write'] }));
     renderWithProviders(<App />, { route: '/admin/users' });
     expect(await screen.findByText('אין הרשאה לאזור הניהול')).toBeInTheDocument();
   });
