@@ -8,6 +8,8 @@ import {
   StartAttemptResponseSchema,
   DocumentLearningSchema,
   WORKFLOW_SETTINGS_KEY,
+  PublishBodySchema,
+  PublishResponseSchema,
   type LearningItemCreate,
   type Gap,
 } from '../src/index.js';
@@ -83,6 +85,10 @@ describe('wave5 schemas (approved spec)', () => {
         lastSignificantChange: null,
       }).refreshAssignmentId,
     ).toBeNull();
+  });
+  it('publish carries significantChange and returns changeFlag', () => {
+    expect(PublishBodySchema.parse({ label: 'v', significantChange: true }).significantChange).toBe(true);
+    expect(PublishResponseSchema.shape.changeFlag.isOptional()).toBe(true);
   });
   it('exports type aliases (compile-time check)', () => {
     const c: LearningItemCreate = { kind: 'briefing', title: 'b' } as LearningItemCreate;

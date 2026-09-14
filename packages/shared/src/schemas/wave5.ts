@@ -110,6 +110,12 @@ export const GenerateQuestionsResponseSchema = z.object({
   tookMs: z.number(),
 });
 export const LearningPublishBodySchema = z.object({ label: z.string().min(1).max(200) });
+/** Response of `POST /learning/items/:id/assign` and of an audience's immediate resolution. */
+export const AssignResultSchema = z.object({
+  assigned: z.number().int(),
+  /** Already assigned at this item version, so the call is idempotent for the caller. */
+  skipped: z.number().int(),
+});
 export const LearningVersionSchema = z.object({
   version: z.number().int(),
   label: z.string(),
@@ -118,6 +124,7 @@ export const LearningVersionSchema = z.object({
   /** Snapshot of every referenced document's `current_version` at publish time (spec §3). */
   sourceVersions: z.array(SourceVersionSchema).default([]),
 });
+export const LearningVersionsResponseSchema = z.object({ items: z.array(LearningVersionSchema) });
 
 /* ── audiences & assignments ────────────────────────────────────────────── */
 export const AudienceSchema = z.object({
@@ -383,7 +390,9 @@ export type PutQuestionsBody = z.infer<typeof PutQuestionsBodySchema>;
 export type GenerateQuestionsBody = z.infer<typeof GenerateQuestionsBodySchema>;
 export type GenerateQuestionsResponse = z.infer<typeof GenerateQuestionsResponseSchema>;
 export type LearningPublishBody = z.infer<typeof LearningPublishBodySchema>;
+export type AssignResult = z.infer<typeof AssignResultSchema>;
 export type LearningVersion = z.infer<typeof LearningVersionSchema>;
+export type LearningVersionsResponse = z.infer<typeof LearningVersionsResponseSchema>;
 export type Audience = z.infer<typeof AudienceSchema>;
 export type AudienceCreate = z.infer<typeof AudienceCreateSchema>;
 export type AssignBody = z.infer<typeof AssignBodySchema>;

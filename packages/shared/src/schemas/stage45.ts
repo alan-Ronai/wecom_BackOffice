@@ -699,7 +699,6 @@ export const SyncLinkCreateBodySchema = z.object({
   externalId: z.string().min(1).max(500),
 });
 
-
 export type GroupSearchItem = z.infer<typeof GroupSearchItemSchema>;
 export type GroupMapRow = z.infer<typeof GroupMapRowSchema>;
 export type ParityLinkRow = z.infer<typeof ParityLinkRowSchema>;

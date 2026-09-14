@@ -342,7 +342,18 @@ async function main() {
   start(
     'web',
     'pnpm',
-    ['--filter', '@wecom/web', 'exec', 'vite', 'preview', '--host', '127.0.0.1', '--port', String(WEB_PORT), '--strictPort'],
+    [
+      '--filter',
+      '@wecom/web',
+      'exec',
+      'vite',
+      'preview',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(WEB_PORT),
+      '--strictPort',
+    ],
     {
       env: { ...process.env, E2E_API_URL: API_URL },
     },

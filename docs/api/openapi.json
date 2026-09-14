@@ -318,7 +318,12 @@
                           "taxonomy.manage",
                           "docs.read_unpublished",
                           "feedback.manage",
-                          "analytics.read"
+                          "analytics.read",
+                          "learning.read",
+                          "learning.manage",
+                          "learning.publish",
+                          "gaps.read",
+                          "gaps.manage"
                         ]
                       }
                     },
@@ -946,7 +951,12 @@
                                 "taxonomy.manage",
                                 "docs.read_unpublished",
                                 "feedback.manage",
-                                "analytics.read"
+                                "analytics.read",
+                                "learning.read",
+                                "learning.manage",
+                                "learning.publish",
+                                "gaps.read",
+                                "gaps.manage"
                               ]
                             }
                           }
@@ -1018,7 +1028,12 @@
                         "taxonomy.manage",
                         "docs.read_unpublished",
                         "feedback.manage",
-                        "analytics.read"
+                        "analytics.read",
+                        "learning.read",
+                        "learning.manage",
+                        "learning.publish",
+                        "gaps.read",
+                        "gaps.manage"
                       ]
                     }
                   }
@@ -1082,7 +1097,12 @@
                           "taxonomy.manage",
                           "docs.read_unpublished",
                           "feedback.manage",
-                          "analytics.read"
+                          "analytics.read",
+                          "learning.read",
+                          "learning.manage",
+                          "learning.publish",
+                          "gaps.read",
+                          "gaps.manage"
                         ]
                       }
                     },
@@ -1148,7 +1168,12 @@
                               "taxonomy.manage",
                               "docs.read_unpublished",
                               "feedback.manage",
-                              "analytics.read"
+                              "analytics.read",
+                              "learning.read",
+                              "learning.manage",
+                              "learning.publish",
+                              "gaps.read",
+                              "gaps.manage"
                             ]
                           },
                           "resource": {
@@ -1208,7 +1233,12 @@
                                 "taxonomy.manage",
                                 "docs.read_unpublished",
                                 "feedback.manage",
-                                "analytics.read"
+                                "analytics.read",
+                                "learning.read",
+                                "learning.manage",
+                                "learning.publish",
+                                "gaps.read",
+                                "gaps.manage"
                               ]
                             }
                           },
@@ -1287,7 +1317,12 @@
                         "taxonomy.manage",
                         "docs.read_unpublished",
                         "feedback.manage",
-                        "analytics.read"
+                        "analytics.read",
+                        "learning.read",
+                        "learning.manage",
+                        "learning.publish",
+                        "gaps.read",
+                        "gaps.manage"
                       ]
                     }
                   }
@@ -1358,7 +1393,12 @@
                           "taxonomy.manage",
                           "docs.read_unpublished",
                           "feedback.manage",
-                          "analytics.read"
+                          "analytics.read",
+                          "learning.read",
+                          "learning.manage",
+                          "learning.publish",
+                          "gaps.read",
+                          "gaps.manage"
                         ]
                       }
                     },
@@ -6213,6 +6253,9 @@
                       "format": "uuid"
                     },
                     "maxItems": 50
+                  },
+                  "significantChange": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -6766,6 +6809,33 @@
                     },
                     "auditId": {
                       "type": "string"
+                    },
+                    "changeFlag": {
+                      "type": "object",
+                      "properties": {
+                        "significant": {
+                          "type": "boolean"
+                        },
+                        "reasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "affectedItems": {
+                          "type": "integer"
+                        },
+                        "refreshAssignments": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "significant",
+                        "reasons",
+                        "affectedItems",
+                        "refreshAssignments"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -9304,6 +9374,33 @@
                     },
                     "auditId": {
                       "type": "string"
+                    },
+                    "changeFlag": {
+                      "type": "object",
+                      "properties": {
+                        "significant": {
+                          "type": "boolean"
+                        },
+                        "reasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "affectedItems": {
+                          "type": "integer"
+                        },
+                        "refreshAssignments": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "significant",
+                        "reasons",
+                        "affectedItems",
+                        "refreshAssignments"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -13981,7 +14078,9 @@
                               "publish",
                               "system",
                               "feedback",
-                              "source"
+                              "source",
+                              "learning",
+                              "gap"
                             ]
                           },
                           "title": {
