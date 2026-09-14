@@ -2679,6 +2679,255 @@
         }
       }
     },
+    "/api/v1/admin/workflow": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requireApprover": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "learning": {
+                      "type": "object",
+                      "properties": {
+                        "defaultPassMark": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100,
+                          "default": 80
+                        },
+                        "defaultMaxAttempts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10,
+                          "nullable": true,
+                          "default": null
+                        },
+                        "refreshDueDays": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 90,
+                          "default": 7
+                        },
+                        "reminderDaysBefore": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 30,
+                          "default": 2
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "gaps": {
+                      "type": "object",
+                      "properties": {
+                        "zeroResultMin": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "default": 3
+                        },
+                        "feedbackClusterMin": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "default": 3
+                        },
+                        "staleDays": {
+                          "type": "integer",
+                          "minimum": 30,
+                          "default": 180
+                        },
+                        "failedQuestionRate": {
+                          "type": "number",
+                          "minimum": 0.1,
+                          "maximum": 1,
+                          "default": 0.5
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "learning",
+                    "gaps"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "requireApprover": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "learning": {
+                    "type": "object",
+                    "properties": {
+                      "defaultPassMark": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "default": 80
+                      },
+                      "defaultMaxAttempts": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10,
+                        "nullable": true,
+                        "default": null
+                      },
+                      "refreshDueDays": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 90,
+                        "default": 7
+                      },
+                      "reminderDaysBefore": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 30,
+                        "default": 2
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "gaps": {
+                    "type": "object",
+                    "properties": {
+                      "zeroResultMin": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 3
+                      },
+                      "feedbackClusterMin": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 3
+                      },
+                      "staleDays": {
+                        "type": "integer",
+                        "minimum": 30,
+                        "default": 180
+                      },
+                      "failedQuestionRate": {
+                        "type": "number",
+                        "minimum": 0.1,
+                        "maximum": 1,
+                        "default": 0.5
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requireApprover": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "learning": {
+                      "type": "object",
+                      "properties": {
+                        "defaultPassMark": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100,
+                          "default": 80
+                        },
+                        "defaultMaxAttempts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10,
+                          "nullable": true,
+                          "default": null
+                        },
+                        "refreshDueDays": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 90,
+                          "default": 7
+                        },
+                        "reminderDaysBefore": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 30,
+                          "default": 2
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "gaps": {
+                      "type": "object",
+                      "properties": {
+                        "zeroResultMin": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "default": 3
+                        },
+                        "feedbackClusterMin": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "default": 3
+                        },
+                        "staleDays": {
+                          "type": "integer",
+                          "minimum": 30,
+                          "default": 180
+                        },
+                        "failedQuestionRate": {
+                          "type": "number",
+                          "minimum": 0.1,
+                          "maximum": 1,
+                          "default": 0.5
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "learning",
+                    "gaps"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/documents": {
       "get": {
         "tags": [
@@ -15154,6 +15403,9 @@
                           "category": {
                             "type": "string",
                             "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "canApprove": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -21471,6 +21723,542 @@
                     "total",
                     "page",
                     "pageSize"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/gaps": {
+      "get": {
+        "tags": [
+          "gaps"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "in": "query",
+            "name": "pageSize",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "zero_results",
+                "feedback_cluster",
+                "stale_high_traffic",
+                "topic_without_procedure",
+                "failed_question"
+              ]
+            },
+            "in": "query",
+            "name": "kind",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "open",
+                "dismissed",
+                "resolved"
+              ],
+              "default": "open"
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "world",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "zero_results",
+                              "feedback_cluster",
+                              "stale_high_traffic",
+                              "topic_without_procedure",
+                              "failed_question"
+                            ]
+                          },
+                          "key": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "score": {
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "dismissed",
+                              "resolved"
+                            ]
+                          },
+                          "evidence": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          "suggestedAction": {
+                            "type": "string",
+                            "enum": [
+                              "create",
+                              "update",
+                              "add_question",
+                              "review"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "topicId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "worldSlug": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "firstSeenAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "lastSeenAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "dismissedReason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "resolvedDocumentId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "key",
+                          "title",
+                          "score",
+                          "status",
+                          "evidence",
+                          "suggestedAction",
+                          "documentId",
+                          "topicId",
+                          "worldSlug",
+                          "firstSeenAt",
+                          "lastSeenAt",
+                          "dismissedReason",
+                          "resolvedDocumentId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "pageSize": {
+                      "type": "integer"
+                    },
+                    "lastRunAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "page",
+                    "pageSize",
+                    "lastRunAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/gaps/{id}/dismiss": {
+      "post": {
+        "tags": [
+          "gaps"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "zero_results",
+                        "feedback_cluster",
+                        "stale_high_traffic",
+                        "topic_without_procedure",
+                        "failed_question"
+                      ]
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "score": {
+                      "type": "number"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "open",
+                        "dismissed",
+                        "resolved"
+                      ]
+                    },
+                    "evidence": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "suggestedAction": {
+                      "type": "string",
+                      "enum": [
+                        "create",
+                        "update",
+                        "add_question",
+                        "review"
+                      ]
+                    },
+                    "documentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "topicId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "worldSlug": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "firstSeenAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "lastSeenAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "dismissedReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "resolvedDocumentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "key",
+                    "title",
+                    "score",
+                    "status",
+                    "evidence",
+                    "suggestedAction",
+                    "documentId",
+                    "topicId",
+                    "worldSlug",
+                    "firstSeenAt",
+                    "lastSeenAt",
+                    "dismissedReason",
+                    "resolvedDocumentId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/gaps/{id}/resolve": {
+      "post": {
+        "tags": [
+          "gaps"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "documentId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "documentId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "zero_results",
+                        "feedback_cluster",
+                        "stale_high_traffic",
+                        "topic_without_procedure",
+                        "failed_question"
+                      ]
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "score": {
+                      "type": "number"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "open",
+                        "dismissed",
+                        "resolved"
+                      ]
+                    },
+                    "evidence": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "suggestedAction": {
+                      "type": "string",
+                      "enum": [
+                        "create",
+                        "update",
+                        "add_question",
+                        "review"
+                      ]
+                    },
+                    "documentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "topicId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "worldSlug": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "firstSeenAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "lastSeenAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "dismissedReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "resolvedDocumentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "key",
+                    "title",
+                    "score",
+                    "status",
+                    "evidence",
+                    "suggestedAction",
+                    "documentId",
+                    "topicId",
+                    "worldSlug",
+                    "firstSeenAt",
+                    "lastSeenAt",
+                    "dismissedReason",
+                    "resolvedDocumentId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/gaps/detect": {
+      "post": {
+        "tags": [
+          "gaps"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detected": {
+                      "type": "integer"
+                    },
+                    "updated": {
+                      "type": "integer"
+                    },
+                    "resolvedAutomatically": {
+                      "type": "integer"
+                    },
+                    "tookMs": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "detected",
+                    "updated",
+                    "resolvedAutomatically",
+                    "tookMs"
                   ],
                   "additionalProperties": false
                 }
