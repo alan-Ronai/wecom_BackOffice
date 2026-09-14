@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useReviewDecision, useReviews, type ReviewRow } from '../../api/hooks/collab.js';
-import { useCan } from '../../api/hooks/me.js';
+import { useCan, useMe } from '../../api/hooks/me.js';
 import { useDocument } from '../../api/hooks/documents.js';
 import { cat } from '../../lib/constants.js';
 import { ago, fmtDate } from '../../lib/format.js';
@@ -35,8 +35,15 @@ function ReviewCard({
 }) {
   const go = useNavigate();
   const can = useCan();
+  const me = useMe();
   const doc = useDocument(row.status === 'open' ? row.documentId : undefined);
   const mayDecide = can('docs.publish', { category: row.category });
+  /**
+   * E-2 (review §4, §7 item 9). The API refuses a self-approval with 403 `SELF_APPROVAL`; the
+   * queue says so before the click rather than after it. "דרוש שינויים" stays available — sending
+   * your own document back to draft publishes nothing and is a withdrawal.
+   */
+  const isRequester = !!me.data && me.data.user.id === row.requestedBy;
 
   return (
     <div className="tcard review-card">
@@ -73,6 +80,8 @@ function ReviewCard({
             <button
               className="btn xs primary"
               aria-label={`אשר ופרסם את ${row.title}`}
+              disabled={isRequester}
+              title={isRequester ? 'ביקשת את הבדיקה — נדרש אישור של גורם אחר' : undefined}
               onClick={() => onDecide(row, 'approve')}
             >
               ✓ אשר ופרסם

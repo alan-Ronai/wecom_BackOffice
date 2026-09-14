@@ -227,6 +227,74 @@ run('stage 5 — collaboration', () => {
     expect(authorBell.items[0]).toMatchObject({ kind: 'publish' });
   });
 
+  /**
+   * E-2 (acceptance review §4, §7 item 9). The review filed a request and then approved it from
+   * the same account; both calls returned 2xx and the review read `approved`. "Editor requests,
+   * lead approves" is a PRD promise, and `docs.publish` alone did not enforce it.
+   */
+  it('the requester cannot approve their own review request', async () => {
+    const doc = await makeDoc('אישור עצמי');
+    // `lead` holds both the role and `docs.publish`, so the *only* thing standing between this
+    // account and its own approval is the new check.
+    const requested = await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${doc.id}/request-review`,
+      headers: auth(lead),
+      payload: {},
+    });
+    expect(requested.statusCode, requested.body).toBe(201);
+
+    const self = await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${doc.id}/review-decision`,
+      headers: auth(lead),
+      payload: { decision: 'approve' },
+    });
+    expect(self.statusCode, self.body).toBe(403);
+    expect(self.json().code).toBe('SELF_APPROVAL');
+
+    // Nothing moved: the request is still open and the document is still in review.
+    const still = await db.pool.query(`select status from review_requests where document_id=$1`, [doc.id]);
+    expect(still.rows[0].status).toBe('open');
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/v1/documents/${doc.id}`, headers: auth(lead) })).json()
+        .status,
+    ).toBe('review');
+
+    // Somebody else can still approve it, so the guard is about *who*, not about the document.
+    await db.pool.query(
+      `insert into user_roles(user_id, role_id) select $1, id from roles where name='lead'`,
+      [author.id],
+    );
+    const other = await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${doc.id}/review-decision`,
+      headers: auth(author),
+      payload: { decision: 'approve' },
+    });
+    expect(other.statusCode, other.body).toBe(200);
+    expect(other.json().status).toBe('approved');
+  });
+
+  it('the requester may still send their own document back to draft', async () => {
+    // A withdrawal publishes nothing, so requiring a colleague for it would only strand drafts.
+    const doc = await makeDoc('משיכה עצמית');
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${doc.id}/request-review`,
+      headers: auth(lead),
+      payload: {},
+    });
+    const back = await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${doc.id}/review-decision`,
+      headers: auth(lead),
+      payload: { decision: 'changes', note: 'נמשך לתיקון' },
+    });
+    expect(back.statusCode, back.body).toBe(200);
+    expect(back.json().status).toBe('changes');
+  });
+
   it('a changes decision sends the card back to draft', async () => {
     const doc = await makeDoc('תקלת SIM', 'sim');
     await app.inject({
