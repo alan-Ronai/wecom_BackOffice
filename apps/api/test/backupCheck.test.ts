@@ -36,6 +36,8 @@ describe('checkBackupAge', () => {
     expect(r.ok).toBe(true);
     expect(r.latestFile).toBe('kb-20260913-0215.dump');
     expect(r.ageHours).toBeLessThan(1);
+    expect(r.latestAt).not.toBeNull();
+    expect(new Date(r.latestAt!).getTime()).toBeGreaterThan(Date.now() - 5000);
   });
 
   it('ignores files that are not deploy/backup.sh dumps', async () => {
