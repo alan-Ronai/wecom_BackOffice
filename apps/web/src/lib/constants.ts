@@ -132,3 +132,54 @@ export const STATUS_LABEL: Record<string, string> = {
   partial: 'מסמך חלקי',
   archived: 'בארכיון',
 };
+
+/* ── stage 4 · connected data ───────────────────────────────────────────── */
+
+/** `MappingFieldSchema` — the card fields a data-file column can be mapped onto. */
+export const MAPPING_FIELDS: [string, string][] = [
+  ['title', 'כותרת'],
+  ['description', 'תיאור'],
+  ['category', 'קטגוריה'],
+  ['wave', 'גל'],
+  ['priority', 'שכיחות'],
+  ['code', 'קוד'],
+  ['stepTitle', 'כותרת שלב'],
+  ['stepAction', 'פעולה בשלב'],
+  ['stepOutcome', 'תוצאת שלב'],
+  ['ignore', '— התעלם'],
+];
+export const MAPPING_LABEL: Record<string, string> = Object.fromEntries(MAPPING_FIELDS);
+
+/** `syncState` of a source, with the chip class the legacy palette already defines. */
+export const SYNC_STATE: Record<string, { label: string; cls: string; mark: string }> = {
+  synced: { label: 'מסונכרן', cls: 'chip-green', mark: '✓' },
+  pending: { label: 'ממתין לעיבוד', cls: 'chip-amber', mark: '⚠' },
+  processing: { label: 'בעיבוד', cls: 'chip-blue', mark: '⟳' },
+  error: { label: 'שגיאה', cls: 'chip-red', mark: '✗' },
+};
+
+/** `LinkTypeSchema` — the edge types the relationship graph renders and filters by. */
+export const LINK_TYPES: [string, string][] = [
+  ['next', 'הבא'],
+  ['prerequisite', 'תנאי מוקדם'],
+  ['link', 'קישור'],
+  ['shares_block', 'אותו בלוק'],
+  ['same_field', 'אותו שדה CRM'],
+  ['derived_from_source', 'נגזר ממקור'],
+  ['related', 'קשור'],
+];
+export const LINK_TYPE_LABEL: Record<string, string> = Object.fromEntries(LINK_TYPES);
+
+/**
+ * `GraphNodeKindSchema` — icon, Hebrew label and the token each kind is painted with. Documents
+ * override the colour with their category colour from `CATS`, which is where the legacy palette
+ * already encodes "which part of the knowledge base is this".
+ */
+export const NODE_KINDS: Record<string, { label: string; plural: string; icon: string; color: string }> = {
+  document: { label: 'מסמך', plural: 'מסמכים', icon: '📄', color: 'var(--navy-soft)' },
+  block: { label: 'בלוק', plural: 'בלוקים', icon: '⧉', color: 'var(--info)' },
+  field: { label: 'שדה CRM', plural: 'שדות CRM', icon: '▦', color: 'var(--red)' },
+  source: { label: 'מקור', plural: 'מקורות', icon: '§', color: 'var(--warn)' },
+  script: { label: 'תסריט', plural: 'תסריטים', icon: '“', color: 'var(--ok)' },
+};
+export const NODE_KIND_KEYS = Object.keys(NODE_KINDS);

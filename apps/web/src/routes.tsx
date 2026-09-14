@@ -10,6 +10,11 @@ import { EditorPage } from './components/editor/EditorPage.js';
 import { HistoryPage } from './components/history/HistoryPage.js';
 import { TrashPage } from './components/trash/TrashPage.js';
 import { SourcesPage } from './components/sources/SourcesPage.js';
+import { DataPage } from './components/data/DataPage.js';
+import { GraphPage } from './components/graph/GraphPage.js';
+import { FieldPage } from './components/library/FieldPage.js';
+import { BlockPage } from './components/library/BlockPage.js';
+import { DashboardsPage } from './components/dashboards/DashboardsPage.js';
 import { AdminLayout } from './components/admin/AdminLayout.js';
 import { UsersPage } from './components/admin/UsersPage.js';
 import { RolesPage } from './components/admin/RolesPage.js';
@@ -35,7 +40,11 @@ export const routeObjects: RouteObject[] = [
       { path: 'recent', element: <LibraryPage mode="recent" /> },
       { path: 'drafts', element: <LibraryPage mode="drafts" /> },
       { path: 'fields', element: <FieldsPage /> },
+      // `:name` is a CRM field name, not an id — Hebrew, spaces and all — so callers encode it
+      // into the path segment and the page decodes it.
+      { path: 'fields/:name', element: <FieldPage /> },
       { path: 'blocks', element: <BlocksPage /> },
+      { path: 'blocks/:id', element: <BlockPage /> },
       { path: 'doc/:id', element: <ArticlePage /> },
       { path: 'doc/:id/:step', element: <ArticlePage /> },
       { path: 'edit/:id', element: <EditorPage /> },
@@ -45,6 +54,10 @@ export const routeObjects: RouteObject[] = [
       { path: 'trash', element: <TrashPage /> },
       { path: 'sources', element: <SourcesPage /> },
       { path: 'sources/:id', element: <SourcesPage /> },
+      { path: 'data', element: <DataPage /> },
+      { path: 'data/:sourceId', element: <DataPage /> },
+      { path: 'graph', element: <GraphPage /> },
+      { path: 'dashboards', element: <DashboardsPage /> },
       {
         path: 'admin',
         element: <AdminLayout />,

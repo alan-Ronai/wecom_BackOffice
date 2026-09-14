@@ -6,7 +6,6 @@ import { useFields } from '../../api/hooks/content.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { Html } from '../Fmt.js';
 import { fmtDate } from '../../lib/format.js';
-import { useEntityDialogs } from './dialogs.js';
 import { LoadError } from '../ui/index.js';
 
 /** Port of legacy KB.views.fields. */
@@ -14,7 +13,6 @@ export function FieldsPage() {
   const go = useNavigate();
   const fields = useFields();
   const docs = useDocuments({ sort: 'wave' });
-  const dialogs = useEntityDialogs();
   const list = fields.data ?? [];
   const usage = (name: string) => (docs.data?.items ?? []).filter((c) => c.crmFields.includes(name)).length;
   const groups: [string, typeof list][] = [
@@ -69,7 +67,10 @@ export function FieldsPage() {
                       key={f.name}
                       role="button"
                       tabIndex={0}
-                      onClick={() => dialogs.showField(f.name)}
+                      // The card opens the field's own page now that there is one; the quick
+                      // popover stays for CRM chips inline in step text, where a route change
+                      // would lose the reader's place.
+                      onClick={() => go(`/fields/${encodeURIComponent(f.name)}`)}
                     >
                       <div className="chips">
                         <span

@@ -3,6 +3,7 @@ import type { Category } from '@wecom/shared';
 import { useDocuments } from '../../api/hooks/documents.js';
 import { useFields, useScripts } from '../../api/hooks/content.js';
 import { useSources } from '../../api/hooks/pipeline.js';
+import { useDataFiles } from '../../api/hooks/stage4.js';
 import { useTrash } from '../../api/hooks/trash.js';
 import { useMe } from '../../api/hooks/me.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
@@ -37,6 +38,7 @@ export function Sidebar({
   const drafts = useDocuments({ drafts: true, sort: 'wave' });
   const trash = useTrash();
   const sources = useSources();
+  const dataFiles = useDataFiles();
   const fields = useFields();
   const scripts = useScripts();
 
@@ -46,6 +48,11 @@ export function Sidebar({
     return acc;
   }, {});
   const pendingSrc = (sources.data ?? []).filter((s) => s.syncState === 'pending').length;
+  // A data file with nothing but `ignore` in its mapping imports nothing, so it is the one state
+  // worth a badge: the file is linked but still inert until someone maps a column.
+  const unmappedFiles = (dataFiles.data?.items ?? []).filter((f) =>
+    f.mapping.every((m) => m.field === 'ignore'),
+  ).length;
   const crmChanges = (fields.data ?? []).filter((f) => f.status !== 'ok').length;
   const dark = prefs.data?.theme === 'dark';
 
@@ -116,6 +123,15 @@ export function Sidebar({
           📄{pendingSrc ? <span className="b">{pendingSrc}</span> : null}
         </span>
         <span
+          className={'rail-btn' + (on('/graph') ? ' on' : '')}
+          title="גרף קשרים"
+          role="button"
+          tabIndex={0}
+          onClick={() => go('/graph')}
+        >
+          ⁂
+        </span>
+        <span
           className="rail-btn"
           title="חיפוש · Ctrl K"
           role="button"
@@ -140,7 +156,7 @@ export function Sidebar({
           wecom.
         </span>
         <span className="tag">מאגר ידע פנימי</span>
-        {!railMode && /^\/(doc|edit|history|sources)\b/.test(loc.pathname) ? (
+        {!railMode && /^\/(doc|edit|history|sources|data|graph)\b/.test(loc.pathname) ? (
           <span
             className="rail-btn"
             style={{ width: 28, height: 28 }}
@@ -176,7 +192,14 @@ export function Sidebar({
           {item('טיוטות', '/drafts', drafts.data?.items.length || null, true)}
           {item('היסטוריית גרסאות', '/history')}
           {item('סל מיחזור', '/trash', trash.data?.items.length || null)}
+        </nav>
+
+        <div className="sec-title">נתונים</div>
+        <nav aria-label="נתונים">
           {item('מסמכי מקור', '/sources', pendingSrc || null, true)}
+          {item('קבצי נתונים', '/data', unmappedFiles || null, true)}
+          {item('גרף קשרים', '/graph')}
+          {item('לוחות בקרה', '/dashboards')}
         </nav>
 
         <div className="sec-title">מקורות נתונים</div>
@@ -214,7 +237,7 @@ export function Sidebar({
               </div>
             );
           })}
-          <div className="src-add" role="button" tabIndex={0} onClick={() => go('/sources')}>
+          <div className="src-add" role="button" tabIndex={0} onClick={() => go('/data')}>
             + הוסף מקור (JSON / CSV)
           </div>
         </div>

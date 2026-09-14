@@ -74,6 +74,26 @@ export const useUpsertField = () => {
   });
 };
 
+/**
+ * Deleting a field does not delete the *text* that references it: the chips in every step keep
+ * rendering, as "unknown field". So the graph, the field pages and the dashboards all go stale
+ * together and are invalidated together.
+ */
+export const useDeleteField = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) =>
+      unwrap(await api.DELETE('/fields/{name}', { params: { path: { name } } })),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.fields });
+      void qc.invalidateQueries({ queryKey: ['fieldPage'] });
+      void qc.invalidateQueries({ queryKey: ['fieldUsage'] });
+      void qc.invalidateQueries({ queryKey: ['graph'] });
+      void qc.invalidateQueries({ queryKey: keys.dashboards });
+    },
+  });
+};
+
 /* ── scripts ────────────────────────────────────────────────────────────── */
 export const useScripts = () =>
   useQuery({

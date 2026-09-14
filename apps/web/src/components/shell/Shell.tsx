@@ -13,7 +13,11 @@ import { Sidebar } from './Sidebar.js';
 import { TabStrip } from './TabStrip.js';
 import { DrawerProvider, useDrawer } from './MobileDrawer.js';
 
-const RAIL_ROUTES = /^\/(doc|edit|history|sources)\b/;
+/**
+ * Routes that need the width: the article/editor, and the stage-4 screens that carry their own
+ * side panel (`/data`, `/graph`) — two nested sidebars is one too many.
+ */
+const RAIL_ROUTES = /^\/(doc|edit|history|sources|data|graph)\b/;
 
 function ShellInner() {
   const loc = useLocation();
