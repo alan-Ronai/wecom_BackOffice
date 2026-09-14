@@ -38,6 +38,7 @@ export default async function routes(app: FastifyInstance) {
       const { type, id: rawId } = req.params as { type: repo.TrashType; id: string };
       const id = decodeId(rawId);
       return withTransaction(app.db, async (tx) => {
+        await repo.assertTrashScope(tx, type, id, user.worldScopes);
         await repo.restore(tx, type, id, user.id);
         const auditId = await audit(tx, {
           actorId: user.id,
@@ -62,6 +63,7 @@ export default async function routes(app: FastifyInstance) {
       const { type, id: rawId } = req.params as { type: repo.TrashType; id: string };
       const id = decodeId(rawId);
       await withTransaction(app.db, async (tx) => {
+        await repo.assertTrashScope(tx, type, id, user.worldScopes);
         await repo.purge(tx, type, id);
         await audit(tx, {
           actorId: user.id,

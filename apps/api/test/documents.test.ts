@@ -514,4 +514,142 @@ run('documents', () => {
     });
     expect(found.statusCode).toBe(200);
   });
+  /**
+   * A-I3's rule, and the over-restriction the first attempt at it introduced.
+   *
+   * `body.worlds` and `body.topics` are full replacements, so the check has to be on the
+   * *difference* in both directions. Checking every world in the resulting set instead refuses
+   * a scoped editor for memberships they are not touching — which `config.scope: 'document'`
+   * and the route's own `hasScope(user, before.worlds)` intersection have already allowed.
+   */
+  describe('assertTaxonomyScope', () => {
+    let scoped: Awaited<ReturnType<typeof makeUser>>;
+    let simTopic: string;
+    let billingTopic: string;
+    /** Primary world `billing`, also shared into `sim`: the caller can edit it but owns one world. */
+    let shared: string;
+
+    const topicIn = async (world: string, slug: string) =>
+      (
+        await db.pool.query(
+          `insert into topics(world_id, slug, name) select id, $2, $2 from worlds where slug=$1 returning id`,
+          [world, slug],
+        )
+      ).rows[0].id as string;
+
+    const patch = (id: string, payload: unknown, as = scoped) =>
+      app.inject({ method: 'PATCH', url: `/api/v1/documents/${id}`, headers: auth(as), payload });
+
+    beforeAll(async () => {
+      scoped = await makeUser(db.pool, { name: 'עורך SIM', scopes: ['sim'] });
+      simTopic = await topicIn('sim', 'ai3-sim');
+      billingTopic = await topicIn('billing', 'ai3-billing');
+      shared = (
+        await app.inject({
+          method: 'POST',
+          url: '/api/v1/documents',
+          headers: auth(u),
+          payload: {
+            title: 'משותף',
+            category: 'billing',
+            wave: 1,
+            priority: 'm',
+            kind: 'steps',
+            worlds: ['sim'],
+            topics: [billingTopic],
+          },
+        })
+      ).json().id as string;
+    });
+
+    it('lets a scoped editor patch topics on a shared document without touching its other worlds', async () => {
+      // The regression: `resulting` is {billing, sim} and `billing` is out of scope, but the
+      // write changes no world at all, so there is nothing for the caller to justify.
+      const r = await patch(shared, { topics: [billingTopic, simTopic] });
+      expect(r.statusCode, r.body).toBe(200);
+      expect(new Set(r.json().topics)).toEqual(new Set([billingTopic, simTopic]));
+      // Same for a no-op re-send of the world set, and for naming the primary explicitly.
+      expect((await patch(shared, { worlds: ['sim'] })).statusCode).toBe(200);
+      expect((await patch(shared, { category: 'billing' })).statusCode).toBe(200);
+      // …and an ordinary field patch is untouched by any of this.
+      expect((await patch(shared, { title: 'משותף — עודכן' })).statusCode).toBe(200);
+    });
+
+    it('refuses adding a world the caller cannot see', async () => {
+      const r = await patch(shared, { worlds: ['sim', 'tech'] });
+      expect(r.statusCode).toBe(403);
+      // The membership did not change.
+      const after = (
+        await app.inject({ method: 'GET', url: `/api/v1/documents/${shared}`, headers: auth(u) })
+      ).json();
+      expect(after.worlds).not.toContain('tech');
+    });
+
+    it('refuses removing a world the caller cannot see', async () => {
+      // `worlds: []` with the primary still `billing` keeps billing; dropping it needs the
+      // primary to move, which is the shape that actually strips the other team's access.
+      const r = await patch(shared, { category: 'sim', worlds: [] });
+      expect(r.statusCode).toBe(403);
+      const after = (
+        await app.inject({ method: 'GET', url: `/api/v1/documents/${shared}`, headers: auth(u) })
+      ).json();
+      expect(after.worlds).toContain('billing');
+    });
+
+    it('refuses removing a topic whose world the caller cannot see', async () => {
+      const r = await patch(shared, { topics: [simTopic] });
+      expect(r.statusCode).toBe(403);
+      expect(
+        (await app.inject({ method: 'GET', url: `/api/v1/documents/${shared}`, headers: auth(u) })).json()
+          .topics,
+      ).toContain(billingTopic);
+    });
+
+    it('400s a topic that belongs to a world the document is not in', async () => {
+      const techTopic = await topicIn('tech', 'ai3-tech');
+      const r = await patch(shared, { topics: [billingTopic, simTopic, techTopic] });
+      expect(r.statusCode).toBe(400);
+      expect(r.json().code).toBe('TOPIC_OUT_OF_WORLD');
+      // An application 400's `details` survives the error handler now, so the client can say
+      // *which* topic and *which* world rather than just "something was wrong".
+      expect(r.json().details).toMatchObject({ worldSlug: 'tech' });
+      // An id that names no topic at all is the other 400.
+      const unknown = await patch(shared, {
+        topics: ['00000000-0000-4000-8000-000000000000'],
+      });
+      expect(unknown.statusCode).toBe(400);
+      expect(unknown.json().code).toBe('UNKNOWN_TOPIC');
+    });
+
+    it('still applies the rule on create, where every membership is an addition', async () => {
+      const out = await app.inject({
+        method: 'POST',
+        url: '/api/v1/documents',
+        headers: auth(scoped),
+        payload: {
+          title: 'חדש מחוץ לתחום',
+          category: 'sim',
+          wave: 1,
+          priority: 'm',
+          kind: 'steps',
+          worlds: ['tech'],
+        },
+      });
+      expect(out.statusCode).toBe(403);
+      const ok = await app.inject({
+        method: 'POST',
+        url: '/api/v1/documents',
+        headers: auth(scoped),
+        payload: {
+          title: 'חדש בתחום',
+          category: 'sim',
+          wave: 1,
+          priority: 'm',
+          kind: 'steps',
+          topics: [simTopic],
+        },
+      });
+      expect(ok.statusCode, ok.body).toBe(201);
+    });
+  });
 });
