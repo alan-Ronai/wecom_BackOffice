@@ -3,7 +3,6 @@ import { useBlocks, useFields, useUpsertBlock } from '../../api/hooks/content.js
 import { useCan } from '../../api/hooks/me.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { Fmt } from '../Fmt.js';
-import { useEntityDialogs } from './dialogs.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
@@ -13,7 +12,6 @@ export function BlocksPage() {
   const go = useNavigate();
   const blocks = useBlocks();
   const fields = useFields();
-  const dialogs = useEntityDialogs();
   const modal = useModal();
   const toast = useToast();
   const can = useCan();
@@ -72,7 +70,9 @@ export function BlocksPage() {
                 key={b.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => dialogs.showBlock(b.id)}
+                // The card opens the block's own page now that there is one; the popover stays
+                // for `⧉` markers inline in a document, where a route change loses the reader.
+                onClick={() => go(`/blocks/${b.id}`)}
               >
                 <div className="chips">
                   <span className="blockbar">⧉ {b.kind === 'script' ? 'תסריט' : 'שלב'}</span>

@@ -68,7 +68,15 @@ function FieldBody({
   );
 }
 
-function BlockBody({ id, onOpen }: { id: string; onOpen: (docId: string, stepKey?: string) => void }) {
+function BlockBody({
+  id,
+  onOpen,
+  onOpenPage,
+}: {
+  id: string;
+  onOpen: (docId: string, stepKey?: string) => void;
+  onOpenPage: () => void;
+}) {
   const blocks = useBlocks();
   const usage = useBlockUsage(id);
   const fields = useFields();
@@ -95,8 +103,11 @@ function BlockBody({ id, onOpen }: { id: string; onOpen: (docId: string, stepKey
           ))}
         </div>
       )}
-      <div className="eyebrow" style={{ marginTop: 14 }}>
-        משמש ב-{used.length} מסמכים · שינוי בבלוק מתעדכן בכולם
+      <div className="eyebrow" style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
+        <span>משמש ב-{used.length} מסמכים · שינוי בבלוק מתעדכן בכולם</span>
+        <button className="btn xs" style={{ marginInlineStart: 'auto' }} onClick={onOpenPage}>
+          דף הבלוק המלא
+        </button>
       </div>
       <div className="field-docs">
         {used.map((u) => (
@@ -160,6 +171,10 @@ export function useEntityDialogs() {
             onOpen={(docId, stepKey) => {
               close();
               nav(`/doc/${docId}${stepKey ? '/' + stepKey : ''}`);
+            }}
+            onOpenPage={() => {
+              close();
+              nav(`/blocks/${id}`);
             }}
           />
         ),
