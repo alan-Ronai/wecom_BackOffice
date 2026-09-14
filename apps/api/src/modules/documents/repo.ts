@@ -549,7 +549,7 @@ export async function publishDocument(
   );
   const published = (await getDocument(tx, id))!;
   const inserted = await tx.query(
-    'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id) values ($1,$2,$3,$4,$5,$6,$7) returning id',
+    'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id, schema_version) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id',
     [
       id,
       version,
@@ -558,6 +558,7 @@ export async function publishDocument(
       opts.label,
       opts.kind ?? 'published',
       opts.suggestionId ?? null,
+      CURRENT_DOCUMENT_SCHEMA_VERSION,
     ],
   );
   return { doc: published, version, versionId: inserted.rows[0].id as string };
@@ -591,12 +592,70 @@ export async function listVersions(q: Q, id: string): Promise<VersionRow[]> {
   }));
 }
 
+/**
+ * The `DocumentSchema` version `document_versions.snapshot` rows are written under.
+ * Bump this and add an entry to `SNAPSHOT_MIGRATIONS` keyed by the *old* version whenever
+ * a change to `DocumentSchema` stops it from parsing snapshots written under the previous
+ * version — see `parseSnapshot` below (backend review deferred minor #15).
+ */
+export const CURRENT_DOCUMENT_SCHEMA_VERSION = 1;
+
+/** `oldVersion -> (raw snapshot as stored) -> raw snapshot shaped for oldVersion + 1`. */
+const SNAPSHOT_MIGRATIONS: Record<number, (raw: unknown) => unknown> = {};
+
+/**
+ * Parses a stored snapshot against `DocumentSchema`, running it through every migration
+ * step between the version it was written under and `CURRENT_DOCUMENT_SCHEMA_VERSION`
+ * first. Rows written before this column existed default to `schema_version = 1` (the
+ * only version that has ever existed), so this is a no-op today and only changes
+ * behaviour once `DocumentSchema` actually changes shape. A snapshot that still fails to
+ * parse after migration is a genuine data problem, not a crash: it surfaces as a clean
+ * 410 instead of an unhandled 500 (the failure mode the review flagged).
+ */
+function parseSnapshot(raw: unknown, schemaVersion: number): Document {
+  let migrated = raw;
+  for (let v = schemaVersion; v < CURRENT_DOCUMENT_SCHEMA_VERSION; v++) {
+    const step = SNAPSHOT_MIGRATIONS[v];
+    if (step) migrated = step(migrated);
+  }
+  const parsed = DocumentSchema.safeParse(migrated);
+  if (!parsed.success) {
+    throw httpError(
+      410,
+      'VERSION_SCHEMA_UNSUPPORTED',
+      'גרסה זו נשמרה בפורמט שאינו נתמך יותר ואינה ניתנת להצגה',
+    );
+  }
+  return parsed.data;
+}
+
 export async function getVersion(q: Q, id: string, v: number): Promise<Document | null> {
-  const r = await q.query('select snapshot from document_versions where document_id=$1 and version=$2', [
-    id,
-    v,
-  ]);
-  return r.rowCount ? DocumentSchema.parse(r.rows[0].snapshot) : null;
+  const r = await q.query(
+    'select snapshot, schema_version from document_versions where document_id=$1 and version=$2',
+    [id, v],
+  );
+  return r.rowCount ? parseSnapshot(r.rows[0].snapshot, (r.rows[0].schema_version as number) ?? 1) : null;
+}
+
+/**
+ * Batch form of `getVersion`: one query for every version in `versions` instead of one
+ * round trip per version. Used by `GET /documents/:id/diff`'s blame pass, which used to
+ * call `getVersion` once per version in the [from, to] range.
+ */
+export async function getVersionsBatch(
+  q: Q,
+  id: string,
+  versions: number[],
+): Promise<Map<number, Document>> {
+  const out = new Map<number, Document>();
+  if (!versions.length) return out;
+  const r = await q.query(
+    'select version, snapshot, schema_version from document_versions where document_id=$1 and version = any($2)',
+    [id, versions],
+  );
+  for (const row of r.rows)
+    out.set(row.version as number, parseSnapshot(row.snapshot, (row.schema_version as number) ?? 1));
+  return out;
 }
 
 // ---------------------------------------------------------------------------

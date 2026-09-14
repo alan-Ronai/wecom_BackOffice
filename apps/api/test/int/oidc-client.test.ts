@@ -10,11 +10,33 @@ run('OidcProvider', () => {
   let graph: http.Server;
   let provider: OidcProvider;
   const graphCalls: string[] = [];
+  let batchCalls = 0;
   beforeAll(async () => {
     mock = await startOidcMock(8087);
     graph = http.createServer((req, res) => {
       graphCalls.push(req.url ?? '');
       res.setHeader('content-type', 'application/json');
+      if (req.url?.endsWith('/$batch') && req.method === 'POST') {
+        batchCalls++;
+        let raw = '';
+        req.on('data', (c) => (raw += c));
+        req.on('end', () => {
+          const { requests } = JSON.parse(raw) as {
+            requests: { id: string; url: string }[];
+          };
+          const responses = requests.map((r) => {
+            const subject = decodeURIComponent(r.url.split('/users/')[1].split('?')[0]);
+            if (subject === 'entra-missing') return { id: r.id, status: 404, body: {} };
+            return {
+              id: r.id,
+              status: 200,
+              body: { id: subject, accountEnabled: subject !== 'entra-disabled' },
+            };
+          });
+          res.end(JSON.stringify({ responses }));
+        });
+        return;
+      }
       res.end(JSON.stringify({ value: [{ id: 'grp-a' }, { id: 'grp-b' }] }));
     });
     await new Promise<void>((r) => graph.listen(8088, '127.0.0.1', r));
@@ -77,5 +99,21 @@ run('OidcProvider', () => {
     expect(r.groupsOverflow).toBe(true);
     expect(await provider.fetchGroupsFromGraph('entra-2')).toEqual(['grp-a', 'grp-b']);
     expect(graphCalls.find((c) => c.includes('/users/entra-2/memberOf'))).toBeTruthy();
+  });
+
+  it('checks many subjects through one $batch call instead of one request per user', async () => {
+    const subjects = ['entra-ok-1', 'entra-disabled', 'entra-missing', 'entra-ok-2'];
+    batchCalls = 0;
+    const disabled = await provider.listDisabledUsers(subjects);
+    expect(disabled).toEqual(new Set(['entra-disabled', 'entra-missing']));
+    expect(batchCalls).toBe(1);
+  });
+
+  it('splits into multiple $batch calls past the 20-subject Graph limit', async () => {
+    const subjects = Array.from({ length: 25 }, (_, i) => `entra-many-${i}`);
+    batchCalls = 0;
+    const disabled = await provider.listDisabledUsers(subjects);
+    expect(disabled.size).toBe(0);
+    expect(batchCalls).toBe(2);
   });
 });

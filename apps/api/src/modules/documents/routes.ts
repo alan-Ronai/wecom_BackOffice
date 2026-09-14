@@ -320,10 +320,13 @@ export default async function routes(app: FastifyInstance) {
       const rows = diffDocuments(oldDoc, newDoc, blocks);
       // Blame: the first version between `from` and `to` in which each row's step changed.
       const versions = await repo.listVersions(app.db, id);
+      const inRange = versions.filter((v) => v.version >= from && v.version <= toVersion);
+      // One query for every snapshot in range instead of `getVersion` per version.
+      const need = inRange.filter((v) => v.version !== from).map((v) => v.version);
+      const snapshots = await repo.getVersionsBatch(app.db, id, need);
       const history: { version: number; author: string; doc: typeof current }[] = [];
-      for (const v of versions) {
-        if (v.version < from || v.version > toVersion) continue;
-        const doc = v.version === from ? oldDoc : await repo.getVersion(app.db, id, v.version);
+      for (const v of inRange) {
+        const doc = v.version === from ? oldDoc : snapshots.get(v.version);
         if (doc) history.push({ version: v.version, author: v.authorName, doc });
       }
       annotateBlame(rows, history, blocks);
