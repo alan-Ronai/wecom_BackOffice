@@ -1,4 +1,5 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import { getDocumentSyncState } from './document-sync-state.js';
 import { z } from 'zod';
 import {
   ConflictViewSchema,
@@ -207,20 +208,7 @@ const routes: FastifyPluginAsyncZod<SyncUiOptions> = async (app, opts) => {
     },
     async (req) => {
       await assertVisibleDocument(app.db, req.params.id, requireUser(req));
-      const r = await app.db.query<{ id: string; state: string; connector_name: string }>(
-        `select l.id, l.state, c.name as connector_name
-           from sync_links l join connectors c on c.id = l.connector_id
-          where l.document_id = $1
-          order by case l.state
-                     when 'conflict' then 0 when 'pending_import' then 1 when 'pending_push' then 2 else 3
-                   end
-          limit 1`,
-        [req.params.id],
-      );
-      const row = r.rows[0];
-      return row
-        ? { state: row.state as SyncLinkRow['state'], connectorName: row.connector_name, linkId: row.id }
-        : { state: null, connectorName: null, linkId: null };
+      return getDocumentSyncState(app.db, req.params.id);
     },
   );
 

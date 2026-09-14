@@ -133,16 +133,25 @@ run('stage 5 — connectors & sync UI', () => {
   it('one document reports its own sync state, most urgent link first', async () => {
     const r = await app.inject({ method: 'GET', url: `/api/v1/documents/${docId}/sync-state` });
     expect(r.statusCode, r.body).toBe(200);
-    expect(r.json()).toEqual({ state: 'synced', connectorName: 'אתר תמיכה', linkId });
+    expect(r.json()).toMatchObject({
+      documentId: docId,
+      overall: 'synced',
+      flagReason: null,
+      links: [{ linkId, state: 'synced', connectorName: 'אתר תמיכה', connectorType: 'wordpress' }],
+    });
 
     // A conflict outranks everything else, whichever link carries it.
     await db.pool.query("update sync_links set state='conflict' where id=$1", [linkId]);
     expect(
       (await app.inject({ method: 'GET', url: `/api/v1/documents/${docId}/sync-state` })).json(),
-    ).toMatchObject({ state: 'conflict' });
+    ).toMatchObject({ overall: 'conflict', flagReason: expect.stringContaining('קונפליקט') });
+    await db.pool.query("update sync_links set state='pending_push' where id=$1", [linkId]);
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/v1/documents/${docId}/sync-state` })).json(),
+    ).toMatchObject({ overall: 'pending_push', flagReason: expect.stringContaining('ממתין לדחיפה') });
     await db.pool.query("update sync_links set state='synced' where id=$1", [linkId]);
 
-    // Not connected is `null`, which is not the same answer as "in sync".
+    // Not connected is `'unlinked'`, which is not the same answer as "in sync".
     const other = (
       await db.pool.query<{ id: string }>(
         `insert into documents(slug, title, category, wave, priority, kind, status)
@@ -151,7 +160,7 @@ run('stage 5 — connectors & sync UI', () => {
     ).rows[0].id;
     expect(
       (await app.inject({ method: 'GET', url: `/api/v1/documents/${other}/sync-state` })).json(),
-    ).toEqual({ state: null, connectorName: null, linkId: null });
+    ).toEqual({ documentId: other, overall: 'unlinked', flagReason: null, links: [] });
   });
 
   it('no conflict yet → the conflict view is a 404, not an empty three-way', async () => {

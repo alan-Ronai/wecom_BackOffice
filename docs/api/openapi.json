@@ -31913,30 +31913,112 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "state": {
+                    "documentId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "overall": {
                       "type": "string",
                       "enum": [
+                        "unlinked",
                         "synced",
                         "pending_import",
                         "pending_push",
                         "conflict"
-                      ],
-                      "nullable": true
+                      ]
                     },
-                    "connectorName": {
+                    "flagReason": {
                       "type": "string",
                       "nullable": true
                     },
-                    "linkId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "nullable": true
+                    "links": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "linkId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "connectorId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "connectorName": {
+                            "type": "string"
+                          },
+                          "connectorType": {
+                            "type": "string"
+                          },
+                          "externalId": {
+                            "type": "string"
+                          },
+                          "remoteUrl": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "synced",
+                              "pending_import",
+                              "pending_push",
+                              "conflict"
+                            ]
+                          },
+                          "localChanged": {
+                            "type": "boolean"
+                          },
+                          "remoteChanged": {
+                            "type": "boolean"
+                          },
+                          "currentLocalVersion": {
+                            "type": "integer"
+                          },
+                          "baseLocalVersion": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "lastSyncedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "connectorLastStatus": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "connectorLastRunAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "linkId",
+                          "connectorId",
+                          "connectorName",
+                          "connectorType",
+                          "externalId",
+                          "remoteUrl",
+                          "state",
+                          "localChanged",
+                          "remoteChanged",
+                          "currentLocalVersion",
+                          "baseLocalVersion",
+                          "lastSyncedAt",
+                          "connectorLastStatus",
+                          "connectorLastRunAt"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
-                    "state",
-                    "connectorName",
-                    "linkId"
+                    "documentId",
+                    "overall",
+                    "flagReason",
+                    "links"
                   ],
                   "additionalProperties": false
                 }

@@ -12,7 +12,7 @@ import { useDocumentSyncState } from '../../api/hooks/stage5.js';
  *
  * Only the two states an editor can do something about are shown. `synced` needs no chip — the
  * absence of one is the good news — and `pending_import` is the queue pulling *towards* us, which
- * resolves itself on the next run without anybody's help. `null` means the document is not
+ * resolves itself on the next run without anybody's help. `'unlinked'` means the document is not
  * connected to a connector at all.
  *
  * It is read-only here on purpose: resolving a conflict needs `sources.manage` and the three-way
@@ -20,9 +20,10 @@ import { useDocumentSyncState } from '../../api/hooks/stage5.js';
  */
 export function SyncStateBadge({ documentId }: { documentId: string }) {
   const q = useDocumentSyncState(documentId);
-  const state = q.data?.state;
+  const state = q.data?.overall;
   if (state !== 'pending_push' && state !== 'conflict') return null;
-  const where = q.data?.connectorName ? ` (${q.data.connectorName})` : '';
+  const link = q.data?.links.find((l) => l.state === state);
+  const where = link?.connectorName ? ` (${link.connectorName})` : '';
   return state === 'conflict' ? (
     <span
       className="chip chip-red sync-state"
