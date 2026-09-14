@@ -125,6 +125,48 @@ export function SettingsBody() {
         </div>
       </div>
 
+      {/*
+        Legacy's `.type-rules` card. It is not decoration: it is the written form of the contract
+        every `<Fmt>` call in the app follows, and the only place a reader can find out *why* an
+        identifier is wrapped rather than merely that it is. The stylesheet kept the two-column
+        rule; this is what goes in it.
+      */}
+      <div className="type-rules" style={{ marginTop: 10 }}>
+        <div>
+          <b>כללי טיפוגרפיה</b>
+          גוף: IBM Plex Sans Hebrew 400/500
+          <br />
+          כותרות: 600/700, ריווח אותיות 0
+          <br />
+          מזהים לטיניים:{' '}
+          <bdi className="lat" dir="ltr">
+            IBM Plex Mono
+          </bdi>
+          <br />
+          מספרים: תמיד ספרות לטיניות,{' '}
+          <bdi className="lat" dir="ltr">
+            tabular-nums
+          </bdi>
+        </div>
+        <div>
+          <b>כללי bidi</b>
+          כל מזהה לטיני / מספר / נתיב עטוף ב-
+          <bdi className="lat" dir="ltr">
+            &lt;bdi dir=&quot;ltr&quot;&gt;
+          </bdi>
+          <br />
+          חצים ופיסוק בתוך הטקסט העברי, לא בתוך המזהה
+          <br />
+          שדות CRM = צ׳יפ עם כיוון קבוע
+          <br />
+          קיצורי מקשים ותאריכים —{' '}
+          <bdi className="lat" dir="ltr">
+            ltr
+          </bdi>{' '}
+          תמיד
+        </div>
+      </div>
+
       <div className="settings-row" style={{ marginTop: 14, border: 0 }}>
         <div>
           איפוס מצב מקומי
