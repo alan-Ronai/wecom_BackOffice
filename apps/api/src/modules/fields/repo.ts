@@ -14,6 +14,14 @@ import { publishDocument } from '../documents/publish.js';
 type FieldRenameBody = z.infer<typeof FieldRenameBodySchema>;
 type FieldRenameResult = z.infer<typeof FieldRenameResultSchema>;
 
+/**
+ * The caller's category scope as a SQL predicate over the `documents` alias. `null` scopes
+ * make it a no-op. Field and block *pages* are cross-cutting read models with no document in
+ * `params.id`, so `config.scope: 'document'` cannot reach them — scope is a repo argument.
+ */
+const scopeClause = (alias: string, param: string) =>
+  `(${param}::text[] is null or ${alias}.category = any(${param}))`;
+
 const toField = (r: Record<string, unknown>): CrmField => ({
   name: r.name as string,
   status: r.status as CrmField['status'],
@@ -40,12 +48,13 @@ export async function getField(q: Q, name: string): Promise<CrmField | null> {
   return r.rowCount ? toField(r.rows[0]) : null;
 }
 
-export async function fieldUsage(q: Q, name: string) {
+export async function fieldUsage(q: Q, name: string, scopes: string[] | null = null) {
   const r = await q.query(
     `select d.id, d.title, array_agg(s.step_key order by s.position) keys
      from step_field_refs f join steps s on s.id=f.step_id join documents d on d.id=s.document_id
-     where f.field_name=$1 and d.deleted_at is null group by d.id, d.title order by d.title`,
-    [name],
+     where f.field_name=$1 and d.deleted_at is null and ${scopeClause('d', '$2')}
+     group by d.id, d.title order by d.title`,
+    [name, scopes],
   );
   return r.rows.map((x) => ({
     documentId: x.id as string,
@@ -97,7 +106,11 @@ export async function deleteField(tx: Tx, name: string, userId: string): Promise
  * Every step that mentions the field, with the text it is mentioned in. Block-backed
  * steps take their actions from the block, the same way `stepText` assembles them.
  */
-export async function fieldUsageRows(q: Q, name: string): Promise<FieldPage['usage']> {
+export async function fieldUsageRows(
+  q: Q,
+  name: string,
+  scopes: string[] | null = null,
+): Promise<FieldPage['usage']> {
   const r = await q.query(
     `select d.id, d.title, d.category, s.step_key, s.num, s.title step_title,
             concat_ws(' · ', s.title, coalesce(
@@ -107,9 +120,9 @@ export async function fieldUsageRows(q: Q, name: string): Promise<FieldPage['usa
        from step_field_refs r
        join steps s on s.id = r.step_id
        join documents d on d.id = s.document_id and d.deleted_at is null
-      where r.field_name = $1
+      where r.field_name = $1 and ${scopeClause('d', '$2')}
       order by d.title, s.position`,
-    [name],
+    [name, scopes],
   );
   return r.rows.map((x) => ({
     documentId: x.id as string,
@@ -151,10 +164,14 @@ export function fieldAlerts(field: CrmField): FieldPage['alerts'] {
   return out;
 }
 
-export async function fieldPage(q: Q, name: string): Promise<FieldPage | null> {
+export async function fieldPage(
+  q: Q,
+  name: string,
+  scopes: string[] | null = null,
+): Promise<FieldPage | null> {
   const field = await getField(q, name);
   if (!field) return null;
-  const [usage, history] = await Promise.all([fieldUsageRows(q, name), fieldHistory(q, name)]);
+  const [usage, history] = await Promise.all([fieldUsageRows(q, name, scopes), fieldHistory(q, name)]);
   return {
     field,
     usage,

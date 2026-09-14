@@ -37,9 +37,9 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['fields'], params: Params, response: { 200: FieldUsageSchema } },
     },
     async (req) => {
-      requireUser(req);
+      const user = requireUser(req);
       const name = decodeName((req.params as { name: string }).name);
-      return { items: await repo.fieldUsage(app.db, name) };
+      return { items: await repo.fieldUsage(app.db, name, user.categoryScopes) };
     },
   );
 
@@ -52,8 +52,14 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['fields'], params: Params, response: { 200: FieldPageSchema } },
     },
     async (req) => {
-      requireUser(req);
-      const page = await repo.fieldPage(app.db, decodeName((req.params as { name: string }).name));
+      const user = requireUser(req);
+      // The field itself is catalogue data, but its `usage` carries document ids, titles,
+      // categories and the full step text — all of which are scoped.
+      const page = await repo.fieldPage(
+        app.db,
+        decodeName((req.params as { name: string }).name),
+        user.categoryScopes,
+      );
       if (!page) throw notFound('השדה');
       return page;
     },

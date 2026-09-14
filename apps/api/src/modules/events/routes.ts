@@ -12,6 +12,24 @@ const CATEGORY_TTL_MS = 60_000;
 const documentIdOf = (e: Event): string | null =>
   'documentId' in e.payload ? ((e.payload as { documentId?: string }).documentId ?? null) : null;
 
+/**
+ * Events addressed to *one person* rather than to a document, by name.
+ *
+ * `notification.created` carries a `userId` and no `documentId`, so `documentIdOf` has nothing
+ * to key on and the event used to reach every open stream — carrying a `title` built from a
+ * display name and a document title (`comments.ts:105`, `reviews.ts:111`). The payload comment
+ * says "the web filters on `userId` before it touches the bell", but client-side filtering is a
+ * rendering decision, not an access control, so the fan-out is cut here.
+ *
+ * The list is keyed on the event *name*, not on "the payload happens to have a `userId`":
+ * `presence.changed` also carries one, and there it means "who moved", not "who this is for" —
+ * narrowing it to that user would leave every other viewer's presence badge frozen.
+ */
+const PER_RECIPIENT = new Set<Event['name']>(['notification.created']);
+
+const recipientOf = (e: Event): string | null =>
+  PER_RECIPIENT.has(e.name) ? ((e.payload as { userId?: string }).userId ?? null) : null;
+
 export default async function routes(app: FastifyInstance) {
   let open = 0;
   const categories = new Map<string, { at: number; category: string | null }>();
@@ -47,6 +65,10 @@ export default async function routes(app: FastifyInstance) {
       const scopes = user.categoryScopes;
       const off = app.events.subscribe((e) => {
         void (async () => {
+          // A per-recipient event goes to that recipient's connections and to no others,
+          // whatever their scope or permissions.
+          const recipient = recipientOf(e);
+          if (recipient !== null && recipient !== user.id) return;
           // A category-scoped user must not learn about documents outside their scope.
           if (scopes) {
             const id = documentIdOf(e);
