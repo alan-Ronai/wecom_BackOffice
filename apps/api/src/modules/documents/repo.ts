@@ -34,6 +34,59 @@ export const slugify = (title: string): string => {
 export const iso = (d: Date | string | null | undefined): string | null =>
   d ? new Date(d).toISOString() : null;
 
+/** Primary world first, the rest sorted — the order every consumer relies on. */
+export const orderWorlds = (primary: string, worlds: readonly string[]): string[] => [
+  primary,
+  ...[...new Set(worlds)].filter((w) => w !== primary).sort(),
+];
+
+/** Postgres FK failures on the taxonomy tables are client errors, not 500s. */
+export const mapTaxonomyFkError = (e: unknown): never => {
+  const err = e as { code?: string; constraint?: string };
+  if (
+    err.code === '23503' &&
+    (err.constraint === 'documents_category_fkey' || err.constraint === 'document_worlds_world_slug_fkey')
+  )
+    throw httpError(400, 'UNKNOWN_WORLD', 'עולם התוכן אינו קיים');
+  if (err.code === '23503' && err.constraint === 'document_topics_topic_id_fkey')
+    throw httpError(400, 'UNKNOWN_TOPIC', 'הנושא אינו קיים');
+  throw e;
+};
+
+/**
+ * Make `document_worlds` = {primary} ∪ extraWorlds and (when given) `document_topics` = topics.
+ * The primary world is always a member, so "which worlds" is one join everywhere.
+ */
+export async function syncMemberships(
+  tx: Tx,
+  id: string,
+  primary: string,
+  extraWorlds: readonly string[],
+  topics?: readonly string[],
+): Promise<void> {
+  const worlds = [...new Set([primary, ...extraWorlds])];
+  await tx.query('delete from document_worlds where document_id=$1 and not (world_slug = any($2::text[]))', [
+    id,
+    worlds,
+  ]);
+  for (const w of worlds)
+    await tx.query(
+      'insert into document_worlds(document_id, world_slug) values ($1,$2) on conflict do nothing',
+      [id, w],
+    );
+  if (topics !== undefined) {
+    await tx.query('delete from document_topics where document_id=$1 and not (topic_id = any($2::uuid[]))', [
+      id,
+      [...topics],
+    ]);
+    for (const t of topics)
+      await tx.query(
+        'insert into document_topics(document_id, topic_id) values ($1,$2) on conflict do nothing',
+        [id, t],
+      );
+  }
+}
+
 const groupBy = <T extends Record<string, unknown>>(rows: T[], key: string): Map<string, T[]> => {
   const m = new Map<string, T[]>();
   for (const r of rows) {
@@ -50,7 +103,8 @@ type Row = Record<string, never> & Record<string, unknown>;
 /** Assemble the normalised rows of several documents into the shared `Document` shape. */
 export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Document>> {
   if (!ids.length) return new Map();
-  const [docs, phases, steps, actions, outcomes, branches, options] = await Promise.all([
+  const [docs, phases, steps, actions, outcomes, branches, options, worldRows, topicRows] =
+    await Promise.all([
     q.query('select * from documents where id = any($1) and deleted_at is null', [ids]),
     q.query('select * from phases where document_id = any($1) order by position', [ids]),
     q.query('select * from steps where document_id = any($1) order by position', [ids]),
@@ -69,6 +123,10 @@ export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Doc
       'select o.* from step_branch_options o join step_branches b on b.id=o.branch_id join steps s on s.id=b.step_id where s.document_id = any($1) order by o.position',
       [ids],
     ),
+    q.query('select document_id, world_slug from document_worlds where document_id = any($1)', [ids]),
+    q.query('select document_id, topic_id from document_topics where document_id = any($1) order by topic_id', [
+      ids,
+    ]),
   ]);
   const phasesBy = groupBy(phases.rows as Row[], 'document_id');
   const stepsBy = groupBy(steps.rows as Row[], 'phase_id');
@@ -76,6 +134,8 @@ export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Doc
   const outBy = groupBy(outcomes.rows as Row[], 'step_id');
   const brBy = groupBy(branches.rows as Row[], 'step_id');
   const optBy = groupBy(options.rows as Row[], 'branch_id');
+  const worldsBy = groupBy(worldRows.rows as Row[], 'document_id');
+  const topicsBy = groupBy(topicRows.rows as Row[], 'document_id');
 
   const out = new Map<string, Document>();
   for (const row of docs.rows) {
@@ -145,6 +205,14 @@ export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Doc
         createdBy: row.created_by ?? undefined,
         updatedBy: row.updated_by ?? undefined,
         etag: row.etag,
+        docType: row.doc_type,
+        tags: (row.tags as string[] | null) ?? [],
+        worlds: orderWorlds(
+          row.category as string,
+          (worldsBy.get(row.id) ?? []).map((w) => String(w.world_slug)),
+        ),
+        topics: (topicsBy.get(row.id) ?? []).map((t) => String(t.topic_id)),
+        bodyHtml: (row.body_html as string | null) ?? undefined,
       }),
     );
   }
@@ -155,15 +223,16 @@ export const getDocument = async (q: Q, id: string): Promise<Document | null> =>
   (await assembleMany(q, [id])).get(id) ?? null;
 
 /**
- * `categoryScopes` is the caller's `user_roles.category_scope` union (null = every
- * category). Route-level `config.scope` only guards `/documents/:id`; without the
- * same term here a scoped user could list every document in every category.
+ * `worldScopes` is the caller's `user_roles.world_scope` union (null = every world).
+ * Route-level `config.scope` only guards `/documents/:id`; without the same term here a
+ * scoped user could list every document in every world. Scope is an INTERSECTION with
+ * `document_worlds`: an item shared into a scoped world stays reachable.
  */
 export async function listCards(
   q: Q,
   query: ListDocumentsQuery,
   userId: string,
-  categoryScopes: readonly string[] | null = null,
+  worldScopes: readonly string[] | null = null,
 ): Promise<{ items: DocumentCard[]; total: number }> {
   const params: unknown[] = [userId];
   const p = (v: unknown) => {
@@ -171,7 +240,20 @@ export async function listCards(
     return '$' + params.length;
   };
   const where: string[] = ['d.deleted_at is null'];
-  if (categoryScopes) where.push(`d.category = any(${p([...categoryScopes])})`);
+  if (worldScopes)
+    where.push(
+      `exists (select 1 from document_worlds sw where sw.document_id=d.id and sw.world_slug = any(${p([...worldScopes])}))`,
+    );
+  if (query.world)
+    where.push(
+      `exists (select 1 from document_worlds fw where fw.document_id=d.id and fw.world_slug = ${p(query.world)})`,
+    );
+  if (query.topic)
+    where.push(
+      `exists (select 1 from document_topics ft where ft.document_id=d.id and ft.topic_id = ${p(query.topic)})`,
+    );
+  if (query.docType) where.push(`d.doc_type = ${p(query.docType)}`);
+  if (query.tag?.length) where.push(`d.tags @> ${p(query.tag)}::text[]`);
   if (query.category) where.push(`d.category = ${p(query.category)}`);
   if (query.wave) where.push(`d.wave = ${p(query.wave)}`);
   if (query.priority) where.push(`d.priority = ${p(query.priority)}`);
@@ -201,6 +283,8 @@ export async function listCards(
     left join (select from_document_id id, count(distinct to_document_id) n from document_links where to_document_id is not null group by 1) lo on lo.id=d.id
     left join (select to_document_id id, count(distinct from_document_id) n from document_links where to_document_id is not null group by 1) li on li.id=d.id
     left join (select s.document_id, array_agg(distinct f.field_name) names from step_field_refs f join steps s on s.id=f.step_id group by 1) cf on cf.document_id=d.id
+    left join (select document_id, array_agg(world_slug order by world_slug) ws from document_worlds group by 1) dw on dw.document_id=d.id
+    left join (select document_id, array_agg(topic_id::text order by topic_id) ts from document_topics group by 1) dt on dt.document_id=d.id
     left join users au on au.id=d.updated_by
     where ${where.join(' and ')}`;
 
@@ -210,7 +294,8 @@ export async function listCards(
   const rows = await q.query(
     `select d.*, coalesce(st.n,0)::int step_count, coalesce(st.shared,false) shared,
        coalesce(lo.n,0)::int links_out, coalesce(li.n,0)::int links_in, coalesce(v.total,0)::int views,
-       coalesce(cf.names,'{}') crm, (p.user_id is not null) pinned, au.display_name author_name
+       coalesce(cf.names,'{}') crm, (p.user_id is not null) pinned, au.display_name author_name,
+       coalesce(dw.ws,'{}') ws, coalesce(dt.ts,'{}') ts
      ${base} order by ${order} limit ${limit} offset ${offset}`,
     params,
   );
@@ -237,6 +322,10 @@ export async function listCards(
         hasSharedBlocks: r.shared,
         pinned: r.pinned,
         authorName: r.author_name ?? undefined,
+        docType: r.doc_type,
+        tags: r.tags ?? [],
+        worlds: orderWorlds(r.category, r.ws),
+        topics: r.ts,
       }),
     ),
   };
@@ -250,6 +339,7 @@ export async function insertDocument(
   body: CreateDocumentBody,
   userId: string | null,
 ): Promise<Document> {
+  const docType = body.docType ?? (body.kind === 'text' ? 'I' : 'R');
   const values = (slug: string) => [
     slug,
     body.title,
@@ -259,23 +349,30 @@ export async function insertDocument(
     body.priority,
     body.kind,
     'draft',
-    body.topicId ?? null,
+    docType,
+    body.tags ?? [],
+    body.bodyHtml ?? null,
     userId,
   ];
-  const sql = `insert into documents(slug, title, description, category, wave, priority, kind, status, topic_id, created_by, updated_by)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) returning id`;
+  const sql = `insert into documents(slug, title, description, category, wave, priority, kind, status, doc_type, tags, body_html, created_by, updated_by)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) returning id`;
   for (let attempt = 0; ; attempt++) {
     // A caller-supplied slug is their choice, so a collision there is a real 409.
     const slug = body.slug ?? slugify(body.title);
     try {
       await tx.query('savepoint insert_document');
       const r = await tx.query(sql, values(slug));
+      try {
+        await syncMemberships(tx, r.rows[0].id as string, body.category, body.worlds ?? [], body.topics ?? []);
+      } catch (e) {
+        mapTaxonomyFkError(e);
+      }
       await tx.query('release savepoint insert_document');
       return (await getDocument(tx, r.rows[0].id as string))!;
     } catch (e) {
       await tx.query('rollback to savepoint insert_document');
       const unique = (e as { code?: string }).code === '23505';
-      if (!unique) throw e;
+      if (!unique) mapTaxonomyFkError(e);
       if (body.slug) throw httpError(409, 'SLUG_TAKEN', 'המזהה (slug) כבר בשימוש');
       if (attempt >= SLUG_ATTEMPTS - 1)
         throw httpError(409, 'SLUG_TAKEN', 'לא הצלחנו להקצות מזהה ייחודי, נסה שוב');
@@ -291,6 +388,9 @@ const PATCH_COLUMNS: Record<string, string> = {
   priority: 'priority',
   code: 'code',
   sourceRef: 'source_ref',
+  docType: 'doc_type',
+  tags: 'tags',
+  bodyHtml: 'body_html',
 };
 
 /**
@@ -305,9 +405,10 @@ export async function patchDocument(
   userId: string,
   ifMatch?: string,
 ): Promise<Document> {
-  const cur = await tx.query('select etag from documents where id=$1 and deleted_at is null for update', [
-    id,
-  ]);
+  const cur = await tx.query(
+    'select etag, category from documents where id=$1 and deleted_at is null for update',
+    [id],
+  );
   if (!cur.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
   if (ifMatch && ifMatch !== cur.rows[0].etag)
     throw httpError(412, 'ETAG_MISMATCH', 'המסמך השתנה בינתיים — טען מחדש ונסה שוב');
@@ -321,13 +422,31 @@ export async function patchDocument(
     }
   }
   params.push(userId, id);
-  const r = await tx.query(
-    `update documents set ${sets.length ? sets.join(', ') + ',' : ''} updated_by = $${params.length - 1},
+  let updated;
+  try {
+    updated = await tx.query(
+      `update documents set ${sets.length ? sets.join(', ') + ',' : ''} updated_by = $${params.length - 1},
        updated_at = now(), etag = gen_random_uuid()::text
      where id = $${params.length} and deleted_at is null`,
-    params,
-  );
-  if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
+      params,
+    );
+  } catch (e) {
+    mapTaxonomyFkError(e);
+  }
+  if (!updated!.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
+  if (body.category !== undefined || body.worlds !== undefined || body.topics !== undefined) {
+    const primary = body.category ?? (cur.rows[0].category as string);
+    const extra =
+      body.worlds ??
+      (await tx.query('select world_slug from document_worlds where document_id=$1', [id])).rows.map(
+        (x) => x.world_slug as string,
+      );
+    try {
+      await syncMemberships(tx, id, primary, extra, body.topics);
+    } catch (e) {
+      mapTaxonomyFkError(e);
+    }
+  }
   return (await getDocument(tx, id))!;
 }
 

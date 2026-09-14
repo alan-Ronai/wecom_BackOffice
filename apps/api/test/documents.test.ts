@@ -352,4 +352,82 @@ run('documents', () => {
       (await app.inject({ method: 'GET', url: `/api/v1/documents/${c.id}`, headers: auth(u) })).statusCode,
     ).toBe(404);
   });
+
+  it('creates with taxonomy, keeps the primary world first, filters by world/type/tag', async () => {
+    const topic = (
+      await db.pool.query(
+        `insert into topics(world_id, slug, name) select id, 'apn', 'APN' from worlds where slug='tech' returning id`,
+      )
+    ).rows[0].id as string;
+    const c = await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      headers: auth(u),
+      payload: {
+        title: 'הגדרת APN', category: 'tech', wave: 1, priority: 'h', kind: 'steps',
+        docType: 'O', tags: ['apn', 'android'], worlds: ['sim', 'tech'], topics: [topic],
+      },
+    });
+    expect(c.statusCode).toBe(201);
+    const d = c.json();
+    expect(d.docType).toBe('O');
+    expect(d.worlds).toEqual(['tech', 'sim']);
+    expect(d.topics).toEqual([topic]);
+    expect(d.tags).toEqual(['apn', 'android']);
+    const byWorld = await app.inject({ method: 'GET', url: '/api/v1/documents?world=sim', headers: auth(u) });
+    expect(byWorld.json().items.map((x: { id: string }) => x.id)).toContain(d.id);
+    const byType = await app.inject({ method: 'GET', url: '/api/v1/documents?docType=O', headers: auth(u) });
+    expect(byType.json().items.every((x: { docType: string }) => x.docType === 'O')).toBe(true);
+    const byTags = await app.inject({ method: 'GET', url: '/api/v1/documents?tag=apn&tag=android', headers: auth(u) });
+    expect(byTags.json().items.map((x: { id: string }) => x.id)).toEqual([d.id]);
+    const miss = await app.inject({ method: 'GET', url: '/api/v1/documents?tag=apn&tag=ios', headers: auth(u) });
+    expect(miss.json().total).toBe(0);
+    const byTopic = await app.inject({ method: 'GET', url: `/api/v1/documents?topic=${topic}`, headers: auth(u) });
+    expect(byTopic.json().items[0].topics).toEqual([topic]);
+  });
+
+  it('defaults docType, patches tags/worlds, and rejects unknown worlds with 400', async () => {
+    const c = (
+      await app.inject({
+        method: 'POST', url: '/api/v1/documents', headers: auth(u),
+        payload: { title: 'x', category: 'ops', wave: 3, priority: 'l', kind: 'steps' },
+      })
+    ).json();
+    expect(c.docType).toBe('R');
+    expect(c.worlds).toEqual(['ops']);
+    const p = await app.inject({
+      method: 'PATCH', url: `/api/v1/documents/${c.id}`, headers: auth(u),
+      payload: { tags: ['t1'], worlds: ['billing'], category: 'plans' },
+    });
+    expect(p.statusCode).toBe(200);
+    expect(p.json().worlds).toEqual(['plans', 'billing']);
+    expect(p.json().tags).toEqual(['t1']);
+    const bad = await app.inject({
+      method: 'POST', url: '/api/v1/documents', headers: auth(u),
+      payload: { title: 'y', category: 'nope', wave: 1, priority: 'l', kind: 'steps' },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().code).toBe('UNKNOWN_WORLD');
+  });
+
+  it('a scoped user reaches an item through any shared world', async () => {
+    const scoped = await makeUser(db.pool, { scopes: ['billing'] });
+    const c = (
+      await app.inject({
+        method: 'POST', url: '/api/v1/documents', headers: auth(u),
+        payload: { title: 'shared', category: 'plans', wave: 1, priority: 'l', kind: 'steps', worlds: ['billing'] },
+      })
+    ).json();
+    const g = await app.inject({ method: 'GET', url: `/api/v1/documents/${c.id}`, headers: auth(scoped) });
+    expect(g.statusCode).toBe(200);
+    const l = await app.inject({ method: 'GET', url: '/api/v1/documents?world=plans', headers: auth(scoped) });
+    expect(l.json().items.map((x: { id: string }) => x.id)).toContain(c.id);
+    const only = (
+      await app.inject({
+        method: 'POST', url: '/api/v1/documents', headers: auth(u),
+        payload: { title: 'plans only', category: 'plans', wave: 1, priority: 'l', kind: 'steps' },
+      })
+    ).json();
+    expect((await app.inject({ method: 'GET', url: `/api/v1/documents/${only.id}`, headers: auth(scoped) })).statusCode).toBe(403);
+  });
 });

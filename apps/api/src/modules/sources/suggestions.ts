@@ -259,6 +259,10 @@ export class SuggestionService {
             phases: p.phases,
             sourceId,
             sourceRef: s.anchor,
+            // W1 taxonomy defaults: the suggestion only names a primary world.
+            tags: [],
+            worlds: [],
+            topics: [],
           },
           actorId,
         );

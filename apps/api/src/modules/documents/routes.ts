@@ -91,7 +91,7 @@ export default async function routes(app: FastifyInstance) {
     async (req) => {
       const user = requireUser(req);
       const q = req.query as z.infer<typeof ListDocumentsQuerySchema>;
-      const { items, total } = await repo.listCards(app.db, q, user.id, user.categoryScopes);
+      const { items, total } = await repo.listCards(app.db, q, user.id, user.worldScopes);
       return { items, total, page: q.page, pageSize: q.pageSize };
     },
   );
@@ -120,7 +120,7 @@ export default async function routes(app: FastifyInstance) {
     async (req, reply) => {
       const user = requireUser(req);
       const body = req.body as z.infer<typeof CreateDocumentBodySchema>;
-      if (!hasScope(user, body.category)) throw forbidden();
+      for (const w of [body.category, ...(body.worlds ?? [])]) if (!hasScope(user, w)) throw forbidden();
       const doc = await withTransaction(app.db, async (tx) => {
         const d = await repo.insertDocument(tx, body, user.id);
         await audit(tx, {
@@ -158,8 +158,9 @@ export default async function routes(app: FastifyInstance) {
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.category) || (body.category && !hasScope(user, body.category)))
-          throw forbidden();
+        if (!hasScope(user, before.worlds)) throw forbidden();
+        for (const w of [body.category, ...(body.worlds ?? [])])
+          if (w && !hasScope(user, w)) throw forbidden();
         const after = await repo.patchDocument(
           tx,
           id,
@@ -172,8 +173,20 @@ export default async function routes(app: FastifyInstance) {
           action: 'docs.edit',
           entityType: 'document',
           entityId: id,
-          before: { title: before.title, wave: before.wave, category: before.category },
-          after: { title: after.title, wave: after.wave, category: after.category },
+          before: {
+            title: before.title,
+            wave: before.wave,
+            category: before.category,
+            docType: before.docType,
+            tags: before.tags,
+          },
+          after: {
+            title: after.title,
+            wave: after.wave,
+            category: after.category,
+            docType: after.docType,
+            tags: after.tags,
+          },
           requestId: req.id,
           ip: req.ip,
         });
@@ -208,7 +221,7 @@ export default async function routes(app: FastifyInstance) {
       const doc = await withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.category)) throw forbidden();
+        if (!hasScope(user, before.worlds)) throw forbidden();
         const after = await repo.saveStructure(
           tx,
           id,
@@ -255,7 +268,7 @@ export default async function routes(app: FastifyInstance) {
       const result = await withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.category)) throw forbidden();
+        if (!hasScope(user, before.worlds)) throw forbidden();
         const { doc, version } = await repo.publishDocument(tx, id, {
           actorId: user.id,
           label: body.label,
@@ -367,7 +380,7 @@ export default async function routes(app: FastifyInstance) {
       const result = await withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.category)) throw forbidden();
+        if (!hasScope(user, before.worlds)) throw forbidden();
         const { doc, version } = await repo.restoreVersion(tx, id, v, user.id);
         const auditId = await audit(tx, {
           actorId: user.id,
@@ -407,7 +420,7 @@ export default async function routes(app: FastifyInstance) {
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.category)) throw forbidden();
+        if (!hasScope(user, before.worlds)) throw forbidden();
         await repo.softDelete(tx, id, user.id);
         const restoreUntil = new Date(Date.now() + app.config.TRASH_DAYS * 86400_000).toISOString();
         const auditId = await audit(tx, {
