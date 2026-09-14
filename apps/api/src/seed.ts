@@ -103,7 +103,7 @@ class Authors {
 
 /** Legacy codes carry the PRD letter (M-00, R-01, O-02, E-01); otherwise the spec rule. */
 const docTypeFor = (d: { code?: string; kind: string; phases: unknown[] }): string =>
-  d.code && /^[MROES]-/.test(d.code) ? d.code[0]! : d.kind === 'retention' || d.phases.length ? 'R' : 'I';
+  d.code && /^[MROESTI]-/.test(d.code) ? d.code[0]! : d.kind === 'retention' || d.phases.length ? 'R' : 'I';
 
 /** W1: every item is a member of its primary world, plus its legacy topic when it had one. */
 const membership = async (tx: Tx, documentId: string, world: string, topicSlug: string | null) => {
