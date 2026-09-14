@@ -13,6 +13,7 @@
   --ok: #1A7A4A; --ok-bg: #EDFAF3; --ok-border: #B7E8CE; --ok-mark: #D8F5E5;
   --warn: #B86A00; --warn-bg: #FFF8EE; --warn-border: #F5D8A5; --warn-mark: #FFF3D6;
   --info: #1D45B4; --info-bg: #EBF1FF;
+  --purple: #5B2FB8; --purple-bg: #F2ECFF;
   --del-mark: #FFE0E0;
   --shadow-sm: 0 1px 2px rgba(31,46,59,.04); --shadow: 0 12px 30px rgba(31,46,59,.18); --shadow-lg: 0 30px 80px rgba(0,0,0,.45);
   --r-xs: 4px; --r-sm: 6px; --r: 8px; --r-md: 10px; --r-lg: 12px; --r-xl: 14px;
@@ -30,6 +31,7 @@ html[data-theme="dark"] {
   --ok: #6FD39A; --ok-bg: rgba(26,122,74,.2); --ok-border: rgba(111,211,154,.3); --ok-mark: rgba(26,122,74,.35);
   --warn: #FFC466; --warn-bg: rgba(184,106,0,.2); --warn-border: rgba(255,196,102,.3); --warn-mark: rgba(184,106,0,.35);
   --info: #9DB8FF; --info-bg: rgba(93,140,255,.18);
+  --purple: #C3A8FF; --purple-bg: rgba(109,63,209,.22);
   --del-mark: rgba(192,40,0,.35);
   --shadow-sm: 0 1px 2px rgba(0,0,0,.3); --shadow: 0 12px 30px rgba(0,0,0,.5);
   --sidebar-bg: #0B1015;
@@ -72,6 +74,7 @@ mark { background: var(--red-mark); color: inherit; padding: 0 2px; border-radiu
 .chip-gray { background: var(--surface-2); color: var(--muted); }
 .chip-blue { background: var(--info-bg); color: var(--info); }
 .chip-green { background: var(--ok-bg); color: var(--ok); }
+.chip-purple { background: var(--purple-bg); color: var(--purple); }
 .chip-navy { background: var(--navy); color: #fff; }
 html[data-theme="dark"] .chip-navy { background: var(--surface-3); color: var(--text); }
 .chip-solid { background: var(--red); color: #fff; }

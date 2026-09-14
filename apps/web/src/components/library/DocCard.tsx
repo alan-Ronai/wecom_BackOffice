@@ -1,5 +1,6 @@
 import type { DocumentCard } from '@wecom/shared';
-import { CATS, PRI } from '../../lib/constants.js';
+import { PRI } from '../../lib/constants.js';
+import { TypeBadge, worldShort } from '../taxonomy/TypeBadge.js';
 
 /** Port of legacy KB.cardFor — chips, title, description and the computed meta row. */
 export function DocCard({
@@ -63,7 +64,8 @@ export function DocCard({
         ⋯
       </span>
       <div className="chips">
-        <span className="chip chip-blue">{CATS[card.category].short}</span>
+        <span className="chip chip-blue">{worldShort(card.category)}</span>
+        {card.docType ? <TypeBadge docType={card.docType} compact /> : null}
         {partial ? (
           <span className="chip chip-amber">מסמך חלקי</span>
         ) : draft ? (
@@ -74,6 +76,16 @@ export function DocCard({
       </div>
       <div className="title">{card.title}</div>
       <div className="desc">{card.description}</div>
+      {card.tags.length ? (
+        <div className="tags">
+          {card.tags.slice(0, 3).map((t) => (
+            <span key={t} className="tag">
+              {t}
+            </span>
+          ))}
+          {card.tags.length > 3 ? <span className="tag more">+{card.tags.length - 3}</span> : null}
+        </div>
+      ) : null}
       <div className={'meta' + (partial ? ' warn' : '')}>
         {bits.map((b, i) => (
           <span key={b}>
