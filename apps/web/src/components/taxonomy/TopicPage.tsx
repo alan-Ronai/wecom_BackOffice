@@ -15,8 +15,9 @@ export function TopicPage() {
   const nav = useNavigate();
   // A topic view is recorded server-side by `GET /topics/:id/items` (W5's `topic_views`), not
   // through `POST /telemetry`: `telemetry_events.document_id` is an FK to `documents`, so a
-  // topic id could never land there.
-  const view = useTopicView(id);
+  // topic id could never land there. This screen *is* the topic browse, so it records — stated
+  // explicitly because `ArticlePage` reads the same list with `record: false`.
+  const view = useTopicView(id, { record: true });
 
   if (view.error instanceof ApiError && view.error.status === 404)
     return <Empty title="הנושא לא נמצא">ייתכן שהנושא הועבר לארכיון או שהקישור שגוי.</Empty>;

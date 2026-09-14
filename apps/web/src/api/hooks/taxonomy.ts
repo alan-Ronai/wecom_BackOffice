@@ -55,12 +55,38 @@ export const useTopics = (worldSlug: string | undefined) =>
     staleTime: 60_000,
   });
 
-export const useTopicView = (id: string | undefined) =>
+/**
+ * `GET /topics/:id/items` is not a read-only route: it records a topic view (W5's `topic_views`,
+ * which is what `/analytics`'s "נושאים נצפים" card counts). So the caller has to say whether this
+ * read *is* a topic browse.
+ *
+ * `TopicPage` is one and takes the default. `ArticlePage` is not — it reads the same list only to
+ * compute prev/next inside the topic, and left unqualified it made every article open write a
+ * `topic_views` row indistinguishable from a real one, which is a data-repair job rather than a
+ * code fix once it has run for a while.
+ *
+ * The cache key deliberately does not include `record`: both callers want the same list, and the
+ * shared key is what keeps `invalidateContent` and the SSE `taxonomy.changed` fan-out working.
+ * A `TopicPage` mount refetches the stale entry and records the view then.
+ */
+export const useTopicView = (id: string | undefined, opts: { record?: boolean } = {}) =>
   useQuery({
     queryKey: keys.topic(id ?? ''),
     enabled: !!id,
     queryFn: async (): Promise<TopicView> =>
-      checked(TopicViewSchema, await api.GET('/topics/{id}/items', { params: { path: { id: id! } } })),
+      checked(
+        TopicViewSchema,
+        await api.GET('/topics/{id}/items', {
+          // The server defaults to `record=true`, so only the suppressing case is sent. The cast
+          // is the single place that knows `record` is arriving: the API half of this fix adds it
+          // to `docs/api/openapi.json`, and until that lands `schema.d.ts` types this route's
+          // query as `undefined`. It becomes a no-op the moment the client is regenerated.
+          params: {
+            path: { id: id! },
+            ...(opts.record === false ? { query: { record: false } } : {}),
+          } as { path: { id: string } },
+        }),
+      ),
   });
 
 export const useTags = (q = '') =>

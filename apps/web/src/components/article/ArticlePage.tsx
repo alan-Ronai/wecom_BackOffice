@@ -90,8 +90,14 @@ export function ArticlePage() {
   const [paneMode, setPaneMode] = useState<PaneMode | null>(null);
   const source = useSourceDocument(id);
   const effectivePane: PaneMode = paneMode ?? prefs.data?.paneMode ?? 'work';
-  /** W1: the topic view is what "previous / next in this topic" means (PRD §4). */
-  const topicView = useTopicView(doc?.topics?.[0]);
+  /**
+   * W1: the topic view is what "previous / next in this topic" means (PRD §4).
+   *
+   * `record: false` because this is not a topic browse. The route records a topic view by
+   * default, and an article open is not one — counting it would make `/analytics`'s "נושאים
+   * נצפים" measure "articles opened that happen to sit in a topic" instead.
+   */
+  const topicView = useTopicView(doc?.topics?.[0], { record: false });
   const topicNeighbours = useMemo(() => {
     const flat = (topicView.data?.groups ?? []).flatMap((g) => g.items);
     const i = flat.findIndex((x) => x.id === doc?.id);
