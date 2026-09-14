@@ -29,6 +29,34 @@ export function imageSize(bytes: Buffer, mime: string): { width: number; height:
   return null;
 }
 
+/**
+ * The mime the bytes actually are, from their header — or null when they are none of the four
+ * formats the allowlist permits (B-M14).
+ *
+ * This lives next to `imageSize` because it reads the same headers: `imageSize` already trusts
+ * the *declared* mime to decide how to parse, so a PDF (or an HTML page, or a docx) labelled
+ * `image/png` had its bytes 16–24 read as a width and a height, and the docx exporter then sized
+ * a box around numbers that meant nothing. The 4-mime allowlist plus `nosniff` kept this off the
+ * XSS path; what it could not do was keep the stored bytes honest.
+ */
+export function sniffImageMime(bytes: Buffer): (typeof ASSET_MIMES)[number] | null {
+  const starts = (...sig: number[]) =>
+    bytes.length >= sig.length && sig.every((b, i) => bytes[i] === b);
+  if (starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return 'image/png';
+  if (starts(0xff, 0xd8, 0xff)) return 'image/jpeg';
+  // GIF87a / GIF89a.
+  if (bytes.length >= 6 && /^GIF8[79]a$/.test(bytes.toString('ascii', 0, 6))) return 'image/gif';
+  // RIFF <u32 size> WEBP — the chunk that follows is VP8 , VP8L or VP8X; `imageSize` only reads
+  // the first, but all three are WebP and all three are storable.
+  if (
+    bytes.length >= 12 &&
+    bytes.toString('ascii', 0, 4) === 'RIFF' &&
+    bytes.toString('ascii', 8, 12) === 'WEBP'
+  )
+    return 'image/webp';
+  return null;
+}
+
 const toAsset = (r: Record<string, unknown>): Asset => ({
   id: r.id as string,
   url: assetUrl(r.id as string),
@@ -46,6 +74,16 @@ export async function putAsset(
     throw httpError(415, 'UNSUPPORTED_ASSET', 'סוג קובץ לא נתמך: מותרים PNG, JPEG, GIF, WebP');
   if (a.bytes.length > ASSET_MAX_BYTES) throw httpError(413, 'ASSET_TOO_LARGE', 'הקובץ גדול מ-10MB');
   if (!a.bytes.length) throw httpError(400, 'EMPTY_ASSET', 'קובץ ריק');
+  // B-M14: the allowlist above checks what the client *said*. This checks what it sent — same
+  // 415, because "not one of the four" and "not what you called it" are the same refusal to the
+  // uploader. The two callers that are not the route (docx import, WordPress media pull) already
+  // treat a throw here as "drop this image and record it".
+  const sniffed = sniffImageMime(a.bytes);
+  if (sniffed !== a.mime)
+    throw httpError(415, 'ASSET_MIME_MISMATCH', 'תוכן הקובץ אינו תואם לסוג שהוצהר', {
+      declared: a.mime,
+      actual: sniffed,
+    });
   const sha = createHash('sha256').update(a.bytes).digest('hex');
   const existing = await q.query('select id, mime, size, width, height from assets where sha256=$1', [sha]);
   if (existing.rowCount) return toAsset(existing.rows[0]);

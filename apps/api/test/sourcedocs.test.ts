@@ -315,6 +315,46 @@ run('source documents', () => {
         )
       ).statusCode,
     ).toBe(403);
+
+    /**
+     * B-M14 — the allowlist above only ever checked the *declared* mime. `imageSize` then parsed
+     * the bytes as if the label were true, so a PDF called `image/png` was stored with garbage
+     * dimensions and the docx exporter sized a broken box around them.
+     */
+    const mislabelled = await post(Buffer.from('%PDF-1.7\n%âãÏÓ\n1 0 obj\n'), 'image/png');
+    expect(mislabelled.statusCode, mislabelled.body).toBe(415);
+    expect(mislabelled.json().code).toBe('ASSET_MIME_MISMATCH');
+    // An image of an allowed type, called another allowed type, is a mismatch too — that is the
+    // pair that reaches `imageSize` and reads real bytes with the wrong parser.
+    const swapped = await post(png, 'image/jpeg');
+    expect(swapped.statusCode, swapped.body).toBe(415);
+    expect(swapped.json().code).toBe('ASSET_MIME_MISMATCH');
+    // Nothing was stored for either.
+    expect(
+      (await db.pool.query(`select count(*)::int n from assets where mime='image/jpeg'`)).rows[0].n,
+    ).toBe(0);
+  });
+
+  it('B-M14: every allowed format is recognised from its header, and nothing else is', async () => {
+    const { sniffImageMime } = await import('../src/modules/sourcedocs/assets.js');
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+    const webp = Buffer.concat([
+      Buffer.from('RIFF', 'ascii'),
+      Buffer.alloc(4),
+      Buffer.from('WEBPVP8L', 'ascii'),
+    ]);
+    expect(sniffImageMime(png)).toBe('image/png');
+    expect(sniffImageMime(Buffer.from([0xff, 0xd8, 0xff, 0xe0]))).toBe('image/jpeg');
+    expect(sniffImageMime(Buffer.from('GIF89a....', 'ascii'))).toBe('image/gif');
+    expect(sniffImageMime(Buffer.from('GIF87a....', 'ascii'))).toBe('image/gif');
+    expect(sniffImageMime(webp)).toBe('image/webp');
+    // SVG is the one the allowlist names explicitly, and it has no magic bytes at all.
+    expect(sniffImageMime(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'))).toBeNull();
+    expect(sniffImageMime(Buffer.from('PK'))).toBeNull();
+    expect(sniffImageMime(Buffer.alloc(0))).toBeNull();
+    // A truncated header is not a match: `starts` is length-checked, not read past the end.
+    expect(sniffImageMime(png.subarray(0, 4))).toBeNull();
+    expect(sniffImageMime(Buffer.from('RIFF', 'ascii'))).toBeNull();
   });
 
   it('serves the raw upload of a revision', async () => {
