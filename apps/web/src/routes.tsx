@@ -35,6 +35,7 @@ import { TopicPage } from './components/taxonomy/TopicPage.js';
 import { TaxonomyPage } from './components/admin/TaxonomyPage.js';
 import { SourceEditPage } from './components/source/SourceEditPage.js';
 import { FeedbackPage } from './components/feedback/FeedbackPage.js';
+import { AnalyticsPage } from './components/analytics/AnalyticsPage.js';
 
 /** Routes mirror the legacy hashes one-to-one (spec §5). */
 export const routeObjects: RouteObject[] = [
@@ -84,6 +85,8 @@ export const routeObjects: RouteObject[] = [
       { path: 'feedback', element: <FeedbackPage /> },
       { path: 'feedback/analytics', element: <FeedbackPage tab="analytics" /> },
       { path: 'feedback/:id', element: <FeedbackPage /> },
+      // W5. The sidebar entry that leads here is W6's mount; the route stands on its own.
+      { path: 'analytics', element: <AnalyticsPage /> },
       {
         path: 'admin',
         element: <AdminLayout />,

@@ -67,6 +67,11 @@ export const keys = {
     identity: ['admin', 'identity'] as const,
     system: ['admin', 'system'] as const,
   },
+  /* wave 4 — usage analytics (W5) */
+  analytics: {
+    usage: (q: unknown = '*') => ['analytics', 'usage', q] as const,
+    searchLog: (q: unknown = '*') => ['analytics', 'searchLog', q] as const,
+  },
   connectors: ['connectors'] as const,
   connector: (id: string) => ['connectors', id] as const,
   connectorTypes: ['connectors', 'types'] as const,

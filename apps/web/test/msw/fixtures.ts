@@ -1035,10 +1035,62 @@ export const topicView: TopicView = {
   ],
 };
 
+/* ── wave 4 · usage analytics (W5) ─────────────────────────────────────────
+ * Shapes are `UsageAnalyticsSchema` / `SearchLogResponseSchema`; `fixtures.test.ts` parses both.
+ */
+export const usageAnalytics = {
+  from: '2026-08-15T00:00:00.000Z',
+  to: '2026-09-14T00:00:00.000Z',
+  itemViews: [
+    {
+      documentId: docBrowsing.id,
+      title: 'גלישה איטית / חוסר גלישה',
+      docType: 'R',
+      views: 12,
+      viewers: 4,
+      lastViewedAt: '2026-09-13T09:00:00.000Z',
+    },
+  ],
+  topItems: [{ documentId: docBrowsing.id, title: 'גלישה איטית / חוסר גלישה', views: 12 }],
+  topTopics: [
+    { topicId: '66666666-6666-4666-8666-666666666666', name: 'הפעלת eSIM', worldSlug: 'sim', views: 7 },
+  ],
+  viewers: [{ userId: me.user.id, displayName: me.user.displayName, views: 5 }],
+  zeroResultTerms: [{ q: 'zzz-none', count: 3, lastAt: '2026-09-13T09:00:00.000Z' }],
+  staleness: [
+    {
+      documentId: docBrowsing.id,
+      title: 'גלישה איטית / חוסר גלישה',
+      ownerName: null,
+      updatedAt: '2026-07-01T00:00:00.000Z',
+      publishedAt: null,
+      daysSinceUpdate: 75,
+    },
+  ],
+};
+
 export const tags = [
   { tag: 'apn', count: 3 },
   { tag: 'browsing', count: 2 },
 ];
+
+export const searchLog = {
+  items: [
+    {
+      id: '77777777-7777-4777-8777-777777777777',
+      userId: me.user.id,
+      userName: me.user.displayName,
+      q: 'zzz-none',
+      filters: {},
+      results: 0,
+      tookMs: 3,
+      at: '2026-09-13T09:00:00.000Z',
+    },
+  ],
+  total: 1,
+  page: 1,
+  pageSize: 50,
+};
 
 export const fx = {
   me,
@@ -1064,6 +1116,8 @@ export const fx = {
   audit,
   health,
   system,
+  usageAnalytics,
+  searchLog,
 };
 
 export type Fixtures = typeof fx;
