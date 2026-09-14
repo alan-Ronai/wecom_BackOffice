@@ -107,6 +107,7 @@ const LearningItemEditor = () =>
   import('./components/learning/manage/LearningItemEditor.js').then((m) => ({
     default: m.LearningItemEditor,
   }));
+const GapsPage = () => import('./components/gaps/GapsPage.js').then((m) => ({ default: m.GapsPage }));
 
 /**
  * One boundary around the whole lazy area rather than one per route.
@@ -186,6 +187,7 @@ export const routeObjects: RouteObject[] = [
       { path: 'learning/manage', element: split(LearningManagePage) },
       { path: 'learning/manage/new', element: split(LearningItemEditor) },
       { path: 'learning/manage/:id', element: split(LearningItemEditor) },
+      { path: 'gaps', element: split(GapsPage) },
       {
         path: 'admin',
         element: split(AdminLayout),
