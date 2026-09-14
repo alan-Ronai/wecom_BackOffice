@@ -37,42 +37,67 @@ import { resolveFeedback } from '../feedback/repo.js'; // W3: close reports with
 const Params = z.object({ id: IdSchema });
 
 /**
- * `body.worlds` is a full replacement, not an addition: `syncMemberships` deletes every
- * `document_worlds` row outside `{category} ∪ worlds`. Checking only the worlds being *added*
+ * `body.worlds` and `body.topics` are full replacements, not additions: `syncMemberships`
+ * deletes every `document_worlds` row outside `{category} ∪ worlds`, and every
+ * `document_topics` row outside `topics`. Checking only the memberships being *added*
  * therefore let an editor scoped to one world send `worlds: []` and strip a document out of a
  * world they cannot see — that team loses it from their list, topic view, search and graph.
  *
- * So both directions are checked, and `body.topics` (which was not checked at all) must name
- * topics that live in the document's resulting world set and in the caller's scope. A topic in
- * a third world would otherwise pull the item onto a topic page the editor cannot reach.
+ * The check is on the **difference**, in both directions, and never on a membership the write
+ * leaves alone. Requiring scope on every world in the resulting set instead would be
+ * over-restriction, and a worse bug than the one it fixes: a `sim`-scoped editor patching only
+ * `topics` on a `{billing(primary), sim}` document would be refused for a world they are not
+ * touching, even though `config.scope: 'document'` and the caller's `hasScope(user,
+ * before.worlds)` intersection have already established that they may edit this document.
+ *
+ * `body.topics` was not checked at all before. Beyond the add/remove scope rule, every topic
+ * the caller *names* must live in the document's resulting world set — a topic in a third
+ * world would pull the item onto a topic page nobody expected it on. That is a 400 about the
+ * request rather than a permission, so it is checked over all named topics and answered first.
  */
 async function assertTaxonomyScope(
   tx: Parameters<typeof audit>[0],
   user: ReturnType<typeof requireUser>,
-  before: { category: string; worlds: string[] },
+  before: { category: string; worlds: string[]; topics: string[] },
   body: { category?: string; worlds?: string[]; topics?: string[] },
 ): Promise<void> {
   if (body.category === undefined && body.worlds === undefined && body.topics === undefined) return;
   const primary = body.category ?? before.category;
   const resulting = new Set([primary, ...(body.worlds ?? before.worlds)]);
-  for (const w of resulting) if (!hasScope(user, w)) throw forbidden();
-  for (const w of before.worlds) if (!resulting.has(w) && !hasScope(user, w)) throw forbidden();
-  if (body.topics?.length) {
-    const r = await tx.query<{ id: string; world_slug: string }>(
-      'select t.id, w.slug world_slug from topics t join worlds w on w.id = t.world_id where t.id = any($1::uuid[])',
-      [body.topics],
-    );
-    const found = new Map(r.rows.map((x) => [x.id, x.world_slug]));
-    for (const t of body.topics) {
-      const world = found.get(t);
-      if (!world) throw httpError(400, 'UNKNOWN_TOPIC', 'הנושא אינו קיים', { topicId: t });
-      if (!resulting.has(world))
-        throw httpError(400, 'TOPIC_OUT_OF_WORLD', 'הנושא שייך לעולם תוכן שהפריט אינו נמצא בו', {
-          topicId: t,
-          worldSlug: world,
-        });
-      if (!hasScope(user, world)) throw forbidden();
-    }
+  /** Only what this write actually changes; a retained membership is not the caller's to justify. */
+  const changed = <T>(a: Iterable<T>, b: ReadonlySet<T>) => [...a].filter((x) => !b.has(x));
+  const beforeWorlds = new Set(before.worlds);
+  for (const w of [...changed(resulting, beforeWorlds), ...changed(before.worlds, resulting)])
+    if (!hasScope(user, w)) throw forbidden();
+
+  if (body.topics === undefined) return;
+  const named = body.topics;
+  const beforeTopics = new Set(before.topics);
+  const resultingTopics = new Set(named);
+  const touched = [...changed(named, beforeTopics), ...changed(before.topics, resultingTopics)];
+  if (!named.length && !touched.length) return;
+  const worldOf = new Map(
+    (
+      await tx.query<{ id: string; world_slug: string }>(
+        'select t.id, w.slug world_slug from topics t join worlds w on w.id = t.world_id where t.id = any($1::uuid[])',
+        [[...new Set([...named, ...touched])]],
+      )
+    ).rows.map((x) => [x.id, x.world_slug]),
+  );
+  for (const t of named) {
+    const world = worldOf.get(t);
+    if (!world) throw httpError(400, 'UNKNOWN_TOPIC', 'הנושא אינו קיים', { topicId: t });
+    if (!resulting.has(world))
+      throw httpError(400, 'TOPIC_OUT_OF_WORLD', 'הנושא שייך לעולם תוכן שהפריט אינו נמצא בו', {
+        topicId: t,
+        worldSlug: world,
+      });
+  }
+  // A topic being added or removed is a membership change, so it takes the same scope rule as a
+  // world; a topic the write keeps is left alone, for the same reason a retained world is.
+  for (const t of touched) {
+    const world = worldOf.get(t);
+    if (world && !hasScope(user, world)) throw forbidden();
   }
 }
 
@@ -173,7 +198,8 @@ export default async function routes(app: FastifyInstance) {
       const user = requireUser(req);
       const body = req.body as z.infer<typeof CreateDocumentBodySchema>;
       const doc = await withTransaction(app.db, async (tx) => {
-        await assertTaxonomyScope(tx, user, { category: body.category, worlds: [] }, body);
+        // A create has no prior memberships, so every world and topic in the body is an addition.
+        await assertTaxonomyScope(tx, user, { category: body.category, worlds: [], topics: [] }, body);
         const d = await repo.insertDocument(tx, body, user.id);
         await audit(tx, {
           actorId: user.id,

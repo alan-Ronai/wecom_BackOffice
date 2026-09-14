@@ -116,6 +116,32 @@ const TABLE: Record<TrashType, { table: string; key: string }> = {
   script: { table: 'documents', key: 'id' },
 };
 
+/**
+ * The by-id half of A-M12. `GET /trash` is world-scoped, so a scoped user is not shown another
+ * world's deleted documents — but `POST /trash/:type/:id/restore` and `DELETE /trash/:type/:id`
+ * take an id, and without this an id from anywhere (a stale tab, a guess, an audit row) still
+ * restored or purged. 404 rather than 403, and the same answer as a genuinely missing id, so the
+ * route cannot be used to confirm that an out-of-scope item exists.
+ *
+ * Blocks and fields are catalogue entries with no world of their own; `listTrash` does not filter
+ * them either, so neither does this.
+ */
+export async function assertTrashScope(
+  q: Q,
+  type: TrashType,
+  id: string,
+  worldScopes: readonly string[] | null,
+): Promise<void> {
+  if (!worldScopes || (type !== 'document' && type !== 'script')) return;
+  const r = await q.query(
+    `select 1 from documents d
+      where d.id = $1 and d.deleted_at is not null
+        and exists (select 1 from document_worlds dw where dw.document_id = d.id and dw.world_slug = any($2))`,
+    [id, [...worldScopes]],
+  );
+  if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'הפריט לא נמצא בסל המיחזור');
+}
+
 export async function restore(tx: Tx, type: TrashType, id: string, userId: string): Promise<void> {
   const t = TABLE[type];
   const r = await tx.query(
