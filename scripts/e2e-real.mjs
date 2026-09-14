@@ -59,7 +59,7 @@ function run(cmd, args, opts = {}) {
  * leaked an API holding port 3101, so a later run's health check passed against a zombie pointing
  * at a database that no longer existed. Teardown signals the whole group.
  */
-function start(label, cmd, args, opts = {}) {
+function start(label, cmd, args, opts = {}, onLine) {
   const child = spawn(cmd, args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], detached: true, ...opts });
   children.push({ label, child });
   const pipe = (stream, to) => {
@@ -68,7 +68,13 @@ function start(label, cmd, args, opts = {}) {
       buf += d.toString();
       const lines = buf.split('\n');
       buf = lines.pop() ?? '';
-      for (const l of lines) if (l.trim()) to.write(`  [${label}] ${l}\n`);
+      for (const l of lines) {
+        if (!l.trim()) continue;
+        // The reader has to sit inside the pipe: attaching a second `data` listener afterwards
+        // races the one above, which has already consumed the first chunk.
+        onLine?.(l);
+        to.write(`  [${label}] ${l}\n`);
+      }
     });
   };
   pipe(child.stdout, process.stdout);
@@ -230,6 +236,16 @@ async function main() {
     { env: dbEnv },
   );
 
+  console.log('\n── 2b. wordpress stub ───────────────────────────────────────');
+  // The real connector talks to a real HTTP server here — the same stub the connector unit tests
+  // use — so W4-E2E-3 exercises fetch, auth, pagination and the push, not a mock of them.
+  let WP_URL = '';
+  start('wp', 'pnpm', ['--filter', '@wecom/api', 'exec', 'node', '../../scripts/wp-stub.mjs'], {}, (line) => {
+    const m = /WP_STUB_URL=(\S+)/.exec(line);
+    if (m) WP_URL = m[1];
+  });
+  await waitFor('wordpress stub url', () => !!WP_URL);
+
   console.log('\n── 3. api (production-like) ─────────────────────────────────');
   start('api', 'pnpm', ['--filter', '@wecom/api', 'exec', 'tsx', 'src/server.ts'], {
     env: {
@@ -251,6 +267,9 @@ async function main() {
       MODEL_DISABLED: 'true',
       MIGRATE_ON_START: 'false',
       BACKUP_DIR: '/tmp/wecom-e2e-backups',
+      // The stub is on loopback, and an empty allowlist would let a connector reach anything —
+      // so the gate also proves the allowlist admits a host it is told to admit.
+      CONNECTOR_HOST_ALLOWLIST: '127.0.0.1,localhost',
     },
   });
   await waitFor(`api healthy at ${API_URL}/api/v1/system/health`, httpOk(`${API_URL}/api/v1/system/health`));
@@ -291,6 +310,7 @@ async function main() {
         E2E_REAL_BASE_URL: WEB_URL,
         E2E_ADMIN_EMAIL: ADMIN_EMAIL,
         E2E_ADMIN_PASSWORD: ADMIN_PASSWORD,
+        E2E_WP_URL: WP_URL,
         ...(process.env.E2E_HEADED === '1' ? { PWDEBUG: '0' } : {}),
       },
     },
