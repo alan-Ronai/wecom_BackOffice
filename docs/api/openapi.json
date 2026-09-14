@@ -1471,12 +1471,18 @@
                           "roleId": {
                             "type": "string",
                             "format": "uuid"
+                          },
+                          "lastSyncedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
                           }
                         },
                         "required": [
                           "idpGroupId",
                           "idpGroupName",
-                          "roleId"
+                          "roleId",
+                          "lastSyncedAt"
                         ],
                         "additionalProperties": false
                       }
@@ -1557,6 +1563,146 @@
                   "required": [
                     "ok",
                     "auditId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/groups/search": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "in": "query",
+            "name": "q",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "displayName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {},
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {},
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {},
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
                   ],
                   "additionalProperties": false
                 }
@@ -26961,6 +27107,205 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "connectors"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "connectorId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "externalId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "connectorId",
+                  "documentId",
+                  "externalId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "connectorId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "connectorName": {
+                      "type": "string"
+                    },
+                    "documentId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "remoteUrl": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "synced",
+                        "pending_import",
+                        "pending_push",
+                        "conflict"
+                      ]
+                    },
+                    "baseLocalVersion": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "currentLocalVersion": {
+                      "type": "integer"
+                    },
+                    "remoteChanged": {
+                      "type": "boolean"
+                    },
+                    "localChanged": {
+                      "type": "boolean"
+                    },
+                    "lastSyncedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "connectorId",
+                    "connectorName",
+                    "documentId",
+                    "title",
+                    "externalId",
+                    "remoteUrl",
+                    "state",
+                    "baseLocalVersion",
+                    "currentLocalVersion",
+                    "remoteChanged",
+                    "localChanged",
+                    "lastSyncedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {},
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {},
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {},
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/sync/links/{id}/conflict": {
@@ -28393,6 +28738,315 @@
                   "required": [
                     "code",
                     "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {},
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {},
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sync/parity": {
+      "get": {
+        "tags": [
+          "connectors"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "query",
+            "name": "connectorId",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "connectors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "connectorId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "connectorName": {
+                            "type": "string"
+                          },
+                          "remoteAvailable": {
+                            "type": "boolean"
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "connectorId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "connectorName": {
+                                  "type": "string"
+                                },
+                                "documentId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "externalId": {
+                                  "type": "string"
+                                },
+                                "remoteUrl": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "synced",
+                                    "pending_import",
+                                    "pending_push",
+                                    "conflict"
+                                  ]
+                                },
+                                "baseLocalVersion": {
+                                  "type": "integer",
+                                  "nullable": true
+                                },
+                                "currentLocalVersion": {
+                                  "type": "integer"
+                                },
+                                "remoteChanged": {
+                                  "type": "boolean"
+                                },
+                                "localChanged": {
+                                  "type": "boolean"
+                                },
+                                "lastSyncedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "nullable": true
+                                },
+                                "localHash": {
+                                  "type": "string"
+                                },
+                                "remoteHash": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "baseRemoteHash": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "remoteUpdatedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "nullable": true
+                                },
+                                "unlinkedReason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "remote_missing",
+                                    "remote_unavailable"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "connectorId",
+                                "connectorName",
+                                "documentId",
+                                "title",
+                                "externalId",
+                                "remoteUrl",
+                                "state",
+                                "baseLocalVersion",
+                                "currentLocalVersion",
+                                "remoteChanged",
+                                "localChanged",
+                                "lastSyncedAt",
+                                "localHash",
+                                "remoteHash",
+                                "baseRemoteHash",
+                                "remoteUpdatedAt"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "unlinked": {
+                            "type": "object",
+                            "properties": {
+                              "documents": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "documentId": {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "category": {
+                                      "type": "string",
+                                      "enum": [
+                                        "sim",
+                                        "tech",
+                                        "billing",
+                                        "plans",
+                                        "intl",
+                                        "ops"
+                                      ]
+                                    },
+                                    "currentVersion": {
+                                      "type": "integer"
+                                    },
+                                    "updatedAt": {
+                                      "type": "string",
+                                      "format": "date-time",
+                                      "nullable": true
+                                    }
+                                  },
+                                  "required": [
+                                    "documentId",
+                                    "title",
+                                    "category",
+                                    "currentVersion",
+                                    "updatedAt"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "remote": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "externalId": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "hash": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string"
+                                    },
+                                    "url": {
+                                      "type": "string",
+                                      "nullable": true
+                                    },
+                                    "updatedAt": {
+                                      "type": "string",
+                                      "format": "date-time",
+                                      "nullable": true
+                                    }
+                                  },
+                                  "required": [
+                                    "externalId",
+                                    "title",
+                                    "hash",
+                                    "kind",
+                                    "url",
+                                    "updatedAt"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "documents",
+                              "remote"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "connectorId",
+                          "connectorName",
+                          "remoteAvailable",
+                          "items",
+                          "unlinked"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "connectors"
                   ],
                   "additionalProperties": false
                 }

@@ -10,6 +10,8 @@ import type pg from 'pg';
 import { ErrorEnvelopeSchema } from '@wecom/shared';
 import { loadConfig } from '../../../src/config.js';
 import connectorsModule, { type ConnectorsModuleOptions } from '../../../src/modules/connectors/index.js';
+import syncModule from '../../../src/modules/sync/routes.js';
+import type { RemoteCache } from '../../../src/modules/sync/remote-cache.js';
 
 export interface L6TestUser {
   id: string;
@@ -22,7 +24,13 @@ export interface L6TestUser {
  * `buildApp` itself is exercised separately (registration + 403 without a user).
  */
 export async function buildL6TestApp(
-  opts: { pool: pg.Pool; databaseUrl: string; testUser?: L6TestUser } & ConnectorsModuleOptions,
+  opts: {
+    pool: pg.Pool;
+    databaseUrl: string;
+    testUser?: L6TestUser;
+    /** Wave 3: injected so the parity report's 60 s remote-listing window can be driven in tests. */
+    remoteCache?: RemoteCache;
+  } & ConnectorsModuleOptions,
 ): Promise<FastifyInstance> {
   const config = loadConfig({ DATABASE_URL: opts.databaseUrl, NODE_ENV: 'test' });
   const app = Fastify({ logger: false }).withTypeProvider<ZodTypeProvider>();
@@ -64,6 +72,12 @@ export async function buildL6TestApp(
         revisions: opts.revisions,
         documents: opts.documents,
         events: opts.events,
+      });
+      // Wave 3: the parity report and `POST /sync/links`, registered where `app.ts` registers them.
+      await v1.register(syncModule, {
+        repo: v1.connectors.repo,
+        registry: v1.connectors.registry,
+        cache: opts.remoteCache,
       });
     },
     { prefix: '/api/v1' },

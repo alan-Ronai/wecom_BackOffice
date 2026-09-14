@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { OidcProvider } from '../modules/auth/oidc.js';
 import type { IdentityService } from '../modules/auth/identity.js';
 import { audit } from '../lib/audit.js';
+import { recordGroupsSynced } from '../modules/admin/groups-sync-state.js';
 import { withTransaction } from '../lib/sql.js';
 import { QUEUES } from '../plugins/boss.js';
 
@@ -15,7 +16,7 @@ export type SyncDeps = {
 
 export async function runIdentitySync(
   deps: SyncDeps,
-): Promise<{ checked: number; deactivated: number; roleChanges: number }> {
+): Promise<{ checked: number; deactivated: number; roleChanges: number; groups: number }> {
   const users = (
     await deps.db.query<{ id: string; subject: string }>(
       `select id, subject from users where active and source='entra'`,
@@ -34,7 +35,11 @@ export async function runIdentitySync(
     const ch = await deps.identity.applyGroupMap(u.id, groups);
     if (ch.added.length || ch.removed.length) roleChanges++;
   }
-  const summary = { checked: users.length, deactivated, roleChanges };
+  // Bookkeeping the admin screen reads back (`GET /admin/groups-map`): the run reconciled every
+  // mapping, so every mapping is stamped with the run's time. Recorded after the loop, so a run
+  // that threw half way through does not claim the mappings it never reached.
+  const syncedGroups = await recordGroupsSynced(deps.db, new Date());
+  const summary = { checked: users.length, deactivated, roleChanges, groups: syncedGroups.length };
   await withTransaction(deps.db, (tx) =>
     audit(tx, {
       actorId: null,
