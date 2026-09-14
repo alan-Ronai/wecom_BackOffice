@@ -50,7 +50,10 @@ const SYSTEM_STATE_KEY = 'backup_check';
  * and so the result survives past the job that produced it (the worker and the request
  * that reads it are not always the same process).
  */
-export async function recordBackupCheck(db: pg.Pool | pg.PoolClient, result: BackupCheckResult): Promise<void> {
+export async function recordBackupCheck(
+  db: pg.Pool | pg.PoolClient,
+  result: BackupCheckResult,
+): Promise<void> {
   await db.query(
     `insert into system_state(key, value, updated_at) values ($1, $2, now())
      on conflict (key) do update set value = excluded.value, updated_at = excluded.updated_at`,

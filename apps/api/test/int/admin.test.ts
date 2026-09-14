@@ -90,7 +90,12 @@ run('admin routes', () => {
     expect(body.suggestions).toEqual({ pending: 0 });
     // No backup directory in a test container, and the worker has never run: falls back to a
     // live check, which also reports false (not "unknown") since it did run.
-    expect(body.backup).toMatchObject({ ok: false, latestFile: null, lastBackupAt: null, lastBackupOk: false });
+    expect(body.backup).toMatchObject({
+      ok: false,
+      latestFile: null,
+      lastBackupAt: null,
+      lastBackupOk: false,
+    });
     expect(typeof body.version).toBe('string');
     expect(
       (await app.inject({ method: 'GET', url: '/api/v1/admin/system', headers: editor })).statusCode,
@@ -100,7 +105,12 @@ run('admin routes', () => {
   it('surfaces the system.backup-check worker result once recorded (lastBackupAt/lastBackupOk)', async () => {
     const { recordBackupCheck } = await import('../../src/services/backupCheck.js');
     const latestAt = new Date().toISOString();
-    await recordBackupCheck(db.pool, { ok: true, latestFile: 'kb-20260913-0215.dump', ageHours: 1, latestAt });
+    await recordBackupCheck(db.pool, {
+      ok: true,
+      latestFile: 'kb-20260913-0215.dump',
+      ageHours: 1,
+      latestAt,
+    });
 
     const health = await app.inject({ method: 'GET', url: '/api/v1/system/health' });
     expect(health.json()).toMatchObject({ lastBackupAt: latestAt, lastBackupOk: true });

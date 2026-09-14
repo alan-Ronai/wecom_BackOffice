@@ -268,7 +268,9 @@ export default async function routes(app: FastifyInstance) {
       // Best-effort, outside the transaction: a model outage must never fail a publish.
       const model = (app as unknown as { model?: ModelClient | null }).model;
       if (model?.embed)
-        updateEmbedding(app.db, id, model).catch((err) => req.log.warn({ err, id }, 'embed on publish failed'));
+        updateEmbedding(app.db, id, model).catch((err) =>
+          req.log.warn({ err, id }, 'embed on publish failed'),
+        );
       return result;
     },
   );
@@ -373,7 +375,9 @@ export default async function routes(app: FastifyInstance) {
       await pushOnPublish(app, req, id, user.id);
       const model = (app as unknown as { model?: ModelClient | null }).model;
       if (model?.embed)
-        updateEmbedding(app.db, id, model).catch((err) => req.log.warn({ err, id }, 'embed on restore failed'));
+        updateEmbedding(app.db, id, model).catch((err) =>
+          req.log.warn({ err, id }, 'embed on restore failed'),
+        );
       return result;
     },
   );

@@ -301,14 +301,22 @@ async function rerank(q: Q, hits: SearchHit[], text: string, model: ModelClient)
  * a title/description/step-text summary and comfortably under typical embedding-model
  * context limits.
  */
-export async function updateEmbedding(q: Q, id: string, model: ModelClient | null | undefined): Promise<boolean> {
+export async function updateEmbedding(
+  q: Q,
+  id: string,
+  model: ModelClient | null | undefined,
+): Promise<boolean> {
   if (!model?.embed) return false;
   const r = await q.query(
     "select title, coalesce(description,'') description, coalesce(search_text,'') search_text from documents where id=$1 and deleted_at is null",
     [id],
   );
   if (!r.rowCount) return false;
-  const { title, description, search_text: searchText } = r.rows[0] as {
+  const {
+    title,
+    description,
+    search_text: searchText,
+  } = r.rows[0] as {
     title: string;
     description: string;
     search_text: string;

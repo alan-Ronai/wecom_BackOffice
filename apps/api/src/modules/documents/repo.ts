@@ -642,11 +642,7 @@ export async function getVersion(q: Q, id: string, v: number): Promise<Document 
  * round trip per version. Used by `GET /documents/:id/diff`'s blame pass, which used to
  * call `getVersion` once per version in the [from, to] range.
  */
-export async function getVersionsBatch(
-  q: Q,
-  id: string,
-  versions: number[],
-): Promise<Map<number, Document>> {
+export async function getVersionsBatch(q: Q, id: string, versions: number[]): Promise<Map<number, Document>> {
   const out = new Map<number, Document>();
   if (!versions.length) return out;
   const r = await q.query(
