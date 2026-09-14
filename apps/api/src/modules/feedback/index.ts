@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import { setNotifier } from '../../plugins/wave4.js';
 import feedbackRoutes from './routes.js';
+import { PgNotifier } from './notifier.js';
 import type { AlertDeps } from './alerts.js';
 
 /**
@@ -13,5 +15,7 @@ export default async function feedbackModule(app: FastifyInstance) {
     taxonomy: app.taxonomy,
     log: app.log,
   });
+  // The W0 holder delegates, so swapping here is visible to every sibling module and to jobs.
+  setNotifier(app, new PgNotifier(app.db, app.events, app.log));
   await app.register(feedbackRoutes(deps));
 }
