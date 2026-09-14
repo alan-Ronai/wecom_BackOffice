@@ -73,6 +73,7 @@ export const me: Me = {
   roles: ['admin'],
   permissions: [...PERMISSIONS],
   categoryScopes: null,
+  worldScopes: null,
   preferences: { theme: null, font: 'plex', panel: true, callMode: true, sidebarExpanded: false },
 };
 

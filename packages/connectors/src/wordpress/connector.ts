@@ -1,14 +1,16 @@
 import type {
+  AbsorbedMedia,
   Connector,
   ConnectorInfo,
   LibraryContent,
+  MediaSink,
   RemoteChange,
   RemoteItem,
   RemoteRef,
   SourceContent,
 } from '../contract.js';
 import { WpConfigSchema, type WpConfig } from './config.js';
-import { WpClient, type WpPost } from './client.js';
+import { WpClient, WpError, type WpPost } from './client.js';
 import { contentHash, htmlToParagraphs, normalizeText } from './html.js';
 import { renderWpHtml } from '../render/wpHtml.js';
 import { assertFresh, verifySignature, WebhookBodySchema } from './webhook.js';
@@ -102,7 +104,7 @@ export class WordPressConnector implements Connector<WpConfig> {
   async push(cfg: WpConfig, externalId: string | null, content: LibraryContent): Promise<RemoteRef> {
     const client = this.client(cfg);
     let html = content.html && content.html.trim() ? content.html : renderWpHtml(content);
-    if (content.assets) html = await this.rewriteAssets(client, html, content.assets);
+    if (content.assets) html = await this.rewriteAssets(client, html, content.assets, content.media);
     let type: string;
     let post: WpPost;
     if (externalId) {
@@ -125,32 +127,115 @@ export class WordPressConnector implements Connector<WpConfig> {
     };
   }
 
-  private static ASSET_IMG = /<img([^>]*?)\ssrc="\/api\/v1\/assets\/([0-9a-f-]{36})"([^>]*)>/g;
+  /**
+   * Matches the `src` `sanitizeHtml` emits. A strict UUID rather than 36 characters of hex and
+   * hyphens, so a malformed src cannot round-trip into a media upload (C-M1).
+   */
+  private static ASSET_IMG =
+    /<img([^>]*?)\ssrc="\/api\/v1\/assets\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"([^>]*)>/g;
+  /** Remote `<img>` in inbound HTML: absolute http(s) only, single- or double-quoted. */
+  private static REMOTE_IMG = /<img([^>]*?)\ssrc=(["'])(https?:\/\/[^"']+)\2([^>]*)>/g;
+
+  private static EXT: Record<string, string> = {
+    'image/png': 'png',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/jpeg': 'jpg',
+  };
+
+  /** `"` inside an attribute value would break out of it; the remote controls this string. */
+  private static attr = (v: string) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+
   /** Every KB asset image becomes a WordPress media item; unknown assets are dropped rather than left broken. */
   private async rewriteAssets(
     client: WpClient,
     html: string,
     resolve: NonNullable<LibraryContent['assets']>,
+    media?: LibraryContent['media'],
   ): Promise<string> {
     const uploaded = new Map<string, string>();
-    const ids = [...html.matchAll(WordPressConnector.ASSET_IMG)].map((m) => m[2]);
+    const ids = [...html.matchAll(WordPressConnector.ASSET_IMG)].map((m) => m[2]!);
     for (const id of new Set(ids)) {
+      /**
+       * B-I6: reuse what an earlier push uploaded. Without this a document with ten images
+       * published fifty times left five hundred copies of the same bytes in the customer's
+       * media library. A HEAD detects a media item deleted on the remote; anything other than
+       * a clean 404/410 counts as "still there", so a transient network failure does not
+       * re-upload the whole library.
+       */
+      const known = await media?.get(id);
+      if (known) {
+        if (!(await this.mediaMissing(known.remoteUrl))) {
+          uploaded.set(id, known.remoteUrl);
+          continue;
+        }
+        await media?.forget(id);
+      }
       const a = await resolve(id);
       if (!a) continue;
-      const ext =
-        a.mime === 'image/png'
-          ? 'png'
-          : a.mime === 'image/gif'
-            ? 'gif'
-            : a.mime === 'image/webp'
-              ? 'webp'
-              : 'jpg';
-      const m = await client.uploadMedia(a.bytes, a.mime, `${id}.${ext}`);
+      const m = await client.uploadMedia(a.bytes, a.mime, `${id}.${WordPressConnector.EXT[a.mime] ?? 'jpg'}`);
       uploaded.set(id, m.source_url);
+      await media?.put(id, String(m.id), m.source_url);
     }
     return html.replace(WordPressConnector.ASSET_IMG, (_all, pre: string, id: string, post: string) =>
-      uploaded.has(id) ? `<img${pre} src="${uploaded.get(id)}"${post}>` : '',
+      uploaded.has(id) ? `<img${pre} src="${WordPressConnector.attr(uploaded.get(id)!)}"${post}>` : '',
     );
+  }
+
+  private async mediaMissing(url: string): Promise<boolean> {
+    try {
+      assertAllowedHost(url, this.guards.hostAllowlist);
+      const res = await this.fetchImpl(url, { method: 'HEAD' });
+      return res.status === 404 || res.status === 410;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * B-C2 — the missing half of §5.1: "pull rewrites WordPress media URLs back to assets
+   * (downloaded once, deduped by sha256)".
+   *
+   * Inbound bodies point at `https://<site>/wp-content/uploads/…`, and `sanitizeHtml` keeps a
+   * `src` only when it is `/api/v1/assets/<uuid>`, so every image was stripped on the way in —
+   * and the next push then wrote that image-free HTML back with `updatePost`, removing the
+   * images from the WordPress post as well. Each remote image is fetched through the same
+   * allowlisted `fetch` the connector uses everywhere else, handed to the sink (which dedupes
+   * on sha256, so "downloaded once" holds across syncs) and its `src` rewritten. A failure
+   * drops that one image and is reported, never swallowed.
+   */
+  async absorbMedia(cfg: WpConfig, html: string, sink: MediaSink): Promise<AbsorbedMedia> {
+    assertAllowedHost(cfg.baseUrl, this.guards.hostAllowlist);
+    const rewritten = new Map<string, string>();
+    const dropped: AbsorbedMedia['dropped'] = [];
+    const urls = [...html.matchAll(WordPressConnector.REMOTE_IMG)].map((m) => m[3]!);
+    if (!urls.length) return { html, dropped };
+    const headers = this.client(cfg).mediaHeaders();
+    for (const url of new Set(urls)) {
+      try {
+        assertAllowedHost(url, this.guards.hostAllowlist);
+        const res = await this.fetchImpl(url, { headers });
+        if (!res.ok) throw new WpError(res.status, `WordPress GET media → ${res.status}`);
+        const mime = (res.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
+        if (!WordPressConnector.EXT[mime]) throw new Error(`unsupported media type: ${mime || 'unknown'}`);
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        rewritten.set(url, (await sink(bytes, mime, url)).src);
+      } catch (e) {
+        dropped.push({ url, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    return {
+      html: html.replace(
+        WordPressConnector.REMOTE_IMG,
+        (all, pre: string, _q: string, url: string, post: string) => {
+          const src = rewritten.get(url);
+          // An image we could not take stays as it is: the sanitizer drops it, and the drop is
+          // already on the record in `dropped` rather than being invisible.
+          return src ? `<img${pre} src="${WordPressConnector.attr(src)}"${post}>` : all;
+        },
+      ),
+      dropped,
+    };
   }
 
   /** `body` carries the raw request text so the HMAC can be checked byte for byte. */

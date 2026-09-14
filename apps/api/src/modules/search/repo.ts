@@ -3,7 +3,8 @@ import type { SearchHit, SearchQuery, SearchResponse } from '@wecom/shared';
 import type pg from 'pg';
 import { getDocument, recomputeDerived, type Q } from '../documents/repo.js';
 import { htmlToText } from '../scripts/html.js';
-import { withTransaction } from '../../lib/sql.js';
+import { LIKE_ESCAPE, likeEscape, withTransaction } from '../../lib/sql.js';
+import { visibleWhere } from '../../lib/visibility.js';
 
 /** Hebrew category labels, mirroring the legacy `KB.CATS`. */
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -25,8 +26,8 @@ const words = (q: string) => q.trim().split(/\s+/).filter(Boolean);
 
 const wordClause = (cols: string[], w: string, params: unknown[]): string => {
   params.push(w);
-  const i = '$' + params.length;
-  return '(' + cols.map((c) => `${c} ilike '%' || ${i} || '%'`).join(' or ') + ')';
+  const i = likeEscape('$' + params.length);
+  return '(' + cols.map((c) => `${c} ilike '%' || ${i} || '%'${LIKE_ESCAPE}`).join(' or ') + ')';
 };
 /** Documents and steps must contain every word: "ריענון sim" is one step, not two results. */
 const allWords = (cols: string[], ws: string[], params: unknown[]): string =>
@@ -49,7 +50,7 @@ export async function search(
 ): Promise<SearchResponse> {
   const started = Date.now();
   /** W2 visibility: a read-only role never sees unpublished documents (or their steps). */
-  const visTerm = readUnpublished ? '' : " and d.status in ('published','partial')";
+  const visTerm = visibleWhere(readUnpublished);
   const text = query.q.trim();
   const requested = query.types
     ? new Set(query.types.split(',').map((t) => t.trim()) as SearchGroupType[])
@@ -278,10 +279,14 @@ export async function search(
     const params: unknown[] = [];
     const cond = anyWord(['d.title', "coalesce(d.body_html,'')"], ws, params);
     const scope = scopeTerm(params);
+    // A-M2: the facets apply here too. Scripts are type-T documents since 0030, so they carry
+    // worlds, topics and tags like every other document — `?world=`/`?topic=`/`?tag=` used to
+    // narrow every group except this one, and `?docType=M` still returned script hits.
+    const tax = taxTerm(params);
     params.push(limit);
     const r = await q.query(
       `select d.id, d.title, coalesce(d.body_html,'') body from documents d
-        where d.deleted_at is null and d.doc_type = 'T' and d.kind = 'text' and (${cond})${scope}${visTerm} order by d.title limit $${params.length}`,
+        where d.deleted_at is null and d.doc_type = 'T' and d.kind = 'text' and (${cond})${scope}${visTerm}${tax} order by d.title limit $${params.length}`,
       params,
     );
     for (const x of r.rows) {

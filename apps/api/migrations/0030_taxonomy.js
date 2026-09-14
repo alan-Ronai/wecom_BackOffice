@@ -21,8 +21,27 @@ const q = (s) => s.replace(/'/g, "''");
 
 /** 0007's function plus tags at weight B. */
 const SEARCH_FN_WITH_TAGS = `create or replace function documents_search_vector_update() returns trigger as $$ begin new.search_vector := setweight(to_tsvector('simple', coalesce(new.title,'')), 'A') || setweight(to_tsvector('simple', coalesce(new.description,'')), 'B') || setweight(to_tsvector('simple', coalesce(array_to_string(new.tags, ' '),'')), 'B') || setweight(to_tsvector('simple', coalesce(new.search_text,'')), 'C'); return new; end $$ language plpgsql`;
-/** Verbatim copy of 0007_search.js so `down` restores it. */
-const SEARCH_FN_ORIGINAL = `create or replace function documents_search_vector_update() returns trigger as $$ begin new.search_vector := setweight(to_tsvector('simple', coalesce(new.title,'')), 'A') || setweight(to_tsvector('simple', coalesce(new.description,'')), 'B') || setweight(to_tsvector('simple', coalesce(new.search_text,'')), 'C'); return new; end $$ language plpgsql`;
+/**
+ * Verbatim copy of **0027**'s definition, which is what is live when this file runs — not
+ * 0007's. Restoring 0007's would drop the `ts_delete(…, kb_stopwords())` from the index side
+ * while 0027's `kb_tsquery`/`kb_tsquery_prefix` keep stripping the same stopwords at query
+ * time: the two halves disagree and a query containing a Hebrew stopword stops matching. That
+ * is precisely the regression 0027 exists to prevent, and rolling back through 0035…0030 is
+ * exactly what a bad wave-4 deploy does.
+ */
+const SEARCH_FN_ORIGINAL = `
+  create or replace function documents_search_vector_update() returns trigger as $$
+  begin
+    new.search_vector := ts_delete(
+      setweight(to_tsvector('simple', coalesce(new.title,'')), 'A')
+      || setweight(to_tsvector('simple', coalesce(new.description,'')), 'B')
+      || setweight(to_tsvector('simple', coalesce(new.search_text,'')), 'C'),
+      kb_stopwords()
+    );
+    return new;
+  end
+  $$ language plpgsql;
+`;
 const ISO = (col) => `to_char(${col} at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
 exports.up = (pgm) => {
@@ -95,15 +114,20 @@ exports.up = (pgm) => {
            order by topic_id, (slug like 'topic-%') desc, created_at) x
     join worlds w on w.slug = x.category
     on conflict do nothing`);
+  // `topics` is unique on (world_id, slug), so matching by slug alone would attach a document
+  // to a same-named topic in another world on a database whose legacy `topic_id` was
+  // per-category. The shipped dataset has no id spanning two categories; scope the join anyway.
   pgm.sql(`insert into document_topics(document_id, topic_id)
-    select d.id, t.id from documents d join topics t on t.slug = 'topic-' || d.topic_id
+    select d.id, t.id from documents d
+      join worlds w on w.slug = d.category
+      join topics t on t.world_id = w.id and t.slug = 'topic-' || d.topic_id
     where d.topic_id is not null on conflict do nothing`);
   pgm.dropColumns('documents', ['topic_id']);
 
   // 6. doc_type (code prefix wins; then the spec rule)
   pgm.addColumns('documents', { doc_type: { type: 'text' } });
   pgm.sql(`update documents d set doc_type = case
-      when d.code ~ '^[MROES]-' then left(d.code, 1)
+      when d.code ~ '^[MROESTI]-' then left(d.code, 1)
       when d.kind = 'retention' then 'R'
       when exists (select 1 from phases p where p.document_id = d.id) then 'R'
       else 'I' end`);
@@ -131,7 +155,7 @@ exports.up = (pgm) => {
   // 9. scripts → type-T documents; script_refs → document_links
   pgm.sql(`insert into documents(id, slug, title, description, category, wave, priority, kind, status, doc_type, tags, body_html,
                                  current_version, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by)
-    select s.id, 'script-' || left(replace(s.id::text, '-', ''), 8), s.title, '',
+    select s.id, 'script-' || left(replace(s.id::text, '-', ''), 12), s.title, '',
            coalesce((select d.category from script_refs r join documents d on d.id = r.document_id
                       where r.script_id = s.id group by d.category order by count(*) desc, d.category limit 1), 'ops'),
            3, 'm', 'text', 'published', 'T', s.tags,
@@ -181,6 +205,9 @@ exports.down = (pgm) => {
     },
     { constraints: { primaryKey: ['script_id', 'document_id'] } },
   );
+  // 0028 created these; without them a rollback-then-forward leaves the tables unindexed.
+  pgm.createIndex('script_refs', 'script_id', { ifNotExists: true });
+  pgm.createIndex('script_refs', 'document_id', { ifNotExists: true });
   pgm.sql(`insert into scripts(id, title, text, tags, created_at, updated_at, created_by, updated_by, deleted_at, deleted_by)
     select d.id, d.title,
            replace(replace(replace(replace(replace(regexp_replace(coalesce(d.body_html, ''), '^<p>|</p>$', '', 'g'),

@@ -80,20 +80,33 @@ export async function getAsset(
   };
 }
 
-/** Deletes assets that no source document version and no text-kind body references. */
+/** The `src` the sanitizer keeps, as a capture. A strict UUID, so the `::uuid` cast is safe. */
+const ASSET_REF_RE = '/api/v1/assets/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
+const refs = (table: string, col: string) =>
+  `select distinct (regexp_matches(coalesce(${col}, ''), '${ASSET_REF_RE}', 'g'))[1]::uuid id from ${table}`;
+
+/**
+ * Deletes assets nothing references any more.
+ *
+ * **`drafts` is a reference.** §5.1 autosaves in-progress source HTML into `drafts` under
+ * `source:<documentId>` every 3 s, and an image is uploaded to `/assets` the moment it is
+ * pasted — long before "שמור גרסה" writes a version. The 24-hour floor only bought a day, so
+ * an editor who pasted screenshots on Monday and saved the version the following week lost
+ * them to Sunday's run, permanently: `assets` is the only copy.
+ *
+ * Ids are extracted once per row and compared as uuids, rather than correlating every asset
+ * against every HTML row with `like '%' || a.id || '%'` (assets × versions).
+ */
 export async function gcUnreferencedAssets(q: Q): Promise<number> {
-  // `documents.body_html` only exists once W1's migration lands; probe rather than assume.
-  const hasBody = await q.query(
-    "select 1 from information_schema.columns where table_name='documents' and column_name='body_html'",
-  );
-  const bodyClause = hasBody.rowCount
-    ? "and not exists (select 1 from documents d where d.body_html like '%' || a.id::text || '%')"
-    : '';
   const r = await q.query(`
+    with referenced as (
+      ${refs('source_document_versions', 'html')}
+      union ${refs('source_documents', 'html')}
+      union ${refs('documents', 'body_html')}
+      union ${refs('drafts', "payload->>'html'")}
+    )
     delete from assets a
-    where not exists (select 1 from source_document_versions v where v.html like '%' || a.id::text || '%')
-      and not exists (select 1 from source_documents s where s.html like '%' || a.id::text || '%')
-      ${bodyClause}
-      and a.created_at < now() - interval '1 day'`);
+     where a.created_at < now() - interval '1 day'
+       and not exists (select 1 from referenced r where r.id = a.id)`);
   return r.rowCount ?? 0;
 }

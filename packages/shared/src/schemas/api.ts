@@ -294,6 +294,15 @@ export const SyncLinkSchema = z.object({
   baseLocalVersion: z.number().int(),
   lastSyncedAt: IsoDateSchema.nullable(),
   conflict: z.unknown().nullable(),
+  /**
+   * W4/B-C2: images the last inbound sync could not bring across. The sanitizer drops an
+   * `<img>` whose `src` is not a local asset, so without this the loss would be invisible —
+   * and the next push would write the image-free body back to the remote.
+   */
+  mediaErrors: z
+    .array(z.object({ url: z.string(), error: z.string() }))
+    .nullable()
+    .default(null),
 });
 export const SyncResolveBodySchema = z.object({
   resolution: z.enum(['ours', 'theirs', 'merged']),

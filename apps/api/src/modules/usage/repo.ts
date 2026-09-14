@@ -2,6 +2,7 @@ import type pg from 'pg';
 import type { UsageAnalytics } from '@wecom/shared';
 import type { z } from 'zod';
 import type { SearchLogQuerySchema, UsageAnalyticsQuerySchema } from '@wecom/shared';
+import { visibleStatusSql } from '../../lib/visibility.js';
 
 type Q = pg.Pool | pg.PoolClient;
 export type UsageQuery = z.infer<typeof UsageAnalyticsQuerySchema>;
@@ -42,14 +43,33 @@ export const window = (query: UsageQuery): { from: Date; to: Date } => {
   return { from, to };
 };
 
-export async function usageAnalytics(q: Q, query: UsageQuery, caps: Caps): Promise<UsageAnalytics> {
+/**
+ * B-I8 / B-M7: §2.5 grants `analytics.read` to lead, admin **and editor**, and editors are the
+ * role that carries `world_scope`. Unscoped, a single-world editor read every world's item
+ * titles, the org-wide viewer leaderboard and the org-wide staleness table. `worldScopes` is
+ * the caller's grant (null = every world) and is applied on top of the `?world=` filter.
+ *
+ * Both terms now intersect `document_worlds` rather than comparing `documents.category`: the
+ * contract said W5 would use the primary world "until W6 widens to `document_worlds`", and
+ * this is W6.
+ */
+export async function usageAnalytics(
+  q: Q,
+  query: UsageQuery,
+  caps: Caps,
+  worldScopes: readonly string[] | null = null,
+): Promise<UsageAnalytics> {
   const { from, to } = window(query);
   const limit = query.limit;
-  // World filter = primary world (documents.category). W6 may widen to document_worlds after W1 merges.
   const worldTerm = (alias: string, params: unknown[]) => {
-    if (!query.world) return '';
-    params.push(query.world);
-    return ` and ${alias}.category = $${params.length}`;
+    let sql = '';
+    const member = (v: unknown) => {
+      params.push(v);
+      return ` and exists (select 1 from document_worlds dw where dw.document_id=${alias}.id and dw.world_slug = any($${params.length}::text[]))`;
+    };
+    if (worldScopes) sql += member([...worldScopes]);
+    if (query.world) sql += member([query.world]);
+    return sql;
   };
   const docType = caps.docType ? 'd.doc_type' : 'null::text';
 
@@ -87,9 +107,13 @@ export async function usageAnalytics(q: Q, query: UsageQuery, caps: Caps): Promi
   if (caps.topics) {
     const p3: unknown[] = [from, to];
     let w3 = '';
+    if (worldScopes) {
+      p3.push([...worldScopes]);
+      w3 += ` and w.slug = any($${p3.length}::text[])`;
+    }
     if (query.world) {
       p3.push(query.world);
-      w3 = ` and w.slug = $${p3.length}`;
+      w3 += ` and w.slug = $${p3.length}`;
     }
     p3.push(limit);
     const r = await q.query(
@@ -117,7 +141,7 @@ export async function usageAnalytics(q: Q, query: UsageQuery, caps: Caps): Promi
     `select d.id document_id, d.title, ${ownerSel}, d.updated_at, ${publishedSel},
             floor(extract(epoch from (now() - d.updated_at)) / 86400)::int days
      from documents d ${ownerJoin}
-     where d.deleted_at is null and d.status in ('published','partial')${w4}
+     where d.deleted_at is null and ${visibleStatusSql()}${w4}
      order by d.updated_at asc limit $${p4.length}`,
     p4,
   );
@@ -133,7 +157,8 @@ export async function usageAnalytics(q: Q, query: UsageQuery, caps: Caps): Promi
       viewers: x.viewers as number,
       lastViewedAt: iso(x.last_viewed_at as Date),
     })),
-    topItems: itemViews.rows.map((x) => ({
+    // B-M7: a top-10, not a second copy of `itemViews` at the same limit.
+    topItems: itemViews.rows.slice(0, 10).map((x) => ({
       documentId: x.document_id as string,
       title: x.title as string,
       views: x.views as number,

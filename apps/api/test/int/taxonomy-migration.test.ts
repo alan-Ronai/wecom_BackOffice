@@ -94,7 +94,9 @@ run('0030_taxonomy', () => {
     expect(types.rows).toEqual([
       { slug: 'browsing', doc_type: 'R', kind: 'steps' },
       { slug: 'pdf-011', doc_type: 'M', kind: 'steps' },
-      { slug: 'script-44444444', doc_type: 'T', kind: 'text' },
+      // A-M10: the fold slug is 12 hex characters, not 8 — 32 bits against a unique constraint
+      // aborts the whole migration on a collision.
+      { slug: 'script-444444444444', doc_type: 'T', kind: 'text' },
       { slug: 'topic-11', doc_type: 'I', kind: 'steps' },
     ]);
     const cols = await pool.query(

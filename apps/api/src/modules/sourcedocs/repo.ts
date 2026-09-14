@@ -14,8 +14,16 @@ export interface SourceDocRow {
   updatedById: string | null;
   updatedByName: string | null;
   updatedAt: string;
+  /**
+   * `source_revisions.id` behind this version, when the source came from an import or a sync.
+   * The source pane's raw-file download (`GET /sources/:id/revisions/:rev/raw`, spec §5.1) has
+   * no other way to name a revision, so without it the button can never render.
+   */
+  latestRevisionId: string | null;
 }
-const SELECT = `select s.document_id, s.html, s.text, s.current_version, s.etag, s.updated_by, u.display_name, s.updated_at
+const SELECT = `select s.document_id, s.html, s.text, s.current_version, s.etag, s.updated_by, u.display_name, s.updated_at,
+         (select cv.source_revision_id from source_document_versions cv
+           where cv.source_document_id = s.id and cv.version = s.current_version) latest_revision_id
   from source_documents s left join users u on u.id=s.updated_by`;
 const row = (r: Record<string, unknown>): SourceDocRow => ({
   documentId: r.document_id as string,
@@ -26,6 +34,7 @@ const row = (r: Record<string, unknown>): SourceDocRow => ({
   updatedById: (r.updated_by as string) ?? null,
   updatedByName: (r.display_name as string) ?? null,
   updatedAt: (r.updated_at as Date).toISOString(),
+  latestRevisionId: (r.latest_revision_id as string) ?? null,
 });
 
 export async function getSourceDocument(q: Q, documentId: string): Promise<SourceDocRow | null> {
@@ -68,10 +77,17 @@ export async function saveSourceDocument(
          where document_id=$1 returning id`,
         [documentId, html, text, hash, version, input.authorId],
       )
-    : await tx.query(
-        `insert into source_documents(document_id, html, text, hash, current_version, updated_by) values ($1,$2,$3,$4,$5,$6) returning id`,
+    : /**
+       * `select … for update` locks nothing when there is no row yet, so two first-saves race
+       * into this insert. `do nothing` + a re-read turns the loser into the 412 the client
+       * already knows how to handle, instead of a raw 500 on the unique constraint.
+       */
+      await tx.query(
+        `insert into source_documents(document_id, html, text, hash, current_version, updated_by) values ($1,$2,$3,$4,$5,$6)
+         on conflict (document_id) do nothing returning id`,
         [documentId, html, text, hash, version, input.authorId],
       );
+  if (!up.rowCount) throw httpError(412, 'ETAG_MISMATCH', 'מסמך המקור נוצר בינתיים — טען מחדש ונסה שוב');
   await tx.query(
     `insert into source_document_versions(source_document_id, version, html, author_id, label, source_revision_id) values ($1,$2,$3,$4,$5,$6)`,
     [up.rows[0].id, version, html, input.authorId, input.label ?? '', input.sourceRevisionId ?? null],
@@ -103,7 +119,8 @@ export async function getSourceVersion(
   version: number,
 ): Promise<SourceDocRow | null> {
   const r = await q.query(
-    `select s.document_id, v.html, v.author_id updated_by, u.display_name, v.created_at updated_at, v.version current_version, s.etag
+    `select s.document_id, v.html, v.author_id updated_by, u.display_name, v.created_at updated_at, v.version current_version, s.etag,
+            v.source_revision_id latest_revision_id
      from source_document_versions v join source_documents s on s.id=v.source_document_id left join users u on u.id=v.author_id
      where s.document_id=$1 and v.version=$2`,
     [documentId, version],

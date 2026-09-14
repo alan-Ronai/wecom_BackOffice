@@ -62,6 +62,7 @@ describe('permissions', () => {
       roles: ['editor'],
       permissions: ['docs.read'],
       categoryScopes: null,
+      worldScopes: null,
       preferences: { theme: null, font: 'plex', panel: true, callMode: true, sidebarExpanded: false },
     });
     expect(me.permissions).toContain('docs.read');

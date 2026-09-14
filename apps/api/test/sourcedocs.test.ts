@@ -38,6 +38,16 @@ run('source documents', () => {
       headers: { ...auth(editor), 'if-match': created.json().etag },
       payload: minimalStructure,
     });
+    // B-C1: the source routes now apply the §2.2 visibility rule as well as world scope, so a
+    // `docs.read`-only reader may only see the source of a *published* item. The refusal on an
+    // unpublished one is asserted in `test/int/scope-leak.test.ts`; here the document is
+    // published so these cases stay about the source surface itself.
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${docId}/publish`,
+      headers: auth(editor),
+      payload: { label: 'v1' },
+    });
   }, 120000);
   afterAll(async () => {
     await app?.close();
@@ -161,12 +171,39 @@ run('source documents', () => {
         })
       ).statusCode,
     ).toBe(403);
-    await app.inject({
+    // B-I3: `If-Match` is required once a source document exists, so an omitted header is a
+    // 428 rather than a silent overwrite of whatever is there.
+    const noPrecondition = await app.inject({
       method: 'PUT',
       url: `/api/v1/documents/${docId}/source`,
       headers: auth(editor),
       payload: { html: '<p>גרסה 3</p>' },
     });
+    expect(noPrecondition.statusCode).toBe(428);
+    expect(noPrecondition.json().code).toBe('IF_MATCH_REQUIRED');
+    const cur = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents/${docId}/source`,
+      headers: auth(editor),
+    });
+    const saved = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${docId}/source`,
+      headers: { ...auth(editor), 'if-match': cur.json().etag as string },
+      payload: { html: '<p>גרסה 3</p>' },
+    });
+    expect(saved.statusCode).toBe(200);
+    // A stale etag is still a 412, not a lost update.
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: `/api/v1/documents/${docId}/source`,
+          headers: { ...auth(editor), 'if-match': cur.json().etag as string },
+          payload: { html: '<p>גרסה 4</p>' },
+        })
+      ).statusCode,
+    ).toBe(412);
     expect(
       (
         await app.inject({
@@ -339,6 +376,41 @@ run('source documents', () => {
     const n = await gcUnreferencedAssets(db.pool);
     expect(n).toBe(1);
     expect((await db.pool.query('select count(*)::int n from assets')).rows[0].n).toBe(before - 1);
+  });
+
+  /**
+   * B-I2 — §5.1 autosaves in-progress source HTML into `drafts` every 3 s, and images are
+   * uploaded the moment they are pasted, long before "שמור גרסה" writes a version. The gc was
+   * guarded against versions and `body_html` but not against drafts, so an editor who pasted
+   * screenshots and saved the version a week later lost them to the Sunday run — permanently,
+   * since `assets` is the only copy.
+   */
+  it('B-I2: gc keeps an asset that only an autosave draft references', async () => {
+    const { gcUnreferencedAssets } = await import('../src/modules/sourcedocs/assets.js');
+    const a = await db.pool.query(
+      `insert into assets(mime, bytes, sha256, size, created_at)
+       values ('image/png', '\\x00', 'in-a-draft', 1, now() - interval '2 days') returning id`,
+    );
+    const assetId = a.rows[0].id as string;
+    const put = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${docId}/source/draft`,
+      headers: auth(editor),
+      payload: { html: `<p><img src="/api/v1/assets/${assetId}"></p>` },
+    });
+    expect(put.statusCode).toBe(204);
+    await gcUnreferencedAssets(db.pool);
+    expect((await db.pool.query('select 1 from assets where id=$1', [assetId])).rowCount).toBe(1);
+
+    // …and once the draft is gone it is collectable again, so this is a reference and not a
+    // blanket exemption.
+    await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/documents/${docId}/source/draft`,
+      headers: auth(editor),
+    });
+    await gcUnreferencedAssets(db.pool);
+    expect((await db.pool.query('select 1 from assets where id=$1', [assetId])).rowCount).toBe(0);
   });
 
   it('backfill: a document with an accepted docx revision gets a source document on migration', async () => {

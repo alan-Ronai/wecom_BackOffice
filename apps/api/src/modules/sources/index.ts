@@ -34,7 +34,9 @@ export async function registerSourcesModule(app: FastifyInstance): Promise<Pipel
           : undefined;
         const reason = `גרסת מקור חדשה · ${src.rows[0]?.title ?? sourceId} · ${who ?? 'סנכרון'} · ${revisionId.slice(0, 8)}`;
         for (const docId of await documentsForSource(app.db, sourceId))
-          await withTransaction(app.db, (tx) => markSourceReviewNeeded(tx, app.notifier, docId, reason));
+          await withTransaction(app.db, (tx) =>
+            markSourceReviewNeeded(tx, app.notifier, docId, reason, actorId),
+          );
       },
     },
   );

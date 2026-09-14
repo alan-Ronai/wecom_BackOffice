@@ -15,11 +15,13 @@ import { deleteDraft, getDraft, putDraft } from '../drafts/repo.js';
 import { audit } from '../../lib/audit.js';
 import { httpError, notFound } from '../../lib/http.js';
 import { withTransaction } from '../../lib/sql.js';
-import { requireUser } from '../../lib/user.js';
+import { hasScope, requireUser } from '../../lib/user.js';
+import { assertVisibleDocument, canReadUnpublished, visibleStatusSql } from '../../lib/visibility.js';
 import * as repo from './repo.js';
 import { getAsset, putAsset } from './assets.js';
 import { importDocx } from './import.js';
-import { ingestSourceHtml } from './ingest.js';
+import { queueIngestRetry, runIngest } from './ingestRetry.js';
+import { documentsForSource } from '../documents/sourceReview.js';
 
 const Params = z.object({ id: IdSchema });
 const VersionParams = z.object({ id: IdSchema, v: z.coerce.number().int().positive() });
@@ -68,14 +70,26 @@ export default async function routes(app: FastifyInstance) {
       await deleteDraft(tx, sourceDraftKey(documentId), user.id).catch(() => undefined);
       return s;
     });
-    // Outside the transaction: ingest has its own transaction and enqueues a job.
-    const ing = await ingestSourceHtml(app, documentId, saved.html, user.id);
-    if (!ing.duplicate)
-      await app.db.query(
-        `update source_document_versions v set source_revision_id=$3 from source_documents s
-        where v.source_document_id=s.id and s.document_id=$1 and v.version=$2`,
-        [documentId, saved.version, ing.revisionId],
-      );
+    /**
+     * B-I4 — the version row above is already durable. `ingestSourceHtml` runs the revision
+     * pipeline (`SourceRevisionService.ingest` → `onIngested` → `markSourceReviewNeeded`), and
+     * a throw here used to answer 500 for a save that had committed: the source had moved, the
+     * working view was never flagged "נדרשת לבדיקה", nobody was alerted, and the client would
+     * very likely retry the PUT and write a second identical version.
+     *
+     * The ingest is not folded into the transaction — `SourceRevisionService` owns its own and
+     * enqueues a `pipeline.process` job, and enlisting it would mean threading a `Tx` through
+     * the whole revision service and holding a write transaction across a job enqueue. Instead
+     * the save always succeeds and the ingest is retried, keyed on the version that is already
+     * on disk: `retrySourceIngest` is idempotent because `revisions.ingest` dedupes on the
+     * content hash, and it only stamps `source_revision_id` where it is still null.
+     */
+    try {
+      await runIngest(app, documentId, saved.version, saved.html, user.id);
+    } catch (err) {
+      req.log.error({ err, documentId, version: saved.version }, 'source ingest failed; queued a retry');
+      await queueIngestRetry(app, req, documentId, saved.version, user.id);
+    }
     return saved;
   }
 
@@ -90,8 +104,11 @@ export default async function routes(app: FastifyInstance) {
       },
     },
     async (req, reply) => {
-      requireUser(req);
-      const s = await repo.getSourceDocument(app.db, (req.params as { id: string }).id);
+      const { id } = req.params as { id: string };
+      // `scope: 'document'` is only the world half; §3 says the visibility rule applies here
+      // too, and the source document is the fullest representation of an item.
+      await assertVisibleDocument(app.db, id, requireUser(req));
+      const s = await repo.getSourceDocument(app.db, id);
       if (!s) return reply.code(204).send(null);
       reply.header('etag', s.etag);
       return s;
@@ -113,6 +130,15 @@ export default async function routes(app: FastifyInstance) {
       const { id } = req.params as { id: string };
       const body = req.body as z.infer<typeof PutSourceDocumentBodySchema>;
       const ifMatch = typeof req.headers['if-match'] === 'string' ? req.headers['if-match'] : undefined;
+      /**
+       * The header was optional, so a client that omitted it overwrote whatever was there with
+       * no 412 and the conflict dialog §5.1 assumes had nothing to fire on. It is required once
+       * a source document exists; the first save has no etag to send, and the create path
+       * handles that race itself (`on conflict do nothing` → 412). 428 matches the convention
+       * `POST /documents/:id/publish` already uses for a missing precondition.
+       */
+      if (!ifMatch && (await repo.currentSourceVersion(app.db, id)) !== null)
+        throw httpError(428, 'IF_MATCH_REQUIRED', 'נדרשת כותרת If-Match עם ה-etag של מסמך המקור');
       const s = await saveAndIngest(req, id, body.html, body.label, 'sourcedocs.save', ifMatch);
       reply.header('etag', s.etag);
       return s;
@@ -185,8 +211,9 @@ export default async function routes(app: FastifyInstance) {
       },
     },
     async (req) => {
-      requireUser(req);
-      return { items: await repo.listSourceVersions(app.db, (req.params as { id: string }).id) };
+      const { id } = req.params as { id: string };
+      await assertVisibleDocument(app.db, id, requireUser(req));
+      return { items: await repo.listSourceVersions(app.db, id) };
     },
   );
 
@@ -201,8 +228,8 @@ export default async function routes(app: FastifyInstance) {
       },
     },
     async (req) => {
-      requireUser(req);
       const { id, v } = req.params as { id: string; v: number };
+      await assertVisibleDocument(app.db, id, requireUser(req));
       const s = await repo.getSourceVersion(app.db, id, v);
       if (!s) throw notFound('גרסת המקור');
       return s;
@@ -259,8 +286,8 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['sourcedocs'], params: Params },
     },
     async (req, reply) => {
-      requireUser(req);
       const { id } = req.params as { id: string };
+      await assertVisibleDocument(app.db, id, requireUser(req));
       const s = await repo.getSourceDocument(app.db, id);
       if (!s) throw notFound('מסמך המקור');
       const title = (await app.db.query('select title from documents where id=$1', [id])).rows[0]
@@ -297,8 +324,23 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['sourcedocs'], params: RevParams },
     },
     async (req, reply) => {
-      requireUser(req);
+      const user = requireUser(req);
       const { id, rev } = req.params as { id: string; rev: string };
+      /**
+       * This route had neither `scope: 'document'` (there is no `:id` document to resolve — the
+       * id is a *source*) nor a visibility check, so it served the original uploaded bytes of
+       * any source in any world to any authenticated reader. A source is reachable only through
+       * a document the caller may open: at least one owning document must be in their world
+       * scope and visible to them.
+       */
+      const owners = await app.db.query<{ id: string; worlds: string[] }>(
+        `select d.id,
+                coalesce((select array_agg(dw.world_slug) from document_worlds dw where dw.document_id = d.id), '{}') worlds
+           from documents d
+          where d.id = any($1::uuid[])${canReadUnpublished(user) ? '' : ` and ${visibleStatusSql()}`}`,
+        [await documentsForSource(app.db, id)],
+      );
+      if (!owners.rows.some((d) => hasScope(user, d.worlds))) throw notFound('קובץ המקור');
       const r = await app.db.query(
         `select r.raw, s.ext, s.kind, s.title from source_revisions r join sources s on s.id=r.source_id where r.source_id=$1 and r.id=$2`,
         [id, rev],

@@ -14,6 +14,7 @@ export const QUEUES = {
   feedbackDigest: 'feedback.digest', // W3: daily per-editor summary of open feedback
   feedbackAlerts: 'feedback.alerts', // W3: every 10 min, repeat/anomaly windows
   assetsGc: 'assets.gc', // W4: weekly, delete assets no source version references
+  sourceIngestRetry: 'source.ingest-retry', // W4: re-run a committed source version's ingest
 } as const;
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 

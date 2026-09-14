@@ -2,6 +2,7 @@ import type { DataFile, DataPreview } from '@wecom/shared';
 import type { Q } from '../documents/repo.js';
 import { iso } from '../documents/repo.js';
 import { toColumnMapping, type MappingRecord } from './mapping.js';
+import { visibleWhere } from '../../lib/visibility.js';
 
 /**
  * `columns` is a legal but unquoted-unsafe identifier, so it is quoted everywhere.
@@ -10,7 +11,7 @@ import { toColumnMapping, type MappingRecord } from './mapping.js';
  * published ones, or the number would say how many drafts hang off a source.
  */
 const fileSelect = (readUnpublished: boolean): string => {
-  const vis = readUnpublished ? '' : " and d.status in ('published','partial')";
+  const vis = visibleWhere(readUnpublished);
   return `
   select s.id, s.title, s.kind, s."columns", s.mapping, s.sync_state, s.last_synced_at,
          (select count(*)::int from (

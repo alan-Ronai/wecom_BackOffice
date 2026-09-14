@@ -114,8 +114,19 @@ export const MeSchema = z.object({
   user: UserSchema,
   roles: z.array(z.string()),
   permissions: z.array(PermissionSchema),
-  categoryScopes: z.array(CategorySchema).nullable(),
-  worldScopes: z.array(CategorySchema).nullable().optional(), // W1: same value as categoryScopes; categoryScopes is removed after wave 4
+  /**
+   * @deprecated W1 renamed this to `worldScopes`; read that instead. Still emitted for one
+   * release (`auth/routes.ts`, `auth/permissions.ts` and `plugins/testUser.ts` all derive both
+   * from one `resolvedScopes`), removed after wave 4.
+   */
+  categoryScopes: z.array(CategorySchema).nullable().optional(),
+  /**
+   * The caller's world scope: `null` means unscoped — every world — and an array is the
+   * intersection set. Required-and-nullable rather than optional, so there are two states to
+   * handle and not three; the API has always emitted it, and the optionality only pointed new
+   * consumers at the deprecated spelling (C-I2).
+   */
+  worldScopes: z.array(CategorySchema).nullable(),
   preferences: PreferencesSchema,
 });
 export type Me = z.infer<typeof MeSchema>;

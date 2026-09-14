@@ -6,14 +6,17 @@ import {
   TagsQuerySchema,
   TagsResponseSchema,
   TopicBodySchema,
+  TopicItemsQuerySchema,
   TopicPatchSchema,
   TopicSchema,
+  TopicsQuerySchema,
   TopicsResponseSchema,
   TopicViewSchema,
   WorldBodySchema,
   WorldPatchSchema,
   WorldSchema,
   WorldSlugSchema,
+  ForceQuerySchema,
   WorldsQuerySchema,
   WorldsResponseSchema,
   makeEvent,
@@ -22,11 +25,11 @@ import { audit } from '../../lib/audit.js';
 import { notFound } from '../../lib/errors.js';
 import { withTransaction } from '../../lib/sql.js';
 import { requireUser } from '../../lib/user.js';
+import { canReadUnpublished } from '../../lib/visibility.js';
 import * as repo from './repo.js';
 
 const SlugParams = z.object({ slug: WorldSlugSchema });
 const IdParams = z.object({ id: IdSchema });
-const bool = z.union([z.boolean(), z.enum(['true', 'false']).transform((v) => v === 'true')]);
 
 export default async function routes(app: FastifyInstance) {
   const changed = (tx: Parameters<typeof audit>[0], entity: 'world' | 'topic', id: string) =>
@@ -136,13 +139,13 @@ export default async function routes(app: FastifyInstance) {
       schema: {
         tags: ['taxonomy'],
         params: SlugParams,
-        querystring: z.object({ force: bool.optional() }),
+        querystring: ForceQuerySchema,
       },
     },
     async (req, reply) => {
       const user = requireUser(req);
       const { slug } = req.params as z.infer<typeof SlugParams>;
-      const force = (req.query as { force?: boolean }).force === true;
+      const force = (req.query as z.infer<typeof ForceQuerySchema>).force === true;
       await withTransaction(app.db, async (tx) => {
         const w = await repo.deactivateWorld(tx, slug, force, user.id);
         await log(req)(
@@ -170,14 +173,14 @@ export default async function routes(app: FastifyInstance) {
       schema: {
         tags: ['taxonomy'],
         params: SlugParams,
-        querystring: z.object({ includeInactive: bool.optional() }),
+        querystring: TopicsQuerySchema,
         response: { 200: TopicsResponseSchema },
       },
     },
     async (req) => {
       requireUser(req);
       const { slug } = req.params as z.infer<typeof SlugParams>;
-      const inactive = (req.query as { includeInactive?: boolean }).includeInactive === true;
+      const inactive = (req.query as z.infer<typeof TopicsQuerySchema>).includeInactive === true;
       return { items: await repo.listTopics(app.db, slug, inactive) };
     },
   );
@@ -284,20 +287,29 @@ export default async function routes(app: FastifyInstance) {
     '/topics/:id/items',
     {
       config: { requires: ['docs.read'] },
-      schema: { tags: ['taxonomy'], params: IdParams, response: { 200: TopicViewSchema } },
+      schema: {
+        tags: ['taxonomy'],
+        params: IdParams,
+        querystring: TopicItemsQuerySchema,
+        response: { 200: TopicViewSchema },
+      },
     },
     async (req) => {
       const user = requireUser(req);
       const { id } = req.params as z.infer<typeof IdParams>;
+      const { record } = req.query as z.infer<typeof TopicItemsQuerySchema>;
       const view = await repo.topicView(app.db, id, {
-        unpublished: user.permissions.has('docs.read_unpublished'),
+        unpublished: canReadUnpublished(user),
         worldScopes: user.worldScopes,
       });
       if (!view) throw notFound('הנושא');
       // W5 records topic views; W0's default is a no-op. Never let usage failures break the page.
-      void app.usage
-        .recordTopicView(user.id, id)
-        .catch((e: unknown) => app.log.warn({ err: e }, 'recordTopicView failed'));
+      // `record=false` is for callers that want the ordered list without claiming a topic was
+      // browsed — otherwise every article open inflates the "נושאים נצפים" analytics card.
+      if (record)
+        void app.usage
+          .recordTopicView(user.id, id)
+          .catch((e: unknown) => app.log.warn({ err: e }, 'recordTopicView failed'));
       return view;
     },
   );
@@ -309,8 +321,13 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['taxonomy'], querystring: TagsQuerySchema, response: { 200: TagsResponseSchema } },
     },
     async (req) => {
-      requireUser(req);
-      return { items: await repo.listTags(app.db, req.query as z.infer<typeof TagsQuerySchema>) };
+      const user = requireUser(req);
+      return {
+        items: await repo.listTags(app.db, req.query as z.infer<typeof TagsQuerySchema>, {
+          unpublished: canReadUnpublished(user),
+          worldScopes: user.worldScopes,
+        }),
+      };
     },
   );
 }
