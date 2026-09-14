@@ -28,9 +28,39 @@ export type ProposedSuggestion = Omit<
   | 'appliedVersionId'
   | 'editedPayload'
 >;
+/* ── wave 5 (V1): quiz question generation (additive, optional) ─────────── */
+export interface QuestionContextStep {
+  key: string;
+  num: string;
+  title: string;
+  actions: string[];
+  outcomes: { text: string; gotoTitle?: string }[];
+  branch?: { q: string; options: { label: string; text: string }[] };
+}
+export interface QuestionContext {
+  documents: { id: string; title: string; steps: QuestionContextStep[] }[];
+  perDocument: number;
+  /** Rule-generated questions the model may rewrite instead of duplicating. */
+  seeds: GeneratedQuestion[];
+}
+export interface GeneratedQuestion {
+  documentId: string;
+  stepKey: string | null;
+  stem: string;
+  kind: 'single' | 'multi' | 'order' | 'free';
+  options: { id: string; text: string; correct: boolean }[];
+  explanation: string;
+  modelConf: number | null;
+}
+
 export interface ModelClient {
   name: string;
   available(): Promise<boolean>;
   proposeChanges(ctx: ProposalContext): Promise<ProposedSuggestion[]>;
   embed?(text: string): Promise<number[]>;
+  /**
+   * Wave 5 (V1). Optional: `RuleBasedModel` does not implement it — the api owns the
+   * deterministic rules and treats an absent method exactly like a failed call.
+   */
+  generateQuestions?(ctx: QuestionContext): Promise<GeneratedQuestion[]>;
 }

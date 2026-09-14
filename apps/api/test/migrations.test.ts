@@ -174,6 +174,28 @@ run('migrations', () => {
     const ws = await pool.query("select value from app_settings where key='workflow'");
     expect(ws.rowCount).toBe(1);
   });
+  it('creates the wave 5 learning content tables', async () => {
+    const r = await pool.query(
+      "select table_name from information_schema.tables where table_schema='public' and table_name in ('learning_items','learning_item_versions','briefing_entries','quiz_questions') order by 1",
+    );
+    expect(r.rows.map((x) => x.table_name)).toEqual([
+      'briefing_entries',
+      'learning_item_versions',
+      'learning_items',
+      'quiz_questions',
+    ]);
+    const c = await pool.query(
+      "select column_name from information_schema.columns where table_name='learning_items' and column_name in ('kind','status','pass_mark','max_attempts','world_slug','deleted_at') order by 1",
+    );
+    expect(c.rows.map((x) => x.column_name)).toEqual([
+      'deleted_at',
+      'kind',
+      'max_attempts',
+      'pass_mark',
+      'status',
+      'world_slug',
+    ]);
+  });
   it('adds the wave 4 governance columns and the status check', async () => {
     const cols = await pool.query(
       `select column_name from information_schema.columns where table_name='documents'
