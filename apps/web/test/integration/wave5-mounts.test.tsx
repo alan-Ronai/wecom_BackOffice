@@ -6,7 +6,8 @@
  * spec asks for. Copy is asserted against what the lanes actually shipped, not the plan's draft.
  */
 import { describe, it, expect } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../msw/server.js';
 import { renderWithProviders } from '../render.js';
@@ -98,5 +99,119 @@ describe('V6 article mounts', () => {
     await screen.findByRole('heading', { level: 1 });
     expect(screen.queryByRole('status', { name: 'רענון ידע נדרש' })).toBeNull();
     expect(screen.queryByRole('list', { name: 'פריטי למידה' })).toBeNull();
+  });
+});
+
+describe('V6 editor mounts', () => {
+  it('pre-ticks the significant-change checkbox from the preview, sends it, and toasts the flag', async () => {
+    learningState.changePreview = { significant: true, reasons: ['תוצאה השתנתה בשלב 3'], affectedItems: 2 };
+    let sent: { significantChange?: boolean } | undefined;
+    server.use(
+      http.post(`${B}/documents/:id/publish`, async ({ request }) => {
+        sent = (await request.json()) as { significantChange?: boolean };
+        return HttpResponse.json({
+          document: fx.docBrowsing,
+          version: 4,
+          auditId: 'a0000000-0000-4000-8000-0000000000cc',
+          changeFlag: {
+            significant: true,
+            reasons: ['תוצאה השתנתה בשלב 3'],
+            affectedItems: 2,
+            refreshAssignments: 5,
+          },
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<App />, { route: `/edit/${fx.docBrowsing.id}` });
+    await user.click(await screen.findByRole('button', { name: /פרסם/ }));
+    const box = await screen.findByRole('checkbox', { name: 'שינוי מהותי – דרוש רענון' });
+    // The detector already decided; the editor is confirming, not guessing.
+    await waitFor(() => expect(box).toBeChecked());
+    expect(screen.getByText(/2 פריטי למידה מושפעים/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'אישור' }));
+    await waitFor(() => expect(sent?.significantChange).toBe(true));
+    expect(await screen.findByText(/5 רענונים נוצרו/)).toBeInTheDocument();
+  });
+
+  it('unticking the box is an explicit override, sent as false', async () => {
+    learningState.changePreview = { significant: true, reasons: ['תוצאה השתנתה'], affectedItems: 1 };
+    let sent: { significantChange?: boolean } | undefined;
+    server.use(
+      http.post(`${B}/documents/:id/publish`, async ({ request }) => {
+        sent = (await request.json()) as { significantChange?: boolean };
+        return HttpResponse.json({
+          document: fx.docBrowsing,
+          version: 4,
+          auditId: 'a0000000-0000-4000-8000-0000000000cd',
+          changeFlag: { significant: false, reasons: [], affectedItems: 0, refreshAssignments: 0 },
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<App />, { route: `/edit/${fx.docBrowsing.id}` });
+    await user.click(await screen.findByRole('button', { name: /פרסם/ }));
+    const box = await screen.findByRole('checkbox', { name: 'שינוי מהותי – דרוש רענון' });
+    await waitFor(() => expect(box).toBeChecked());
+    await user.click(box);
+    await user.click(screen.getByRole('button', { name: 'אישור' }));
+    await waitFor(() => expect(sent?.significantChange).toBe(false));
+  });
+});
+
+describe('V6 review-queue mounts', () => {
+  it('disables approve and explains the approver rule when the row says this caller may not', async () => {
+    server.use(
+      http.get(`${B}/reviews`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'e0000000-0000-4000-8000-000000000001',
+              documentId: fx.docIntl.id,
+              requestedBy: 'f0000000-0000-4000-8000-000000000009',
+              requestedByName: 'דנה ר.',
+              note: 'לבדיקה',
+              status: 'open',
+              decidedBy: null,
+              decidedByName: null,
+              decisionNote: null,
+              createdAt: '2026-09-15T08:00:00.000Z',
+              decidedAt: null,
+              title: fx.docIntl.title,
+              category: 'intl',
+              canApprove: false,
+            },
+          ],
+          total: 1,
+          page: 1,
+          pageSize: 50,
+        }),
+      ),
+    );
+    renderWithProviders(<App />, { route: '/reviews' });
+    const approve = await screen.findByRole('button', { name: `אשר ופרסם את ${fx.docIntl.title}` });
+    expect(approve).toBeDisabled();
+    expect(screen.getByText('אישור דורש תפקיד מאשר')).toBeInTheDocument();
+  });
+
+  it('turns a 403 APPROVER_REQUIRED into a message instead of an unhandled rejection', async () => {
+    server.use(
+      http.post(`${B}/documents/:id/review-decision`, () =>
+        HttpResponse.json({ code: 'APPROVER_REQUIRED', message: 'נדרש תפקיד מאשר' }, { status: 403 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<App />, { route: '/reviews' });
+    await user.click(await screen.findByRole('button', { name: /אשר ופרסם את/ }));
+    await user.click(await screen.findByRole('button', { name: 'אישור' }));
+    expect(await screen.findByText(/נדרש תפקיד מאשר כדי לאשר ולפרסם מסקירה/)).toBeInTheDocument();
+  });
+});
+
+describe('V6 identity mounts', () => {
+  it('shows the workflow settings card on /admin/identity', async () => {
+    renderWithProviders(<App />, { route: '/admin/identity' });
+    const card = await screen.findByRole('region', { name: 'תהליך עבודה ולמידה' });
+    expect(within(card).getByRole('checkbox', { name: 'דרוש מאשר לפרסום' })).toBeInTheDocument();
   });
 });

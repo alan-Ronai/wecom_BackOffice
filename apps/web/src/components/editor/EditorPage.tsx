@@ -61,6 +61,7 @@ import { OwnerFields } from '../governance/OwnerFields.js';
 import { ImportExportButtons } from '../source/ImportExportButtons.js';
 import { RichText } from '../source/RichText.js';
 import { PublishFeedbackPicker } from '../feedback/PublishFeedbackPicker.js';
+import { useChangePreview } from '../../api/hooks/learning.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 
 const emptyDoc = (cat: Category): Document => ({
@@ -136,28 +137,48 @@ function BodyEditor({
   );
 }
 
+const SIGNIFICANT = 'שינוי מהותי – דרוש רענון';
+
 function PublishBody({
   documentId,
   defaultLabel,
   onLabel,
   onIds,
+  onSignificant,
   onSubmit,
 }: {
   documentId: string | null;
   defaultLabel: string;
   onLabel: (v: string) => void;
   onIds: (v: string[]) => void;
+  onSignificant: (v: boolean) => void;
   onSubmit: () => void;
 }) {
   const LABEL = 'מה השתנה? (מופיע בהיסטוריית הגרסאות)';
   const [label, setLabel] = useState(defaultLabel);
   const [ids, setIds] = useState<string[]>([]);
+  /**
+   * Wave 5 §1.5. The detector decides on the server either way; the checkbox states its verdict in
+   * advance (`GET /documents/:id/change-preview`) so the editor confirms or overrides a reading
+   * rather than guessing one. Unticking it is a real override — the publish body then carries
+   * `significantChange: false` and no refresh is created.
+   */
+  const preview = useChangePreview(documentId ?? undefined);
+  const [significant, setSignificant] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const previewed = preview.data?.significant ?? false;
+  useEffect(() => {
+    if (!touched) setSignificant(previewed);
+  }, [previewed, touched]);
   useEffect(() => {
     onLabel(label);
   }, [label, onLabel]);
   useEffect(() => {
     onIds(ids);
   }, [ids, onIds]);
+  useEffect(() => {
+    onSignificant(significant);
+  }, [significant, onSignificant]);
   return (
     <div className="form" style={{ display: 'grid', gap: 10 }}>
       <label>
@@ -176,6 +197,25 @@ function PublishBody({
           }}
         />
       </label>
+      {documentId ? (
+        <label className="check-row">
+          <input
+            type="checkbox"
+            aria-label={SIGNIFICANT}
+            checked={significant}
+            onChange={(e) => {
+              setTouched(true);
+              setSignificant(e.target.checked);
+            }}
+          />
+          {SIGNIFICANT}
+          <span className="small muted">
+            {previewed && preview.data?.affectedItems
+              ? `זוהה שינוי בתוצאה או בהסתעפות · ${preview.data.affectedItems} פריטי למידה מושפעים`
+              : 'מבטל השלמות של תדריכים ושאלונים שמבוססים על המסמך ויוצר משימות רענון'}
+          </span>
+        </label>
+      ) : null}
       {/* Renders nothing when the item has no open reports, so mounting it is unconditional. */}
       {documentId ? <PublishFeedbackPicker documentId={documentId} value={ids} onChange={setIds} /> : null}
     </div>
@@ -421,7 +461,7 @@ export function EditorPage() {
     }
     const partial = checks.some(([, t]) => t.includes('ריק'));
     const nextV = (published.data?.currentVersion ?? 0) + 1;
-    const box = { label: isNew ? 'פריט ידע חדש' : '', ids: [] as string[] };
+    const box = { label: isNew ? 'פריט ידע חדש' : '', ids: [] as string[], significant: false };
     const ok = await new Promise<boolean>((resolve) => {
       let dispose = () => {};
       const submit = () => {
@@ -436,6 +476,7 @@ export function EditorPage() {
             defaultLabel={box.label}
             onLabel={(v) => (box.label = v)}
             onIds={(v) => (box.ids = v)}
+            onSignificant={(v) => (box.significant = v)}
             onSubmit={submit}
           />
         ),
@@ -504,13 +545,23 @@ export function EditorPage() {
     }
     // `targetId` — not `id` — so creating a knowledge item actually publishes the new document
     // instead of POSTing to the literal path segment `new`.
-    const { version } = await publish.mutateAsync({
+    const result = await publish.mutateAsync({
       id: targetId,
       label: label || 'פורסם',
       markPartial: partial,
       ...(box.ids.length ? { resolveFeedbackIds: box.ids } : {}),
+      // Always sent for an existing document: the checkbox is an explicit yes *or* an explicit no,
+      // and only silence would let the detector's own verdict stand unreviewed.
+      ...(isNew ? {} : { significantChange: box.significant }),
     });
-    toast(`פורסם v${version} · הכרטיס בספרייה עודכן`, 'ok');
+    const { version } = result;
+    const flag = result.changeFlag;
+    toast(
+      flag?.significant
+        ? `פורסם v${version} · שינוי מהותי: ${flag.refreshAssignments} רענונים נוצרו`
+        : `פורסם v${version} · הכרטיס בספרייה עודכן`,
+      'ok',
+    );
     go(`/doc/${targetId}`);
   };
 

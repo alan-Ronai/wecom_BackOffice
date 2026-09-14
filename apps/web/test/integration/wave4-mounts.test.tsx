@@ -425,7 +425,10 @@ describe('W6 editor mounts', () => {
     await userEvent.click(await screen.findByRole('button', { name: /פרסם v/ }));
     const dialog = await screen.findByRole('dialog', { name: /פרסום v/ });
     await userEvent.type(within(dialog).getByLabelText(/מה השתנה/), 'תיקון');
-    await userEvent.click(await within(dialog).findByRole('checkbox'));
+    // Wave 5 added a second checkbox to this dialog (the significant-change flag), so the feedback
+    // row is addressed by its own text rather than by being the only one.
+    const group = within(dialog).getByRole('group', { name: 'לסגור משובים פתוחים עם הגרסה הזו?' });
+    await userEvent.click(await within(group).findByRole('checkbox'));
     await userEvent.click(within(dialog).getByRole('button', { name: 'אישור' }));
     await waitFor(() => expect(body?.resolveFeedbackIds).toEqual(['99999999-9999-4999-8999-999999999999']));
   });

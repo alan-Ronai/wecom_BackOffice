@@ -8,7 +8,7 @@ import { FeedbackButton } from '../../src/components/feedback/FeedbackButton.js'
 import { feedbackState } from '../msw/feedback-handlers.js';
 import { fx } from '../msw/fixtures.js';
 
-const mount = (stepKey?: string) =>
+const mount = (stepKey?: string, docType: string | undefined = fx.docBrowsing.docType) =>
   renderWithProviders(
     <ToastProvider>
       <ModalProvider>
@@ -17,7 +17,7 @@ const mount = (stepKey?: string) =>
           documentVersion={fx.docBrowsing.currentVersion}
           stepKey={stepKey}
           documentTitle={fx.docBrowsing.title}
-          docType={fx.docBrowsing.docType}
+          docType={docType}
           worldSlug={fx.docBrowsing.category}
         />
       </ModalProvider>
@@ -25,6 +25,13 @@ const mount = (stepKey?: string) =>
   );
 
 describe('<FeedbackButton>', () => {
+  it('A-4: names the doc type as letter · label, never the bare storage letter', async () => {
+    mount('s1', 'T');
+    await userEvent.click(screen.getByRole('button', { name: 'דיווח על בעיה / משוב' }));
+    const dialog = await screen.findByRole('dialog', { name: 'דיווח על בעיה / משוב' });
+    expect(within(dialog).getByText(/סוג T · תסריט/)).toBeInTheDocument();
+  });
+
   it('opens the seven kinds with the read-only context and submits without extra input', async () => {
     mount('s3');
     await userEvent.click(screen.getByRole('button', { name: 'דיווח על בעיה / משוב' }));

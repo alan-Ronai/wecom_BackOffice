@@ -1,8 +1,6 @@
 import { useState } from 'react';
-import { useRoles } from '../../../api/hooks/admin.js';
 import { useMentionable } from '../../../api/hooks/collab.js';
-import { useAssignUsers, useCreateAudience } from '../../../api/hooks/learningManage.js';
-import { useWorlds } from '../../../api/hooks/taxonomy.js';
+import { useAssignUsers, useAudienceOptions, useCreateAudience } from '../../../api/hooks/learningManage.js';
 import { useDebounced } from '../../../lib/useDebounced.js';
 import { useToast } from '../../ui/Toast.js';
 import { useFocusTrap } from '../../ui/useFocusTrap.js';
@@ -19,8 +17,11 @@ const toggle = (xs: string[], v: string) => (xs.includes(v) ? xs.filter((x) => x
  * focus trap so it behaves like every other dialog in the app.
  */
 export function AssignDialog({ itemId, onClose }: { itemId: string; onClose: () => void }) {
-  const roles = useRoles();
-  const worlds = useWorlds();
+  // One call for both halves of the audience: `learning.manage` is enough for it, which
+  // `GET /admin/roles` (roles.manage) and the full world list are not.
+  const options = useAudienceOptions();
+  const roles = options.data?.roles ?? [];
+  const worlds = options.data?.worlds ?? [];
   const [roleNames, setRoleNames] = useState<string[]>([]);
   const [worldSlugs, setWorldSlugs] = useState<string[]>([]);
   /**
@@ -67,7 +68,7 @@ export function AssignDialog({ itemId, onClose }: { itemId: string; onClose: () 
         <fieldset>
           <legend>קהל יעד (תפקידים × עולמות תוכן)</legend>
           <div className="checks" role="group" aria-label="תפקידים">
-            {(roles.data ?? []).map((r) => (
+            {roles.map((r) => (
               <label key={r.name}>
                 <input
                   type="checkbox"
@@ -75,12 +76,12 @@ export function AssignDialog({ itemId, onClose }: { itemId: string; onClose: () 
                   checked={roleNames.includes(r.name)}
                   onChange={() => setRoleNames((x) => toggle(x, r.name))}
                 />{' '}
-                {r.name}
+                {r.label}
               </label>
             ))}
           </div>
           <div className="checks" role="group" aria-label="עולמות תוכן">
-            {(worlds.data ?? []).map((w) => (
+            {worlds.map((w) => (
               <label key={w.slug}>
                 <input
                   type="checkbox"

@@ -2,20 +2,22 @@
  * Wave 5 (V4b) — the editor's half of learning: items, builders, publishing, audiences,
  * assignment and completion.
  *
- * Every call goes through the temporary `w5` bridge (`src/api/wave5.ts`) because the V1–V3 routes
- * are not in the published contract while this lane runs, and every response is parsed with
- * `checked` against `@wecom/shared`. V6 swaps each `w5(...)` for the generated `api.*` call.
+ * V4b shipped behind the temporary `w5` bridge because the V1–V3 routes were not in the published
+ * contract while the lane ran. V6 published them, so every call goes through the generated client
+ * and every response is still parsed with `checked` against `@wecom/shared`.
  */
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import {
   AssignResultSchema,
+  AudienceOptionsSchema,
   AudienceSchema,
   CompletionResponseSchema,
   GenerateQuestionsResponseSchema,
   LearningDashboardSchema,
   LearningItemSchema,
   LearningItemsResponseSchema,
+  LearningPublishResponseSchema,
   LearningVersionsResponseSchema,
   type AssignBodySchema,
   type AudienceCreateSchema,
@@ -27,44 +29,36 @@ import {
   type PutEntriesBodySchema,
   type PutQuestionsBodySchema,
 } from '@wecom/shared';
+import { api } from '../client.js';
 import { keys } from '../keys.js';
+import { checked } from '../stage45.js';
+import { unwrap } from '../unwrap.js';
 import { invalidateLearning } from '../invalidateLearning.js';
-import { w5, w5Void } from '../wave5.js';
 
 export type LearningItemsQuery = Partial<z.input<typeof LearningItemsQuerySchema>>;
-type QueryParams = Record<string, string | number | undefined>;
-
-/**
- * `POST /learning/items/:id/publish` answers `{ item, version }` — the V1 ruling, which corrects
- * what `CONTRACTS-wave5.md` said (a bare `LearningVersion`). V1 appends
- * `LearningPublishResponseSchema` to `@wecom/shared`; until that lands on this branch the shape is
- * composed here from the shared item schema rather than re-declared, and V6 swaps the import in.
- */
-const PublishResponseSchema = z.object({
-  item: LearningItemSchema,
-  version: z.number().int().nonnegative(),
-});
 
 export const useLearningItems = (q: LearningItemsQuery = {}, enabled = true) =>
   useQuery({
     queryKey: keys.learning.items(q),
     enabled,
     placeholderData: keepPreviousData,
-    queryFn: () => w5(LearningItemsResponseSchema, 'GET', '/learning/items', { query: q as QueryParams }),
+    queryFn: async () =>
+      checked(LearningItemsResponseSchema, await api.GET('/learning/items', { params: { query: q } })),
   });
 
 export const useLearningItem = (id: string | undefined) =>
   useQuery({
     queryKey: keys.learning.item(id ?? ''),
     enabled: !!id,
-    queryFn: () => w5(LearningItemSchema, 'GET', `/learning/items/${id}`),
+    queryFn: async () =>
+      checked(LearningItemSchema, await api.GET('/learning/items/{id}', { params: { path: { id: id! } } })),
   });
 
 export const useCreateLearningItem = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: z.input<typeof LearningItemCreateSchema>) =>
-      w5(LearningItemSchema, 'POST', '/learning/items', { body }),
+    mutationFn: async (body: z.input<typeof LearningItemCreateSchema>) =>
+      checked(LearningItemSchema, await api.POST('/learning/items', { body: body as never })),
     onSuccess: () => invalidateLearning(qc),
   });
 };
@@ -72,8 +66,11 @@ export const useCreateLearningItem = () => {
 export const usePatchLearningItem = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: z.input<typeof LearningItemPatchSchema>) =>
-      w5(LearningItemSchema, 'PATCH', `/learning/items/${id}`, { body }),
+    mutationFn: async (body: z.input<typeof LearningItemPatchSchema>) =>
+      checked(
+        LearningItemSchema,
+        await api.PATCH('/learning/items/{id}', { params: { path: { id } }, body: body as never }),
+      ),
     onSuccess: (item) => {
       qc.setQueryData(keys.learning.item(id), item);
       invalidateLearning(qc, id);
@@ -84,7 +81,9 @@ export const usePatchLearningItem = (id: string) => {
 export const useDeleteLearningItem = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => w5Void('DELETE', `/learning/items/${id}`),
+    mutationFn: async (id: string) => {
+      unwrap(await api.DELETE('/learning/items/{id}', { params: { path: { id } } }));
+    },
     onSuccess: (_v, id) => invalidateLearning(qc, id),
   });
 };
@@ -92,8 +91,11 @@ export const useDeleteLearningItem = () => {
 export const usePutEntries = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: z.input<typeof PutEntriesBodySchema>) =>
-      w5(LearningItemSchema, 'PUT', `/learning/items/${id}/entries`, { body }),
+    mutationFn: async (body: z.input<typeof PutEntriesBodySchema>) =>
+      checked(
+        LearningItemSchema,
+        await api.PUT('/learning/items/{id}/entries', { params: { path: { id } }, body: body as never }),
+      ),
     onSuccess: (item) => {
       qc.setQueryData(keys.learning.item(id), item);
       invalidateLearning(qc, id);
@@ -104,8 +106,11 @@ export const usePutEntries = (id: string) => {
 export const usePutQuestions = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: z.input<typeof PutQuestionsBodySchema>) =>
-      w5(LearningItemSchema, 'PUT', `/learning/items/${id}/questions`, { body }),
+    mutationFn: async (body: z.input<typeof PutQuestionsBodySchema>) =>
+      checked(
+        LearningItemSchema,
+        await api.PUT('/learning/items/{id}/questions', { params: { path: { id } }, body: body as never }),
+      ),
     onSuccess: (item) => {
       qc.setQueryData(keys.learning.item(id), item);
       invalidateLearning(qc, id);
@@ -116,15 +121,21 @@ export const usePutQuestions = (id: string) => {
 /** Draft questions only — nothing is saved until `usePutQuestions` (spec §4). */
 export const useGenerateQuestions = (id: string) =>
   useMutation({
-    mutationFn: (body: z.input<typeof GenerateQuestionsBodySchema>) =>
-      w5(GenerateQuestionsResponseSchema, 'POST', `/learning/items/${id}/generate`, { body }),
+    mutationFn: async (body: z.input<typeof GenerateQuestionsBodySchema>) =>
+      checked(
+        GenerateQuestionsResponseSchema,
+        await api.POST('/learning/items/{id}/generate', { params: { path: { id } }, body: body as never }),
+      ),
   });
 
 export const usePublishLearningItem = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: z.input<typeof LearningPublishBodySchema>) =>
-      w5(PublishResponseSchema, 'POST', `/learning/items/${id}/publish`, { body }),
+    mutationFn: async (body: z.input<typeof LearningPublishBodySchema>) =>
+      checked(
+        LearningPublishResponseSchema,
+        await api.POST('/learning/items/{id}/publish', { params: { path: { id } }, body: body as never }),
+      ),
     onSuccess: (res) => {
       qc.setQueryData(keys.learning.item(id), res.item);
       invalidateLearning(qc, id);
@@ -137,14 +148,33 @@ export const useLearningVersions = (id: string | undefined) =>
     queryKey: keys.learning.versions(id ?? ''),
     enabled: !!id,
     queryFn: async () =>
-      (await w5(LearningVersionsResponseSchema, 'GET', `/learning/items/${id}/versions`)).items,
+      checked(
+        LearningVersionsResponseSchema,
+        await api.GET('/learning/items/{id}/versions', { params: { path: { id: id! } } }),
+      ).items,
+  });
+
+/**
+ * V6: the roles and worlds an audience is built from, behind `learning.manage` alone. The dialog
+ * used `GET /admin/roles`, which needs `roles.manage` — so a lead who may assign learning saw an
+ * empty role list against the real API while the MSW fixture happily answered.
+ */
+export const useAudienceOptions = (enabled = true) =>
+  useQuery({
+    queryKey: keys.learning.audienceOptions,
+    enabled,
+    staleTime: 300_000,
+    queryFn: async () => checked(AudienceOptionsSchema, await api.GET('/learning/audience-options')),
   });
 
 export const useCreateAudience = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: z.input<typeof AudienceCreateSchema>) =>
-      w5(AudienceSchema, 'POST', `/learning/items/${id}/audiences`, { body }),
+    mutationFn: async (body: z.input<typeof AudienceCreateSchema>) =>
+      checked(
+        AudienceSchema,
+        await api.POST('/learning/items/{id}/audiences', { params: { path: { id } }, body: body as never }),
+      ),
     onSuccess: () => invalidateLearning(qc, id),
   });
 };
@@ -152,7 +182,9 @@ export const useCreateAudience = (id: string) => {
 export const useDeleteAudience = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (audienceId: string) => w5Void('DELETE', `/learning/audiences/${audienceId}`),
+    mutationFn: async (id: string) => {
+      unwrap(await api.DELETE('/learning/audiences/{id}', { params: { path: { id } } }));
+    },
     onSuccess: () => invalidateLearning(qc),
   });
 };
@@ -160,8 +192,11 @@ export const useDeleteAudience = () => {
 export const useAssignUsers = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: z.input<typeof AssignBodySchema>) =>
-      w5(AssignResultSchema, 'POST', `/learning/items/${id}/assign`, { body }),
+    mutationFn: async (body: z.input<typeof AssignBodySchema>) =>
+      checked(
+        AssignResultSchema,
+        await api.POST('/learning/items/{id}/assign', { params: { path: { id } }, body: body as never }),
+      ),
     onSuccess: () => invalidateLearning(qc, id),
   });
 };
@@ -170,7 +205,11 @@ export const useCompletion = (id: string | undefined, enabled = true) =>
   useQuery({
     queryKey: keys.learning.completion(id ?? ''),
     enabled: enabled && !!id,
-    queryFn: () => w5(CompletionResponseSchema, 'GET', `/learning/items/${id}/completion`),
+    queryFn: async () =>
+      checked(
+        CompletionResponseSchema,
+        await api.GET('/learning/items/{id}/completion', { params: { path: { id: id! } } }),
+      ),
   });
 
 export const useLearningDashboard = (world?: string, enabled = true) =>
@@ -178,7 +217,11 @@ export const useLearningDashboard = (world?: string, enabled = true) =>
     queryKey: keys.learning.dashboard(world),
     enabled,
     staleTime: 60_000,
-    queryFn: () => w5(LearningDashboardSchema, 'GET', '/learning/dashboard', { query: { world } }),
+    queryFn: async () =>
+      checked(
+        LearningDashboardSchema,
+        await api.GET('/learning/dashboard', { params: { query: { world } } }),
+      ),
   });
 
 /**

@@ -1,17 +1,17 @@
 /**
  * Wave 5 (V4b) — knowledge gaps (`GET /gaps`, dismiss, resolve, detect).
  *
- * Through the temporary `w5` bridge and parsed with `checked` against `@wecom/shared`; V6 swaps
- * the bodies for the generated client once V3 publishes the routes.
+ * V4b shipped behind the temporary `w5` bridge; V6 published V3's routes, so these go through the
+ * generated client and are still parsed with `checked` against `@wecom/shared`.
  */
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { z } from 'zod';
 import { GapDetectResultSchema, GapSchema, GapsResponseSchema, type GapsQuerySchema } from '@wecom/shared';
+import { api } from '../client.js';
 import { keys } from '../keys.js';
-import { w5 } from '../wave5.js';
+import { checked } from '../stage45.js';
 
 export type GapsQuery = Partial<z.input<typeof GapsQuerySchema>>;
-type QueryParams = Record<string, string | number | undefined>;
 
 /** Every gap write can move every filtered list, so they all invalidate the whole prefix. */
 const ALL = { queryKey: ['gaps'] as const };
@@ -21,7 +21,7 @@ export const useGaps = (q: GapsQuery = {}, enabled = true) =>
     queryKey: keys.gaps(q),
     enabled,
     placeholderData: keepPreviousData,
-    queryFn: () => w5(GapsResponseSchema, 'GET', '/gaps', { query: q as QueryParams }),
+    queryFn: async () => checked(GapsResponseSchema, await api.GET('/gaps', { params: { query: q } })),
   });
 
 const useGapMutation = <V, R>(fn: (v: V) => Promise<R>) => {
@@ -30,16 +30,19 @@ const useGapMutation = <V, R>(fn: (v: V) => Promise<R>) => {
 };
 
 export const useDismissGap = () =>
-  useGapMutation(({ id, reason }: { id: string; reason: string }) =>
-    w5(GapSchema, 'POST', `/gaps/${id}/dismiss`, { body: { reason } }),
+  useGapMutation(async ({ id, reason }: { id: string; reason: string }) =>
+    checked(GapSchema, await api.POST('/gaps/{id}/dismiss', { params: { path: { id } }, body: { reason } })),
   );
 
 export const useResolveGap = () =>
-  useGapMutation(({ id, documentId }: { id: string; documentId: string }) =>
-    w5(GapSchema, 'POST', `/gaps/${id}/resolve`, { body: { documentId } }),
+  useGapMutation(async ({ id, documentId }: { id: string; documentId: string }) =>
+    checked(
+      GapSchema,
+      await api.POST('/gaps/{id}/resolve', { params: { path: { id } }, body: { documentId } }),
+    ),
   );
 
 export const useDetectGaps = () =>
-  useGapMutation<void, z.infer<typeof GapDetectResultSchema>>(() =>
-    w5(GapDetectResultSchema, 'POST', '/gaps/detect', { body: {} }),
+  useGapMutation<void, z.infer<typeof GapDetectResultSchema>>(async () =>
+    checked(GapDetectResultSchema, await api.POST('/gaps/detect', {})),
   );

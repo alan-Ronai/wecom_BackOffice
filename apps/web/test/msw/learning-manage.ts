@@ -232,6 +232,12 @@ export const learningManageHandlers: RequestHandler[] = [
     return HttpResponse.json({ ...fx.completion, item: toCard(i) });
   }),
   http.get(`${B}/learning/dashboard`, () => HttpResponse.json(fx.learningDashboard)),
+  http.get(`${B}/learning/audience-options`, () =>
+    HttpResponse.json({
+      roles: fx.roles.map((r) => ({ name: r.name, label: r.description || r.name })),
+      worlds: fx.worlds.map((w) => ({ slug: w.slug, name: w.name })),
+    }),
+  ),
   http.get(`${B}/gaps`, ({ request }) => {
     const u = new URL(request.url);
     const status = u.searchParams.get('status') ?? 'open';

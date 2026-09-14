@@ -149,6 +149,8 @@ export const sampleResult = (passed: boolean): AttemptResult => ({
 interface LearningState {
   my: MyLearningResponse;
   docLearning: DocumentLearning;
+  /** V6 `GET /documents/:id/change-preview` — what the publish dialog pre-ticks from. */
+  changePreview: { significant: boolean; reasons: string[]; affectedItems: number };
   acknowledged: string[];
   attempts: { assignmentId: string; attemptId: string; answers?: unknown }[];
   nextResultPassed: boolean;
@@ -186,6 +188,7 @@ const initial = (): LearningState => ({
     refreshAssignmentId: null,
     lastSignificantChange: null,
   },
+  changePreview: { significant: false, reasons: [], affectedItems: 0 },
   acknowledged: [],
   attempts: [],
   nextResultPassed: true,
@@ -245,6 +248,7 @@ export const learningHandlers: RequestHandler[] = [
    * whatever a test pinned on `docLearning`; the `items` half is derived from the manager state
    * unless a test pinned those too, so V4b's `?documentId=` filter and V4a's badge agree.
    */
+  http.get(`${B}/documents/:id/change-preview`, () => HttpResponse.json(learningState.changePreview)),
   http.get(`${B}/documents/:id/learning`, ({ params }) =>
     HttpResponse.json({
       ...learningState.docLearning,

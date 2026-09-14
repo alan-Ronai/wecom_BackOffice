@@ -71,6 +71,7 @@ export const keys = {
     completion: (id: string) => ['learning', 'completion', id] as const,
     dashboard: (world: string = '*') => ['learning', 'dashboard', world] as const,
     audienceOptions: ['learning', 'audienceOptions'] as const,
+    changePreview: (documentId: string) => ['learning', 'changePreview', documentId] as const,
   },
   /* wave 5 — knowledge gaps (V4b) */
   gaps: (q: unknown = '*') => ['gaps', q] as const,
