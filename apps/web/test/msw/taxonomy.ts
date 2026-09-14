@@ -143,8 +143,7 @@ export const taxonomyHandlers = (state: TaxonomyState): RequestHandler[] => [
    */
   http.get(`${B}/topics/:id/items`, ({ params, request }) => {
     if (params.id !== fx.topics[0]!.id) return notFound();
-    if (new URL(request.url).searchParams.get('record') !== 'false')
-      state.topicViews.push(String(params.id));
+    if (new URL(request.url).searchParams.get('record') !== 'false') state.topicViews.push(String(params.id));
     return HttpResponse.json(fx.topicView);
   }),
   http.get(`${B}/tags`, ({ request }) => {

@@ -43,7 +43,8 @@ export function FeedbackDrawer({ id, onClose }: { id: string; onClose: () => voi
     // Prefill with the newest version published after the report (spec §5.4).
     const latest = loaded.laterVersions.at(-1);
     setVersion(latest ? String(latest.version) : '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentionally only the id: see the note above. (No react-hooks plugin in this repo's
+    // eslint config, so there is no rule to silence — the reason is the comment.)
   }, [loaded?.id]);
 
   // A drawer that traps attention has to be dismissible from the keyboard (wave 3's `Modal` bar).

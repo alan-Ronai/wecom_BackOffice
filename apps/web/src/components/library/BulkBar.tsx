@@ -94,10 +94,7 @@ export function BulkBar({
             {menu === 'category' ? (
               <div className="menu">
                 {(worlds.data ?? []).map((w) => (
-                  <button
-                    key={w.slug}
-                    onClick={() => pick('set-category', { category: w.slug as Category })}
-                  >
+                  <button key={w.slug} onClick={() => pick('set-category', { category: w.slug as Category })}>
                     {w.name || cat(w.slug).label}
                   </button>
                 ))}

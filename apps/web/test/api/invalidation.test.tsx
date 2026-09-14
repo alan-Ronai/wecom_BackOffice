@@ -31,8 +31,7 @@ const harness = () => {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  const stale = () =>
-    ROOTS.filter((k) => qc.getQueryState([...k, 'seed'])?.isInvalidated).map((k) => k[0]);
+  const stale = () => ROOTS.filter((k) => qc.getQueryState([...k, 'seed'])?.isInvalidated).map((k) => k[0]);
   return { qc, wrapper, stale };
 };
 
@@ -76,7 +75,12 @@ describe('content invalidation', () => {
 
 describe('the client scope gate mirrors the server', () => {
   const me = (scopes: string[] | null): Me =>
-    ({ ...fx.me, permissions: ['docs.read', 'docs.edit'], worldScopes: scopes, categoryScopes: scopes }) as Me;
+    ({
+      ...fx.me,
+      permissions: ['docs.read', 'docs.edit'],
+      worldScopes: scopes,
+      categoryScopes: scopes,
+    }) as Me;
 
   it('allows a document whose secondary world is in scope', () => {
     // The server intersects the whole membership; checking `doc.category` alone made the client
@@ -120,8 +124,6 @@ describe('checkedMaybe distinguishes "no source yet" from "you may not see this"
   });
 
   it('rethrows NOT_PUBLISHED so the caller can render the unavailable page', () => {
-    expect(() => checkedMaybe(S, res(404, { code: 'NOT_PUBLISHED', message: 'לא זמין' }))).toThrow(
-      ApiError,
-    );
+    expect(() => checkedMaybe(S, res(404, { code: 'NOT_PUBLISHED', message: 'לא זמין' }))).toThrow(ApiError);
   });
 });

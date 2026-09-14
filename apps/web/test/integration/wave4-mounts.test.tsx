@@ -151,9 +151,7 @@ describe('W6 article mounts', () => {
       ),
     );
     renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
-    expect(
-      await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title })).toBeInTheDocument();
     // Falls back to the slug rather than crashing on `undefined.label`.
     expect(screen.getAllByText(/field/).length).toBeGreaterThan(0);
   });
@@ -196,17 +194,13 @@ describe('W6 article mounts', () => {
     // agent who switched to "מקור" on one item used to open the next one on the source pane's
     // empty state instead of the article — mid-call, reading as "the document is empty".
     server.use(
-      http.get(`${B}/me/preferences`, () =>
-        HttpResponse.json({ ...fx.me.preferences, paneMode: 'source' }),
-      ),
+      http.get(`${B}/me/preferences`, () => HttpResponse.json({ ...fx.me.preferences, paneMode: 'source' })),
       http.get(`${B}/documents/${D_BROWSING}/source`, () =>
         HttpResponse.json({ code: 'NOT_FOUND', message: 'אין מקור' }, { status: 404 }),
       ),
     );
     renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
-    expect(
-      await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'מקור' })).toBeDisabled());
     expect(screen.queryByText('אין עדיין מסמך מקור לפריט זה')).toBeNull();
   });

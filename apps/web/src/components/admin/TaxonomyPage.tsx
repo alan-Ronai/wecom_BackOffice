@@ -162,9 +162,11 @@ export function TaxonomyPage() {
                              or a dropped connection used to surface as that same confident claim
                              and then re-issue the call with `force: true` — forcing past an error
                              nobody has identified. */
-                          if (
-                            !(err instanceof ApiError && err.status === 409 && err.code === 'WORLD_IN_USE')
-                          ) {
+                          if (!(
+                            err instanceof ApiError &&
+                            err.status === 409 &&
+                            err.code === 'WORLD_IN_USE'
+                          )) {
                             toast('השבתת עולם התוכן נכשלה', 'warn');
                             return;
                           }

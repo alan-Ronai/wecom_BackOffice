@@ -396,9 +396,7 @@ export function ArticlePage() {
         <div className="meta">
           {doc.docType ? <TypeBadge docType={doc.docType} /> : null}
           <span className="chip chip-blue">
-            {doc.kind === 'retention'
-              ? 'שימור לקוחות'
-              : `תפעולי – ${cat(doc.category).short}`}
+            {doc.kind === 'retention' ? 'שימור לקוחות' : `תפעולי – ${cat(doc.category).short}`}
           </span>
           <span className="chip chip-gray">v{doc.currentVersion}</span>
           <span className="chip chip-gray">{steps.length} שלבים</span>

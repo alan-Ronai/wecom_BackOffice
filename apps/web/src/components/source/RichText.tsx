@@ -37,7 +37,15 @@ export const richTextExtensions = (compact = false) => [
     protocols: ['http', 'https'],
     HTMLAttributes: { rel: 'noopener' },
   }),
-  ...(compact ? [] : [Image.configure({ allowBase64: false }), Table.configure({ resizable: false }), TableRow, TableHeader, TableCell]),
+  ...(compact
+    ? []
+    : [
+        Image.configure({ allowBase64: false }),
+        Table.configure({ resizable: false }),
+        TableRow,
+        TableHeader,
+        TableCell,
+      ]),
   TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'right' }),
 ];
 
@@ -207,7 +215,6 @@ export function RichText({
   // against the editor's own HTML is what keeps this from fighting the user's typing.
   useEffect(() => {
     if (editor && value !== editor.getHTML()) editor.commands.setContent(value, { emitUpdate: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, editor]);
 
   if (!editor) return null;

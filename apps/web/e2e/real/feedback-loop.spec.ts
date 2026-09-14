@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { adminApi, createUser, signInAs } from './helpers/users.js';
 
 /**
@@ -10,7 +10,13 @@ import { adminApi, createUser, signInAs } from './helpers/users.js';
  * This is the one flow no lane could test: the report is W3, the source edit is W4, the publish
  * link is W2/W6, and the analytics is W3 again reading what the publish wrote.
  */
-test.describe.configure({ mode: 'serial' });
+/** See `taxonomy-visibility.spec.ts`: teardown that survives a failure, in place of the no-op
+    `test.describe.configure({ mode: 'serial' })` this file used to carry. */
+const opened: { pages: Page[]; apis: APIRequestContext[] } = { pages: [], apis: [] };
+test.afterEach(async () => {
+  for (const p of opened.pages.splice(0)) await p.context().close();
+  for (const a of opened.apis.splice(0)) await a.dispose();
+});
 
 const DOC_TITLE = 'איטיות גלישה / חוסר גלישה';
 const REPORT = `הסף בשלב 1 לא נכון ${Date.now().toString(36)}`;
@@ -21,15 +27,24 @@ test('W4-E2E-1 feedback travels from an agent to a closed status linked to a pub
   baseURL,
 }) => {
   const api = await adminApi(page, baseURL!);
+  opened.apis.push(api);
   const agent = await createUser(api, 'agent');
   const lead = await createUser(api, 'lead');
 
   /* 1. the agent reports, from the step they are on ------------------------ */
   const a = await signInAs(browser, agent, baseURL!);
+  opened.pages.push(a);
   await a.goto('/library');
   await a.getByText(DOC_TITLE).first().click();
   await expect(a.getByRole('heading', { level: 1, name: DOC_TITLE })).toBeVisible();
-  await a.getByRole('button', { name: 'דיווח על בעיה / משוב' }).first().click();
+  /*
+   * §5.4 puts the report button in the header *and per step*. `.first()` is the header's, so this
+   * asserts the per-step ones exist at all — the guard that used to hide them outside call mode
+   * left exactly one, and `.first()` would still have found it.
+   */
+  const reportButtons = a.getByRole('button', { name: 'דיווח על בעיה / משוב' });
+  await expect.poll(() => reportButtons.count()).toBeGreaterThan(2);
+  await reportButtons.first().click();
   const dlg = a.getByRole('dialog', { name: 'דיווח על בעיה / משוב' });
   await dlg.getByRole('radio', { name: 'מצאתי טעות' }).check();
   await dlg.getByLabel('הסבר קצר').fill(REPORT);
@@ -37,10 +52,10 @@ test('W4-E2E-1 feedback travels from an agent to a closed status linked to a pub
   await expect(dlg.getByText(/גרסה v\d+/)).toBeVisible();
   await dlg.getByRole('button', { name: 'שלח' }).click();
   await expect(a.getByText(/המשוב נשלח/)).toBeVisible();
-  await a.context().close();
 
   /* 2. the lead finds it in the queue and takes it -------------------------- */
   const l = await signInAs(browser, lead, baseURL!);
+  opened.pages.push(l);
   await l.goto('/feedback');
   const row = l.getByRole('row').filter({ hasText: DOC_TITLE }).first();
   await expect(row).toBeVisible();
@@ -88,6 +103,4 @@ test('W4-E2E-1 feedback travels from an agent to a closed status linked to a pub
 
   await l.goto('/feedback/analytics');
   await expect(l.getByText(/שיעור משובים שהובילו לשינוי תוכן/)).toBeVisible();
-  await l.context().close();
-  await api.dispose();
 });

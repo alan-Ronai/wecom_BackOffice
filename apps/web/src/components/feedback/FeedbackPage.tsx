@@ -111,13 +111,7 @@ export function FeedbackPage({ tab }: { tab?: 'analytics' } = {}) {
         <FeedbackAnalyticsTab world={world} />
       ) : (
         <>
-          <div
-            className="facets"
-            role="tablist"
-            aria-label="סטטוס"
-            ref={tabsRef}
-            onKeyDown={onTabKeys}
-          >
+          <div className="facets" role="tablist" aria-label="סטטוס" ref={tabsRef} onKeyDown={onTabKeys}>
             {/* Real `<button>`s. As `<span role="tab" tabIndex={0}>` they were focusable and
                 announced as tabs, and Enter/Space did nothing — the `role` promised an
                 interaction the element could not deliver. */}
