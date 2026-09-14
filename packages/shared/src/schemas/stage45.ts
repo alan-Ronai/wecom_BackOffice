@@ -304,7 +304,13 @@ export const ReviewRequestSchema = z.object({
   decidedAt: IsoDateSchema.nullable(),
 });
 export const ReviewQueueResponseSchema = paginated(
-  ReviewRequestSchema.extend({ title: z.string(), category: CategorySchema }),
+  // `canApprove` is wave 5 V3's additive field: whether *the caller* may decide this request
+  // under `workflow.requireApprover`. Optional so a pre-wave-5 client keeps parsing the row.
+  ReviewRequestSchema.extend({
+    title: z.string(),
+    category: CategorySchema,
+    canApprove: z.boolean().optional(),
+  }),
 );
 
 /* ── Stage 5: saved views, templates, presence ──────────────────────────── */

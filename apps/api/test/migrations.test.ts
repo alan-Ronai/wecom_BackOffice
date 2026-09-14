@@ -282,6 +282,22 @@ run('migrations', () => {
     // only users; deliberately no FK to topics (W1's table)
     expect(fk.rows[0].n).toBe(1);
   });
+  it('creates knowledge_gaps with its unique (kind,key) index and gap_runs', async () => {
+    const t = await pool.query(
+      "select table_name from information_schema.tables where table_schema='public' and table_name in ('knowledge_gaps','gap_runs') order by 1",
+    );
+    expect(t.rows.map((r) => r.table_name)).toEqual(['gap_runs', 'knowledge_gaps']);
+    const idx = await pool.query(
+      "select indexname from pg_indexes where tablename='knowledge_gaps' and indexname='knowledge_gaps_kind_key_uniq'",
+    );
+    expect(idx.rowCount).toBe(1);
+    const chk = await pool.query(
+      `select pg_get_constraintdef(c.oid) def from pg_constraint c join pg_class t on t.oid=c.conrelid
+       where t.relname='knowledge_gaps' and c.conname='knowledge_gaps_kind_check'`,
+    );
+    expect(chk.rows[0].def).toContain('zero_results');
+  });
+
   it('0035 keeps both the tags term and the Hebrew stopword filter in the search vector', async () => {
     // 0030 added tags but dropped 0027's stopword filter; 0035 is the one definition with both.
     await pool.query(

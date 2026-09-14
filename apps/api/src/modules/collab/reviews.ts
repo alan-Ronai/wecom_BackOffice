@@ -16,6 +16,7 @@ import { badRequest, httpError, notFound } from '../../lib/http.js';
 import { withTransaction, type Queryable, type Tx } from '../../lib/sql.js';
 import { requireUser } from '../../lib/user.js';
 import { publishDocument } from '../documents/publish.js';
+import { assertCanApprove, canApprove } from './approver.js'; // wave 5 V3: approver gate
 import { documentTitle, iso, leadIds, notify, notifyMany } from './repo.js';
 
 type ReviewRequest = z.infer<typeof ReviewRequestSchema>;
@@ -155,6 +156,8 @@ export default async function reviewRoutes(instance: FastifyInstance) {
     },
     async (req) => {
       const user = requireUser(req);
+      // Before the transaction: a caller the approver switch refuses must not take the row lock.
+      await assertCanApprove(app.db, user);
       const documentId = req.params.id;
       return withTransaction(app.db, async (tx) => {
         const open = await tx.query<{
@@ -261,6 +264,9 @@ export default async function reviewRoutes(instance: FastifyInstance) {
     },
     async (req) => {
       const user = requireUser(req);
+      // One read for the whole page: whether *this* caller may decide is a property of the
+      // caller and the settings, not of the row, so the queue can say so without a per-row query.
+      const can = await canApprove(app.db, user);
       const { page, pageSize, status } = req.query;
       const cond: string[] = [];
       const params: unknown[] = [];
@@ -295,6 +301,7 @@ export default async function reviewRoutes(instance: FastifyInstance) {
           ...toApi(r),
           title: r.title as string,
           category: r.category as Category,
+          canApprove: can,
         })),
         total: Number(total.rows[0].n),
         page,
