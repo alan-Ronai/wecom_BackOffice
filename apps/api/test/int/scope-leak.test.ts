@@ -186,6 +186,13 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     });
     billingSource = (await db.pool.query('select source_id from documents where id=$1', [billingDoc])).rows[0]
       .source_id as string;
+    // A gap on the billing document, so `/gaps` has something to leak (V3). Inserted directly:
+    // the heuristics run nightly, and what is under test is the read filter, not the detector.
+    await db.pool.query(
+      `insert into knowledge_gaps(kind, key, title, suggested_action, world_slug, document_id)
+       values ('feedback_cluster', $1, $2, 'update', 'billing', $3)`,
+      [billingDoc, `דיווחים חוזרים על חוסר מידע: ${SECRET}`, billingDoc],
+    );
     billingRevision = (
       await db.pool.query(
         'select id from source_revisions where source_id=$1 order by imported_at desc limit 1',
@@ -222,6 +229,8 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     `/api/v1/trash`,
     `/api/v1/feedback?pageSize=100`,
     `/api/v1/feedback/analytics`,
+    // Wave 5 V3: a knowledge gap names the document it is about, in its key and in its title.
+    `/api/v1/gaps?pageSize=100`,
   ];
 
   // One `it` rather than `it.each`: the urls are built from ids `beforeAll` assigns, and

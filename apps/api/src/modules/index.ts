@@ -16,6 +16,7 @@ import sourcedocs from './sourcedocs/index.js'; // wave 4: source documents
 import taxonomy from './taxonomy/index.js'; // wave 4 W1: worlds, topics, tags
 import feedback from './feedback/index.js'; // wave 4 W3: agent feedback
 import usage from './usage/index.js'; // wave 4 (W5): usage analytics + PgUsage
+import gaps from './gaps/index.js'; // wave 5 V3: knowledge gaps
 import { startJobs } from '../jobs/index.js';
 
 /**
@@ -41,6 +42,7 @@ export async function registerModules(v1: FastifyInstance) {
     taxonomy,
     feedback,
     usage,
+    gaps,
   ])
     await v1.register(m);
   // L2 background workers (trash.purge, search.reindex) bind to L1's `app.boss` once it is up.
