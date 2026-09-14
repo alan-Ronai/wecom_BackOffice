@@ -15,6 +15,7 @@ import { TypeBadge, worldShort } from '../taxonomy/TypeBadge.js';
 import { hitLabel } from './hitLabel.js';
 import { useFocusTrap } from '../ui/useFocusTrap.js';
 import type { SearchHit } from '../../api/types.js';
+import { results as nResults } from '../../lib/count.js';
 
 /**
  * Tab cycles these filters, and the key is sent verbatim as `?types=` — so the keys must be the
@@ -269,7 +270,7 @@ export function Palette() {
   };
 
   let selIdx = -1;
-  const stat = `${search.data?.total ?? selectable.length} תוצאות ב-${search.data?.files ?? 0} קבצים · ${Math.max(1, Math.round(search.data?.tookMs ?? 1))}ms`;
+  const stat = `${nResults(search.data?.total ?? selectable.length)} ב-${search.data?.files ?? 0} קבצים · ${Math.max(1, Math.round(search.data?.tookMs ?? 1))}ms`;
 
   return (
     <div

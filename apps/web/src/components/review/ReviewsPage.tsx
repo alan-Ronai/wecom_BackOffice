@@ -9,6 +9,7 @@ import { Hamburger } from '../shell/MobileDrawer.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
+import { items } from '../../lib/count.js';
 
 type Tab = 'open' | 'approved' | 'changes';
 const TABS: [Tab, string][] = [
@@ -139,7 +140,7 @@ export function ReviewsPage() {
           <div className="lib-head">
             <div>
               <h1>
-                סקירות<span>{rows.length} פריטים</span>
+                סקירות<span>{items(rows.length)}</span>
               </h1>
               <p>פריטי ידע שנשלחו לאישור. אישור מפרסם גרסה חדשה; החזרה לתיקון מחזירה לטיוטה.</p>
             </div>

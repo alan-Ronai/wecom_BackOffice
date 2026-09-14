@@ -11,6 +11,7 @@ import { useDebounced } from '../../lib/useDebounced.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { Chip, LoadError } from '../ui/index.js';
+import { users as nUsers } from '../../lib/count.js';
 
 const SOURCE_LABEL: Record<AdminUserRow['source'], string> = {
   entra: 'Entra',
@@ -210,7 +211,7 @@ export function UsersPage() {
       toast(
         failed
           ? `${targets.length - failed} מתוך ${targets.length} משתמשים עודכנו`
-          : `התפקיד הוקצה ל-${targets.length} משתמשים`,
+          : `התפקיד הוקצה ל-${nUsers(targets.length)}`,
         failed ? 'warn' : 'ok',
       );
     })();
@@ -252,7 +253,7 @@ export function UsersPage() {
 
   const bulkRoleDialog = () =>
     modal.open({
-      title: `הקצאת תפקיד ל-${visibleSelected.length} משתמשים`,
+      title: `הקצאת תפקיד ל-${nUsers(visibleSelected.length)}`,
       body: (
         <RoleEditor
           // Seeded from the first selected user so the dialog opens on something, not on blank.

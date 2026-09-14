@@ -17,6 +17,7 @@ import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
 import { Fmt } from '../Fmt.js';
 import type { TrashItem } from '../../api/types.js';
+import { counted, items as nItems } from '../../lib/count.js';
 
 const TYPE_LABEL: Record<string, string> = {
   document: '',
@@ -79,7 +80,7 @@ export function TrashPage() {
             <h2>
               סל מיחזור{' '}
               <span>
-                {items.length} פריטים · נמחקים סופית אחרי {TRASH_DAYS} יום
+                {counted(items.length, nItems, 'נמחק', 'נמחקים')} סופית אחרי {TRASH_DAYS} יום
               </span>
             </h2>
             <div className="btns">
@@ -101,7 +102,7 @@ export function TrashPage() {
                   onClick={async () => {
                     const ok = await modal.confirm(
                       'מחיקה לצמיתות',
-                      `${selected.length} פריטים יימחקו לצמיתות. לא ניתן לבטל.`,
+                      `${counted(selected.length, nItems, 'יימחק', 'יימחקו')} לצמיתות. לא ניתן לבטל.`,
                       'מחק לצמיתות',
                       'danger',
                     );
@@ -144,7 +145,7 @@ export function TrashPage() {
                     toast(
                       res.skipped
                         ? `נמחקו ${res.purged} · ${res.skipped} נשארו (פורסמו בעבר)`
-                        : `נמחקו ${res.purged} פריטים`,
+                        : counted(res.purged, nItems, 'נמחק', 'נמחקו'),
                       'ok',
                     );
                   }}

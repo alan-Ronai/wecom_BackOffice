@@ -24,7 +24,7 @@ describe('<TrashPage>', () => {
     const dialog = await screen.findByRole('dialog', { name: 'ריקון סל המיחזור' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'רוקן סל' }));
     await waitFor(() => expect(state.trash.length).toBe(0));
-    expect(await screen.findByText(/נמחקו 1 פריטים/)).toBeInTheDocument();
+    expect(await screen.findByText(/פריט אחד נמחק/)).toBeInTheDocument();
   });
 
   it('reports what the purge kept, rather than claiming it emptied the bin', async () => {

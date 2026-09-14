@@ -7,6 +7,7 @@ import type { MatrixRole } from '../../api/stage5.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
+import { counted, users as nUsers } from '../../lib/count.js';
 
 /** roleId → the permissions it should have once the operator presses שמור. */
 type Draft = Record<string, Permission[]>;
@@ -120,7 +121,7 @@ export function RolesPage() {
               <bdi className="lat" dir="ltr">
                 {perm}
               </bdi>
-              <span className="small muted">{role.users} משתמשים</span>
+              <span className="small muted">{nUsers(role.users)}</span>
             </div>
           ))}
         </div>
@@ -190,7 +191,7 @@ export function RolesPage() {
               {roles.map((r) => (
                 <th key={r.id} className={isDirty(r) ? 'dirty' : ''}>
                   {r.name}
-                  <div className="small muted">{r.users} משתמשים</div>
+                  <div className="small muted">{nUsers(r.users)}</div>
                   {inheritsFrom[r.id] ? (
                     <div className="small muted">כולל את {inheritsFrom[r.id]!.name}</div>
                   ) : null}
@@ -256,7 +257,7 @@ export function RolesPage() {
                         onClick={async () => {
                           const ok = await modal.confirm(
                             'מחיקת תפקיד',
-                            `התפקיד "${r.name}" יוסר מ-${r.users} משתמשים.`,
+                            `התפקיד "${r.name}" יוסר מ-${nUsers(r.users)}.`,
                             'מחק',
                             'danger',
                           );
@@ -278,7 +279,8 @@ export function RolesPage() {
 
       {dirty.length ? (
         <div className="small muted" style={{ marginTop: 10 }}>
-          שינוי שלא נשמר ב-{dirty.map((r) => r.name).join(' · ')} · {dirty[0].users} משתמשים מושפעים
+          שינוי שלא נשמר ב-{dirty.map((r) => r.name).join(' · ')} ·{' '}
+          {counted(dirty[0].users, nUsers, 'מושפע', 'מושפעים')}
         </div>
       ) : null}
       <div className="small muted" style={{ marginTop: 6 }}>

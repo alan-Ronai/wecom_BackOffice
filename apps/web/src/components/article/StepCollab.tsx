@@ -4,6 +4,7 @@ import { useCan } from '../../api/hooks/me.js';
 import { useToast } from '../ui/Toast.js';
 import { ago, copy } from '../../lib/format.js';
 import { MentionInput } from './MentionInput.js';
+import { documents as nDocs } from '../../lib/count.js';
 
 /**
  * What the "הסבר ללקוח" picker needs of a script.
@@ -51,7 +52,7 @@ function ScriptPicker({
         <div className="pick" key={s.id}>
           <div className="q">{s.text}</div>
           <div className="row">
-            <span className="muted small">משמש ב-{s.usedIn} מסמכים</span>
+            <span className="muted small">משמש ב-{nDocs(s.usedIn)}</span>
             <button
               className="btn xs"
               onClick={() => {

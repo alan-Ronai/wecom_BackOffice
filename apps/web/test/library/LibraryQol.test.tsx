@@ -140,7 +140,7 @@ describe('bulk actions', () => {
 
     const bar = screen.getByRole('region', { name: 'פעולות על הפריטים שנבחרו' });
     await userEvent.click(within(bar).getByRole('button', { name: 'מחק' }));
-    await screen.findByText(/יועברו לסל המיחזור/);
+    await screen.findByText(/פריט אחד יועבר לסל המיחזור/);
     await userEvent.click(screen.getByRole('button', { name: 'ביטול' }));
 
     expect(stage45State.bulk).toHaveLength(0);

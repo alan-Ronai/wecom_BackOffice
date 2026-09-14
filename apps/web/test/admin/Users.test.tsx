@@ -157,7 +157,7 @@ describe('admin · users', () => {
 
     await waitFor(() => expect(patched).toHaveLength(2));
     expect(patched.every((p) => Array.isArray(p.body.roles))).toBe(true);
-    expect(await screen.findByText('התפקיד הוקצה ל-2 משתמשים')).toBeInTheDocument();
+    expect(await screen.findByText('התפקיד הוקצה ל-שני משתמשים')).toBeInTheDocument();
     // The selection is spent, so a second click on the same button cannot repeat it by accident.
     expect(screen.queryByText('2 נבחרו')).not.toBeInTheDocument();
   });

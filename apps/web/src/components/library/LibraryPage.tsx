@@ -30,6 +30,7 @@ import { LibraryToolbar } from './LibraryToolbar.js';
 import { DocList } from './DocList.js';
 import { BulkBar } from './BulkBar.js';
 import type { ListDocumentsQuery } from '../../api/types.js';
+import { counted, items as nItems, topics as nTopics } from '../../lib/count.js';
 
 export type LibraryMode = 'library' | 'pinned' | 'recent' | 'drafts';
 
@@ -165,7 +166,7 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
     if (action === 'delete') {
       const ok = await modal.confirm(
         'מחיקה מרובה',
-        `${ids.length} פריטים יועברו לסל המיחזור ל-30 יום.`,
+        `${counted(ids.length, nItems, 'יועבר', 'יועברו')} לסל המיחזור ל-30 יום.`,
         'העבר לסל',
         'danger',
       );
@@ -177,7 +178,7 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
     toast(
       res.skipped.length
         ? `בוצע על ${res.affected} מתוך ${ids.length} · ${res.skipped.length} דולגו`
-        : `בוצע על ${res.affected} פריטים`,
+        : `בוצע על ${nItems(res.affected)}`,
       res.skipped.length ? 'warn' : 'ok',
     );
   };
@@ -188,7 +189,7 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
       `wecom-kb-selection-${new Date().toISOString().slice(0, 10)}.json`,
       JSON.stringify({ exportedAt: new Date().toISOString(), documents: chosen }, null, 2),
     );
-    toast(`${chosen.length} פריטים יוצאו`, 'ok');
+    toast(counted(chosen.length, nItems, 'יוצא', 'יוצאו'), 'ok');
   };
 
   /* Saved views. The query is the local filter state, so applying one is a pure UI change. */
@@ -336,7 +337,7 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
           added++;
         }
       }
-      toast(`יובאו ${added} פריטים מ-${file.name}`, 'ok');
+      toast(`${counted(added, nItems, 'יובא', 'יובאו')} מ-${file.name}`, 'ok');
     } catch (e) {
       toast(`הקובץ לא נקרא: ${(e as Error).message}`, 'warn');
     }
@@ -433,7 +434,8 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
               <h1>
                 {title}
                 <span>
-                  {items.length} נושאים{mode === 'library' ? ` · ${waves} גלי כתיבה` : ''}
+                  {nTopics(items.length)}
+                  {mode === 'library' ? ` · ${waves} גלי כתיבה` : ''}
                 </span>
               </h1>
               <p>

@@ -6,6 +6,7 @@ import { useModal } from '../ui/Modal.js';
 import { Fmt, Html } from '../Fmt.js';
 import { fmtDate, copy } from '../../lib/format.js';
 import { useToast } from '../ui/Toast.js';
+import { documents as nDocs } from '../../lib/count.js';
 
 /** "שדה CRM" popover — status, path and the documents that reference it. */
 function FieldBody({
@@ -35,7 +36,7 @@ function FieldBody({
       ) : null}
       {f?.status === 'new' ? <p style={{ color: 'var(--warn)' }}>שדה חדש — נוסף השבוע.</p> : null}
       <div className="eyebrow" style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
-        <span>ב-{docs.length} מסמכים</span>
+        <span>ב-{nDocs(docs.length)}</span>
         {/* The popover is the quick answer; the page carries usage-by-step, the timeline and the
             rename-with-references flow, which do not belong in a hover-sized surface. */}
         <button className="btn xs" style={{ marginInlineStart: 'auto' }} onClick={onOpenPage}>

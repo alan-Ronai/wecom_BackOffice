@@ -12,6 +12,7 @@ import { Fmt, Html } from '../Fmt.js';
 import type { ResolvedStep } from '../../lib/steps.js';
 import type { FieldInfo } from '../../lib/format.js';
 import { CardMap } from './CardMap.js';
+import { notes as nNotes } from '../../lib/count.js';
 
 type Tab = 'links' | 'notes' | 'versions';
 
@@ -74,7 +75,7 @@ export function Panel({
         {(
           [
             ['links', 'קשרים'],
-            ['notes', `הערות ${list.length}`],
+            ['notes', list.length ? nNotes(list.length) : 'הערות'],
             ['versions', 'גרסאות'],
           ] as [Tab, string][]
         ).map(([k, l]) => (

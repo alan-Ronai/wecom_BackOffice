@@ -17,6 +17,7 @@ import { useDragOrder } from '../../lib/useDragOrder.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
+import { items as nItems, topics as nTopics } from '../../lib/count.js';
 
 /**
  * The contract's slug pattern, checked before the request. The dialog above asks for a Hebrew
@@ -124,7 +125,8 @@ export function TaxonomyPage() {
                 {w.name}
               </button>
               <small>
-                {w.topicCount} נושאים · {w.itemCount} פריטים{w.active ? '' : ' · מושבת'}
+                {nTopics(w.topicCount)} · {nItems(w.itemCount)}
+                {w.active ? '' : ' · מושבת'}
               </small>
               {mayEdit ? (
                 <span className="row-actions">
@@ -228,7 +230,8 @@ export function TaxonomyPage() {
               >
                 <b>{t.name}</b>{' '}
                 <small>
-                  {t.slug} · {t.itemCount} פריטים{t.active ? '' : ' · מושבת'}
+                  {t.slug} · {nItems(t.itemCount)}
+                  {t.active ? '' : ' · מושבת'}
                 </small>
                 {mayEdit ? (
                   <span className="row-actions">

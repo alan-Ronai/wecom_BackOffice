@@ -4,6 +4,7 @@ import { ApiError } from '../../api/unwrap.js';
 import { Empty, LoadError } from '../ui/index.js';
 import { TypeBadge, worldLabel, worldShort } from './TypeBadge.js';
 import { fmtDate } from '../../lib/format.js';
+import { items } from '../../lib/count.js';
 
 /**
  * PRD §6: every item of a topic, grouped by type, so the agent moves between diagnosis, route
@@ -31,7 +32,7 @@ export function TopicPage() {
           <div className="eyebrow">{worldLabel(world.slug)}</div>
           <h1>
             {topic.name}
-            <span>{topic.itemCount} פריטים</span>
+            <span>{items(topic.itemCount)}</span>
           </h1>
           {topic.description ? <p>{topic.description}</p> : null}
         </div>

@@ -19,6 +19,7 @@ import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
 import { DiffView } from './DiffView.js';
+import { versions as nVersions } from '../../lib/count.js';
 
 /** Document picker when no `:id` is in the route (legacy history view). */
 function Picker() {
@@ -59,7 +60,7 @@ function Picker() {
                 </div>
                 <div className="title">{d.title}</div>
                 <div className="meta">
-                  <span>{d.currentVersion} גרסאות</span>
+                  <span>{nVersions(d.currentVersion)}</span>
                   <span>·</span>
                   <span>
                     {d.authorName ?? ''} · {fmtDate(d.updatedAt)}

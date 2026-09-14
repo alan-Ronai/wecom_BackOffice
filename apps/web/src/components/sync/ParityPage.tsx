@@ -8,6 +8,7 @@ import { ago } from '../../lib/format.js';
 import { LoadError } from '../ui/index.js';
 import { useToast } from '../ui/Toast.js';
 import { StateChip } from './state.js';
+import { counted, documents as nDocs, items as nItems } from '../../lib/count.js';
 
 /** Design 4d shows seven characters. A full sha256 in a table cell is noise, not information. */
 const shortHash = (h: string | null): string => (h ? h.slice(0, 7) : '—');
@@ -213,7 +214,7 @@ function Unlinked({ group: g, mayLink }: { group: ParityConnector; mayLink: bool
           <h2>
             ללא קישור
             <span>
-              {docs.length} מסמכים · {remote.length} פריטים מרוחקים
+              {nDocs(docs.length)} · {counted(remote.length, nItems, 'מרוחק', 'מרוחקים')}
             </span>
           </h2>
         </div>
