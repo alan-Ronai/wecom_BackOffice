@@ -220,6 +220,46 @@ run('connector routes', () => {
     await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${created.json().id}` });
   });
 
+  // Backend ask #2: PATCH merges `config` rather than replacing it.
+  it('merges config on PATCH: partial updates keep other keys, and null clears one', async () => {
+    const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
+
+    // A partial config PATCH (one key) must not disturb the keys it didn't mention.
+    const partial = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { config: { username: 'kb-partial' } },
+    });
+    expect(partial.statusCode).toBe(200);
+    expect(partial.json().config).toMatchObject({
+      username: 'kb-partial',
+      baseUrl: stub.url,
+      postTypes: ['posts'],
+    });
+
+    // Explicit `null` clears a key — `categoryMap` has a schema default ({}), so
+    // clearing it is observable as the config reverting to that default.
+    const beforeClear = await app.inject({ method: 'GET', url: `/api/v1/connectors/${conn.id}` });
+    expect(beforeClear.json().config.categoryMap).toEqual({});
+    const withMap = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { config: { categoryMap: { תמיכה: 'sim' } } },
+    });
+    expect(withMap.json().config.categoryMap).toEqual({ תמיכה: 'sim' });
+    const cleared = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { config: { categoryMap: null } },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().config.categoryMap).toEqual({});
+    // Untouched keys (including the still-masked secrets) survive both PATCHes above.
+    expect(cleared.json().config).toMatchObject({ username: 'kb-partial', baseUrl: stub.url });
+    expect(cleared.json().config.applicationPassword).toBe('••••');
+    await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
+  });
+
   it('a masked secret round-tripped in a PATCH leaves the stored secret unchanged', async () => {
     const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
     const before = await pool.query('select config_encrypted from connectors where id=$1', [conn.id]);

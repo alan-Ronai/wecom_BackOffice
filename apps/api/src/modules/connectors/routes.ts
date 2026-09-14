@@ -189,12 +189,22 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
       if (!row) return reply.status(404).send(notFound(req, 'מחבר לא נמצא'));
       let config: Record<string, unknown> | undefined;
       if (req.body.config) {
-        // A masked secret (`••••`) round-tripped from the UI means "unchanged" — merging it
-        // in literally would overwrite the real, stored secret with the placeholder itself.
-        const incoming = Object.fromEntries(
-          Object.entries(req.body.config).filter(([, v]) => v !== MASKED_VALUE),
-        );
-        const merged = { ...(repo.config(row) as Record<string, unknown>), ...incoming };
+        // A PATCH sends only the keys it means to change, so absent keys must survive
+        // untouched (including secrets the client was never handed back). Per key:
+        //   - the masked placeholder (`••••`) means "unchanged" — merging it in literally
+        //     would overwrite the real, stored secret with the placeholder itself;
+        //   - an explicit `null` means "clear this key" — delete it from the merged config
+        //     rather than writing a literal null, so the connector's schema can re-apply
+        //     its own default (or reject the now-missing required key with a 400).
+        const merged: Record<string, unknown> = { ...(repo.config(row) as Record<string, unknown>) };
+        for (const [k, v] of Object.entries(req.body.config)) {
+          if (v === MASKED_VALUE) continue;
+          if (v === null) {
+            delete merged[k];
+            continue;
+          }
+          merged[k] = v;
+        }
         const parsed = registry.get(row.type).configSchema.safeParse(merged);
         if (!parsed.success)
           return reply.status(400).send({
