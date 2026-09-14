@@ -34,9 +34,7 @@ export async function getSourceDocument(q: Q, documentId: string): Promise<Sourc
 }
 
 export async function currentSourceVersion(q: Q, documentId: string): Promise<number | null> {
-  const r = await q.query('select current_version from source_documents where document_id=$1', [
-    documentId,
-  ]);
+  const r = await q.query('select current_version from source_documents where document_id=$1', [documentId]);
   return r.rowCount ? (r.rows[0].current_version as number) : null;
 }
 
@@ -52,9 +50,7 @@ export async function saveSourceDocument(
     ifMatch?: string;
   },
 ): Promise<SourceDocRow> {
-  const doc = await tx.query('select id from documents where id=$1 and deleted_at is null', [
-    documentId,
-  ]);
+  const doc = await tx.query('select id from documents where id=$1 and deleted_at is null', [documentId]);
   if (!doc.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
   const html = sanitizeHtml(input.html);
   const text = htmlToText(html);
@@ -83,10 +79,7 @@ export async function saveSourceDocument(
   return (await getSourceDocument(tx, documentId))!;
 }
 
-export async function listSourceVersions(
-  q: Q,
-  documentId: string,
-): Promise<SourceDocumentVersion[]> {
+export async function listSourceVersions(q: Q, documentId: string): Promise<SourceDocumentVersion[]> {
   const r = await q.query(
     `select v.version, v.label, v.author_id, coalesce(u.display_name, 'מערכת') author_name, v.created_at, v.source_revision_id
      from source_document_versions v join source_documents s on s.id=v.source_document_id left join users u on u.id=v.author_id

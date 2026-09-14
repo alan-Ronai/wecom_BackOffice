@@ -136,11 +136,7 @@ describe('SyncService.runConnector', () => {
     const { svc, revisions, documents } = setup({}, 'h1', 1);
     await svc.runConnector(C, null);
     expect(revisions.ingest).toHaveBeenCalledTimes(1);
-    expect(documents.putSourceFromRemote).toHaveBeenCalledWith(
-      D,
-      expect.stringContaining('<p>'),
-      'מוורדפרס',
-    );
+    expect(documents.putSourceFromRemote).toHaveBeenCalledWith(D, expect.stringContaining('<p>'), 'מוורדפרס');
   });
   it('local changed → pushes the source html when present', async () => {
     const { svc, connector } = setup({}, 'h0', 2);

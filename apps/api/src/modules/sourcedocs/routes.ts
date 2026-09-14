@@ -148,10 +148,7 @@ export default async function routes(app: FastifyInstance) {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
       const body = req.body as z.infer<typeof PutSourceDraftBodySchema>;
-      if (
-        !(await app.db.query('select 1 from documents where id=$1 and deleted_at is null', [id]))
-          .rowCount
-      )
+      if (!(await app.db.query('select 1 from documents where id=$1 and deleted_at is null', [id])).rowCount)
         throw notFound('המסמך');
       await withTransaction(app.db, (tx) =>
         putDraft(tx, sourceDraftKey(id), id, user.id, { html: body.html }),
@@ -170,9 +167,7 @@ export default async function routes(app: FastifyInstance) {
     async (req, reply) => {
       const user = requireUser(req);
       await withTransaction(app.db, (tx) =>
-        deleteDraft(tx, sourceDraftKey((req.params as { id: string }).id), user.id).catch(
-          () => undefined,
-        ),
+        deleteDraft(tx, sourceDraftKey((req.params as { id: string }).id), user.id).catch(() => undefined),
       );
       reply.code(204);
       return null;
@@ -285,10 +280,7 @@ export default async function routes(app: FastifyInstance) {
         },
       });
       reply
-        .header(
-          'content-type',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        )
+        .header('content-type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
         .header(
           'content-disposition',
           `attachment; filename="source.docx"; filename*=UTF-8''${encodeURIComponent(title)}.docx`,

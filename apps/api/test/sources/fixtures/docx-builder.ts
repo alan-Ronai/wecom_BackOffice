@@ -88,8 +88,7 @@ export async function buildDocx(spec: DocxSpec): Promise<Buffer> {
       1, 2, 3, 4,
     ]
       .map(
-        (n) =>
-          `<w:style w:type="paragraph" w:styleId="Heading${n}"><w:name w:val="heading ${n}"/></w:style>`,
+        (n) => `<w:style w:type="paragraph" w:styleId="Heading${n}"><w:name w:val="heading ${n}"/></w:style>`,
       )
       .join('')}</w:styles>`,
   );

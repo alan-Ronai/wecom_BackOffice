@@ -185,12 +185,10 @@ async function blocks(
     if (tag === 'ul' || tag === 'ol') {
       const ref = tag === 'ul' ? BULLETS : NUMBERS;
       for (const li of el.childNodes.filter(
-        (c) =>
-          c.nodeType === NodeType.ELEMENT_NODE && (c as HTMLElement).tagName.toLowerCase() === 'li',
+        (c) => c.nodeType === NodeType.ELEMENT_NODE && (c as HTMLElement).tagName.toLowerCase() === 'li',
       ) as HTMLElement[]) {
         const nested = li.childNodes.filter(
-          (c) =>
-            c.nodeType === NodeType.ELEMENT_NODE && /^(ul|ol)$/i.test((c as HTMLElement).tagName),
+          (c) => c.nodeType === NodeType.ELEMENT_NODE && /^(ul|ol)$/i.test((c as HTMLElement).tagName),
         );
         const inline = li.childNodes.filter((c) => !nested.includes(c));
         out.push(
@@ -209,8 +207,7 @@ async function blocks(
       for (const tr of el.querySelectorAll('tr')) {
         const cells: TableCell[] = [];
         for (const c of tr.childNodes.filter(
-          (x) =>
-            x.nodeType === NodeType.ELEMENT_NODE && /^(td|th)$/i.test((x as HTMLElement).tagName),
+          (x) => x.nodeType === NodeType.ELEMENT_NODE && /^(td|th)$/i.test((x as HTMLElement).tagName),
         ) as HTMLElement[]) {
           const isHead = c.tagName.toLowerCase() === 'th';
           cells.push(

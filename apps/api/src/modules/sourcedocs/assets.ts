@@ -47,9 +47,7 @@ export async function putAsset(
   if (a.bytes.length > ASSET_MAX_BYTES) throw httpError(413, 'ASSET_TOO_LARGE', 'הקובץ גדול מ-10MB');
   if (!a.bytes.length) throw httpError(400, 'EMPTY_ASSET', 'קובץ ריק');
   const sha = createHash('sha256').update(a.bytes).digest('hex');
-  const existing = await q.query('select id, mime, size, width, height from assets where sha256=$1', [
-    sha,
-  ]);
+  const existing = await q.query('select id, mime, size, width, height from assets where sha256=$1', [sha]);
   if (existing.rowCount) return toAsset(existing.rows[0]);
   const dim = imageSize(a.bytes, a.mime);
   const r = await q.query(

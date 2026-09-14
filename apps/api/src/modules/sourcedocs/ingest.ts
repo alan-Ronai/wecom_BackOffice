@@ -20,10 +20,9 @@ export async function ingestSourceHtml(
   html: string,
   actorId: string | null,
 ): Promise<{ revisionId: string; duplicate: boolean; sourceId: string }> {
-  const d = await app.db.query(
-    'select title, source_id from documents where id=$1 and deleted_at is null',
-    [documentId],
-  );
+  const d = await app.db.query('select title, source_id from documents where id=$1 and deleted_at is null', [
+    documentId,
+  ]);
   if (!d.rowCount)
     throw Object.assign(new Error('document not found'), { statusCode: 404, code: 'NOT_FOUND' });
   let sourceId = d.rows[0].source_id as string | null;

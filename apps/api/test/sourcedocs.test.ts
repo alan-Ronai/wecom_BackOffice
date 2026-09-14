@@ -75,10 +75,9 @@ run('source documents', () => {
       src.rows[0].source_id,
     ]);
     expect(kind.rows[0]).toEqual({ kind: 'text', external_id: 'sourcedoc:' + docId });
-    const revs = await db.pool.query(
-      'select count(*)::int n from source_revisions where source_id=$1',
-      [src.rows[0].source_id],
-    );
+    const revs = await db.pool.query('select count(*)::int n from source_revisions where source_id=$1', [
+      src.rows[0].source_id,
+    ]);
     expect(revs.rows[0].n).toBe(1);
     const vers = await db.pool.query(
       'select version, label from source_document_versions v join source_documents s on s.id=v.source_document_id where s.document_id=$1',
@@ -239,9 +238,7 @@ run('source documents', () => {
     expect(exp.statusCode).toBe(200);
     expect(exp.headers['content-type']).toContain('wordprocessingml');
     const JSZip = (await import('jszip')).default;
-    const xml = await (await JSZip.loadAsync(exp.rawPayload))
-      .file('word/document.xml')!
-      .async('string');
+    const xml = await (await JSZip.loadAsync(exp.rawPayload)).file('word/document.xml')!.async('string');
     expect(xml).toContain('נוהל מיובא');
     expect(xml).toContain('<w:tbl>');
     expect(xml).toContain('<w:drawing>');
@@ -359,10 +356,7 @@ run('source documents', () => {
         kind: 'steps',
       },
     });
-    await db.pool.query('update documents set source_id=$2 where id=$1', [
-      d.json().id,
-      s.rows[0].id,
-    ]);
+    await db.pool.query('update documents set source_id=$2 where id=$1', [d.json().id, s.rows[0].id]);
     await db.pool.query(
       `insert into source_revisions(source_id, hash, paragraphs, accepted) values ($1,'h',$2,true)`,
       [
@@ -380,9 +374,7 @@ run('source documents', () => {
       readFileSync('migrations/0033_source_documents.js', 'utf8'),
     )![1];
     await db.pool.query(sql.replace(/\\\\n/g, '\\n'));
-    const r = await db.pool.query('select html from source_documents where document_id=$1', [
-      d.json().id,
-    ]);
+    const r = await db.pool.query('select html from source_documents where document_id=$1', [d.json().id]);
     expect(r.rows[0].html).toBe('<h2>כותרת</h2><p>גוף</p>');
   });
 });

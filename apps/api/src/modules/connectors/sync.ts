@@ -1,13 +1,7 @@
 import type pg from 'pg';
 import type { Connector, ConnectorRegistry, RemoteChange, RemoteItem, RemoteRef } from '@wecom/connectors';
 import type { SourceContent } from '@wecom/connectors';
-import {
-  makeEvent,
-  type AssetBytesResolver,
-  type Block,
-  type Document,
-  type Event,
-} from '@wecom/shared';
+import { makeEvent, type AssetBytesResolver, type Block, type Document, type Event } from '@wecom/shared';
 import type { ConnectorsRepo, SyncLinkRow } from './repo.js';
 
 /**
