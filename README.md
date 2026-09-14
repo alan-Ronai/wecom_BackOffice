@@ -2,7 +2,7 @@
 
 Monorepo: `apps/api` (Fastify + PostgreSQL), `apps/web` (React), `packages/shared` (contracts), `packages/connectors`, `packages/model`, `deploy/`, `docs/`, `legacy/` (previous static app, kept as the design reference).
 
-See `docs/superpowers/specs/` for the design and `docs/superpowers/plans/` for the lane plans. Legacy app docs: `legacy/README.md`. Operating the deployed system (backups, restore drills, rotating secrets, adding a connector or category, upgrading the model): `docs/operations.md`. Installing on the target VM: `deploy/INSTALL.md`.
+See `docs/superpowers/specs/` for the design and `docs/superpowers/plans/` for the lane plans. Legacy app docs: `legacy/README.md`. Operating the deployed system (backups, restore drills, rotating secrets, adding a connector or category, upgrading the model): `docs/operations.md`. Installing on the target VM: `deploy/INSTALL.md`. Standing decisions on `pnpm audit --prod` findings (what was fixed, what is accepted and why): `docs/security-advisories.md`.
 
 ## Scripts
 
