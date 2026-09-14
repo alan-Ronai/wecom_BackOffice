@@ -25,6 +25,7 @@ import { resetStage4State, stage4Handlers } from './stage4.js';
 import { resetStage5, stage5Handlers } from './stage5.js';
 import { resetStage45, stage45Handlers } from './stage45.js';
 import { initialTaxonomy, taxonomyHandlers, type TaxonomyState } from './taxonomy.js';
+import { feedbackHandlers, resetFeedbackState } from './feedback-handlers.js';
 import type { TrashItem } from '../../src/api/types.js';
 
 const B = '/api/v1';
@@ -93,6 +94,7 @@ export function resetState(): void {
   resetStage4State();
   resetStage5();
   resetStage45();
+  resetFeedbackState();
 }
 
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
@@ -121,6 +123,8 @@ const newDraftEnvelope = (draftKey: string, payload: unknown) => ({
 });
 
 export const handlers: RequestHandler[] = [
+  // First, so `/feedback/analytics` is matched before any generic `:id` route another lane adds.
+  ...feedbackHandlers,
   http.get(`${B}/auth/me`, () => HttpResponse.json({ ...fx.me, preferences: { ...state.preferences } })),
   // Bare provider ids plus a fallback — not `{ id, label }` objects.
   http.get(`${B}/auth/providers`, () =>

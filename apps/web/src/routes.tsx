@@ -34,6 +34,7 @@ import { SystemPage } from './components/admin/SystemPage.js';
 import { TopicPage } from './components/taxonomy/TopicPage.js';
 import { TaxonomyPage } from './components/admin/TaxonomyPage.js';
 import { SourceEditPage } from './components/source/SourceEditPage.js';
+import { FeedbackPage } from './components/feedback/FeedbackPage.js';
 
 /** Routes mirror the legacy hashes one-to-one (spec §5). */
 export const routeObjects: RouteObject[] = [
@@ -78,6 +79,11 @@ export const routeObjects: RouteObject[] = [
       { path: 'sync', element: <SyncQueuePage /> },
       { path: 'sync/parity', element: <ParityPage /> },
       { path: 'sync/conflicts/:id', element: <ConflictPage /> },
+      // wave 4 (W3) — `analytics` before `:id`, or the drawer would try to load a report called
+      // "analytics".
+      { path: 'feedback', element: <FeedbackPage /> },
+      { path: 'feedback/analytics', element: <FeedbackPage tab="analytics" /> },
+      { path: 'feedback/:id', element: <FeedbackPage /> },
       {
         path: 'admin',
         element: <AdminLayout />,
