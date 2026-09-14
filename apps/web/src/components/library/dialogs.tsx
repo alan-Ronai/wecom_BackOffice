@@ -8,7 +8,15 @@ import { fmtDate, copy } from '../../lib/format.js';
 import { useToast } from '../ui/Toast.js';
 
 /** "שדה CRM" popover — status, path and the documents that reference it. */
-function FieldBody({ name, onOpen }: { name: string; onOpen: (docId: string) => void }) {
+function FieldBody({
+  name,
+  onOpen,
+  onOpenPage,
+}: {
+  name: string;
+  onOpen: (docId: string) => void;
+  onOpenPage: () => void;
+}) {
   const fields = useFields();
   const usage = useFieldUsage(name);
   const f = fields.data?.find((x) => x.name === name);
@@ -26,8 +34,13 @@ function FieldBody({ name, onOpen }: { name: string; onOpen: (docId: string) => 
         </p>
       ) : null}
       {f?.status === 'new' ? <p style={{ color: 'var(--warn)' }}>שדה חדש — נוסף השבוע.</p> : null}
-      <div className="eyebrow" style={{ marginTop: 14 }}>
-        ב-{docs.length} מסמכים
+      <div className="eyebrow" style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
+        <span>ב-{docs.length} מסמכים</span>
+        {/* The popover is the quick answer; the page carries usage-by-step, the timeline and the
+            rename-with-references flow, which do not belong in a hover-sized surface. */}
+        <button className="btn xs" style={{ marginInlineStart: 'auto' }} onClick={onOpenPage}>
+          דף השדה המלא
+        </button>
       </div>
       <div className="field-docs">
         {docs.length ? (
@@ -125,6 +138,10 @@ export function useEntityDialogs() {
             onOpen={(id) => {
               close();
               nav(`/doc/${id}`);
+            }}
+            onOpenPage={() => {
+              close();
+              nav(`/fields/${encodeURIComponent(name)}`);
             }}
           />
         ),
