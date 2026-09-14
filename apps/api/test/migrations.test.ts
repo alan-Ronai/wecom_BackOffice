@@ -133,6 +133,47 @@ run('migrations', () => {
     expect(grants).not.toContain('agent:docs.read_unpublished');
     expect(grants).not.toContain('editor:taxonomy.manage');
   });
+  it('seeds wave 5 permissions, the approver role, and widens notification kinds', async () => {
+    const p = await pool.query(
+      "select name from permissions where name in ('learning.read','learning.manage','learning.publish','gaps.read','gaps.manage') order by 1",
+    );
+    expect(p.rows.map((r) => r.name)).toEqual([
+      'gaps.manage',
+      'gaps.read',
+      'learning.manage',
+      'learning.publish',
+      'learning.read',
+    ]);
+    const role = await pool.query("select system from roles where name='approver'");
+    expect(role.rows[0]?.system).toBe(true);
+    const rp = await pool.query(
+      `select rp.permission from role_permissions rp join roles r on r.id=rp.role_id where r.name='approver' order by 1`,
+    );
+    expect(rp.rows.map((x) => x.permission)).toEqual([
+      'docs.publish',
+      'docs.read',
+      'docs.read_unpublished',
+      'learning.publish',
+      'notes.write',
+      'suggestions.apply',
+    ]);
+    // The `notifications.kind` check is a closed list; without 0038 widening it, V2's first
+    // refresh notification would be a 23514 at insert time rather than a contract mismatch.
+    const u = await pool.query(
+      `insert into users(subject, source, display_name) values ('w5-kind','local','w5') returning id`,
+    );
+    for (const kind of ['learning', 'gap'])
+      await pool.query(`insert into notifications(user_id, kind, title) values ($1, $2, 't')`, [
+        u.rows[0].id,
+        kind,
+      ]);
+    await expect(
+      pool.query(`insert into notifications(user_id, kind, title) values ($1, 'bogus', 't')`, [u.rows[0].id]),
+    ).rejects.toThrow(/notifications_kind_check/);
+    await pool.query(`delete from users where id=$1`, [u.rows[0].id]); // cascades the notifications
+    const ws = await pool.query("select value from app_settings where key='workflow'");
+    expect(ws.rowCount).toBe(1);
+  });
   it('adds the wave 4 governance columns and the status check', async () => {
     const cols = await pool.query(
       `select column_name from information_schema.columns where table_name='documents'

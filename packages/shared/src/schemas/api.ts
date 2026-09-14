@@ -24,6 +24,8 @@ import {
   VersionSchema,
 } from './content.js';
 import { DocTypeSchema, TaxonomyFilterSchema, WorldSlugSchema } from './wave4.js';
+// `wave5.ts` imports only `common.js`/`content.js`, so this direction introduces no cycle.
+import { ChangeFlagSchema } from './wave5.js';
 import { SuggestionPayloadSchema } from './pipeline.js';
 import { PermissionSchema, PreferencesSchema } from './identity.js';
 
@@ -87,6 +89,11 @@ export const PublishBodySchema = z.object({
   label: z.string().min(1).max(200),
   markPartial: z.boolean().optional(),
   resolveFeedbackIds: z.array(IdSchema).max(50).optional(),
+  /**
+   * Wave 5 (V2): the publish dialog's "שינוי מהותי – דרוש רענון" checkbox, pre-ticked when the
+   * diff detector says so. Omitted = let the detector decide; an explicit value overrides it.
+   */
+  significantChange: z.boolean().optional(),
 });
 export const DiffQuerySchema = z.object({
   from: z.coerce.number().int().min(0),
@@ -370,6 +377,8 @@ export const PublishResponseSchema = z.object({
   document: DocumentSchema,
   version: z.number().int(),
   auditId: z.string(),
+  /** Wave 5 (V2): what the change did to learning — absent until V2 lands the hook. */
+  changeFlag: ChangeFlagSchema.optional(),
 });
 export const DeleteResponseSchema = z.object({ auditId: z.string(), restoreUntil: IsoDateSchema });
 export const LinksResponseSchema = z.object({

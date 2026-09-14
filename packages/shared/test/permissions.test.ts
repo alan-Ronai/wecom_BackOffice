@@ -27,7 +27,27 @@ describe('permissions', () => {
       'docs.read_unpublished',
       'feedback.manage',
       'analytics.read',
+      'learning.read',
+      'learning.manage',
+      'learning.publish',
+      'gaps.read',
+      'gaps.manage',
     ]);
+  });
+  it('wave 5 grants and the approver role', () => {
+    expect(DEFAULT_ROLES.agent).toContain('learning.read');
+    expect(DEFAULT_ROLES.editor).toEqual(expect.arrayContaining(['learning.manage', 'gaps.read']));
+    expect(DEFAULT_ROLES.editor).not.toContain('learning.publish');
+    expect(DEFAULT_ROLES.lead).toEqual(expect.arrayContaining(['learning.publish', 'gaps.manage']));
+    expect([...DEFAULT_ROLES.approver]).toEqual([
+      'docs.read',
+      'docs.read_unpublished',
+      'notes.write',
+      'docs.publish',
+      'suggestions.apply',
+      'learning.publish',
+    ]);
+    expect(DEFAULT_ROLES.approver).not.toContain('docs.edit');
   });
   it('grants the wave 4 permissions to the right roles', () => {
     expect(DEFAULT_ROLES.agent).not.toContain('docs.read_unpublished');

@@ -23,6 +23,11 @@ export const EVENTS = [
   'feedback.updated',
   'source_document.saved',
   'taxonomy.changed',
+  // Wave 5 — learning & gaps (additive; appended, never reordered).
+  'learning.assigned',
+  'learning.completed',
+  'learning.refresh_required',
+  'gap.detected',
 ] as const;
 export type EventName = (typeof EVENTS)[number];
 
@@ -109,6 +114,21 @@ const payloads = {
     actorId: IdSchema.nullable(),
   }),
   'taxonomy.changed': z.object({ entity: z.enum(['world', 'topic']), id: IdSchema }),
+  /* ── Wave 5: learning & knowledge gaps ───────────────────────────────── */
+  'learning.assigned': z.object({ assignmentId: IdSchema, userId: IdSchema, itemId: IdSchema }),
+  'learning.completed': z.object({
+    assignmentId: IdSchema,
+    userId: IdSchema,
+    itemId: IdSchema,
+    passed: z.boolean(),
+  }),
+  /** Raised once per significant publish; `affectedUsers` is the refresh-assignment count. */
+  'learning.refresh_required': z.object({
+    documentId: IdSchema,
+    version: z.number().int(),
+    affectedUsers: z.number().int(),
+  }),
+  'gap.detected': z.object({ gapId: IdSchema, kind: z.string() }),
 } as const;
 export type EventPayloads = { [K in EventName]: z.infer<(typeof payloads)[K]> };
 
