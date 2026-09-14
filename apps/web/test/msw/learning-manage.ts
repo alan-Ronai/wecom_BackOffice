@@ -68,6 +68,20 @@ const toCard = (i: LearningItem): LearningItemCard => ({
   completionRate: i.status === 'published' ? 0.75 : null,
 });
 
+/**
+ * Items referencing one document, derived from the manager state — the only place an item's
+ * document anchors live. `GET /documents/:id/learning` is served once, by `learning-handlers.ts`
+ * (V6 kept one of the two lanes' stubs), which calls this for the `items` half of the response.
+ */
+export const itemsReferencing = (documentId: string): LearningItemCard[] =>
+  learningState.items
+    .filter(
+      (i) =>
+        i.entries.some((e) => e.documentId === documentId) ||
+        i.questions.some((q) => q.documentId === documentId),
+    )
+    .map(toCard);
+
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
 const find = (id: string | readonly string[] | undefined) =>
   learningState.items.find((i) => i.id === String(id));
@@ -218,24 +232,6 @@ export const learningManageHandlers: RequestHandler[] = [
     return HttpResponse.json({ ...fx.completion, item: toCard(i) });
   }),
   http.get(`${B}/learning/dashboard`, () => HttpResponse.json(fx.learningDashboard)),
-  /**
-   * Items referencing a document (V2 route); drives the `?documentId=` filter on `/learning/manage`.
-   * V4a's group may register the same path — msw takes the first match, and V6 keeps one of the two.
-   */
-  http.get(`${B}/documents/:id/learning`, ({ params }) => {
-    const id = String(params.id);
-    const items = learningState.items
-      .filter(
-        (i) => i.entries.some((e) => e.documentId === id) || i.questions.some((q) => q.documentId === id),
-      )
-      .map(toCard);
-    return HttpResponse.json({
-      items,
-      refreshRequired: false,
-      refreshAssignmentId: null,
-      lastSignificantChange: null,
-    });
-  }),
   http.get(`${B}/gaps`, ({ request }) => {
     const u = new URL(request.url);
     const status = u.searchParams.get('status') ?? 'open';

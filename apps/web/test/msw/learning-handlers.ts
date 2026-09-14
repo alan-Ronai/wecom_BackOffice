@@ -12,6 +12,7 @@ import type {
   StartAttemptResponse,
 } from '@wecom/shared';
 import { fx } from './fixtures.js';
+import { itemsReferencing } from './learning-manage.js';
 
 const B = '/api/v1';
 const T = '2026-09-15T08:00:00.000Z';
@@ -239,5 +240,17 @@ export const learningHandlers: RequestHandler[] = [
     }
     return HttpResponse.json({ ...result, attemptId: String(params.id) });
   }),
-  http.get(`${B}/documents/:id/learning`, () => HttpResponse.json(learningState.docLearning)),
+  /**
+   * The one stub for `GET /documents/:id/learning` (both web lanes needed it). The refresh half is
+   * whatever a test pinned on `docLearning`; the `items` half is derived from the manager state
+   * unless a test pinned those too, so V4b's `?documentId=` filter and V4a's badge agree.
+   */
+  http.get(`${B}/documents/:id/learning`, ({ params }) =>
+    HttpResponse.json({
+      ...learningState.docLearning,
+      items: learningState.docLearning.items.length
+        ? learningState.docLearning.items
+        : itemsReferencing(String(params.id)),
+    }),
+  ),
 ];

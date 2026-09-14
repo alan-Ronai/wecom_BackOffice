@@ -13,6 +13,7 @@ import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
 import { fx } from '../msw/fixtures.js';
 import { learningState } from '../msw/learning-handlers.js';
+import { learningState as manageState } from '../msw/learning-manage.js';
 
 const B = '/api/v1';
 const side = async () => within(await screen.findByRole('complementary', { name: 'ניווט ראשי' }));
@@ -92,6 +93,7 @@ describe('V6 article mounts', () => {
   });
 
   it('renders nothing extra when no learning item references the document', async () => {
+    manageState.items = [];
     renderWithProviders(<App />, { route: `/doc/${fx.docBrowsing.id}` });
     await screen.findByRole('heading', { level: 1 });
     expect(screen.queryByRole('status', { name: 'רענון ידע נדרש' })).toBeNull();
