@@ -205,9 +205,13 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
           });
         config = parsed.data as Record<string, unknown>;
       }
+      // `schedule` is tri-state: omitted means "leave it alone", so only forward the key
+      // to the repo when the client actually sent it (including an explicit `null`, which
+      // means "ללא תזמון" — clear it). Spreading `req.body.schedule` unconditionally would
+      // always add the key, turning every "not sent" into "clear it".
       const updated = await repo.update(row.id, {
         name: req.body.name,
-        schedule: req.body.schedule,
+        ...('schedule' in req.body ? { schedule: req.body.schedule } : {}),
         enabled: req.body.enabled,
         config,
       });

@@ -174,6 +174,52 @@ run('connector routes', () => {
     await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
   });
 
+  // Backend ask #1: `schedule` must be clearable — an explicit `null` on the write side
+  // is "ללא תזמון", distinct from omitting the key (which leaves the schedule alone).
+  it('clears the schedule to null and leaves it alone when the key is omitted', async () => {
+    const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
+    expect(conn.schedule).toBe('*/15 * * * *');
+
+    const cleared = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { schedule: null },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().schedule).toBeNull();
+    const row = await pool.query('select schedule from connectors where id=$1', [conn.id]);
+    expect(row.rows[0].schedule).toBeNull();
+
+    // Omitting `schedule` entirely on the next PATCH must leave it cleared, not
+    // silently restore a default — the tri-state write is the whole point of the ask.
+    const untouched = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { name: 'עוד שם' },
+    });
+    expect(untouched.statusCode).toBe(200);
+    expect(untouched.json().schedule).toBeNull();
+
+    const reset = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { schedule: '*/10 * * * *' },
+    });
+    expect(reset.json().schedule).toBe('*/10 * * * *');
+    await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
+  });
+
+  it('creates a connector with no schedule when the client asks for none up front', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/connectors',
+      payload: { ...body(), schedule: null },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().schedule).toBeNull();
+    await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${created.json().id}` });
+  });
+
   it('a masked secret round-tripped in a PATCH leaves the stored secret unchanged', async () => {
     const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
     const before = await pool.query('select config_encrypted from connectors where id=$1', [conn.id]);
