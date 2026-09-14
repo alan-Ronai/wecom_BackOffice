@@ -4,6 +4,8 @@ import { useCan } from '../../api/hooks/me.js';
 import { useToast } from '../ui/Toast.js';
 import { ago, copy } from '../../lib/format.js';
 import { MentionInput } from './MentionInput.js';
+import { useFocusTrap } from '../ui/useFocusTrap.js';
+import { documents as nDocs } from '../../lib/count.js';
 
 /**
  * What the "הסבר ללקוח" picker needs of a script.
@@ -38,8 +40,28 @@ function ScriptPicker({
   onClose: () => void;
 }) {
   const toast = useToast();
+  /**
+   * The review praises the feedback modal in §3 for being "a proper `role="dialog"` with
+   * `aria-modal` and a Hebrew label". This picker claimed the role without either of the other
+   * two: `Tab` walked straight out of it into the article behind, `Escape` did nothing, and a
+   * screen reader was told "dialog" while the page underneath stayed fully available. The three
+   * go together — `useFocusTrap` is what makes `aria-modal` true for the keyboard.
+   */
+  const trap = useFocusTrap<HTMLDivElement>(true);
   return (
-    <div className="script-picker" role="dialog" aria-label="תסריטים לשלב זה">
+    <div
+      ref={trap}
+      className="script-picker"
+      role="dialog"
+      aria-modal="true"
+      aria-label="תסריטים לשלב זה"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+    >
       <div className="eyebrow">
         תסריטים לשלב זה ·{' '}
         <bdi className="lat" dir="ltr">
@@ -51,7 +73,7 @@ function ScriptPicker({
         <div className="pick" key={s.id}>
           <div className="q">{s.text}</div>
           <div className="row">
-            <span className="muted small">משמש ב-{s.usedIn} מסמכים</span>
+            <span className="muted small">משמש ב-{nDocs(s.usedIn)}</span>
             <button
               className="btn xs"
               onClick={() => {

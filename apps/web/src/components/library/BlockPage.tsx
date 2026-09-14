@@ -12,6 +12,7 @@ import { Hamburger } from '../shell/MobileDrawer.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
+import { counted, documents as nDocs } from '../../lib/count.js';
 
 /**
  * `/blocks/:id` — the shared block page (design card 5d).
@@ -82,7 +83,7 @@ function BlockPageBody({
   const updateAllReferences = async () => {
     const ok = await modal.confirm(
       'עדכון כל ההפניות',
-      `${embeddingDocuments.length} מסמכים מטמיעים את הבלוק. כל אחד מהם יפורסם מחדש כדי לקלוט את הנוסח העדכני, ותיווצר גרסה חדשה בכל אחד.`,
+      `${counted(embeddingDocuments.length, nDocs, 'מטמיע', 'מטמיעים')} את הבלוק. כל אחד מהם יפורסם מחדש כדי לקלוט את הנוסח העדכני, ותיווצר גרסה חדשה בכל אחד.`,
       'עדכן הכל',
       'primary',
     );
@@ -102,7 +103,7 @@ function BlockPageBody({
     toast(
       failed.length
         ? `עודכנו ${embeddingDocuments.length - failed.length} מתוך ${embeddingDocuments.length} · נכשל: ${failed.join(', ')}`
-        : `${embeddingDocuments.length} מסמכים עודכנו`,
+        : counted(embeddingDocuments.length, nDocs, 'עודכן', 'עודכנו'),
       failed.length ? 'warn' : 'ok',
     );
   };
@@ -149,7 +150,7 @@ function BlockPageBody({
     const ok = await modal.confirm(
       'מחיקת בלוק משותף',
       affected
-        ? `${affected} מסמכים משתמשים בבלוק. מחיקה תשאיר את הטקסט המוטמע כפי שהוא, אבל ההפניות יישברו ועריכה עתידית לא תתפשט.`
+        ? `${counted(affected, nDocs, 'משתמש', 'משתמשים')} בבלוק. מחיקה תשאיר את הטקסט המוטמע כפי שהוא, אבל ההפניות יישברו ועריכה עתידית לא תתפשט.`
         : 'אף מסמך לא משתמש בבלוק — המחיקה בטוחה.',
       'מחק בלוק',
       'danger',

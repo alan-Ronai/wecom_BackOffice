@@ -12578,6 +12578,24 @@
                                 },
                                 "kbd": {
                                   "type": "string"
+                                },
+                                "docType": {
+                                  "type": "string",
+                                  "enum": [
+                                    "M",
+                                    "R",
+                                    "O",
+                                    "E",
+                                    "S",
+                                    "T",
+                                    "I"
+                                  ]
+                                },
+                                "world": {
+                                  "type": "string"
+                                },
+                                "docTitle": {
+                                  "type": "string"
                                 }
                               },
                               "required": [
@@ -14235,7 +14253,8 @@
                             "palette",
                             "jump",
                             "view_topic",
-                            "search_click"
+                            "search_click",
+                            "client_error"
                           ]
                         },
                         "documentId": {

@@ -72,9 +72,14 @@ export async function signInAs(browser: Browser, creds: Creds, baseURL: string):
   const ctx = await browser.newContext({ locale: 'he-IL', baseURL });
   const page = await ctx.newPage();
   await page.goto('/login');
+  // With an SSO issuer configured (`E2E_OIDC=1`) the screen leads with Entra and folds the
+  // local form behind a disclosure — the same shape `auth.setup.ts` follows.
+  if (process.env.E2E_OIDC === '1')
+    await page.getByRole('button', { name: 'כניסה מקומית (מנהל מערכת בלבד)' }).click();
   await page.getByLabel('דוא״ל').fill(creds.email);
   await page.getByLabel('סיסמה').fill(creds.password);
-  await page.getByRole('button', { name: /^כניסה/ }).click();
+  // Exact: the disclosure button also starts with "כניסה".
+  await page.getByRole('button', { name: 'כניסה', exact: true }).click();
   await expect(page).toHaveURL(/\/library/);
   // A new account usually meets the first-login tour, and it covers the library while it is
   // open. Best-effort rather than asserted: whether it shows depends on the preferences row,

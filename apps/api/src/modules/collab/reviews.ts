@@ -179,6 +179,26 @@ export default async function reviewRoutes(instance: FastifyInstance) {
         } = open.rows[0];
         const approve = req.body.decision === 'approve';
         const title = await documentTitle(tx, documentId);
+        /**
+         * E-2 / review §7 item 9 — the second pair of eyes.
+         *
+         * The review filed `POST /request-review` and then `POST /review-decision {approve}` as
+         * the same account; both answered 2xx and the review read `approved`. "Editor requests,
+         * lead approves" is a PRD promise, and nothing enforced it: `docs.publish` is the only
+         * gate, and an author who holds it could sign off their own work.
+         *
+         * The spec defers the approver *role* (§8), so this is the cheap half — "requester ≠
+         * approver" — not the whole thing. It is deliberately not applied to `changes`: sending
+         * your own document back to draft publishes nothing and is a withdrawal, which is a thing
+         * an author should be able to do without finding a colleague.
+         */
+        if (approve && requesterId === user.id)
+          throw httpError(
+            403,
+            'SELF_APPROVAL',
+            'מי שביקש את הבדיקה אינו יכול לאשר אותה — נדרש אישור של גורם אחר',
+            { requestedBy: requesterId },
+          );
         if (approve) {
           // Approve what the reviewer was asked to review, not what the document happens to be
           // now. An author who pushes edits after "send to review" would otherwise have them

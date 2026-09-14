@@ -447,6 +447,12 @@ export const handlers: RequestHandler[] = [
             snippet: 'בתוך איטיות גלישה',
             meta: 'topics.json · תמיכה טכנית',
             score: 80,
+            // A-2, appended with the contract: the knowledge item behind the hit. `meta` keeps
+            // its ingest filename on purpose — the point of the fix is that the client now has
+            // something better to render and no longer has to show it.
+            docType: 'M' as const,
+            world: 'tech',
+            docTitle: fx.docBrowsing.title,
           },
         ],
       },
@@ -461,6 +467,9 @@ export const handlers: RequestHandler[] = [
             snippet: fx.docBrowsing.description,
             meta: 'topics.json · תמיכה טכנית',
             score: 60,
+            docType: 'M' as const,
+            world: 'tech',
+            docTitle: fx.docBrowsing.title,
           },
         ],
       },

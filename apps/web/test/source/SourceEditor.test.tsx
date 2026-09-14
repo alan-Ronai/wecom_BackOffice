@@ -88,4 +88,39 @@ describe('SourceEditor', () => {
       vi.useRealTimers();
     }
   });
+
+  /**
+   * E-6 (acceptance review §4): "`שמור גרסה` opens a 'version description' dialog whose scrim
+   * covers the editor; the page behind still reads `שינויים לא שמורים` while it is open. Correct,
+   * but the two together read as 'the save failed' for a second."
+   */
+  it('stops saying the document is unsaved while the version dialog is open', async () => {
+    state.sourceDocs.set(fx.docBrowsing.id, {
+      html: '<p>התחלה</p>',
+      text: 'התחלה',
+      version: 1,
+      etag: 'e1',
+      versions: [],
+    });
+    renderWithProviders(<SourceEditor documentId={fx.docBrowsing.id} />);
+    const editor = await screen.findByRole('textbox');
+    await waitFor(() => expect(editor.textContent).toContain('התחלה'));
+
+    const block = editor.querySelector('p') ?? editor;
+    await act(async () => {
+      block.textContent = 'התחלה ועוד';
+      fireEvent.input(editor);
+    });
+    expect(await screen.findByText('שינויים לא שמורים')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'שמור גרסה' }));
+    await screen.findByLabelText('תיאור הגרסה');
+    // The save *has* started — the user is inside it — so the strip behind the scrim says so.
+    expect(await screen.findByText('שומר גרסה…')).toBeInTheDocument();
+    expect(screen.queryByText('שינויים לא שמורים')).not.toBeInTheDocument();
+
+    // Dismissing the dialog puts the honest "unsaved" state back.
+    fireEvent.click(screen.getByRole('button', { name: 'ביטול' }));
+    await waitFor(() => expect(screen.getByText('שינויים לא שמורים')).toBeInTheDocument());
+  });
 });

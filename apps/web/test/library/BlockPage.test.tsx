@@ -41,14 +41,14 @@ describe('<BlockPage>', () => {
     // Two embeds, one reference — only the embeds need a republish, so the button says 2.
     await userEvent.click(screen.getByRole('button', { name: 'עדכן את כל ההפניות (2)' }));
     const dialog = await screen.findByRole('dialog', { name: 'עדכון כל ההפניות' });
-    expect(within(dialog).getByText(/2 מסמכים מטמיעים את הבלוק/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/שני מסמכים מטמיעים את הבלוק/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'עדכן הכל' }));
 
     await waitFor(() => expect(state.published).toHaveLength(2));
     expect(state.published.map((p) => p.id).sort()).toEqual([D_BROWSING, D_INTL].sort());
     // One label per publish, naming the block and its version, so the document history explains itself.
     expect(state.published[0].label).toContain('ריענון SIM');
-    expect(await screen.findByText('2 מסמכים עודכנו')).toBeInTheDocument();
+    expect(await screen.findByText('שני מסמכים עודכנו')).toBeInTheDocument();
   });
 
   it('edits the block through the existing block route', async () => {
@@ -80,7 +80,7 @@ describe('<BlockPage>', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '🗑 מחק בלוק' }));
     const dialog = await screen.findByRole('dialog', { name: 'מחיקת בלוק משותף' });
-    expect(within(dialog).getByText(/2 מסמכים משתמשים בבלוק/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/שני מסמכים משתמשים בבלוק/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'מחק בלוק' }));
     expect(await screen.findByText('הבלוק הועבר לסל המיחזור')).toBeInTheDocument();
   });

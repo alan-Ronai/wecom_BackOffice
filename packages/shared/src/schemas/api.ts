@@ -117,6 +117,25 @@ export const SearchHitSchema = z.object({
   stepKey: z.string().optional(),
   num: z.string().optional(),
   kbd: z.string().optional(),
+  /**
+   * Wave 5, append-only (acceptance review A-2 / §7 item 8).
+   *
+   * `meta` is a pre-rendered string that leads with the *ingest filename* — every palette hit read
+   * `topics.json · תמיכה טכנית · שלב 1 – מסנן`. `topics.json` is a developer-facing artefact, and
+   * the review calls it "the single most visible 'this is a tool built for its builders' moment in
+   * the agent path". What the agent needs there is the knowledge item: its type, its world, and —
+   * for a step hit — which item the matched section belongs to.
+   *
+   * These three are the structured version of that, so the client can label a result with the same
+   * chips the library card uses instead of parsing a display string. All optional: a hit that is
+   * not backed by a document (a CRM field, a shared block, a tag, a local action) has none of them,
+   * and a client that meets an older API falls back to `meta`.
+   */
+  docType: DocTypeSchema.optional(),
+  /** World slug of the knowledge item — `cat()`'s key, not its Hebrew label. */
+  world: z.string().optional(),
+  /** Title of the knowledge item. For a step hit this is the *document*, not the step. */
+  docTitle: z.string().optional(),
 });
 export const SearchQuerySchema = z
   .object({

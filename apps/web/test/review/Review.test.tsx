@@ -88,4 +88,22 @@ describe('<ReviewsPage> — the lead’s decision', () => {
     await screen.findByText(fx.docIntl.title);
     expect(screen.queryByLabelText(/^אשר ופרסם/)).not.toBeInTheDocument();
   });
+
+  /**
+   * E-2 (acceptance review §4, §7 item 9). The API answers 403 `SELF_APPROVAL`; the queue says so
+   * before the click, because finding out after filling in a version label is a worse way to learn
+   * it. "דרוש שינויים" stays live — withdrawing your own request publishes nothing.
+   */
+  it('will not let the requester approve their own request', async () => {
+    const mine = stage45State.reviews[0]!;
+    mine.requestedBy = fx.me.user.id;
+    mine.requestedByName = fx.me.user.displayName;
+
+    renderWithProviders(<App />, { route: '/reviews' });
+    await screen.findByRole('heading', { name: /סקירות/ });
+    const approve = await screen.findByLabelText(`אשר ופרסם את ${fx.docIntl.title}`);
+    expect(approve).toBeDisabled();
+    expect(approve).toHaveAttribute('title', 'ביקשת את הבדיקה — נדרש אישור של גורם אחר');
+    expect(await screen.findByLabelText(`דרוש שינויים ב-${fx.docIntl.title}`)).toBeEnabled();
+  });
 });

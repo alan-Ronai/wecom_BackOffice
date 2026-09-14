@@ -32,6 +32,8 @@ export function SourceEditor({ documentId, onSaved }: { documentId: string; onSa
   const toast = useToast();
   const etag = useRef<string | undefined>(undefined);
   const [dirty, setDirty] = useState(false);
+  /** E-6: open while the "תיאור הגרסה" dialog is, so the strip behind it stops saying "unsaved". */
+  const [naming, setNaming] = useState(false);
   const timer = useRef<number | null>(null);
   /** Latest HTML and whether it is unsaved, kept in refs so unmount can flush without a re-render. */
   const pending = useRef<{ html: string; dirty: boolean }>({ html: '', dirty: false });
@@ -117,7 +119,17 @@ export function SourceEditor({ documentId, onSaved }: { documentId: string; onSa
 
   async function saveVersion() {
     if (!editor) return;
-    const label = await modal.prompt('שמירת גרסת מקור', 'תיאור הגרסה', '');
+    // E-6 (acceptance review §4): the naming dialog's scrim covers the editor while the strip
+    // behind it still reads "שינויים לא שמורים", and the pair reads as "the save failed" for as
+    // long as the dialog is open. The save has in fact started — the agent is inside it — so the
+    // status says so, and keeps saying so until the version lands or the dialog is dismissed.
+    setNaming(true);
+    let label: string | null;
+    try {
+      label = await modal.prompt('שמירת גרסת מקור', 'תיאור הגרסה', '');
+    } finally {
+      setNaming(false);
+    }
     if (label === null) return;
     try {
       const s = await save.mutateAsync({
@@ -152,8 +164,16 @@ export function SourceEditor({ documentId, onSaved }: { documentId: string; onSa
     <div className="source-editor" dir="rtl">
       <RichTextToolbar editor={editor} onPickImage={handleFiles}>
         <span className="grow" />
-        <span className="muted">
-          {dirty ? 'שינויים לא שמורים' : doc.data ? `גרסת מקור ${doc.data.version}` : 'מסמך חדש'}
+        {/* `aria-live` because this line is the only feedback the save gives until the toast, and
+            a screen-reader user who has just left the dialog is not looking at the toolbar. */}
+        <span className="muted" aria-live="polite">
+          {naming || save.isPending
+            ? 'שומר גרסה…'
+            : dirty
+              ? 'שינויים לא שמורים'
+              : doc.data
+                ? `גרסת מקור ${doc.data.version}`
+                : 'מסמך חדש'}
         </span>
         <button type="button" className="btn primary" disabled={save.isPending} onClick={saveVersion}>
           שמור גרסה
