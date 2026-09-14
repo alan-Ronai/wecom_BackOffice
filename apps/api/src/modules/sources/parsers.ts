@@ -26,7 +26,7 @@ const rows2content = (name: string, rows: Record<string, string>[]): SourceConte
   };
 };
 
-const parseCsv = (text: string): Record<string, string>[] => {
+export const parseCsv = (text: string): Record<string, string>[] => {
   const lines = text
     .replace(/\r\n/g, '\n')
     .split('\n')
@@ -37,6 +37,41 @@ const parseCsv = (text: string): Record<string, string>[] => {
   );
 };
 
+export const parseJsonRows = (buffer: Buffer): Record<string, string>[] => {
+  let j: unknown;
+  try {
+    j = JSON.parse(buffer.toString('utf8')) as unknown;
+  } catch (e) {
+    // An unparseable upload is the client's mistake, not a 500 with a stack trace.
+    throw Object.assign(new Error('invalid JSON: ' + (e as Error).message), {
+      statusCode: 400,
+      code: 'UNSUPPORTED_FILE',
+    });
+  }
+  const rows = Array.isArray(j)
+    ? j
+    : ((j as { docs?: unknown[]; topics?: unknown[] }).docs ?? (j as { topics?: unknown[] }).topics ?? []);
+  return rows as Record<string, string>[];
+};
+
+/**
+ * The tabular view of a json/csv upload, for the stage-4 data explorer: the same parsers
+ * `parseUpload` runs, stopping before the paragraph flattening so the rows survive.
+ */
+export function parseDataFile(
+  filename: string,
+  buffer: Buffer,
+): { kind: 'json' | 'csv'; title: string; rows: Record<string, string>[] } {
+  const ext = (filename.split('.').pop() ?? '').toLowerCase();
+  const title = filename.replace(/\.[^.]+$/, '');
+  if (ext === 'json') return { kind: 'json', title, rows: parseJsonRows(buffer) };
+  if (ext === 'csv') return { kind: 'csv', title, rows: parseCsv(buffer.toString('utf8')) };
+  throw Object.assign(new Error('unsupported file type: ' + ext), {
+    statusCode: 400,
+    code: 'UNSUPPORTED_FILE',
+  });
+}
+
 export async function parseUpload(
   filename: string,
   buffer: Buffer,
@@ -45,22 +80,7 @@ export async function parseUpload(
   if (ext === 'docx') return { ...(await parseDocx(buffer)), kind: 'docx' };
   if (ext === 'txt' || ext === 'md')
     return { ...parseText(filename, buffer.toString('utf8'), { allNew: true }), kind: 'text' };
-  if (ext === 'json') {
-    let j: unknown;
-    try {
-      j = JSON.parse(buffer.toString('utf8')) as unknown;
-    } catch (e) {
-      // An unparseable upload is the client's mistake, not a 500 with a stack trace.
-      throw Object.assign(new Error('invalid JSON: ' + (e as Error).message), {
-        statusCode: 400,
-        code: 'UNSUPPORTED_FILE',
-      });
-    }
-    const rows = Array.isArray(j)
-      ? j
-      : ((j as { docs?: unknown[]; topics?: unknown[] }).docs ?? (j as { topics?: unknown[] }).topics ?? []);
-    return { ...rows2content(filename, rows as Record<string, string>[]), kind: 'json' };
-  }
+  if (ext === 'json') return { ...rows2content(filename, parseJsonRows(buffer)), kind: 'json' };
   if (ext === 'csv') return { ...rows2content(filename, parseCsv(buffer.toString('utf8'))), kind: 'csv' };
   throw Object.assign(new Error('unsupported file type: ' + ext), {
     statusCode: 400,

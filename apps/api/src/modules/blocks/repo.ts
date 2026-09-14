@@ -1,4 +1,4 @@
-import type { Block, UpsertBlockBody } from '@wecom/shared';
+import type { Block, BlockPage, UpsertBlockBody } from '@wecom/shared';
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
 import { getDocument, iso, loadBlocksMap, recomputeDerived, slugify, type Q } from '../documents/repo.js';
@@ -132,6 +132,35 @@ export async function deleteBlock(tx: Tx, id: string, userId: string): Promise<s
     if (doc) await recomputeDerived(tx, doc);
   }
   return affected;
+}
+
+/* ── Stage 4: block page ────────────────────────────────────────────────── */
+
+/** `blockUsage` plus the category the UI groups by — the shape `BlockPageSchema` asks for. */
+export async function blockUsageRows(q: Q, id: string): Promise<BlockPage['usage']> {
+  const r = await q.query(
+    `select d.id document_id, d.title, d.category, s.step_key, s.num,
+            case when s.block_id = $1 then 'embedded' else 'reference' end mode
+       from steps s join documents d on d.id = s.document_id and d.deleted_at is null
+      where s.block_id = $1 or $1 = any(s.block_refs)
+      order by d.title, s.position`,
+    [id],
+  );
+  return r.rows.map((x) => ({
+    documentId: x.document_id as string,
+    title: x.title as string,
+    category: x.category as BlockPage['usage'][number]['category'],
+    stepKey: x.step_key as string,
+    stepNum: x.num as string,
+    mode: x.mode as 'embedded' | 'reference',
+  }));
+}
+
+export async function blockPage(q: Q, id: string): Promise<BlockPage | null> {
+  const block = await getBlock(q, id);
+  if (!block) return null;
+  const [usage, versions] = await Promise.all([blockUsageRows(q, id), listBlockVersions(q, id)]);
+  return { block, usage, versions };
 }
 
 export async function listBlockVersions(q: Q, id: string) {

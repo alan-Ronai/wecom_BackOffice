@@ -4,6 +4,7 @@ import { ConnectorsRepo } from './repo.js';
 import { buildRegistry } from './registry.js';
 import { SyncService, type DocumentsService, type EventBus, type SourceRevisionService } from './sync.js';
 import routes from './routes.js';
+import syncUiRoutes from './sync-ui.js'; // stage 5: connectors & sync UI read models
 import { bossAdapter, registerConnectorJobs } from './jobs.js';
 import { documentsOf, eventsOf, hasPermission, revisionsOf, userOf, type Enqueue } from './context.js';
 
@@ -92,5 +93,6 @@ export default fp(async (app: FastifyInstance, opts: ConnectorsModuleOptions = {
     // L3 owns `app.audit` and `req.user`; keep the shim only until it lands.
     if (!app.hasDecorator('audit')) await authShim(scope);
     await scope.register(routes, { repo, registry, sync, enqueue, refresh });
+    await scope.register(syncUiRoutes, { repo, registry, sync });
   });
 });

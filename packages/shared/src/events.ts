@@ -11,6 +11,12 @@ export const EVENTS = [
   'sync.conflict',
   'job.failed',
   'system.status',
+  // Stage 5 — collaboration (additive; every earlier consumer ignores names it does not know).
+  'notification.created',
+  'comment.created',
+  'review.requested',
+  'review.decided',
+  'presence.changed',
 ] as const;
 export type EventName = (typeof EVENTS)[number];
 
@@ -54,6 +60,37 @@ const payloads = {
     model: z.boolean(),
     queue: z.number().int(),
     connectors: z.record(z.boolean()),
+  }),
+  /* ── Stage 5: collaboration ──────────────────────────────────────────── */
+  /** Fan-out is per recipient: the web filters on `userId` before it touches the bell. */
+  'notification.created': z.object({
+    notificationId: IdSchema,
+    userId: IdSchema,
+    kind: z.enum(['suggestion', 'sync', 'mention', 'review', 'publish', 'system']),
+    title: z.string(),
+  }),
+  'comment.created': z.object({
+    commentId: IdSchema,
+    documentId: IdSchema,
+    stepKey: z.string().nullable(),
+    authorId: IdSchema,
+  }),
+  'review.requested': z.object({
+    reviewRequestId: IdSchema,
+    documentId: IdSchema,
+    requestedBy: IdSchema,
+  }),
+  'review.decided': z.object({
+    reviewRequestId: IdSchema,
+    documentId: IdSchema,
+    decision: z.enum(['approve', 'changes']),
+    decidedBy: IdSchema,
+  }),
+  /** `editors` is the live count after the change, so a badge needs no extra fetch. */
+  'presence.changed': z.object({
+    documentId: IdSchema,
+    userId: IdSchema,
+    editors: z.number().int().nonnegative(),
   }),
 } as const;
 export type EventPayloads = { [K in EventName]: z.infer<(typeof payloads)[K]> };

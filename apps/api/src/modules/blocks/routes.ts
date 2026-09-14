@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   BlockListSchema,
+  BlockPageSchema,
   BlockSchema,
   BlockUsageSchema,
   BlockVersionListSchema,
@@ -39,6 +40,22 @@ export default async function routes(app: FastifyInstance) {
       const b = await repo.getBlock(app.db, (req.params as { id: string }).id);
       if (!b) throw notFound('הבלוק');
       return b;
+    },
+  );
+
+  // Stage 4 (connected data): one page per block — where it is embedded or referenced,
+  // and the version trail behind it.
+  app.get(
+    '/blocks/:id/page',
+    {
+      config: { requires: ['docs.read'] },
+      schema: { tags: ['blocks'], params: Params, response: { 200: BlockPageSchema } },
+    },
+    async (req) => {
+      requireUser(req);
+      const page = await repo.blockPage(app.db, (req.params as { id: string }).id);
+      if (!page) throw notFound('הבלוק');
+      return page;
     },
   );
 

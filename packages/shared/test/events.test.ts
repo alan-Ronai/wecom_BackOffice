@@ -13,7 +13,24 @@ describe('events', () => {
       'sync.conflict',
       'job.failed',
       'system.status',
+      // Stage 5 — collaboration. Appended, never reordered: a subscriber that predates
+      // them must keep matching every name it already knew at the position it knew it.
+      'notification.created',
+      'comment.created',
+      'review.requested',
+      'review.decided',
+      'presence.changed',
     ]);
+  });
+  it('validates a stage-5 payload', () => {
+    const e = makeEvent('review.decided', {
+      reviewRequestId: '11111111-1111-4111-8111-111111111111',
+      documentId: '22222222-2222-4222-8222-222222222222',
+      decision: 'approve',
+      decidedBy: '33333333-3333-4333-8333-333333333333',
+    });
+    expect(EventSchema.parse(e).name).toBe('review.decided');
+    expect(EventSchema.safeParse({ ...e, payload: { decision: 'nope' } }).success).toBe(false);
   });
   it('builds and validates an event', () => {
     const e = makeEvent('document.published', {
