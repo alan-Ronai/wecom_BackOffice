@@ -356,7 +356,15 @@ export function ArticlePage() {
       ) : null;
     },
     renderStepFeedback: (s) => (
-      <FeedbackButton size="xs" documentId={doc.id} documentVersion={doc.currentVersion} stepKey={s.key} />
+      <FeedbackButton
+        size="xs"
+        documentId={doc.id}
+        documentVersion={doc.currentVersion}
+        stepKey={s.key}
+        documentTitle={doc.title}
+        docType={doc.docType}
+        worldSlug={doc.category}
+      />
     ),
     renderFooter: (s) => (
       <StepCollab
@@ -534,7 +542,13 @@ export function ArticlePage() {
               </span>
             ) : null}
           </span>
-          <FeedbackButton documentId={doc.id} documentVersion={doc.currentVersion} />
+          <FeedbackButton
+            documentId={doc.id}
+            documentVersion={doc.currentVersion}
+            documentTitle={doc.title}
+            docType={doc.docType}
+            worldSlug={doc.category}
+          />
           <PaneModeToggle
             value={effectivePane}
             hasSource={hasSource}

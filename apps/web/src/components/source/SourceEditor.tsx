@@ -33,6 +33,12 @@ export function SourceEditor({ documentId, onSaved }: { documentId: string; onSa
   const etag = useRef<string | undefined>(undefined);
   const [dirty, setDirty] = useState(false);
   const timer = useRef<number | null>(null);
+  /** Latest HTML and whether it is unsaved, kept in refs so unmount can flush without a re-render. */
+  const pending = useRef<{ html: string; dirty: boolean }>({ html: '', dirty: false });
+  const flush = useRef<() => void>(() => {});
+  flush.current = () => {
+    if (pending.current.dirty) saveDraft.mutate(pending.current.html);
+  };
 
   const editor = useEditor({
     // Shared with the compact body editor (`RichText`), so the two surfaces cannot drift.
@@ -50,16 +56,21 @@ export function SourceEditor({ documentId, onSaved }: { documentId: string; onSa
     },
     onUpdate: ({ editor: ed }) => {
       setDirty(true);
+      pending.current = { html: ed.getHTML(), dirty: true };
       if (timer.current) window.clearTimeout(timer.current);
       timer.current = window.setTimeout(() => {
-        saveDraft.mutate(ed.getHTML());
+        pending.current.dirty = false;
+        saveDraft.mutate(pending.current.html);
       }, AUTOSAVE_MS);
     },
   });
 
+  // Unmount **flushes** the pending autosave rather than dropping it. Clearing the timer alone
+  // lost up to three seconds of typing on the ordinary "type, then navigate away".
   useEffect(
     () => () => {
       if (timer.current) window.clearTimeout(timer.current);
+      flush.current();
     },
     [],
   );
@@ -100,6 +111,7 @@ export function SourceEditor({ documentId, onSaved }: { documentId: string; onSa
     const fresh = await doc.refetch();
     etag.current = fresh.data?.etag;
     editor?.commands.setContent(fresh.data?.html ?? '', { emitUpdate: false });
+    pending.current = { html: fresh.data?.html ?? '', dirty: false };
     setDirty(false);
   }, [doc, editor]);
 
@@ -115,6 +127,7 @@ export function SourceEditor({ documentId, onSaved }: { documentId: string; onSa
       });
       etag.current = s.etag;
       editor.commands.setContent(s.html, { emitUpdate: false }); // server-sanitized
+      pending.current = { html: s.html, dirty: false };
       setDirty(false);
       toast(`נשמרה גרסת מקור ${s.version}`, 'ok');
       onSaved?.(s.version);

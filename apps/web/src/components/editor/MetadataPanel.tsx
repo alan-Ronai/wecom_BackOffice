@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DOC_TYPES, DOC_TYPE_LABELS, type DocType } from '@wecom/shared';
+import { useDebounced } from '../../lib/useDebounced.js';
 import { useTags, useTopics, useWorlds } from '../../api/hooks/taxonomy.js';
 
 export interface MetadataValue {
@@ -26,7 +27,8 @@ export function MetadataPanel({
   const worlds = useWorlds();
   const topics = useTopics(value.category);
   const [tagQ, setTagQ] = useState('');
-  const suggestions = useTags(tagQ);
+  // Debounced key: one request per pause, not one per keystroke.
+  const suggestions = useTags(useDebounced(tagQ, 250));
   const set = (patch: Partial<MetadataValue>) => onChange({ ...value, ...patch });
   const toggle = (list: string[], item: string) =>
     list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
