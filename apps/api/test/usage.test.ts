@@ -72,6 +72,13 @@ run('usage', () => {
                 ($2,'d-usage-2','חיוב כפול','billing',1,'h','published',1, now() - interval '2 days')`,
         [D, E],
       );
+      // B-M7: the world filter and the caller's scope intersect `document_worlds` now, not
+      // `documents.category`. 0030 backfilled a membership for every row and `syncMemberships`
+      // maintains it, so a raw insert has to create one too.
+      await db.pool.query(
+        `insert into document_worlds(document_id, world_slug) values ($1,'tech'), ($2,'billing')`,
+        [D, E],
+      );
       // two users, three views: u→D twice, viewer→D once, viewer→E once
       for (const [usr, doc] of [
         [u.id, D],
@@ -107,7 +114,7 @@ run('usage', () => {
       expect(b.topTopics).toEqual([]); // topics table not created yet in this DB
     });
 
-    it('filters by world (primary category) and honours from/to', async () => {
+    it('filters by world (document_worlds membership) and honours from/to', async () => {
       const r = (
         await app.inject({ method: 'GET', url: '/api/v1/analytics/usage?world=billing', headers: auth(u) })
       ).json();

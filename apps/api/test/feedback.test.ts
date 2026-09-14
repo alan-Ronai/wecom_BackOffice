@@ -41,9 +41,17 @@ run('feedback', () => {
     db = await startTestDb();
     app = await buildTestApp(db.pool, db.url);
     await app.events.start(db.url);
-    // W1 may not be merged: a fake resolver stands in for PgTaxonomy.
+    // W1 may not be merged: a fake resolver stands in for PgTaxonomy. It answers the
+    // document's real primary world first, so `world_slug` on a report is the document's world
+    // and the B-I1 scoping case below is about scope rather than about the fake.
     setTaxonomy(app, {
-      worldsOf: async () => ['tech', 'ops'],
+      worldsOf: async (id: string) => {
+        const r = await db.pool.query<{ category: string }>(
+          'select category from documents where id=$1',
+          [id],
+        );
+        return [...new Set([r.rows[0]?.category ?? 'tech', 'tech', 'ops'])];
+      },
       usersWithPermissionInWorld: async () => [],
     });
     lead = await makeUser(db.pool, { name: 'ענבר ל.' });
@@ -367,5 +375,88 @@ run('feedback', () => {
     expect(fa).toMatchObject({ status: 'done', resolvedVersion: 2, decidedBy: lead.id });
     expect(fb.status).toBe('new');
     expect(ff.status).toBe('new'); // belongs to another document → ignored
+  });
+  /**
+   * B-I1 — `listFeedback`, `getFeedbackDetail` and `feedbackAnalytics` built their `where` from
+   * caller-supplied *filters* only and never from `user.worldScopes`, while the rows carry the
+   * document title, the reporter's display name and the free text of the report. Every other
+   * read surface in this wave grew a scope term; feedback was the one that did not.
+   */
+  it('B-I1: the queue, detail and analytics are scoped to the caller worlds', async () => {
+    const opsDoc = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/documents',
+        headers: auth(lead),
+        payload: { title: 'סודי לתפעול', category: 'ops', wave: 1, priority: 'm', kind: 'steps' },
+      })
+    ).json();
+    await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${opsDoc.id}/structure`,
+      headers: { ...auth(lead), 'if-match': opsDoc.etag },
+      payload: minimalStructure,
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${opsDoc.id}/publish`,
+      headers: auth(lead),
+      payload: { label: 'v1' },
+    });
+    const opsFeedback = (
+      await app.inject({
+        method: 'POST',
+        url: `/api/v1/documents/${opsDoc.id}/feedback`,
+        headers: auth(agent),
+        payload: { kind: 'error', text: 'טקסט סודי לתפעול' },
+      })
+    ).json();
+
+    const scopedLead = await makeUser(db.pool, { name: 'ראש טכני', scopes: ['tech'] });
+    const queue = await app.inject({ method: 'GET', url: '/api/v1/feedback', headers: auth(scopedLead) });
+    expect(queue.statusCode).toBe(200);
+    expect(queue.body).not.toContain(opsFeedback.id);
+    expect(queue.body).not.toContain('סודי לתפעול');
+    expect(queue.body).not.toContain('טקסט סודי לתפעול');
+    // The tab badges are built from the same base, so they must narrow too — otherwise the
+    // count itself is the leak.
+    const opsRows = queue
+      .json()
+      .items.filter((x: { documentTitle: string }) => x.documentTitle === 'סודי לתפעול');
+    expect(opsRows).toEqual([]);
+    expect(
+      Object.values(queue.json().counts as Record<string, number>).reduce((a, b) => a + b, 0),
+    ).toBe(queue.json().total);
+
+    // 404, not 403: the queue and the drawer must not disagree about whether a report exists.
+    for (const [method, url, payload] of [
+      ['GET', `/api/v1/feedback/${opsFeedback.id}`, undefined],
+      ['PATCH', `/api/v1/feedback/${opsFeedback.id}`, { status: 'in_review' }],
+      ['POST', `/api/v1/feedback/${opsFeedback.id}/resolve`, { version: 1 }],
+    ] as const) {
+      const r = await app.inject({ method, url, headers: auth(scopedLead), payload });
+      expect(r.statusCode, `${method} ${url}`).toBe(404);
+    }
+
+    const analytics = await app.inject({
+      method: 'GET',
+      url: '/api/v1/feedback/analytics',
+      headers: auth(scopedLead),
+    });
+    expect(analytics.statusCode).toBe(200);
+    expect(analytics.body).not.toContain('סודי לתפעול');
+
+    // …and the unscoped lead still sees everything, so this is a filter and not a break.
+    const all = await app.inject({ method: 'GET', url: '/api/v1/feedback', headers: auth(lead) });
+    expect(all.body).toContain(opsFeedback.id);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/v1/feedback/analytics',
+          headers: auth(lead),
+        })
+      ).body,
+    ).toContain('סודי לתפעול');
   });
 });

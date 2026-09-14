@@ -82,7 +82,11 @@ run('source review flag', () => {
     expect(d.sourceReviewReason).toMatch(/נהלים/);
     const n = sent.find((x) => x.entityId === docId)!;
     expect(n.kind).toBe('source');
-    expect(new Set(n.userIds)).toEqual(new Set([owner.id, editor.id]));
+    // B-M11: the person whose upload raised the flag already knows. `editor` is both the
+    // document's editor and the actor here, so only the owner is notified — `notifyOnCreate`
+    // has always done this and `markSourceReviewNeeded` now does too.
+    expect(new Set(n.userIds)).toEqual(new Set([owner.id]));
+    expect(n.userIds).not.toContain(editor.id);
   });
 
   it('publish clears the flag and records the source version', async () => {
