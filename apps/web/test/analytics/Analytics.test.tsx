@@ -27,8 +27,9 @@ describe('analytics page', () => {
     renderWithProviders(<App />, { route: '/analytics' });
     const btn = await screen.findByRole('button', { name: 'צור פריט' });
     await userEvent.click(btn);
-    // Landed on /edit/new — the editor's title field is the stable marker there.
-    expect(await screen.findByLabelText('שם פריט הידע')).toBeInTheDocument();
+    // Landed on /edit/new — the editor's title field is the stable marker there — and the term
+    // the page just showed is already in it, which is the whole point of the shortcut (§5.6).
+    expect(await screen.findByLabelText('שם פריט הידע')).toHaveValue('zzz-none');
   });
 
   it('hides the shortcut without docs.create', async () => {

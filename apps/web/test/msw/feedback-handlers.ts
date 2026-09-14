@@ -117,8 +117,19 @@ export const feedbackHandlers: RequestHandler[] = [
     const u = new URL(request.url);
     const status = u.searchParams.get('status');
     const kind = u.searchParams.get('kind');
+    // §5.4's five filters, all of them in `FeedbackQuerySchema`.
+    const world = u.searchParams.get('world');
+    const docType = u.searchParams.get('docType');
+    const assigneeId = u.searchParams.get('assigneeId');
+    const documentId = u.searchParams.get('documentId');
     const items = feedbackState.items.filter(
-      (f) => (!status || f.status === status) && (!kind || f.kind === kind),
+      (f) =>
+        (!status || f.status === status) &&
+        (!kind || f.kind === kind) &&
+        (!world || f.worldSlug === world) &&
+        (!docType || f.docType === docType) &&
+        (!assigneeId || f.assigneeId === assigneeId) &&
+        (!documentId || f.documentId === documentId),
     );
     return HttpResponse.json({ items, total: items.length, page: 1, pageSize: 50, counts: counts() });
   }),

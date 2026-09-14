@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Block, Category, Document, Step } from '@wecom/shared';
 import {
   useCreateDocument,
@@ -185,6 +185,13 @@ function PublishBody({
 export function EditorPage() {
   const { id = 'new' } = useParams<{ id: string }>();
   const isNew = id === 'new';
+  /**
+   * `/edit/new?title=…` — the analytics "צור פריט" shortcut on a zero-result search term. It was
+   * navigating with the term and the editor was ignoring it, so the editor retyped the words the
+   * page had just shown them: exactly the friction §5.6 named the shortcut to remove.
+   */
+  const [searchParams] = useSearchParams();
+  const seedTitle = isNew ? (searchParams.get('title') ?? '') : '';
   const go = useNavigate();
   const can = useCan();
   const modal = useModal();
@@ -238,7 +245,9 @@ export function EditorPage() {
     if (isNew) {
       seeded.current = id;
       // A resumed draft keeps its steps; a fresh one starts with a single empty step.
-      const base = fromDraft ?? addBasic(emptyDoc('tech'), 'step', null, null);
+      const fresh = addBasic(emptyDoc('tech'), 'step', null, null);
+      if (seedTitle) fresh.title = seedTitle;
+      const base = fromDraft ?? fresh;
       setDoc(structuredClone(base));
       setSelected(allSteps(base)[0]?.key ?? null);
       history.reset(base, 'נטען');
@@ -253,7 +262,7 @@ export function EditorPage() {
     setDoc(structuredClone(base));
     setSelected(allSteps(base)[0]?.key ?? null);
     history.reset(base, 'נטען');
-  }, [id, isNew, draft.data, draft.isPending, published.data, published.isPending, history]);
+  }, [id, isNew, seedTitle, draft.data, draft.isPending, published.data, published.isPending, history]);
 
   const update = useCallback(
     (next: Document, label = 'שינוי') => {

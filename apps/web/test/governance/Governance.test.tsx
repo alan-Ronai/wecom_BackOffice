@@ -18,6 +18,7 @@ import { SourceReviewBadge } from '../../src/components/governance/SourceReviewB
 import { OwnerFields } from '../../src/components/governance/OwnerFields.js';
 import { UnavailablePage } from '../../src/components/governance/UnavailablePage.js';
 import { state } from '../msw/handlers.js';
+import { D_INTL } from '../msw/fixtures.js';
 import { fx } from '../msw/fixtures.js';
 
 describe('governance components', () => {
@@ -112,6 +113,45 @@ describe('governance components', () => {
     await userEvent.selectOptions(owner, fx.me.user.id);
     expect(onChange).toHaveBeenCalledWith({ ownerId: fx.me.user.id });
     expect(screen.getByText(/מאשר: ענבר ל\./)).toBeInTheDocument();
+  });
+
+  it('strikes through a link to an invalid item for editors, and asks for nothing as a reader', async () => {
+    // §5.5. The read-only half is the API's (it strips non-published targets from `related`), so
+    // the client half is the editor's warning — and the lookup must not run for a reader.
+    const { server } = await import('../msw/server.js');
+    const { withMe } = await import('../msw/handlers.js');
+    const { http, HttpResponse } = await import('msw');
+    const { Panel } = await import('../../src/components/article/Panel.js');
+    let asked = 0;
+    server.use(
+      http.get(`/api/v1/documents/${D_INTL}`, () => {
+        asked += 1;
+        return HttpResponse.json({ ...fx.docIntl, status: 'invalid' });
+      }),
+    );
+    const props = {
+      doc: fx.docBrowsing,
+      steps: [],
+      fields: [],
+      activeKey: null,
+      onSelectStep: () => {},
+      onShowBlock: () => {},
+      mobileOpen: false,
+      onCloseMobile: () => {},
+      results: {},
+    };
+    const editor = renderWithProviders(<Panel {...props} />);
+    const link = await screen.findByText(fx.docIntl.title);
+    await waitFor(() => expect(link.closest('a')).toHaveClass('link-invalid'));
+    expect(link.closest('a')).toHaveAttribute('title', 'לא בתוקף');
+    editor.unmount();
+
+    asked = 0;
+    server.use(withMe({ permissions: ['docs.read'] }));
+    renderWithProviders(<Panel {...props} />);
+    const asReader = await screen.findByText(fx.docIntl.title);
+    await waitFor(() => expect(asReader.closest('a')).not.toHaveClass('link-invalid'));
+    expect(asked).toBe(0);
   });
 
   it('useReadOnlyReader is true only for a user without docs.read_unpublished', async () => {

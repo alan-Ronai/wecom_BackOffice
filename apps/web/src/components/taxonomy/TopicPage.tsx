@@ -1,5 +1,4 @@
 import { useNavigate, useParams } from 'react-router-dom';
-import { DOC_TYPE_LABELS } from '@wecom/shared';
 import { useTopicView } from '../../api/hooks/taxonomy.js';
 import { ApiError } from '../../api/unwrap.js';
 import { Empty, LoadError } from '../ui/index.js';
@@ -38,6 +37,9 @@ export function TopicPage() {
         </div>
       </div>
       {groups.length === 0 ? <Empty title="אין פריטים בנושא">פריטים שפורסמו יופיעו כאן.</Empty> : null}
+      {/* The M,R,O,E,S,T,I group order is the API's contract (`TopicViewSchema`, W1), not this
+          component's: it renders `groups` in the order it receives them. The footer that used to
+          restate all seven labels on every topic page was debug output, not a legend. */}
       {groups.map((g) => (
         <section key={g.docType} className="topic-group" data-testid="topic-group" data-doctype={g.docType}>
           <h2>
@@ -53,7 +55,12 @@ export function TopicPage() {
                 tabIndex={0}
                 onClick={() => nav(`/doc/${it.id}`)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') nav(`/doc/${it.id}`);
+                  // ARIA requires a `button` role to activate on Space as well as Enter, and
+                  // Space would otherwise scroll the page out from under the reader.
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    nav(`/doc/${it.id}`);
+                  }
                 }}
               >
                 <div className="chips">
@@ -79,7 +86,6 @@ export function TopicPage() {
           </div>
         </section>
       ))}
-      <p className="muted small">סדר הקבוצות: {Object.values(DOC_TYPE_LABELS).join(' → ')}</p>
     </div>
   );
 }

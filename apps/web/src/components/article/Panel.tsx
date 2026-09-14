@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { crmChip } from '@wecom/shared';
 import type { Document } from '@wecom/shared';
-import { useLinks, useRelated, useVersions } from '../../api/hooks/documents.js';
+import { useDocStatuses, useLinks, useRelated, useVersions } from '../../api/hooks/documents.js';
+import { useReadOnlyReader } from '../../api/hooks/governance.js';
 import { useAddNote, useLikeNote, useNotes } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
-import { cat } from '../../lib/constants.js';
+import { STATUS_LABEL, cat } from '../../lib/constants.js';
 import { ago, fmtDate } from '../../lib/format.js';
 import { Fmt, Html } from '../Fmt.js';
 import type { ResolvedStep } from '../../lib/steps.js';
@@ -47,6 +48,19 @@ export function Panel({
   const versions = useVersions(doc.id);
   const addNote = useAddNote(doc.id);
   const likeNote = useLikeNote(doc.id);
+  /**
+   * §5.5: a link to an item that is no longer valid is struck through with a tooltip *for
+   * editors*, and hidden from read-only readers — which the API already does by stripping
+   * non-published targets from their `related`/`links`. So the lookup is for editors only, which
+   * is exactly what `useReadOnlyReader` answers.
+   */
+  const readOnly = useReadOnlyReader();
+  const relatedIds = (related.data ?? []).map((r) => r.documentId);
+  const statuses = useDocStatuses(relatedIds, !readOnly);
+  const invalidTitle = (id: string): string | undefined => {
+    const st = statuses.get(id);
+    return st === 'invalid' || st === 'archived' ? STATUS_LABEL[st] : undefined;
+  };
 
   const list = notes.data ?? [];
   const crm = [
@@ -88,7 +102,12 @@ export function Panel({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {related.data?.length ? (
                   related.data.map((r) => (
-                    <a key={r.documentId} className="rel" data-doc={r.documentId}>
+                    <a
+                      key={r.documentId}
+                      className={'rel' + (invalidTitle(r.documentId) ? ' link-invalid' : '')}
+                      title={invalidTitle(r.documentId)}
+                      data-doc={r.documentId}
+                    >
                       <span className="ic">{cat(r.category).icon}</span>
                       <div className="tx">
                         {r.title}

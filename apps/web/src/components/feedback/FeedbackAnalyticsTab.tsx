@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { FEEDBACK_KIND_LABELS } from '@wecom/shared';
 import { useFeedbackAnalytics } from '../../api/hooks/feedback.js';
 import { LoadError } from '../ui/index.js';
@@ -49,7 +50,9 @@ export function FeedbackAnalyticsTab({ world }: { world?: string }) {
           {d.perItem.map((r) => (
             <tr key={r.documentId}>
               <td>
-                <a href={`/feedback?documentId=${r.documentId}`}>{r.title}</a>
+                {/* `<Link>`: an `<a href>` inside the SPA reloads the document, losing the query
+                    cache, the scroll position and the bundle. */}
+                <Link to={`/feedback?documentId=${r.documentId}`}>{r.title}</Link>
               </td>
               <td>{r.docType ?? '—'}</td>
               <td>{r.count}</td>

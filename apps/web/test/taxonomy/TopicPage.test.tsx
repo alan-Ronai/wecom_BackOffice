@@ -11,6 +11,8 @@ describe('TopicPage', () => {
   it('renders the topic header and groups in PRD order with type badges', async () => {
     renderWithProviders(<App />, { route: `/topic/${fx.topics[0]!.id}` });
     expect(await screen.findByRole('heading', { name: /תקלות גלישה/ })).toBeInTheDocument();
+    // The PRD's M,R,O,E,S,T,I order is the server's contract; what this asserts is that the page
+    // renders the groups in the order it was given rather than re-sorting them.
     const groups = screen.getAllByTestId('topic-group');
     expect(groups.map((g) => g.getAttribute('data-doctype'))).toEqual(['M', 'O']);
     expect(screen.getByText('אבחון גלישה')).toBeInTheDocument();

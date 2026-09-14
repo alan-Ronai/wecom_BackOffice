@@ -6,6 +6,7 @@ import { App } from '../../src/App.js';
 import { withMe } from '../msw/handlers.js';
 import { server } from '../msw/server.js';
 import { feedbackState, sampleFeedback } from '../msw/feedback-handlers.js';
+import { U1 } from '../msw/fixtures.js';
 
 describe('<FeedbackPage>', () => {
   beforeEach(() => {
@@ -15,7 +16,7 @@ describe('<FeedbackPage>', () => {
         id: 'f0000000-0000-4000-8000-000000000002',
         kind: 'missing',
         status: 'in_review',
-        assigneeId: 'e0000000-0000-4000-8000-0000000000a1',
+        assigneeId: U1,
         assigneeName: 'ענבר ל.',
       }),
       sampleFeedback({
@@ -40,6 +41,26 @@ describe('<FeedbackPage>', () => {
     await userEvent.selectOptions(screen.getByLabelText('סוג משוב'), 'other');
     await waitFor(() => expect(screen.getAllByRole('row')).toHaveLength(2));
     expect(screen.getByText('v3')).toBeInTheDocument(); // resolved version chip
+  });
+
+  it('filters by world, item type and assignee, and drives the tabs from the keyboard', async () => {
+    renderWithProviders(<App />, { route: '/feedback' });
+    await screen.findByRole('tab', { name: /חדש \(1\)/ });
+    // §5.4 lists five filters; world, docType and assignee had no control at all.
+    await userEvent.selectOptions(screen.getByLabelText('אחראי טיפול'), U1);
+    await waitFor(() => expect(screen.getAllByRole('row')).toHaveLength(2));
+    await userEvent.selectOptions(screen.getByLabelText('אחראי טיפול'), '');
+    expect(screen.getByLabelText('עולם תוכן')).toBeInTheDocument();
+    expect(screen.getByLabelText('סוג פריט')).toBeInTheDocument();
+
+    // The tabs are real buttons now: `role="tab"` promised Enter/Space and arrow keys, and
+    // `<span role="tab" tabIndex={0}>` delivered neither.
+    const all = screen.getByRole('tab', { name: /הכל/ });
+    all.focus();
+    await userEvent.keyboard('{ArrowLeft}'); // RTL: left is *forward* through the tabs
+    await waitFor(() => expect(screen.getByRole('tab', { name: /חדש/ })).toHaveFocus());
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getAllByRole('row')).toHaveLength(2));
   });
 
   it('opens the drawer, deep-links to the step, records a decision and resolves by version', async () => {
@@ -72,6 +93,10 @@ describe('<FeedbackPage>', () => {
       }),
     );
     expect(await screen.findByText('המשוב נסגר')).toBeInTheDocument();
+
+    // The drawer closes on Escape; its ✕ used to be an inert `<span role="button">`.
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'פרטי משוב' })).toBeNull());
   });
 
   it('analytics tab renders the PRD metrics', async () => {
