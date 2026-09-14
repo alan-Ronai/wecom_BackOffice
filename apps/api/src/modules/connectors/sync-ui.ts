@@ -7,8 +7,10 @@ import {
   IdSchema,
   ResolveConflictBodySchema,
   SyncLinkRowSchema,
+  SyncLinkSyncBodySchema,
   SyncLinksQuerySchema,
   SyncQueueResponseSchema,
+  SyncRunResultSchema,
   paragraphText,
   type Document,
   type Paragraph,
@@ -19,7 +21,7 @@ import type { ConnectorRegistry } from '@wecom/connectors';
 import type { ConnectorsRepo } from './repo.js';
 import type { SyncService } from './sync.js';
 import { describeConfigSchema } from './describe-config.js';
-import { auditOf, userOf } from './context.js';
+import { auditOf, hasPermission, userOf } from './context.js';
 
 type SyncLinkRow = z.infer<typeof SyncLinkRowSchema>;
 
@@ -199,6 +201,72 @@ const routes: FastifyPluginAsyncZod<SyncUiOptions> = async (app, opts) => {
           })),
         },
       });
+    },
+  );
+
+  /**
+   * Stage-5 contract: the per-row "ייבא עכשיו" / "דחוף עכשיו" — one link, one
+   * direction, synchronous like "run now" for the same reason. The permission
+   * required depends on which way data would move: importing writes a source
+   * revision (`sources.manage`), pushing writes the published document out to the
+   * remote (`docs.publish`) — so this checks it in the handler rather than through
+   * the usual static `config.requires`.
+   */
+  app.post(
+    '/sync/links/:id/sync',
+    {
+      schema: {
+        tags: ['connectors'],
+        params,
+        body: SyncLinkSyncBodySchema,
+        response: { 200: SyncRunResultSchema, 403: E, 404: E, 409: E },
+      },
+    },
+    async (req, reply) => {
+      const link = await repo.linkById(req.params.id);
+      if (!link) return reply.status(404).send(missing(req, 'קישור סנכרון לא נמצא'));
+      const permission = req.body.direction === 'import' ? 'sources.manage' : 'docs.publish';
+      if (!hasPermission(userOf(req), permission))
+        return reply.status(403).send({
+          code: 'FORBIDDEN',
+          message: 'אין לך הרשאה לפעולה זו',
+          details: { permission },
+          requestId: req.id,
+        });
+      const actorId = userOf(req)?.id ?? null;
+      try {
+        const outcome = await sync.syncLink(link, req.body.direction, actorId);
+        if (outcome.conflict) {
+          const fresh = await app.db.query(`${LINK_SELECT} where l.id = $1`, [outcome.link.id]);
+          await audit(
+            req,
+            'sync.link.' + req.body.direction,
+            'sync_link',
+            link.id,
+            { state: link.state },
+            { state: 'conflict' },
+          );
+          return reply.status(409).send({
+            code: 'CONFLICT',
+            message: 'הצד המרוחק והמקומי השתנו שניהם; יש לפתור את הקונפליקט לפני הסנכרון',
+            details: fresh.rowCount ? toLinkRow(fresh.rows[0]) : null,
+            requestId: req.id,
+          });
+        }
+        await audit(
+          req,
+          'sync.link.' + req.body.direction,
+          'sync_link',
+          link.id,
+          { state: link.state },
+          { ...outcome.result, state: outcome.link.state },
+        );
+        return reply.send({ ...outcome.result, errors: [] });
+      } catch (err) {
+        // A remote that is down or refuses the direction (e.g. a read-only
+        // connector asked to push) is a result to show, not a 500.
+        return reply.send({ imported: 0, pushed: 0, conflicts: 0, errors: [(err as Error).message] });
+      }
     },
   );
 

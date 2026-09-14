@@ -26,7 +26,7 @@ import {
   ScriptSchema,
   VersionSchema,
 } from './content.js';
-import { PermissionSchema, UserSchema } from './identity.js';
+import { PermissionSchema, SessionSchema, UserSchema } from './identity.js';
 import { SyncLinkStateSchema } from './api.js';
 
 /* ── Stage 4: graph ─────────────────────────────────────────────────────── */
@@ -411,6 +411,14 @@ export const AdminUsersQuerySchema = PaginationQuerySchema.extend({
   role: z.string().optional(),
   active: z.union([z.boolean(), z.enum(['true', 'false']).transform((v) => v === 'true')]).optional(),
 });
+/**
+ * `GET /admin/sessions` row: the stage-1 `SessionSchema` plus a flag the server sets on the
+ * caller's own session so the UI can show "מכשיר זה" / offer "נתק את כל האחרים" without
+ * guessing from IP or recency.
+ */
+export const AdminSessionRowSchema = SessionSchema.extend({
+  isCurrent: z.boolean().optional(),
+});
 export const AuditDiffRowSchema = z.object({
   path: z.string(),
   before: z.unknown().nullable(),
@@ -516,6 +524,18 @@ export const SyncRunResultSchema = z.object({
   conflicts: z.number().int(),
   errors: z.array(z.string()),
 });
+/**
+ * `POST /connectors/test` — the wizard's step-3 dry run for a connector that has not been
+ * saved yet and so has no id to test `POST /connectors/:id/test` against.
+ */
+export const ConnectorTestBodySchema = z.object({
+  type: z.string().min(1),
+  config: z.record(z.unknown()),
+});
+/** `POST /sync/links/:id/sync` — the per-row "ייבא עכשיו" / "דחוף עכשיו". */
+export const SyncLinkSyncBodySchema = z.object({
+  direction: z.enum(['import', 'push']),
+});
 
 /* ── Stage 5: comments (inline step comments with mentions) ─────────────── */
 export const CommentSchema = z.object({
@@ -555,6 +575,7 @@ export type Template = z.infer<typeof TemplateSchema>;
 export type Presence = z.infer<typeof PresenceSchema>;
 export type IdentitySettings = z.infer<typeof IdentitySettingsSchema>;
 export type AdminUserRow = z.infer<typeof AdminUserRowSchema>;
+export type AdminSessionRow = z.infer<typeof AdminSessionRowSchema>;
 export type AuditEntryDetail = z.infer<typeof AuditEntryDetailSchema>;
 export type RoleMatrix = z.infer<typeof RoleMatrixSchema>;
 export type ConnectorRow = z.infer<typeof ConnectorRowSchema>;
