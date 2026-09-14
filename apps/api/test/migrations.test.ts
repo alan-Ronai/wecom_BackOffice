@@ -326,8 +326,14 @@ run('migrations', () => {
         ignorePattern: 'package\\.json',
         log: () => undefined,
       });
-    const wave4 = (await readdir('migrations')).filter((f) => /^00(3[0-9])_/.test(f)).length;
-    await move('down', wave4);
+    // Roll back everything above 0029 — wave 4 and every later wave — so the schema sits exactly
+    // where 0029 left it. Counting only `003x` silently stopped short once wave 5 added 0040+:
+    // the rollback then left 0030 (the migration that dropped 0027's filter) in place.
+    const afterWave3 = (await readdir('migrations')).filter((f) => {
+      const n = /^(\d{4})_/.exec(f);
+      return n !== null && Number(n[1]) >= 30;
+    }).length;
+    await move('down', afterWave3);
     await pool.query(
       `insert into documents(slug, title, description, category, wave, priority)
        values ('w6-stop','חוב של לקוח','', 'tech', 1, 'm')`,
