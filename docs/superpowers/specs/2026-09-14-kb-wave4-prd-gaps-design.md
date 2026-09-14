@@ -167,7 +167,7 @@ Production implementations: `Notifier` writes wave 3's `notifications` table and
 ## 5. Behaviour
 
 ### 5.1 Source editor (W4)
-- TipTap (StarterKit + Table, Image, Link, TextAlign, Underline), `dir="rtl"` default, Hebrew toolbar. Server-side sanitizer allowlist: `h1–h4, p, ul, ol, li, table, thead, tbody, tr, th, td, img[src=/api/v1/assets/*|data omitted], a[href http(s)], strong, em, u, s, blockquote, code, pre, br, hr, span[dir], bdi`. Anything else is stripped; the stored HTML is therefore always renderable by WordPress and the docx exporter.
+- TipTap (StarterKit + Table, Image, Link, TextAlign, Underline), `dir="rtl"` default, Hebrew toolbar. Server-side sanitizer allowlist: `h1–h4, p, ul, ol, li, table, thead, tbody, tr, th, td, img[src=/api/v1/assets/*] (data: URIs rejected), a[href http(s)], strong, em, u, s, blockquote, code, pre, br, hr, span[dir], bdi`. Anything else is stripped; the stored HTML is therefore always renderable by WordPress and the docx exporter.
 - Images: paste/drop → `POST /assets` → `<img src="/api/v1/assets/:id">`. Export embeds bytes into the docx; WordPress push uploads to `wp/v2/media` and rewrites `src`; pull rewrites WordPress media URLs back to assets (downloaded once, deduped by sha256).
 - Import: mammoth docx → HTML → sanitizer → normal save path (label "יובא מ-Word"). Export: HTML walker in `packages/shared/src/format/htmlToDocx.ts` driving the `docx` package (headings, lists, tables, images, links, bold/italic/underline). Loss is limited to styling outside the allowlist; the export dialog says so.
 - Autosave every 3 s into `drafts` under key `source:<documentId>`; explicit "שמור גרסה" → `PUT /source` with label → version. Etag conflict → the same dialog the step editor uses.
