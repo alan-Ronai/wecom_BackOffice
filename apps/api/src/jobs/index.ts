@@ -5,6 +5,7 @@ import { QUEUES } from '../plugins/boss.js';
 import { withTransaction } from '../lib/sql.js';
 import { purgeExpired } from '../modules/trash/repo.js';
 import { purgeTelemetry } from '../modules/dashboards/repo.js';
+import { purgeDashboardCache } from '../modules/dashboards/cache.js';
 import { purgeWebhookNonces } from '../modules/connectors/nonces.js';
 import { reindexAll } from '../modules/search/repo.js';
 
@@ -56,9 +57,12 @@ export async function startJobs(app: FastifyInstance): Promise<void> {
       // still be replayed (`MAX_WEBHOOK_SKEW_MS`, five minutes). Without this it would grow one
       // row per post save, forever.
       const w = await purgeWebhookNonces(app.db);
+      // Dashboard snapshots are keyed by scope-and-visibility, so a deleted role would otherwise
+      // leave its row in `system_state` forever.
+      const d = await purgeDashboardCache(app.db);
       app.log.info(
-        { n, sessions: s.rowCount, telemetry: t, presence: p.rowCount, webhookNonces: w },
-        'housekeeping: trash, sessions, telemetry, presence, webhook nonces',
+        { n, sessions: s.rowCount, telemetry: t, presence: p.rowCount, webhookNonces: w, dashboards: d },
+        'housekeeping: trash, sessions, telemetry, presence, webhook nonces, dashboard cache',
       );
     } catch (err) {
       await reportFailure(app, QUEUES.trashPurge, err);

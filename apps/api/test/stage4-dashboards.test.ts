@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import pg from 'pg';
 import { startTestDb, integration } from './helpers/db.js';
 import { buildTestApp } from './helpers/app.js';
 import { makeUser, auth } from './helpers/fixtures.js';
@@ -101,6 +102,33 @@ run('stage 4: dashboards and telemetry', () => {
     const second = (await get('/api/v1/dashboards')).json();
     expect(second.generatedAt).toBe(first.generatedAt);
     expect(second.coverage.cards).toBe(first.coverage.cards);
+  });
+
+  /**
+   * The half the per-process `Map` could not do. Age alone was always within "cached 60 s", but
+   * only the worker that took a telemetry batch cleared its own map, so the other replicas went
+   * on serving the pre-batch counts — an agent refreshing twice could watch the number go
+   * backwards. A second app on the same pool is a second replica.
+   */
+  it('shares one snapshot across replicas, and invalidates all of them at once', async () => {
+    // Its own pool as well as its own app, so closing it takes nothing from the suite.
+    const replica = await buildTestApp(new pg.Pool({ connectionString: db.url }), db.url);
+    try {
+      const getOn = (url: string) => replica.inject({ method: 'GET', url, headers: auth(u) });
+      const a1 = (await get('/api/v1/dashboards')).json();
+      const b1 = (await getOn('/api/v1/dashboards')).json();
+      // The second replica computed nothing: it read the snapshot the first one wrote.
+      expect(b1.generatedAt).toBe(a1.generatedAt);
+
+      // A batch recorded on one replica has to reach the others' panels, not just its own.
+      expect((await post('/api/v1/telemetry', { events: [{ kind: 'palette' }] })).statusCode).toBe(204);
+      const b2 = (await getOn('/api/v1/dashboards')).json();
+      expect(b2.generatedAt).not.toBe(b1.generatedAt);
+      // And they agree again on the new one.
+      expect((await get('/api/v1/dashboards')).json().generatedAt).toBe(b2.generatedAt);
+    } finally {
+      await replica.close();
+    }
   });
 
   it('rejects an empty or oversized telemetry batch', async () => {
