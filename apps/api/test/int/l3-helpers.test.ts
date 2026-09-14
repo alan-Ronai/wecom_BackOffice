@@ -21,10 +21,10 @@ run('test helpers', () => {
       categoryScope: ['intl'],
     });
     const r = await db.pool.query(
-      'select r.name, ur.category_scope from user_roles ur join roles r on r.id=ur.role_id where ur.user_id=$1',
+      'select r.name, ur.world_scope from user_roles ur join roles r on r.id=ur.role_id where ur.user_id=$1',
       [id],
     );
-    expect(r.rows).toEqual([{ name: 'editor', category_scope: ['intl'] }]);
+    expect(r.rows).toEqual([{ name: 'editor', world_scope: ['intl'] }]);
   });
   it('serves an OIDC discovery document', async () => {
     const m = await startOidcMock(8085);

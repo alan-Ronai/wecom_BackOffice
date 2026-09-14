@@ -60,7 +60,7 @@ export async function seedUser(
   const id = r.rows[0].id;
   for (const role of u.roles ?? []) {
     await pool.query(
-      `insert into user_roles(user_id, role_id, category_scope) select $1, id, $3 from roles where name=$2`,
+      `insert into user_roles(user_id, role_id, world_scope) select $1, id, $3 from roles where name=$2`,
       [id, role, u.categoryScope ?? null],
     );
   }

@@ -12,14 +12,17 @@ export default fp(async (app) => {
       roles?: string[];
       permissions: string[];
       categoryScopes: string[] | null;
+      worldScopes?: string[] | null;
     };
+    const scopes = u.worldScopes ?? u.categoryScopes ?? null;
     req.user = {
       id: u.id,
       displayName: u.displayName ?? 'משתמש בדיקה',
       roles: u.roles ?? [],
       sessionId: null,
       permissions: new Set(u.permissions),
-      categoryScopes: u.categoryScopes ?? null,
+      worldScopes: scopes,
+      categoryScopes: scopes,
     } satisfies ReqUser;
   });
   // Minimal mirror of L3's enforcement so route `config.requires` is exercised in tests.
