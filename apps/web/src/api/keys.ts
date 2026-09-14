@@ -19,7 +19,6 @@ export const keys = {
   blockUsage: (id: string) => ['blockUsage', id] as const,
   fields: ['fields'] as const,
   fieldUsage: (n: string) => ['fieldUsage', n] as const,
-  scripts: ['scripts'] as const,
   search: (q: string, types?: string) => ['search', q, types ?? ''] as const,
   trash: ['trash'] as const,
   sources: ['sources'] as const,

@@ -14,7 +14,6 @@ import type {
   Me,
   Note,
   Role,
-  Script,
   Source,
   SourceRevision,
   Step,
@@ -677,20 +676,68 @@ export const cards: DocumentCard[] = [
   },
 ];
 
-export const scripts: Script[] = [
+/**
+ * Scripts are `docType: 'T'`, `kind: 'text'` documents since the 0030 fold, and the `/scripts`
+ * adapter that used to serve them is gone — so they are library cards like everything else.
+ *
+ * `bodyHtml` is the fold's encoding (`<p>` + `<br>` per line, entities escaped), because that is
+ * what the API stores and what the step-level phrasing picker reads back out. `linksIn` is what
+ * the picker shows as "משמש ב-N מסמכים"; `/scripts` returned the list, the card returns a count.
+ */
+export const scriptCards: DocumentCard[] = [
   {
     id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+    slug: 'script-browsing-triage',
     title: 'סיווג תקלת גלישה',
-    text: '"אתה לא גולש בכלל, או שהגלישה איטית?" · "זה קורה בכל מקום או רק במקום מסוים?"',
+    description: '',
+    category: 'tech',
+    wave: 3,
+    priority: 'm',
+    kind: 'text',
+    status: 'published',
+    ...W4,
+    docType: 'T',
+    bodyHtml: '<p>"אתה לא גולש בכלל, או שהגלישה איטית?" · "זה קורה בכל מקום או רק במקום מסוים?"</p>',
+    currentVersion: 1,
+    worlds: ['tech'],
     tags: ['tech'],
+    topics: [],
+    sourceReviewNeeded: false,
     updatedAt: T,
+    stepCount: 0,
+    linksOut: 0,
+    linksIn: 1,
+    views: 0,
+    crmFields: [],
+    hasSharedBlocks: false,
+    pinned: false,
   },
   {
     id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2',
+    slug: 'script-network-marker',
     title: 'סימון רשת',
-    text: '"איזה סימון מופיע ליד פסי הקליטה? (H+ / 3G / LTE / 5G)"',
+    description: '',
+    category: 'tech',
+    wave: 3,
+    priority: 'm',
+    kind: 'text',
+    status: 'published',
+    ...W4,
+    docType: 'T',
+    bodyHtml: '<p>"איזה סימון מופיע ליד פסי הקליטה? (H+ / 3G / LTE / 5G)"</p>',
+    currentVersion: 1,
+    worlds: ['tech'],
     tags: ['tech'],
+    topics: [],
+    sourceReviewNeeded: false,
     updatedAt: T,
+    stepCount: 0,
+    linksOut: 0,
+    linksIn: 1,
+    views: 0,
+    crmFields: [],
+    hasSharedBlocks: false,
+    pinned: false,
   },
 ];
 
@@ -1112,7 +1159,7 @@ export const fx = {
   tags,
   blocks,
   fields,
-  scripts,
+  scriptCards,
   notes,
   versions,
   sources,

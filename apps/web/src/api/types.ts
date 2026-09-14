@@ -19,7 +19,6 @@ import type {
   StructureBodySchema,
   UpsertBlockBodySchema,
   UpsertFieldBodySchema,
-  UpsertScriptBodySchema,
 } from '@wecom/shared';
 import type { paths } from './schema.js';
 
@@ -60,7 +59,6 @@ export type PublishBody = z.input<typeof PublishBodySchema>;
 export type CreateNoteBody = z.input<typeof CreateNoteBodySchema>;
 export type UpsertBlockBody = z.input<typeof UpsertBlockBodySchema>;
 export type UpsertFieldBody = z.input<typeof UpsertFieldBodySchema>;
-export type UpsertScriptBody = z.input<typeof UpsertScriptBodySchema>;
 export type AdminUserPatch = z.input<typeof AdminUserPatchSchema>;
 export type AdminUserCreate = z.input<typeof AdminUserCreateSchema>;
 export type RoleUpsert = z.input<typeof RoleUpsertSchema>;
@@ -81,8 +79,6 @@ export type LinkSets = Res<'/documents/{id}/links', 'get'>;
 /** `GET|PUT /documents/{id}/draft` — the full envelope, including `otherEditors`. */
 export type DraftEnvelope = Res<'/documents/{id}/draft', 'get'>;
 export type BlockUsage = ItemOf<Res<'/blocks/{id}/usage', 'get'>>;
-/** `GET /scripts` rows carry `usedIn` on top of `ScriptSchema`. */
-export type ScriptRow = ItemOf<Res<'/scripts', 'get'>>;
 /** `GET|PUT /drafts/new/{draftId}` — the server-side draft behind `/edit/new`. */
 export type NewDraftEnvelope = Res<'/drafts/new/{draftId}', 'get'>;
 export type FieldUsage = ItemOf<Res<'/fields/{name}/usage', 'get'>>;

@@ -47,7 +47,7 @@ Telemetry kinds `view_topic` / `search_click` are added to wave 3's `TelemetryEv
 | GET | `/documents` | + `TaxonomyFilterSchema` | unchanged | — |
 | GET | `/search` | + `TaxonomyFilterSchema`; new group type `tags` | unchanged | — |
 | PATCH | `/documents/:id` | + `docType, tags, worlds, topics, bodyHtml` (W1) — `ownerId, editorId` are added by W2 | `DocumentSchema` | docs.edit |
-| * | `/scripts*` | unchanged shapes, served from `doc_type='T'` documents, `deprecated: true` in OpenAPI | as today | |
+| ~~*~~ | ~~`/scripts*`~~ | **Removed.** They were adapters over `doc_type='T'` documents, kept `deprecated: true` for one release; the web's three readers now use `GET /documents?docType=T` and a script is edited as the document it has been since 0030. `GET /documents` carries `bodyHtml` on a `kind: 'text'` card, which is the phrasing the step-level picker reads out. | — | |
 
 ### W2 Governance
 

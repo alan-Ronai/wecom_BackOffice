@@ -11,14 +11,7 @@
  * `state.drafts`, …) and is reset between tests by `setup.ts`.
  */
 import { http, HttpResponse, type RequestHandler } from 'msw';
-import {
-  PreferencesSchema,
-  type CrmField,
-  type Document,
-  type Note,
-  type Script,
-  type Suggestion,
-} from '@wecom/shared';
+import { PreferencesSchema, type CrmField, type Document, type Note, type Suggestion } from '@wecom/shared';
 import * as fixtures from './fixtures.js';
 import { fx, REV_1 } from './fixtures.js';
 import { resetStage4State, stage4Handlers } from './stage4.js';
@@ -38,7 +31,6 @@ interface State extends TaxonomyState {
   published: { id: string; label: string }[];
   trash: TrashItem[];
   documents: Map<string, Document>;
-  scripts: Script[];
   fields: CrmField[];
   views: string[];
   processed: string[];
@@ -75,7 +67,6 @@ const initial = (): State => ({
     [fx.docBrowsing.id, fx.docBrowsing],
     [fx.docIntl.id, fx.docIntl],
   ]),
-  scripts: fx.scripts.map((s) => ({ ...s })),
   fields: fx.fields.map((f) => ({ ...f })),
   views: [],
   processed: [],
@@ -143,9 +134,19 @@ export const handlers: RequestHandler[] = [
 
   http.get(`${B}/documents`, ({ request }) => {
     const u = new URL(request.url);
-    let items = fx.cards.map((c) => ({ ...c, pinned: state.pins.has(c.id) }));
+    // Type-T (script) documents are part of the corpus like anything else since the 0030 fold,
+    // and `?docType=T` is what replaced `GET /scripts` for the three readers that used it.
+    let items = [...fx.cards, ...fx.scriptCards].map((c) => ({ ...c, pinned: state.pins.has(c.id) }));
     const cat = u.searchParams.get('category');
     if (cat) items = items.filter((c) => c.category === cat);
+    const docType = u.searchParams.get('docType');
+    if (docType) items = items.filter((c) => c.docType === docType);
+    const world = u.searchParams.get('world');
+    if (world) items = items.filter((c) => (c.worlds ?? []).includes(world));
+    const topic = u.searchParams.get('topic');
+    if (topic) items = items.filter((c) => (c.topics ?? []).includes(topic));
+    const tags = u.searchParams.getAll('tag');
+    if (tags.length) items = items.filter((c) => tags.every((t) => (c.tags ?? []).includes(t)));
     if (u.searchParams.get('pinned') === 'true') items = items.filter((c) => c.pinned);
     if (u.searchParams.get('recent') === 'true') items = items.filter((c) => c.views > 0);
     if (u.searchParams.get('drafts') === 'true') items = items.filter((c) => c.status === 'draft');
@@ -412,41 +413,6 @@ export const handlers: RequestHandler[] = [
       items: [{ documentId: fx.docBrowsing.id, title: fx.docBrowsing.title, stepKeys: ['s11'] }],
     }),
   ),
-
-  // …and each script with the documents that reference it.
-  http.get(`${B}/scripts`, () =>
-    HttpResponse.json({
-      items: state.scripts.map((s) => ({
-        ...s,
-        usedIn: [{ documentId: fx.docBrowsing.id, title: fx.docBrowsing.title }],
-      })),
-    }),
-  ),
-  http.post(`${B}/scripts`, async ({ request }) => {
-    const body = (await request.json()) as { title: string; text: string; tags?: string[] };
-    const created = {
-      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb9',
-      tags: [],
-      ...body,
-      updatedAt: new Date().toISOString(),
-    };
-    state.scripts.push(created);
-    return HttpResponse.json(created);
-  }),
-  http.put(`${B}/scripts/:id`, async ({ params, request }) => {
-    const i = state.scripts.findIndex((s) => s.id === String(params.id));
-    if (i < 0) return notFound();
-    state.scripts[i] = {
-      ...state.scripts[i],
-      ...((await request.json()) as object),
-      updatedAt: new Date().toISOString(),
-    };
-    return HttpResponse.json(state.scripts[i]);
-  }),
-  http.delete(`${B}/scripts/:id`, ({ params }) => {
-    state.scripts = state.scripts.filter((s) => s.id !== String(params.id));
-    return HttpResponse.json({ auditId: AUDIT });
-  }),
 
   http.get(`${B}/search`, ({ request }) => {
     const u = new URL(request.url);

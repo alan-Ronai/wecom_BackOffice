@@ -378,6 +378,10 @@ export async function listCards(
         publishedAt: iso(r.published_at),
         sourceReviewNeeded: r.source_review_needed ?? false,
         sourceReviewReason: r.source_review_reason ?? null,
+        // Only for `kind: 'text'`, whose body is its content — a `steps` card has never carried
+        // its step text and still does not. This is what `GET /documents?docType=T` needs in
+        // order to replace `/scripts` for the step-level phrasing picker.
+        bodyHtml: r.kind === 'text' ? ((r.body_html as string | null) ?? undefined) : undefined,
       }),
     ),
   };

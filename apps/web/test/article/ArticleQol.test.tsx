@@ -74,7 +74,7 @@ describe('"הסבר ללקוח" script picker', () => {
     await userEvent.click(within(picker).getAllByRole('button', { name: 'הוסף לסיכום' })[0]);
 
     await waitFor(() =>
-      expect(screen.getByTestId('summary').textContent).toContain(`תסריט: ${fx.scripts[0].title}`),
+      expect(screen.getByTestId('summary').textContent).toContain(`תסריט: ${fx.scriptCards[0].title}`),
     );
   });
 });

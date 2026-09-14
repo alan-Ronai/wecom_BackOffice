@@ -5,10 +5,11 @@ import {
   useDocRefs,
   useDocument,
   useIsPinned,
+  useLinks,
   useRecordView,
   useTogglePin,
 } from '../../api/hooks/documents.js';
-import { useAddNote, useBlocks, useFields, useScripts } from '../../api/hooks/content.js';
+import { useAddNote, useBlocks, useFields, useTextDocuments } from '../../api/hooks/content.js';
 import { useComments, usePresence, useTelemetry } from '../../api/hooks/collab.js';
 import { useCan } from '../../api/hooks/me.js';
 import { ApiError } from '../../api/unwrap.js';
@@ -29,7 +30,7 @@ import { StepConnections } from './StepConnections.js';
 import { Panel } from './Panel.js';
 import { SplitView } from './SplitView.js';
 import { useCall } from './useCall.js';
-import { StepCollab } from './StepCollab.js';
+import { StepCollab, type ScriptPick } from './StepCollab.js';
 import { QuickSwitch } from './QuickSwitch.js';
 import { PrintFrame } from './PrintFrame.js';
 import { TypeBadge } from '../taxonomy/TypeBadge.js';
@@ -43,10 +44,23 @@ import { SourcePane } from '../source/SourcePane.js';
 import { SyncStateBadge } from '../source/SyncStateBadge.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 import type { FieldInfo } from '../../lib/format.js';
-import type { ScriptRow } from '../../api/types.js';
 
 /** Stable empty array so memoised children are not invalidated on every render (M1). */
 const EMPTY_FIELDS: FieldInfo[] = [];
+
+/**
+ * A type-T card's `bodyHtml` back to the plain text an agent reads out. The fold wrote it with
+ * `<p>` + `<br>` per line and HTML-escaped entities (`0030_taxonomy.js`), so this is that
+ * encoding read backwards — the same pair the API keeps in `modules/scripts/html.ts`.
+ */
+const scriptTextOf = (card: { bodyHtml?: string }): string =>
+  (card.bodyHtml ?? '')
+    .replace(/^<p>|<\/p>$/g, '')
+    .replace(/<br\s*\/?>/g, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
 
 export function ArticlePage() {
   const { id, step: stepParam } = useParams<{ id: string; step?: string }>();
@@ -68,7 +82,8 @@ export function ArticlePage() {
   const ui = useUiPrefs();
   const addNote = useAddNote(id ?? '');
   const comments = useComments(id);
-  const scriptsQ = useScripts();
+  // Scripts are `docType: 'T'` documents since the 0030 fold; `/scripts` is gone.
+  const scriptsQ = useTextDocuments('T');
   const editors = usePresence(id);
   const track = useTelemetry();
 
@@ -78,6 +93,16 @@ export function ArticlePage() {
   const fields: FieldInfo[] = useMemo(() => fieldsQ.data ?? EMPTY_FIELDS, [fieldsQ.data]);
   // I10: resolved from this document's own links/related, not from page 1 of the library.
   const docRefs = useDocRefs(id);
+  /**
+   * "Which scripts are already attached to this document" — `/scripts`' `usedIn` was the reverse
+   * index of exactly this, so with the adapter gone the picker reads the forward direction. The
+   * query is the one `useDocRefs` already issues, so this costs a cache hit.
+   */
+  const links = useLinks(id);
+  const linkedOut = useMemo(
+    () => new Set((links.data?.out ?? []).map((l) => l.toDocumentId).filter(Boolean) as string[]),
+    [links.data],
+  );
   const callMode = prefs.data?.callMode !== false;
   const showPanel = prefs.data?.panel !== false;
   const call = useCall(doc, steps, callMode);
@@ -321,16 +346,29 @@ export function ArticlePage() {
    * Which scripts the "הסבר ללקוח" picker offers for a step: the ones already attached to this
    * document, then the ones tagged with its category. Falling back to everything would turn a
    * two-second pick mid-call into a scroll through the whole library of phrasings.
+   *
+   * The three inputs used to come from one `/scripts` row. Since that adapter is gone they come
+   * from where they actually live: the body from the type-T card's `bodyHtml`, "attached to this
+   * document" from this document's own out-links (which is what `/scripts`' `usedIn` was a
+   * reverse index of), and the usage count from the card's `linksIn`.
    */
-  const scriptsFor = (stepKey: string): ScriptRow[] => {
-    const all = scriptsQ.data ?? [];
+  const scriptsFor = (stepKey: string): ScriptPick[] => {
     const step = steps.find((x) => x.key === stepKey);
-    const scored = all.filter(
-      (sc) =>
-        sc.usedIn.some((u) => u.documentId === doc.id) ||
-        sc.tags?.includes(doc.category) ||
-        (step?.script ? sc.text.slice(0, 20) === step.script.slice(0, 20) : false),
-    );
+    const all: ScriptPick[] = (scriptsQ.data?.items ?? []).map((sc) => ({
+      id: sc.id,
+      title: sc.title,
+      text: scriptTextOf(sc),
+      usedIn: sc.linksIn,
+    }));
+    const byId = new Map((scriptsQ.data?.items ?? []).map((sc) => [sc.id, sc]));
+    const scored = all.filter((sc) => {
+      const card = byId.get(sc.id)!;
+      return (
+        linkedOut.has(sc.id) ||
+        card.tags?.includes(doc.category) ||
+        (step?.script ? sc.text.slice(0, 20) === step.script.slice(0, 20) : false)
+      );
+    });
     return scored.length ? scored : all;
   };
 

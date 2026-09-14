@@ -201,7 +201,7 @@ export const graphNodes: GraphNode[] = [
   { id: `field:sim block lbl`, kind: 'field', label: 'sim block lbl', degree: 2 },
   { id: `field:${FIELD_ROAMING}`, kind: 'field', label: FIELD_ROAMING, status: 'renamed', degree: 3 },
   { id: `source:${fx.sources[0].id}`, kind: 'source', label: 'נהלי תמיכה טכנית', degree: 2 },
-  { id: `script:${fx.scripts[0].id}`, kind: 'script', label: fx.scripts[0].title, degree: 1 },
+  { id: `script:${fx.scriptCards[0].id}`, kind: 'script', label: fx.scriptCards[0].title, degree: 1 },
 ];
 
 const edge = (
@@ -231,7 +231,7 @@ export const graphEdges: GraphEdge[] = [
   edge(`doc:${D_ROAM}`, `field:${FIELD_ROAMING}`, 'same_field', 's3'),
   edge(`doc:${D_BILL}`, `field:${FIELD_ROAMING}`, 'same_field', 's2'),
   edge(`doc:${D_BROWSING}`, `source:${fx.sources[0].id}`, 'derived_from_source', null),
-  edge(`doc:${D_CHURN}`, `script:${fx.scripts[0].id}`, 'related', 's1'),
+  edge(`doc:${D_CHURN}`, `script:${fx.scriptCards[0].id}`, 'related', 's1'),
 ];
 
 const titleOf = (nodeId: string): string => graphNodes.find((n) => n.id === nodeId)?.label ?? nodeId;

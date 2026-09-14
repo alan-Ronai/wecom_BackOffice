@@ -139,7 +139,7 @@ run('category scope: an out-of-scope document leaks through no route', () => {
      * A-C2 (`/scripts` served every world's type-T documents, drafts included) and A-I2
      * (`/tags` served every world's tag vocabulary and counts) are exactly what these catch.
      */
-    // A type-T "script" in billing, so /scripts has something to leak.
+    // A type-T "script" in billing, so `?docType=T` has something to leak.
     billingScript = (
       await post('/api/v1/documents', {
         title: SECRET + ' — תסריט',
@@ -217,7 +217,7 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     // A-I9: the five wave-4 read routes, plus the feedback queue W3 added (B-I1).
     `/api/v1/topics/${techTopic}/items`,
     `/api/v1/tags?limit=100`,
-    `/api/v1/scripts`,
+    `/api/v1/documents?docType=T&pageSize=200`,
     `/api/v1/worlds`,
     `/api/v1/trash`,
     `/api/v1/feedback?pageSize=100`,
@@ -271,22 +271,29 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     }
   });
 
-  it('A-C2/A-I1: the /scripts adapter is scoped for reads and for writes', async () => {
-    const list = await get('/api/v1/scripts');
+  /**
+   * A-C2's successor. `/scripts` served every world's type-T documents, drafts included; the
+   * adapter is gone and its three readers moved to `GET /documents?docType=T`, so the boundary
+   * that matters now is the documents list's — including the fact that `bodyHtml` rides on a
+   * `kind: 'text'` card, which makes that list the fullest representation of a script there is.
+   */
+  it('A-C2: ?docType=T is scoped, body and all, and the row cannot be rewritten either', async () => {
+    const list = await get('/api/v1/documents?docType=T&pageSize=200');
     expect(list.statusCode).toBe(200);
     expect(list.json().items.map((x: { id: string }) => x.id)).not.toContain(billingScript);
-    // The same rows the scoped user cannot read, they cannot rewrite or delete either.
+    expect(list.body).not.toContain(SECRET);
+    // The same row the scoped user cannot read, they cannot rewrite or delete either.
     for (const [method, payload] of [
-      ['PUT', { title: 'חטיפה', text: 'x', tags: [] }],
+      ['PATCH', { title: 'חטיפה' }],
       ['DELETE', undefined],
     ] as const) {
       const r = await app.inject({
         method,
-        url: `/api/v1/scripts/${billingScript}`,
+        url: `/api/v1/documents/${billingScript}`,
         headers: auth(scoped),
         payload,
       });
-      expect(r.statusCode, method).toBe(403);
+      expect([403, 404], `${method} -> ${r.statusCode}`).toContain(r.statusCode);
     }
   });
 
@@ -493,7 +500,7 @@ run('category scope: an out-of-scope document leaks through no route', () => {
       // A-I9: the wave-4 read routes.
       `/api/v1/topics/${techTopic}/items`,
       `/api/v1/tags?limit=100`,
-      `/api/v1/scripts`,
+      `/api/v1/documents?docType=T&pageSize=200`,
       `/api/v1/worlds`,
       `/api/v1/trash`,
     ];
