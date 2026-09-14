@@ -90,4 +90,55 @@ run('search', () => {
     const { reindexAll } = await import('../src/modules/search/repo.js');
     expect(await reindexAll(db.pool)).toBeGreaterThan(0);
   });
+
+  it('filters by docType/world/tag and returns a tags group', async () => {
+    const d = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/documents',
+        headers: auth(u),
+        payload: {
+          title: 'איפוס נתב',
+          category: 'tech',
+          wave: 1,
+          priority: 'h',
+          kind: 'steps',
+          docType: 'O',
+          tags: ['router', 'reset'],
+        },
+      })
+    ).json();
+    const byTag = await app.inject({ method: 'GET', url: '/api/v1/search?q=router', headers: auth(u) });
+    const tags = byTag.json().groups.find((g: { type: string }) => g.type === 'tags');
+    expect(tags.hits.map((h: { documentId: string }) => h.documentId)).toEqual([d.id]);
+    expect(tags.hits[0].meta).toContain('תגית');
+    const typed = await app.inject({
+      method: 'GET',
+      url: '/api/v1/search?q=נתב&docType=R',
+      headers: auth(u),
+    });
+    expect(JSON.stringify(typed.json())).not.toContain(d.id);
+    const world = await app.inject({
+      method: 'GET',
+      url: '/api/v1/search?q=נתב&world=tech',
+      headers: auth(u),
+    });
+    expect(JSON.stringify(world.json())).toContain(d.id);
+  });
+
+  it('serves the scripts group from type-T documents', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/scripts',
+      headers: auth(u),
+      payload: { title: 'סיווג תקלה', text: 'אתה לא גולש בכלל?', tags: [] },
+    });
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/v1/search?q=גולש&types=scripts',
+      headers: auth(u),
+    });
+    const g = r.json().groups.find((x: { type: string }) => x.type === 'scripts');
+    expect(g.hits[0]).toMatchObject({ type: 'script', title: 'סיווג תקלה', snippet: 'אתה לא גולש בכלל?' });
+  });
 });

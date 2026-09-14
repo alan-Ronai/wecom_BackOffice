@@ -24,6 +24,7 @@ export async function makeUser(
       displayName: name,
       permissions: o.perms ?? [...PERMISSIONS],
       categoryScopes: o.scopes ?? null,
+      worldScopes: o.scopes ?? null,
     }),
     name,
   };

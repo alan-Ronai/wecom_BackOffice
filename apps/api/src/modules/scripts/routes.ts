@@ -9,12 +9,14 @@ import * as repo from './repo.js';
 
 const Params = z.object({ id: IdSchema });
 
+/** Deprecated adapter over type-T documents (W1). Removed after wave 4; use /documents?docType=T. */
+
 export default async function routes(app: FastifyInstance) {
   app.get(
     '/scripts',
     {
       config: { requires: ['docs.read'] },
-      schema: { tags: ['scripts'], response: { 200: ScriptListSchema } },
+      schema: { deprecated: true, tags: ['scripts'], response: { 200: ScriptListSchema } },
     },
     async (req) => {
       requireUser(req);
@@ -26,7 +28,12 @@ export default async function routes(app: FastifyInstance) {
     '/scripts',
     {
       config: { requires: ['scripts.edit'] },
-      schema: { tags: ['scripts'], body: UpsertScriptBodySchema, response: { 200: ScriptSchema } },
+      schema: {
+        deprecated: true,
+        tags: ['scripts'],
+        body: UpsertScriptBodySchema,
+        response: { 200: ScriptSchema },
+      },
     },
     async (req) => {
       const user = requireUser(req);
@@ -53,6 +60,7 @@ export default async function routes(app: FastifyInstance) {
     {
       config: { requires: ['scripts.edit'] },
       schema: {
+        deprecated: true,
         tags: ['scripts'],
         params: Params,
         body: UpsertScriptBodySchema,
@@ -86,7 +94,12 @@ export default async function routes(app: FastifyInstance) {
     '/scripts/:id',
     {
       config: { requires: ['scripts.edit'] },
-      schema: { tags: ['scripts'], params: Params, response: { 200: z.object({ auditId: z.string() }) } },
+      schema: {
+        deprecated: true,
+        tags: ['scripts'],
+        params: Params,
+        response: { 200: z.object({ auditId: z.string() }) },
+      },
     },
     async (req) => {
       const user = requireUser(req);

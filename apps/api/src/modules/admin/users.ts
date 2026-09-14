@@ -66,7 +66,7 @@ export default async function userRoutes(instance: FastifyInstance) {
       );
       const ids = rows.rows.map((u) => u.id);
       const roles = await app.db.query(
-        `select ur.user_id, ur.role_id, r.name, ur.category_scope
+        `select ur.user_id, ur.role_id, r.name, ur.world_scope
            from user_roles ur join roles r on r.id=ur.role_id where ur.user_id = any($1::uuid[]) order by r.name`,
         [ids],
       );
@@ -89,7 +89,7 @@ export default async function userRoutes(instance: FastifyInstance) {
         sessions: u.sessions as number,
         roles: roles.rows
           .filter((r) => r.user_id === u.id)
-          .map((r) => ({ roleId: r.role_id, roleName: r.name, categoryScope: r.category_scope })),
+          .map((r) => ({ roleId: r.role_id, roleName: r.name, categoryScope: r.world_scope })),
         groups: groups.rows.filter((g) => g.user_id === u.id).map((g) => g.idp_group_name as string),
       }));
       return { items, total: Number(total), page, pageSize };
@@ -132,7 +132,7 @@ export default async function userRoutes(instance: FastifyInstance) {
         const user = created.rows[0];
         for (const r of roles ?? [])
           await client.query(
-            `insert into user_roles(user_id, role_id, category_scope, granted_by) values ($1,$2,$3,$4)`,
+            `insert into user_roles(user_id, role_id, world_scope, granted_by) values ($1,$2,$3,$4)`,
             [user.id, r.roleId, r.categoryScope, req.user!.id],
           );
         await audit(client, {
@@ -147,7 +147,7 @@ export default async function userRoutes(instance: FastifyInstance) {
           ip: req.ip,
         });
         const granted = await client.query(
-          `select ur.user_id, ur.role_id, r.name, ur.category_scope, ur.granted_by, ur.granted_at
+          `select ur.user_id, ur.role_id, r.name, ur.world_scope, ur.granted_by, ur.granted_at
              from user_roles ur join roles r on r.id=ur.role_id where ur.user_id=$1 order by r.name`,
           [user.id],
         );
@@ -166,7 +166,7 @@ export default async function userRoutes(instance: FastifyInstance) {
             userId: r.user_id,
             roleId: r.role_id,
             roleName: r.name,
-            categoryScope: r.category_scope,
+            categoryScope: r.world_scope,
             grantedBy: r.granted_by,
             grantedAt: new Date(r.granted_at).toISOString(),
           })),
@@ -200,7 +200,7 @@ export default async function userRoutes(instance: FastifyInstance) {
         await client.query('begin');
         const before = (
           await client.query(
-            `select u.active, (select json_agg(json_build_object('roleId', ur.role_id, 'categoryScope', ur.category_scope)) from user_roles ur where ur.user_id=u.id) as roles
+            `select u.active, (select json_agg(json_build_object('roleId', ur.role_id, 'categoryScope', ur.world_scope)) from user_roles ur where ur.user_id=u.id) as roles
                from users u where u.id=$1`,
             [id],
           )
@@ -221,7 +221,7 @@ export default async function userRoutes(instance: FastifyInstance) {
           await client.query(`delete from user_roles where user_id=$1`, [id]);
           for (const r of req.body.roles)
             await client.query(
-              `insert into user_roles(user_id, role_id, category_scope, granted_by) values ($1,$2,$3,$4)`,
+              `insert into user_roles(user_id, role_id, world_scope, granted_by) values ($1,$2,$3,$4)`,
               [id, r.roleId, r.categoryScope, req.user!.id],
             );
         }

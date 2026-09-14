@@ -106,6 +106,7 @@ export const MeSchema = z.object({
   roles: z.array(z.string()),
   permissions: z.array(PermissionSchema),
   categoryScopes: z.array(CategorySchema).nullable(),
+  worldScopes: z.array(CategorySchema).nullable().optional(), // W1: same value as categoryScopes; categoryScopes is removed after wave 4
   preferences: PreferencesSchema,
 });
 export type Me = z.infer<typeof MeSchema>;

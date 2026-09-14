@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-export const CategorySchema = z.enum(['sim', 'tech', 'billing', 'plans', 'intl', 'ops']);
+/** A world slug. Was a six-value enum; worlds are data since wave 4 (W1) and the API validates against `worlds`. */
+export const CategorySchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/);
 export type Category = z.infer<typeof CategorySchema>;
 export const PrioritySchema = z.enum(['hh', 'h', 'm', 'l']);
 export type Priority = z.infer<typeof PrioritySchema>;

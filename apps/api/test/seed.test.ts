@@ -20,9 +20,11 @@ run('seed', () => {
     expect(first.blocks).toBe(4);
     expect(first.fields).toBe(14);
     expect(first.scripts).toBe(7);
+    expect(first.topics).toBe(52);
     const again = await runSeed(db.pool);
     expect(again.documents).toBe(0);
     expect(again.cards).toBe(0);
+    expect(again.topics).toBe(0);
 
     const b = (await db.pool.query("select id, status, current_version from documents where slug='browsing'"))
       .rows[0];
@@ -55,11 +57,43 @@ run('seed', () => {
     expect(
       (
         await db.pool.query(
-          "select count(*)::int n from documents where status='draft' and topic_id is not null",
+          `select count(*)::int n from documents d where d.status='draft'
+             and exists (select 1 from document_topics t where t.document_id = d.id)`,
         )
       ).rows[0].n,
     ).toBe(29);
-    expect((await db.pool.query('select count(*)::int n from script_refs')).rows[0].n).toBeGreaterThan(0);
+    expect((await db.pool.query('select count(*)::int n from worlds')).rows[0].n).toBe(6);
+    expect(
+      (
+        await db.pool.query(
+          `select count(*)::int n from documents d where not exists (select 1 from document_worlds w where w.document_id=d.id and w.world_slug=d.category)`,
+        )
+      ).rows[0].n,
+    ).toBe(0);
+    expect(
+      (await db.pool.query(`select doc_type from documents where slug='pdf-011'`)).rows[0].doc_type,
+    ).toBe('M');
+    expect(
+      (await db.pool.query(`select doc_type from documents where slug='topic-1'`)).rows[0].doc_type,
+    ).toBe('I');
+    expect(
+      (await db.pool.query(`select count(*)::int n from documents where doc_type='T' and kind='text'`))
+        .rows[0].n,
+    ).toBe(7);
+    expect(
+      (
+        await db.pool.query(
+          `select count(*)::int n from document_links l join documents t on t.id=l.to_document_id where t.doc_type='T' and l.type='link'`,
+        )
+      ).rows[0].n,
+    ).toBeGreaterThan(0);
+    expect(
+      (
+        await db.pool.query(
+          `select t.slug from document_topics x join documents d on d.id=x.document_id join topics t on t.id=x.topic_id where d.slug='browsing'`,
+        )
+      ).rows[0].slug,
+    ).toBe('topic-11');
     expect((await db.pool.query('select count(*)::int n from notes')).rows[0].n).toBe(1);
     expect((await db.pool.query('select count(*)::int n from note_likes')).rows[0].n).toBe(4);
     expect((await db.pool.query('select count(*)::int n from document_links')).rows[0].n).toBeGreaterThan(0);

@@ -11,6 +11,7 @@ export interface TestUserOption {
   permissions: 'all' | Permission[];
   roles?: string[];
   categoryScopes?: string[] | null;
+  worldScopes?: string[] | null;
 }
 
 /**
@@ -22,13 +23,15 @@ export default fp(async (app, opts: { testUser?: TestUserOption }) => {
   const t = opts.testUser;
   if (!t || app.config.NODE_ENV !== 'test') return;
   const permissions = new Set<string>(t.permissions === 'all' ? PERMISSIONS : t.permissions);
+  const scopes = t.worldScopes ?? t.categoryScopes ?? null;
   app.addHook('onRequest', async (req, reply) => {
     req.user = {
       id: t.id,
       displayName: t.displayName,
       roles: t.roles ?? [],
       permissions,
-      categoryScopes: t.categoryScopes ?? null,
+      worldScopes: scopes,
+      categoryScopes: scopes,
       sessionId: null,
     };
     const requires = req.routeOptions.config?.requires;

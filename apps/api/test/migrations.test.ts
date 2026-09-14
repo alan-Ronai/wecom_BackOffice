@@ -57,8 +57,6 @@ run('migrations', () => {
       'block_versions',
       'crm_fields',
       'step_field_refs',
-      'scripts',
-      'script_refs',
       'document_links',
       'notes',
       'note_likes',
@@ -74,6 +72,10 @@ run('migrations', () => {
       'connectors',
       'sync_links',
       'telemetry_events',
+      'worlds',
+      'topics',
+      'document_worlds',
+      'document_topics',
     ])
       expect(names, t).toContain(t);
     // Stage 4 columns the data explorer reads back.

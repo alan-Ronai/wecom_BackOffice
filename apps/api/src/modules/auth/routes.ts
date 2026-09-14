@@ -205,6 +205,7 @@ export default async function authRoutes(instance: FastifyInstance) {
       roles: resolved.roles,
       permissions: [...resolved.permissions],
       categoryScopes: resolved.categoryScopes,
+      worldScopes: resolved.worldScopes,
       preferences: PreferencesSchema.parse(row.prefs ?? {}),
     });
   });
