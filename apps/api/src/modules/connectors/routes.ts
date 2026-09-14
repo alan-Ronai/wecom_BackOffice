@@ -187,6 +187,16 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
     async (req, reply) => {
       const row = await repo.get(req.params.id);
       if (!row) return reply.status(404).send(notFound(req, 'מחבר לא נמצא'));
+      // `type` is immutable: `repo.update` has no `type` column to write, and the config
+      // below is validated against `row.type`'s schema — silently accepting a different
+      // `type` here would validate `config` against the wrong connector's rules and then
+      // discard the `type` change entirely. Reject rather than silently ignore (N3).
+      if ('type' in req.body && req.body.type !== row.type)
+        return reply.status(400).send({
+          code: 'IMMUTABLE_TYPE',
+          message: 'לא ניתן לשנות את סוג המחבר לאחר יצירתו',
+          requestId: req.id,
+        });
       let config: Record<string, unknown> | undefined;
       if (req.body.config) {
         // A PATCH sends only the keys it means to change, so absent keys must survive

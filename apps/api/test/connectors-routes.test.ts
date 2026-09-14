@@ -260,6 +260,35 @@ run('connector routes', () => {
     await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
   });
 
+  // N3 (re-review, minor): `type` is immutable — `repo.update` has no column for it, and
+  // `config` is validated against the *stored* type, so a silently-accepted `type` change
+  // would validate config against the wrong schema and then drop the type change anyway.
+  it('rejects a PATCH that tries to change the connector type', async () => {
+    const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
+    const r = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { type: 'json' },
+    });
+    expect(r.statusCode).toBe(400);
+    expect(r.json().code).toBe('IMMUTABLE_TYPE');
+    const fetched = await app.inject({ method: 'GET', url: `/api/v1/connectors/${conn.id}` });
+    expect(fetched.json().type).toBe('wordpress');
+    await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
+  });
+
+  it('a re-sent, unchanged type is not treated as a type change', async () => {
+    const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
+    const r = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/connectors/${conn.id}`,
+      payload: { type: 'wordpress', name: 'שם עדכני' },
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ type: 'wordpress', name: 'שם עדכני' });
+    await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
+  });
+
   it('a masked secret round-tripped in a PATCH leaves the stored secret unchanged', async () => {
     const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
     const before = await pool.query('select config_encrypted from connectors where id=$1', [conn.id]);
