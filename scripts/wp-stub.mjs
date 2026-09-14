@@ -7,15 +7,10 @@
  * (`packages/connectors/test/helpers/wpStub.ts`) — running the *same* fake against the real API
  * is the point: an e2e that reimplemented WordPress would be testing the reimplementation.
  *
- * `tsx/esm` is registered here rather than the module being compiled, because the stub lives
- * under `test/` and is deliberately not part of the package's build output.
+ * Run it with `tsx`, not bare `node`: the stub lives under `test/` and is deliberately not part
+ * of the package's build output, so the `.ts` import has to be transformed on the fly.
  */
-import { register } from 'node:module';
-import { pathToFileURL } from 'node:url';
-
-register('tsx/esm', pathToFileURL('./'));
-
-const { startWpStub } = await import('../packages/connectors/test/helpers/wpStub.ts');
+import { startWpStub } from '../packages/connectors/test/helpers/wpStub.ts';
 
 const stub = await startWpStub([
   {

@@ -1,5 +1,5 @@
+import { request as playwrightRequest, expect } from '@playwright/test';
 import type { APIRequestContext, Browser, Page } from '@playwright/test';
-import { expect } from '@playwright/test';
 
 export interface Creds {
   id: string;
@@ -9,12 +9,32 @@ export interface Creds {
 }
 
 /**
+ * An API context that carries the admin's session, taken from a browser context that already has
+ * it.
+ *
+ * Neither the `request` fixture nor a freshly signed-in `request.newContext()` works here: the
+ * API sets its session cookie `secure` under `NODE_ENV=production` (which is what this gate runs),
+ * and while Chromium treats `http://127.0.0.1` as a secure origin and keeps it, Playwright's Node
+ * request context does not and silently drops it — every call then answers 401. Copying the
+ * cookie onto the context as a header sidesteps the jar entirely.
+ *
+ * Dispose it with `ctx.dispose()`.
+ */
+export async function adminApi(page: Page, baseURL: string): Promise<APIRequestContext> {
+  const cookies = await page.context().cookies();
+  expect(cookies.length, 'the storage state carries the admin session').toBeGreaterThan(0);
+  return playwrightRequest.newContext({
+    baseURL,
+    extraHTTPHeaders: { cookie: cookies.map((c) => `${c.name}=${c.value}`).join('; ') },
+  });
+}
+
+/**
  * Creates a local user with one seeded role through the real admin API.
  *
  * The wave-4 flows are about *different people seeing different things* — an agent reports, an
- * editor decides, a reader is refused — so the specs cannot all run as the break-glass admin the
- * storage state signs in as. `request` here is the admin-authenticated context Playwright hands
- * the test, which is what makes `POST /admin/users` allowed.
+ * editor decides, a reader is refused — so the specs cannot all run as the one admin the shared
+ * storage state signs in as.
  */
 export async function createUser(
   request: APIRequestContext,
@@ -45,15 +65,23 @@ export async function createUser(
 
 /**
  * Signs in through the real local form in a brand-new context, so the spec's own admin session
- * (the shared `storageState`) is not the one being exercised.
+ * is not the one being exercised.
  */
-export async function signInAs(browser: Browser, creds: Creds): Promise<Page> {
-  const ctx = await browser.newContext({ locale: 'he-IL' });
+export async function signInAs(browser: Browser, creds: Creds, baseURL: string): Promise<Page> {
+  // `browser.newContext` inherits nothing from the project's `use`, so the base URL is explicit.
+  const ctx = await browser.newContext({ locale: 'he-IL', baseURL });
   const page = await ctx.newPage();
   await page.goto('/login');
   await page.getByLabel('דוא״ל').fill(creds.email);
   await page.getByLabel('סיסמה').fill(creds.password);
   await page.getByRole('button', { name: /^כניסה/ }).click();
   await expect(page).toHaveURL(/\/library/);
+  // A new account usually meets the first-login tour, and it covers the library while it is
+  // open. Best-effort rather than asserted: whether it shows depends on the preferences row,
+  // and this helper is about signing in, not about the tour (`auth.setup.ts` asserts that).
+  await page
+    .getByRole('button', { name: 'דלג על הסיור' })
+    .click({ timeout: 5_000 })
+    .catch(() => undefined);
   return page;
 }

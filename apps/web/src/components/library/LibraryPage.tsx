@@ -24,6 +24,7 @@ import { Facets, type FacetValue } from './Facets.js';
 import { AutoCrmCard } from './AutoCrmCard.js';
 import { CardMenu, type MenuItem } from './CardMenu.js';
 import { TaxonomyFacets, type TaxonomyFacetValue } from '../taxonomy/TaxonomyFacets.js';
+import { useWorlds } from '../../api/hooks/taxonomy.js';
 import { useStatusMenuItems } from '../governance/StatusMenu.js';
 import { LibraryToolbar } from './LibraryToolbar.js';
 import { DocList } from './DocList.js';
@@ -36,7 +37,12 @@ const MONTH_MS = 30 * 864e5;
 
 export function LibraryPage({ mode }: { mode: LibraryMode }) {
   const { category } = useParams<{ category?: string }>();
-  const cat = mode === 'library' && category && category in CATS ? (category as Category) : undefined;
+  /**
+   * `/library/:category` is a *world* slug now, and a world is a row an admin can add — so the
+   * old `category in CATS` guard silently dropped the filter for every world beyond the seeded
+   * six, which is exactly the case the sidebar's world rows create.
+   */
+  const cat = mode === 'library' && category ? (category as Category) : undefined;
   const go = useNavigate();
   const nav = useNav();
   const can = useCan();
@@ -91,6 +97,7 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
   const blocks = useBlocks();
   const fields = useFields();
   const scripts = useScripts();
+  const worlds = useWorlds();
   const togglePin = useTogglePin();
   const remove = useDeleteDocument();
   const create = useCreateDocument();
@@ -207,7 +214,7 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
         : mode === 'drafts'
           ? 'טיוטות'
           : cat
-            ? (CATS[cat]?.label ?? cat)
+            ? (worlds.data?.find((w) => w.slug === cat)?.name ?? cat)
             : 'ספריית ידע';
   const srcFile = cat === 'intl' ? 'intl-roaming.json' : 'topics.json';
   const lastUpd = items

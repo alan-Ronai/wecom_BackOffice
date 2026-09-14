@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createUser, signInAs } from './helpers/users.js';
+import { adminApi, createUser, signInAs } from './helpers/users.js';
 
 /**
  * W4-E2E-1 — PRD §12, the closed loop, as three real people against the real stack:
@@ -17,13 +17,15 @@ const REPORT = `הסף בשלב 1 לא נכון ${Date.now().toString(36)}`;
 
 test('W4-E2E-1 feedback travels from an agent to a closed status linked to a published version', async ({
   browser,
-  request,
+  page,
+  baseURL,
 }) => {
-  const agent = await createUser(request, 'agent');
-  const lead = await createUser(request, 'lead');
+  const api = await adminApi(page, baseURL!);
+  const agent = await createUser(api, 'agent');
+  const lead = await createUser(api, 'lead');
 
   /* 1. the agent reports, from the step they are on ------------------------ */
-  const a = await signInAs(browser, agent);
+  const a = await signInAs(browser, agent, baseURL!);
   await a.goto('/library');
   await a.getByText(DOC_TITLE).first().click();
   await expect(a.getByRole('heading', { level: 1, name: DOC_TITLE })).toBeVisible();
@@ -38,7 +40,7 @@ test('W4-E2E-1 feedback travels from an agent to a closed status linked to a pub
   await a.context().close();
 
   /* 2. the lead finds it in the queue and takes it -------------------------- */
-  const l = await signInAs(browser, lead);
+  const l = await signInAs(browser, lead, baseURL!);
   await l.goto('/feedback');
   const row = l.getByRole('row').filter({ hasText: DOC_TITLE }).first();
   await expect(row).toBeVisible();
@@ -87,4 +89,5 @@ test('W4-E2E-1 feedback travels from an agent to a closed status linked to a pub
   await l.goto('/feedback/analytics');
   await expect(l.getByText(/שיעור משובים שהובילו לשינוי תוכן/)).toBeVisible();
   await l.context().close();
+  await api.dispose();
 });

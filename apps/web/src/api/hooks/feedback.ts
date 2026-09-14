@@ -54,9 +54,12 @@ export const useCreateFeedback = (documentId: string) => {
   });
 };
 
-export const useFeedbackList = (q: FeedbackQuery = {}) =>
+/** `enabled` is for the sidebar badge: the route needs `feedback.manage`, and asking without it
+ *  is a 403 on every page load for every agent. */
+export const useFeedbackList = (q: FeedbackQuery = {}, enabled = true) =>
   useQuery({
     queryKey: keys.feedback(q),
+    enabled,
     queryFn: async () =>
       checked(FeedbackListResponseSchema, await api.GET('/feedback', { params: { query: query(q) } })),
     placeholderData: keepPreviousData,

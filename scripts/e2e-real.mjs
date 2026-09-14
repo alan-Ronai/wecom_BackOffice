@@ -19,6 +19,8 @@
  * Usage: pnpm e2e:real [-- --grep <pattern>]
  *   KEEP_STACK=1   leave the container and servers up after the run (for debugging)
  *   E2E_HEADED=1   run Playwright headed
+ *   E2E_PG_CONTAINER / E2E_PG_PORT / E2E_API_PORT / E2E_WEB_PORT
+ *                  run a second, isolated stack beside one that is already up
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -27,7 +29,13 @@ import { dirname, resolve } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-const CONTAINER = 'wecom-e2e-pg';
+/**
+ * Overridable because two worktrees do run this gate at once: without it the second run's
+ * `docker rm -f` takes the first run's Postgres out from under it, and the failure reads as
+ * "terminating connection due to unexpected postmaster exit" a minute later, nowhere near the
+ * cause. The ports are already overridable for the same reason.
+ */
+const CONTAINER = process.env.E2E_PG_CONTAINER ?? 'wecom-e2e-pg';
 const PG_PORT = Number(process.env.E2E_PG_PORT ?? 55432);
 const API_PORT = Number(process.env.E2E_API_PORT ?? 3101);
 const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 4174);
@@ -240,7 +248,7 @@ async function main() {
   // The real connector talks to a real HTTP server here — the same stub the connector unit tests
   // use — so W4-E2E-3 exercises fetch, auth, pagination and the push, not a mock of them.
   let WP_URL = '';
-  start('wp', 'pnpm', ['--filter', '@wecom/api', 'exec', 'node', '../../scripts/wp-stub.mjs'], {}, (line) => {
+  start('wp', 'pnpm', ['--filter', '@wecom/api', 'exec', 'tsx', '../../scripts/wp-stub.mjs'], {}, (line) => {
     const m = /WP_STUB_URL=(\S+)/.exec(line);
     if (m) WP_URL = m[1];
   });

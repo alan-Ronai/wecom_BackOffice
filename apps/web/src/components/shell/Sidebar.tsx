@@ -85,7 +85,7 @@ export function Sidebar({
   const topics = useTopics(openWorld ?? undefined);
   const mayFeedback = can('feedback.manage');
   // One row, fetched only for its `counts`; the badge is the editor's actionable backlog.
-  const feedback = useFeedbackList(mayFeedback ? { pageSize: 1 } : {});
+  const feedback = useFeedbackList({ pageSize: 1 }, mayFeedback);
   const openFeedback = mayFeedback
     ? (feedback.data?.counts.new ?? 0) + (feedback.data?.counts.in_review ?? 0)
     : 0;

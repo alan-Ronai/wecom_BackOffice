@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { adminApi } from './helpers/users.js';
 
 /**
  * W4-E2E-3 — PRD §8, the two-way source loop against a real WordPress-shaped server:
@@ -17,9 +18,11 @@ const WP_TITLE = 'נוהל WordPress לבדיקה';
 
 test('W4-E2E-3 WordPress → source version → review flag → publish → push renders the source HTML', async ({
   page,
-  request,
+  baseURL,
+  request: anonymous,
 }) => {
   expect(WP, 'E2E_WP_URL is set by scripts/e2e-real.mjs').toBeTruthy();
+  const request = await adminApi(page, baseURL!);
 
   /* 1. the connector ------------------------------------------------------- */
   const created = await request.post('/api/v1/connectors', {
@@ -48,19 +51,51 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
   await page.getByText(WP_TITLE).first().click();
   await page.getByRole('button', { name: 'אשר הכל' }).click();
   await page.getByRole('button', { name: 'פרסם לספרייה' }).click();
-  await expect(page.getByText(/פורסמ/)).toBeVisible({ timeout: 20_000 });
+  // The publish is confirmed in a dialog before it runs.
+  await page.getByRole('dialog', { name: 'פרסום לספרייה' }).getByRole('button', { name: 'פרסם' }).click();
+  // At least one: "0 changes applied" would satisfy a looser pattern and prove nothing.
+  await expect(page.getByText(/פורסמו [1-9]\d* שינויים/)).toBeVisible({ timeout: 20_000 });
 
-  // The source pane shows the WordPress HTML as the item's source document.
-  await page.goto('/library');
-  await page.getByText(WP_TITLE).first().click();
-  await expect(page.getByRole('heading', { level: 1, name: WP_TITLE })).toBeVisible();
-  const docUrl = page.url();
-  const docId = new URL(docUrl).pathname.split('/')[2]!;
-  await page.getByRole('button', { name: 'מקור' }).click();
-  await expect(page.getByText('סף מהירות: 5 מגה.')).toBeVisible();
+  /*
+   * The created item is found by its **source**, not by its title: a new-card suggestion names
+   * itself after the first sentence of the paragraph it came from (`packages/model/rules.ts`),
+   * not after the WordPress post. Its identity here is "the document this source produced".
+   */
+  const srcs = await request.get('/api/v1/sources');
+  expect(srcs.ok(), await srcs.text()).toBeTruthy();
+  const sourceId = ((await srcs.json()) as { items: { id: string; title: string }[] }).items.find(
+    (x) => x.title === WP_TITLE,
+  )?.id;
+  expect(sourceId, `the connector created the source "${WP_TITLE}"`).toBeTruthy();
 
-  /* 3. an edit in WordPress becomes source version 2 and raises the flag ---- */
-  const edited = await request.post(`${WP}/wp-json/wp/v2/posts/101`, {
+  let docId: string | undefined;
+  for (let round = 0; round < 20 && !docId; round++) {
+    const list = await request.get('/api/v1/documents?sort=updated&pageSize=10');
+    expect(list.ok(), await list.text()).toBeTruthy();
+    for (const card of ((await list.json()) as { items: { id: string }[] }).items) {
+      const doc = await request.get(`/api/v1/documents/${card.id}`);
+      if (((await doc.json()) as { sourceId?: string | null }).sourceId === sourceId) {
+        docId = card.id;
+        break;
+      }
+    }
+    if (!docId) await page.waitForTimeout(1_000);
+  }
+  expect(docId, 'the accepted suggestion created a document fed by that source').toBeTruthy();
+  const docUrl = `/doc/${docId!}`;
+
+  /*
+   * There is no source *document* yet, and that is the designed order: the sync link is created
+   * when the suggestions are applied (`afterSuggestionsApplied`), and the remote HTML is written
+   * as a source version by the first import that runs *through* that link. So the pane offers
+   * nothing to open here — asserting otherwise would be asserting a step the product skips.
+   */
+  await page.goto(docUrl);
+  const paneToggle = page.getByRole('group', { name: 'מצב תצוגה' });
+  await expect(paneToggle.getByRole('button', { name: 'מקור', exact: true })).toBeDisabled();
+
+  /* 3. an edit in WordPress becomes a source version and raises the flag ---- */
+  const edited = await anonymous.post(`${WP}/wp-json/wp/v2/posts/101`, {
     data: {
       content: '<h2>מבוא</h2><p>סף מהירות: 6 מגה.</p><ul><li>בדיקת APN</li><li>ניתוק מ-Wi-Fi</li></ul>',
     },
@@ -73,15 +108,19 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
     .poll(
       async () => {
         const r = await request.get(`/api/v1/documents/${docId}/source`);
-        return ((await r.json()) as { version: number }).version;
+        if (r.status() === 204) return '';
+        return ((await r.json()) as { html: string }).html;
       },
-      { timeout: 20_000 },
+      { timeout: 30_000 },
     )
-    .toBeGreaterThan(1);
+    .toContain('6 מגה');
 
   await page.goto(docUrl);
   await expect(page.getByText('⚑ נדרשת בדיקה — המקור השתנה')).toBeVisible({ timeout: 20_000 });
-  await page.getByRole('button', { name: 'מקור' }).click();
+  await page
+    .getByRole('group', { name: 'מצב תצוגה' })
+    .getByRole('button', { name: 'מקור', exact: true })
+    .click();
   await expect(page.getByText('סף מהירות: 6 מגה.')).toBeVisible();
 
   /* 4. the editor decides the working view is unaffected -------------------- */
@@ -112,10 +151,11 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
   await expect
     .poll(
       async () => {
-        const r = await request.get(`${WP}/wp-json/wp/v2/posts/101`);
+        const r = await anonymous.get(`${WP}/wp-json/wp/v2/posts/101`);
         return ((await r.json()) as { content: { rendered: string } }).content.rendered;
       },
       { timeout: 30_000 },
     )
     .toContain(`נערך במערכת ${stamp}`);
+  await request.dispose();
 });

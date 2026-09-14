@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createUser, signInAs } from './helpers/users.js';
+import { adminApi, createUser, signInAs } from './helpers/users.js';
 
 /**
  * W4-E2E-2 — PRD §2/§3/§6/§7/§10 in one pass: worlds and topics are data an admin edits, items
@@ -22,20 +22,23 @@ const DRAFT_TITLE = `טיוטה נסתרת ${stamp}`;
 test('W4-E2E-2 admin adds a world and topic; an editor files items; a reader sees the published one only', async ({
   page,
   browser,
-  request,
+  baseURL,
 }) => {
+  const request = await adminApi(page, baseURL!);
   /* 1. the admin adds a world and a topic, with no deploy ------------------- */
   await page.goto('/admin/taxonomy');
-  page.once('dialog', () => undefined); // no native dialogs; the app uses its own modal
   await page.getByRole('button', { name: '✚ עולם תוכן' }).click();
-  await page.getByLabel('שם').fill(WORLD.name);
-  await page.getByRole('dialog').getByRole('button', { name: 'אישור' }).click();
-  await page.getByLabel('slug').fill(WORLD.slug);
-  await page.getByRole('dialog').getByRole('button', { name: 'אישור' }).click();
+  const nameDlg = page.getByRole('dialog', { name: 'עולם תוכן חדש' });
+  await nameDlg.getByLabel('שם', { exact: true }).fill(WORLD.name);
+  await nameDlg.getByRole('button', { name: 'אישור' }).click();
+  const slugDlg = page.getByRole('dialog', { name: /מזהה/ });
+  await slugDlg.getByLabel('slug', { exact: true }).fill(WORLD.slug);
+  await slugDlg.getByRole('button', { name: 'אישור' }).click();
   const worldsList = page.getByTestId('worlds-list');
   await expect(worldsList.getByText(WORLD.name)).toBeVisible();
 
-  await worldsList.getByRole('button', { name: WORLD.name }).click();
+  // Exact: the ✎ rename button's accessible name contains the world name too.
+  await worldsList.getByRole('button', { name: WORLD.name, exact: true }).click();
   await page.getByLabel('שם נושא חדש').fill(TOPIC.name);
   await page.getByLabel('מזהה נושא חדש').fill(TOPIC.slug);
   await page.getByRole('button', { name: '✚ נושא' }).click();
@@ -48,7 +51,7 @@ test('W4-E2E-2 admin adds a world and topic; an editor files items; a reader see
 
   /* 2. an editor files one published item through the editor ---------------- */
   const editor = await createUser(request, 'lead');
-  const e = await signInAs(browser, editor);
+  const e = await signInAs(browser, editor, baseURL!);
   await e.goto('/edit/new');
   await e.getByPlaceholder('שם פריט הידע…').fill(PUBLISHED_TITLE);
   await e.getByLabel('סוג פריט').selectOption('O');
@@ -59,8 +62,19 @@ test('W4-E2E-2 admin adds a world and topic; an editor files items; a reader see
   await e.getByRole('button', { name: /פרסם v/ }).click();
   const pub = e.getByRole('dialog', { name: /פרסום v/ });
   await pub.getByLabel(/מה השתנה/).fill('פריט חדש');
-  await pub.getByRole('button', { name: 'אישור' }).click();
-  await expect(e.getByText(/פורסם v1/)).toBeVisible({ timeout: 20_000 });
+  // Asserted on the responses, not only on the toast: a 400 from either call would otherwise
+  // show up as "the toast never appeared", which says nothing about which call failed or why.
+  const [createRes] = await Promise.all([
+    e.waitForResponse((r) => r.request().method() === 'POST' && /\/api\/v1\/documents$/.test(r.url())),
+    pub.getByRole('button', { name: 'אישור' }).click(),
+  ]);
+  expect(createRes.status(), await createRes.text()).toBe(201);
+  const pubRes = await e.waitForResponse(
+    (r) => r.request().method() === 'POST' && r.url().endsWith('/publish'),
+  );
+  expect(pubRes.status(), await pubRes.text()).toBe(200);
+  // The editor navigates to the published item; that, not the toast, is the durable outcome.
+  await expect(e).toHaveURL(/\/doc\/[0-9a-f-]+/, { timeout: 20_000 });
 
   /* 3. …and one that stays a draft. `POST /documents` creates drafts, and the editor only
         publishes, so the draft is made through the API rather than invented in the UI. ------ */
@@ -94,7 +108,7 @@ test('W4-E2E-2 admin adds a world and topic; an editor files items; a reader see
 
   /* 5. the reader finds the published item by tag, and the draft nowhere ------------------- */
   const agent = await createUser(request, 'agent');
-  const a = await signInAs(browser, agent);
+  const a = await signInAs(browser, agent, baseURL!);
   await a.goto(`/library?tag=${TAG}`);
   await expect(a.getByText(PUBLISHED_TITLE)).toBeVisible();
   await expect(a.getByText(DRAFT_TITLE)).toHaveCount(0);
@@ -109,4 +123,5 @@ test('W4-E2E-2 admin adds a world and topic; an editor files items; a reader see
   await a.goto(`/doc/${draftId}`);
   await expect(a.getByRole('heading', { name: 'פריט זה אינו זמין כרגע' })).toBeVisible();
   await a.context().close();
+  await request.dispose();
 });

@@ -369,7 +369,6 @@ export function ArticlePage() {
           {/* Status and the source-review flag are editor information: a reader only ever sees
               published items, so a chip saying so would be noise. */}
           {can('docs.read_unpublished') ? <StatusChip status={doc.status} /> : null}
-          {can('docs.edit', doc) ? <SourceReviewBadge doc={doc} /> : null}
           {(doc.tags ?? []).map((t) => (
             <span
               key={t}
@@ -404,8 +403,7 @@ export function ArticlePage() {
     </article>
   );
 
-  /** §5.1: the working view, the source document, or both side by side. */
-  const workOrSource =
+  const paneBody =
     effectivePane === 'source' ? (
       <SourcePane documentId={doc.id} canEdit={can('docs.edit', doc)} sourceId={doc.sourceId} />
     ) : effectivePane === 'split' ? (
@@ -416,6 +414,23 @@ export function ArticlePage() {
     ) : (
       workView
     );
+
+  /**
+   * §5.1: the working view, the source document, or both side by side — with the source-review
+   * flag *above* the switch rather than inside the working view's meta row. The flag is about
+   * the source having changed, so it is exactly the reader who has switched to the source pane
+   * who must still see it (and still be able to clear it).
+   */
+  const workOrSource = (
+    <>
+      {can('docs.edit', doc) ? (
+        <div className="source-review-strip">
+          <SourceReviewBadge doc={doc} />
+        </div>
+      ) : null}
+      {paneBody}
+    </>
+  );
 
   const pct = Math.round((call.done / Math.max(1, steps.length)) * 100);
   const ai = steps.findIndex((s) => s.key === call.activeKey);
