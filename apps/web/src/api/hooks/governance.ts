@@ -17,6 +17,7 @@ import {
 import { api } from '../client.js';
 import { keys } from '../keys.js';
 import { checked } from '../stage45.js';
+import { invalidateContent } from '../invalidate.js';
 import { useMe } from './me.js';
 
 type SetStatusBody = z.infer<typeof SetStatusBodySchema>;
@@ -34,12 +35,20 @@ export function useReadOnlyReader(): boolean {
   return !!data && !data.permissions.includes('docs.read_unpublished');
 }
 
-/** One cache update for both mutations — the document itself, plus every list that shows it. */
+/**
+ * One cache update for both mutations — the document itself, plus every list that shows it.
+ *
+ * `['documents']` alone was too narrow for what a status change actually moves: 'invalid' and
+ * 'archived' push an item across the published-only visibility boundary (spec §5.5), which topic
+ * pages, search, related/links/backlinks and the world/topic counts all enforce. Marking an item
+ * "לא בתוקף" exists precisely so agents stop seeing it, and no SSE event is emitted for a status
+ * change, so nothing else would heal those caches.
+ */
 function useDocumentWriteBack() {
   const qc = useQueryClient();
   return (doc: Document, id: string) => {
     qc.setQueryData(keys.doc(id), doc);
-    void qc.invalidateQueries({ queryKey: ['documents'] });
+    invalidateContent(qc);
   };
 }
 

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap } from '../unwrap.js';
+import { invalidateContent } from '../invalidate.js';
 import type { TrashRefType } from '../types.js';
 
 export const useTrash = () =>
@@ -17,10 +18,8 @@ const useTrashMutation = <TVars, TData>(fn: (v: TVars) => Promise<TData>) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: keys.trash });
-      void qc.invalidateQueries({ queryKey: ['documents'] });
-    },
+    // Restoring puts a document back into every list it was counted in; purging takes it out.
+    onSuccess: () => invalidateContent(qc),
   });
 };
 

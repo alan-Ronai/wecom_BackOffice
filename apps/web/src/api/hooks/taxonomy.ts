@@ -23,6 +23,7 @@ import { api } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap } from '../unwrap.js';
 import { checked } from '../stage45.js';
+import { invalidateContent } from '../invalidate.js';
 
 export interface TagCount {
   tag: string;
@@ -73,13 +74,12 @@ export const useTags = (q = '') =>
     staleTime: 30_000,
   });
 
-/** Every taxonomy mutation can change counts on any of the three lists, so all three go stale. */
-const invalidateTaxonomy = (qc: ReturnType<typeof useQueryClient>): void => {
-  void qc.invalidateQueries({ queryKey: ['worlds'] });
-  void qc.invalidateQueries({ queryKey: ['topics'] });
-  void qc.invalidateQueries({ queryKey: ['topic'] });
-  void qc.invalidateQueries({ queryKey: ['tags'] });
-};
+/**
+ * Every taxonomy mutation can change what a document list shows and what a world or topic counts,
+ * so it goes through the shared helper rather than a taxonomy-only list — renaming a world used to
+ * leave every cached library card and search result on the old name.
+ */
+const invalidateTaxonomy = (qc: ReturnType<typeof useQueryClient>): void => invalidateContent(qc);
 
 export const useCreateWorld = () => {
   const qc = useQueryClient();
