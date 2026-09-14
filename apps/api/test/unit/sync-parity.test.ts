@@ -43,10 +43,20 @@ describe('local content hash', () => {
 });
 
 describe('connector categories', () => {
-  it('reads the WordPress category map, dropping slugs that are not KB categories', () => {
+  it('reads the WordPress category map, dropping slugs that name no world', () => {
+    // Wave 4 made worlds rows, so "is this a real world?" is a question about the database, not
+    // about a static enum — the caller passes the slugs that exist.
     expect(
-      connectorCategories({ categoryMap: { support: 'tech', billing: 'billing', x: 'nope' } }, []),
+      connectorCategories(
+        { categoryMap: { support: 'tech', billing: 'billing', x: 'nope' } },
+        [],
+        ['tech', 'billing', 'sim'],
+      ),
     ).toEqual(['billing', 'tech']);
+  });
+
+  it('accepts whatever is declared when the caller has no world list', () => {
+    expect(connectorCategories({ categoryMap: { x: 'field' } }, [])).toEqual(['field']);
   });
 
   it('falls back to the categories already linked when the config declares none', () => {
