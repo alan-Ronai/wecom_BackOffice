@@ -26,7 +26,7 @@ Decisions taken with the product owner:
 
 | Lane | Scope | Migrations |
 |---|---|---|
-| W0 Contracts | `packages/shared/src/schemas/wave4.ts`, permissions, events, queues, `Notifier` + `TaxonomyResolver` interfaces, migration stubs, route lists | reserves 0030–0035 |
+| W0 Contracts | `packages/shared/src/schemas/wave4.ts`, permissions (migration 0029), events, queues, `Notifier` + `TaxonomyResolver` + `UsageRecorder` interfaces, contracts doc | 0029; reserves 0030–0035 for W1–W6 |
 | W1 Taxonomy | worlds, topics, memberships, docType, tags, scripts fold, scope migration, topic page, facets, search filters | 0030 |
 | W2 Governance | statuses (+`invalid`), published-only visibility, purge rule, owner/editor/approver, `published_at`, source-review flag | 0031 |
 | W3 Feedback | feedback table, API, agent modal, editor queue, resolve-by-version, alerts, analytics | 0032 |
