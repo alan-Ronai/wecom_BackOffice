@@ -239,7 +239,7 @@ export const TelemetryEventSchema = z.object({
   // Wave 5 appends `client_error`: the React error boundaries (`ui/ErrorBoundary.tsx`, review
   // §7 item 4) report a render-time crash here, so "the screen blanked on a call" is something
   // anyone can see in `telemetry_events` rather than only in whichever browser console was open.
-  // `0039_telemetry_client_error.js` widens the check constraint to match; the row carries no
+  // `0043_telemetry_client_error.js` widens the check constraint to match; the row carries no
   // `documentId` when the crash is in the shell, which `recordTelemetry` already allows.
   kind: z.enum([
     'outcome',
