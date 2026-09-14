@@ -30,6 +30,12 @@ export interface StepCtx {
    */
   renderFooter?: (step: ResolvedStep) => ReactNode;
   headBadges?: (step: ResolvedStep) => ReactNode;
+  /**
+   * Wave 4 (§5.4): the per-step report entry point, next to "הערת נציג". A slot rather than a
+   * flag for the same reason as the two above — the editor preview and the split panes render
+   * `StepView` too, and neither should be able to file feedback on a step.
+   */
+  renderStepFeedback?: (step: ResolvedStep) => ReactNode;
 }
 
 const OUT_KBD = ['1', '2', '3'];
@@ -294,6 +300,7 @@ export function StepView({ step, ctx }: { step: ResolvedStep; ctx: StepCtx }) {
                     ＋ הערת נציג<kbd>N</kbd>
                   </span>
                 ) : null}
+                {ctx.callMode && cur ? ctx.renderStepFeedback?.(step) : null}
               </div>
             ) : null}
 

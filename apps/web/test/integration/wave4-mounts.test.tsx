@@ -89,3 +89,110 @@ describe('W6 shell mounts', () => {
     expect(await s.findByText('⚙ ניהול עולמות ונושאים')).toBeInTheDocument();
   });
 });
+
+describe('W6 article mounts', () => {
+  it('renders the type badge, tags and a feedback button in the header and on the active step', async () => {
+    server.use(
+      http.get(`${B}/documents/${D_BROWSING}`, () =>
+        HttpResponse.json({ ...fx.docBrowsing, docType: 'R', tags: ['apn', 'esim'] }),
+      ),
+    );
+    renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
+    await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title });
+    expect(screen.getByText('טיפול')).toBeInTheDocument(); // DOC_TYPE_LABELS.R
+    expect(screen.getByText('#apn')).toBeInTheDocument();
+    const buttons = await screen.findAllByRole('button', { name: 'דיווח על בעיה / משוב' });
+    expect(buttons.length).toBeGreaterThanOrEqual(2); // header + active step
+  });
+
+  it('shows the unavailable page on NOT_PUBLISHED instead of "moved to the trash"', async () => {
+    server.use(
+      http.get(`${B}/documents/${D_BROWSING}`, () =>
+        HttpResponse.json({ code: 'NOT_PUBLISHED', message: 'פריט זה אינו זמין כרגע' }, { status: 404 }),
+      ),
+    );
+    renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
+    expect(await screen.findByRole('heading', { name: 'פריט זה אינו זמין כרגע' })).toBeInTheDocument();
+    expect(screen.getByText('הפריט קיים אך אינו מפורסם, אינו בתוקף או הועבר לארכיון.')).toBeInTheDocument();
+    // Not the generic "gone" page: telling a reader to check the trash sends them the wrong way.
+    expect(screen.queryByText(/סל המיחזור/)).toBeNull();
+  });
+
+  it('switches to the source pane and back', async () => {
+    server.use(
+      http.get(`${B}/documents/${D_BROWSING}/source`, () =>
+        HttpResponse.json({
+          documentId: D_BROWSING,
+          html: '<h2>מקור הידע</h2><p>טקסט מקור</p>',
+          text: 'טקסט מקור',
+          version: 2,
+          etag: 's2',
+          updatedById: null,
+          updatedByName: null,
+          updatedAt: T,
+        }),
+      ),
+    );
+    renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
+    await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title });
+    await userEvent.click(await screen.findByRole('button', { name: 'מקור' }));
+    expect(await screen.findByText('טקסט מקור')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'תצוגת עבודה' }));
+    expect(await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title })).toBeVisible();
+  });
+
+  it('offers prev/next inside the topic', async () => {
+    const topicId = fx.topics[0]!.id;
+    server.use(
+      http.get(`${B}/documents/${D_BROWSING}`, () =>
+        HttpResponse.json({ ...fx.docBrowsing, docType: 'R', topics: [topicId] }),
+      ),
+      http.get(`${B}/topics/${topicId}/items`, () =>
+        HttpResponse.json({
+          topic: fx.topics[0],
+          world: fx.worlds[1],
+          groups: [
+            {
+              docType: 'M',
+              items: [
+                {
+                  id: fx.docIntl.id,
+                  slug: 'm',
+                  title: 'אבחון גלישה',
+                  docType: 'M',
+                  kind: 'steps',
+                  status: 'published',
+                  worlds: ['tech'],
+                  description: '',
+                  tags: [],
+                  updatedAt: T,
+                },
+              ],
+            },
+            {
+              docType: 'R',
+              items: [
+                {
+                  id: D_BROWSING,
+                  slug: 'browsing',
+                  title: fx.docBrowsing.title,
+                  docType: 'R',
+                  kind: 'steps',
+                  status: 'published',
+                  worlds: ['tech'],
+                  description: '',
+                  tags: [],
+                  updatedAt: T,
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+    renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
+    await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title });
+    expect(await screen.findByRole('button', { name: /הקודם בנושא: אבחון גלישה/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /הבא בנושא/ })).toBeNull();
+  });
+});
