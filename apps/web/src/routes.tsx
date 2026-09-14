@@ -1,6 +1,7 @@
 import { Suspense, lazy, type ComponentType, type ReactElement } from 'react';
 import { Navigate, type RouteObject } from 'react-router-dom';
 import { Shell } from './components/shell/Shell.js';
+import { ErrorBoundary, RouteBoundary } from './components/ui/ErrorBoundary.js';
 import { RequireAuth } from './components/auth/RequireAuth.js';
 import { LoginPage } from './components/auth/LoginPage.js';
 import { LibraryPage } from './components/library/LibraryPage.js';
@@ -109,30 +110,45 @@ const withSuspense = (element: ReactElement): ReactElement => (
   <Suspense fallback={<div className="route-loading">טוען…</div>}>{element}</Suspense>
 );
 
-const split = (load: () => Promise<{ default: ComponentType }>) => withSuspense(lazyRoute(load));
+/**
+ * A-8. Every route element is wrapped, not just the lazy ones, and the boundary sits *outside*
+ * `Suspense` so a chunk that fails to load is caught by the same panel as a component that throws
+ * while rendering. `Shell` is outside all of them (see `routeObjects` below), which is what keeps
+ * the sidebar, the topbar and `Ctrl K` alive when a page dies mid-call.
+ *
+ * Passing every element through one helper is the point: a route added later gets the net without
+ * its author having to know the net exists.
+ */
+const page = (element: ReactElement): ReactElement => <RouteBoundary>{element}</RouteBoundary>;
+
+const split = (load: () => Promise<{ default: ComponentType }>) => page(withSuspense(lazyRoute(load)));
 
 /** Routes mirror the legacy hashes one-to-one (spec §5). */
 export const routeObjects: RouteObject[] = [
-  { path: '/login', element: <LoginPage /> },
+  { path: '/login', element: page(<LoginPage />) },
   {
+    // The outer net (A-8). Inside `RequireAuth` rather than around it, so an unauthenticated
+    // visitor is still redirected to `/login` by the normal path instead of meeting a panel.
     element: (
       <RequireAuth>
-        <Shell />
+        <ErrorBoundary where="shell">
+          <Shell />
+        </ErrorBoundary>
       </RequireAuth>
     ),
     children: [
       { index: true, element: <Navigate to="/library" replace /> },
-      { path: 'library', element: <LibraryPage mode="library" /> },
-      { path: 'library/:category', element: <LibraryPage mode="library" /> },
-      { path: 'pinned', element: <LibraryPage mode="pinned" /> },
-      { path: 'recent', element: <LibraryPage mode="recent" /> },
-      { path: 'drafts', element: <LibraryPage mode="drafts" /> },
-      { path: 'fields', element: <FieldsPage /> },
+      { path: 'library', element: page(<LibraryPage mode="library" />) },
+      { path: 'library/:category', element: page(<LibraryPage mode="library" />) },
+      { path: 'pinned', element: page(<LibraryPage mode="pinned" />) },
+      { path: 'recent', element: page(<LibraryPage mode="recent" />) },
+      { path: 'drafts', element: page(<LibraryPage mode="drafts" />) },
+      { path: 'fields', element: page(<FieldsPage />) },
       // `:name` is a CRM field name, not an id — Hebrew, spaces and all — so callers encode it
       // into the path segment and the page decodes it.
-      { path: 'fields/:name', element: <FieldPage /> },
-      { path: 'blocks', element: <BlocksPage /> },
-      { path: 'blocks/:id', element: <BlockPage /> },
+      { path: 'fields/:name', element: page(<FieldPage />) },
+      { path: 'blocks', element: page(<BlocksPage />) },
+      { path: 'blocks/:id', element: page(<BlockPage />) },
       /**
        * A script has been a `docType: 'T'`, `kind: 'text'` document since the 0030 fold, and the
        * `/scripts*` adapter routes are gone — so the library filtered to that type *is* the
@@ -140,17 +156,17 @@ export const routeObjects: RouteObject[] = [
        * `POST /documents` creates them. The redirect keeps old links and bookmarks working.
        */
       { path: 'scripts', element: <Navigate to="/library?docType=T" replace /> },
-      { path: 'doc/:id', element: <ArticlePage /> },
-      { path: 'doc/:id/:step', element: <ArticlePage /> },
-      { path: 'topic/:id', element: <TopicPage /> },
-      { path: 'edit/:id', element: <EditorPage /> },
+      { path: 'doc/:id', element: page(<ArticlePage />) },
+      { path: 'doc/:id/:step', element: page(<ArticlePage />) },
+      { path: 'topic/:id', element: page(<TopicPage />) },
+      { path: 'edit/:id', element: page(<EditorPage />) },
       { path: 'edit/:id/source', element: split(SourceEditPage) },
-      { path: 'history', element: <HistoryPage /> },
-      { path: 'history/:id', element: <HistoryPage /> },
-      { path: 'history/:id/:v', element: <HistoryPage /> },
-      { path: 'trash', element: <TrashPage /> },
-      { path: 'reviews', element: <ReviewsPage /> },
-      { path: 'notifications', element: <NotificationsPage /> },
+      { path: 'history', element: page(<HistoryPage />) },
+      { path: 'history/:id', element: page(<HistoryPage />) },
+      { path: 'history/:id/:v', element: page(<HistoryPage />) },
+      { path: 'trash', element: page(<TrashPage />) },
+      { path: 'reviews', element: page(<ReviewsPage />) },
+      { path: 'notifications', element: page(<NotificationsPage />) },
       { path: 'sources', element: split(SourcesPage) },
       { path: 'sources/:id', element: split(SourcesPage) },
       { path: 'data', element: split(DataPage) },

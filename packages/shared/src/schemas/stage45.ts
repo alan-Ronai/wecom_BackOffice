@@ -235,7 +235,21 @@ export const DashboardSchema = z.object({
 export const TelemetryEventSchema = z.object({
   // Wave 4 appends `view_topic` and `search_click`; the enum is append-only, never reordered,
   // and `0026_notification_kinds.js` widens the matching `telemetry_events.kind` check.
-  kind: z.enum(['outcome', 'call_completed', 'palette', 'jump', 'view_topic', 'search_click']),
+  //
+  // Wave 5 appends `client_error`: the React error boundaries (`ui/ErrorBoundary.tsx`, review
+  // §7 item 4) report a render-time crash here, so "the screen blanked on a call" is something
+  // anyone can see in `telemetry_events` rather than only in whichever browser console was open.
+  // `0038_telemetry_client_error.js` widens the check constraint to match; the row carries no
+  // `documentId` when the crash is in the shell, which `recordTelemetry` already allows.
+  kind: z.enum([
+    'outcome',
+    'call_completed',
+    'palette',
+    'jump',
+    'view_topic',
+    'search_click',
+    'client_error',
+  ]),
   documentId: IdSchema.optional(),
   stepKey: z.string().optional(),
   at: IsoDateSchema.optional(),
@@ -695,7 +709,6 @@ export const SyncLinkCreateBodySchema = z.object({
   documentId: IdSchema,
   externalId: z.string().min(1).max(500),
 });
-
 
 export type GroupSearchItem = z.infer<typeof GroupSearchItemSchema>;
 export type GroupMapRow = z.infer<typeof GroupMapRowSchema>;

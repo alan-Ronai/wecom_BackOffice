@@ -13868,7 +13868,8 @@
                             "palette",
                             "jump",
                             "view_topic",
-                            "search_click"
+                            "search_click",
+                            "client_error"
                           ]
                         },
                         "documentId": {

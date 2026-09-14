@@ -1,0 +1,131 @@
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
+import { API_BASE } from '../../api/client.js';
+
+/**
+ * The missing floor under the whole SPA (acceptance review §3 A-8, §6.2, §7 item 4).
+ *
+ * Every page in this app handles *query* errors well — `LoadError`, `Empty`, the retry buttons —
+ * which is exactly what made the absence of a render-time net easy to miss. A malformed step, an
+ * unexpected `null` from a field the API grew, a division by an empty array: any of those throws
+ * during render, React unmounts the entire tree, and an agent who is on a live call is looking at
+ * a white page with no way back but a reload they have to think of themselves.
+ *
+ * Two levels, on purpose:
+ *
+ * - **Around `Shell`** — the last resort. If the chrome itself throws there is nothing left to
+ *   keep alive, so this one replaces the screen.
+ * - **Around each route element** — the useful one. The sidebar, the topbar, the notification bell
+ *   and `Ctrl K` all live in `Shell`, *outside* the route's `<Outlet/>`, so a route that throws
+ *   loses only the page body: the agent can still search, still open another document, still
+ *   navigate. That is the difference between "the tool broke" and "this page broke".
+ *
+ * Recovery is offered twice because the two failures are different. `נסה שוב` re-renders the same
+ * subtree, which is the right answer to a transient throw (a race against a cache that has since
+ * settled). `חזרה לספרייה` is a real navigation to a known-good screen — written as an `<a>`, not
+ * a `<Link>`, precisely because a boundary must not depend on any context still being usable to
+ * get the user out; a full document load is the one escape that cannot itself throw.
+ *
+ * The route boundary also resets itself when the path changes: without that, an agent who used
+ * the still-live palette to open a different document would keep staring at the panel from the
+ * page they left.
+ */
+
+/** Appended to `TelemetryEventSchema` (`stage45.ts`) so a crash is visible in the usage table. */
+const CLIENT_ERROR = 'client_error';
+
+/**
+ * Fire-and-forget, and deliberately not `useTelemetry`'s 10-second buffer: the batch that matters
+ * is the one describing a screen the agent is about to reload away from, and a boundary is a class
+ * component that cannot hold the hook anyway. Wrapped twice — `try` for a `fetch` that is missing
+ * or throws synchronously (jsdom without a network stub), `.catch` for the rejection — because the
+ * one thing this reporter must never do is throw from inside a component that is already broken.
+ */
+export function reportClientError(documentId?: string): void {
+  try {
+    void fetch(`${API_BASE}/telemetry`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({
+        events: [{ kind: CLIENT_ERROR, at: new Date().toISOString(), ...(documentId ? { documentId } : {}) }],
+      }),
+    }).catch(() => undefined);
+  } catch {
+    /* telemetry is never allowed to be the reason a crash screen fails to render */
+  }
+}
+
+interface Props {
+  children: ReactNode;
+  /** Where the throw happened, for the console line: `shell`, or the route path. */
+  where: string;
+  /** Changing this clears a caught error — the route path, so navigating away recovers. */
+  resetKey?: string;
+}
+
+interface State {
+  error: Error | null;
+}
+
+export class ErrorBoundary extends Component<Props, State> {
+  override state: State = { error: null };
+
+  static getDerivedStateFromError(error: Error): State {
+    return { error };
+  }
+
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
+    // The console line is what a developer with the tab open sees; the telemetry row is what
+    // anybody looking at the deployed VM a day later sees. Both, not one.
+    console.error(`[ErrorBoundary:${this.props.where}]`, error, info.componentStack);
+    reportClientError();
+  }
+
+  override componentDidUpdate(prev: Props): void {
+    if (this.state.error && prev.resetKey !== this.props.resetKey) this.setState({ error: null });
+  }
+
+  private readonly reset = () => this.setState({ error: null });
+
+  override render(): ReactNode {
+    const { error } = this.state;
+    if (!error) return this.props.children;
+    return (
+      <div className="error-boundary" role="alert" dir="rtl" data-where={this.props.where}>
+        <div className="eb-card">
+          <div className="eb-mark" aria-hidden="true">
+            ⚠
+          </div>
+          <h2>משהו השתבש</h2>
+          {/* The message, not the stack: an agent cannot act on a stack, and a support call that
+              can quote one line is worth more than a screen that says only "error". */}
+          <p className="eb-msg">{error.message || 'שגיאה לא צפויה'}</p>
+          <div className="eb-actions">
+            <button type="button" className="btn primary" onClick={this.reset}>
+              נסה שוב
+            </button>
+            <a className="btn ghost" href="/library">
+              חזרה לספרייה
+            </a>
+          </div>
+          <p className="eb-note">הדיווח נשלח אוטומטית. אם זה חוזר — צלם מסך ופנה לצוות התוכן.</p>
+        </div>
+      </div>
+    );
+  }
+}
+
+/**
+ * The per-route boundary. A function component only so it can read the path and hand it down as
+ * the reset key — everything else is the class above.
+ */
+export function RouteBoundary({ children }: { children: ReactNode }) {
+  const loc = useLocation();
+  return (
+    <ErrorBoundary where={loc.pathname} resetKey={loc.pathname}>
+      {children}
+    </ErrorBoundary>
+  );
+}
