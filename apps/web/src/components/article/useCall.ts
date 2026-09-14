@@ -19,8 +19,22 @@ export interface Call {
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-/** Port of the legacy call-mode state machine (goto resolution, auto-advance, summary). */
-export function useCall(doc: Document | undefined, steps: ResolvedStep[], enabled: boolean): Call {
+/**
+ * Port of the legacy call-mode state machine (goto resolution, auto-advance, summary).
+ *
+ * `syncUrl` is what makes a second instance possible. The active step is normally mirrored into the
+ * URL so a step is linkable and a reload lands where the agent was — but split view runs this twice,
+ * and the right pane writing `/doc/<right-id>/<step>` would navigate the route away from the left
+ * document the moment somebody pressed ↓ in the second pane. The right pane keeps its progress in
+ * `callState` (which is per document and shared) and stays out of the URL, where only one document
+ * can be named at a time.
+ */
+export function useCall(
+  doc: Document | undefined,
+  steps: ResolvedStep[],
+  enabled: boolean,
+  syncUrl = true,
+): Call {
   const go = useNavigate();
   const docId = doc?.id ?? '';
   const [state, setState] = useState<CallState>(() =>
@@ -54,11 +68,11 @@ export function useCall(doc: Document | undefined, steps: ResolvedStep[], enable
     (key: string, scroll = true) => {
       if (!steps.some((s) => s.key === key)) return;
       setState((s) => ({ ...s, active: key, started: s.started ?? (enabled ? Date.now() : null) }));
-      if (docId) go(`/doc/${docId}/${key}`, { replace: true });
+      if (docId && syncUrl) go(`/doc/${docId}/${key}`, { replace: true });
       if (scroll)
         setTimeout(() => document.getElementById(`step-${key}`)?.scrollIntoView({ block: 'center' }), 30);
     },
-    [docId, enabled, go, steps],
+    [docId, enabled, go, steps, syncUrl],
   );
 
   const move = useCallback(

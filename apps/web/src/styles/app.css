@@ -1228,3 +1228,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .parity-unlinked ul.plain li label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .parity-unlinked ul.plain li .btn { margin-inline-start: auto; }
 @media (max-width: 900px) { .parity-unlinked-cols { grid-template-columns: 1fr; } }
+
+/* ── wave 3 (m3): which split pane the keyboard is driving ───────────────── */
+.pane { position: relative; }
+.pane.pane-active::before {
+  content: ''; position: absolute; inset-block: 0; inset-inline-start: 0; width: 3px;
+  background: var(--info); pointer-events: none; z-index: 1;
+}
