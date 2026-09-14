@@ -9,6 +9,7 @@ import {
   LinksResponseSchema,
   RelatedResponseSchema,
   IdSchema,
+  LinkTypeSchema,
   ListDocumentsQuerySchema,
   ListDocumentsResponseSchema,
   PatchDocumentBodySchema,
@@ -24,8 +25,20 @@ import { forbidden, httpError, notFound } from '../../lib/http.js';
 import { hasScope, requireUser } from '../../lib/user.js';
 import * as repo from './repo.js';
 import { annotateBlame, diffDocuments, diffStats } from './diff.js';
+import { inboundFor } from '../graph/repo.js';
 
 const Params = z.object({ id: IdSchema });
+/** Stage 4 `/documents/:id/backlinks`; the contract spells this response inline. */
+const BacklinksResponseSchema = z.object({
+  items: z.array(
+    z.object({
+      documentId: IdSchema,
+      title: z.string(),
+      stepKey: z.string().nullable(),
+      type: LinkTypeSchema,
+    }),
+  ),
+});
 const VersionParams = z.object({ id: IdSchema, v: z.coerce.number().int().min(0) });
 /** Optional optimistic-concurrency precondition on `PUT /documents/:id/structure`. */
 const IfMatchHeaders = z.object({ 'if-match': z.string().optional() });
@@ -473,6 +486,22 @@ export default async function routes(app: FastifyInstance) {
       const doc = await repo.getDocument(app.db, (req.params as { id: string }).id);
       if (!doc) throw notFound('המסמך');
       return { items: await repo.relatedFor(app.db, doc) };
+    },
+  );
+
+  // Stage 4 (connected data): the inbound half of `/documents/:id/links`, shaped like the
+  // graph's impact rows so the UI can render "what points at this card" the same way.
+  app.get(
+    '/documents/:id/backlinks',
+    {
+      config: { requires: ['docs.read'], scope: 'document' },
+      schema: { tags: ['documents'], params: Params, response: { 200: BacklinksResponseSchema } },
+    },
+    async (req) => {
+      requireUser(req);
+      const { id } = req.params as { id: string };
+      if (!(await repo.getDocument(app.db, id))) throw notFound('המסמך');
+      return { items: await inboundFor(app.db, { kind: 'document', key: id }) };
     },
   );
 }

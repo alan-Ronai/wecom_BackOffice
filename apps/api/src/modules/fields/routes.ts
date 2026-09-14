@@ -3,6 +3,9 @@ import { z } from 'zod';
 import {
   CrmFieldSchema,
   FieldListSchema,
+  FieldPageSchema,
+  FieldRenameBodySchema,
+  FieldRenameResultSchema,
   FieldUsageSchema,
   UpsertFieldBodySchema,
   makeEvent,
@@ -37,6 +40,57 @@ export default async function routes(app: FastifyInstance) {
       requireUser(req);
       const name = decodeName((req.params as { name: string }).name);
       return { items: await repo.fieldUsage(app.db, name) };
+    },
+  );
+
+  // Stage 4 (connected data): one page per CRM field — where it is used, what changed and
+  // what a writer has to watch out for.
+  app.get(
+    '/fields/:name/page',
+    {
+      config: { requires: ['docs.read'] },
+      schema: { tags: ['fields'], params: Params, response: { 200: FieldPageSchema } },
+    },
+    async (req) => {
+      requireUser(req);
+      const page = await repo.fieldPage(app.db, decodeName((req.params as { name: string }).name));
+      if (!page) throw notFound('השדה');
+      return page;
+    },
+  );
+
+  app.post(
+    '/fields/:name/rename',
+    {
+      config: { requires: ['fields.edit'] },
+      schema: {
+        tags: ['fields'],
+        params: Params,
+        body: FieldRenameBodySchema,
+        response: { 200: FieldRenameResultSchema },
+      },
+    },
+    async (req) => {
+      const user = requireUser(req);
+      const name = decodeName((req.params as { name: string }).name);
+      const body = req.body as z.infer<typeof FieldRenameBodySchema>;
+      return withTransaction(app.db, async (tx) => {
+        const before = await repo.getField(tx, name);
+        const { result, affected } = await repo.renameField(tx, name, body, user.id);
+        await audit(tx, {
+          actorId: user.id,
+          action: 'fields.rename',
+          entityType: 'crm_field',
+          entityId: name,
+          before,
+          after: { ...result.field, updatedDocuments: result.updatedDocuments },
+          requestId: req.id,
+          ip: req.ip,
+        });
+        for (const documentId of affected)
+          await app.events.publish(tx, makeEvent('document.updated', { documentId, actorId: user.id }));
+        return result;
+      });
     },
   );
 
