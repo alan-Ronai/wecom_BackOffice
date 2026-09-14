@@ -134,6 +134,20 @@ run('migrations', () => {
     expect(grants).not.toContain('agent:docs.read_unpublished');
     expect(grants).not.toContain('editor:taxonomy.manage');
   });
+  it('creates the wave 4 source document tables and backfills from accepted revisions', async () => {
+    const t = await pool.query(
+      "select table_name from information_schema.tables where table_schema='public' and table_name in ('source_documents','source_document_versions','assets') order by 1",
+    );
+    expect(t.rows.map((r) => r.table_name)).toEqual([
+      'assets',
+      'source_document_versions',
+      'source_documents',
+    ]);
+    const u = await pool.query(
+      "select indexname from pg_indexes where tablename='assets' and indexdef ilike '%unique%(sha256)%'",
+    );
+    expect(u.rowCount).toBe(1);
+  });
   it('rolls back cleanly', async () => {
     await runner({
       databaseUrl: c.getConnectionUri(),
