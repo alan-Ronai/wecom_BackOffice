@@ -12,6 +12,7 @@ import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.
 import { cat, SOURCE_FILES } from '../../lib/constants.js';
 import { useWorlds, useTopics } from '../../api/hooks/taxonomy.js';
 import { useFeedbackList } from '../../api/hooks/feedback.js';
+import { useMyLearning } from '../../api/hooks/learning.js';
 import { usePalette } from '../palette/paletteStore.js';
 import { useSettings } from '../settings/SettingsDialog.js';
 import { NotificationBell } from '../notifications/NotificationBell.js';
@@ -90,6 +91,12 @@ export function Sidebar({
   const feedback = useFeedbackList({ pageSize: 1 }, mayFeedback);
   const openFeedback = mayFeedback
     ? (feedback.data?.counts.new ?? 0) + (feedback.data?.counts.in_review ?? 0)
+    : 0;
+  const mayLearn = can('learning.read');
+  // Fetched only for its counts; the badge is what this user still owes, not what they finished.
+  const myLearning = useMyLearning(mayLearn);
+  const dueLearning = mayLearn
+    ? (myLearning.data?.open.length ?? 0) + (myLearning.data?.overdue.length ?? 0)
     : 0;
 
   const cards = all.data?.items ?? [];
@@ -264,6 +271,19 @@ export function Sidebar({
           {mayFeedback ? item('משוב', '/feedback', openFeedback || null, true) : null}
           {can('analytics.read') ? item('נתוני שימוש', '/analytics') : null}
         </nav>
+
+        {/* wave 5 — the learner's own backlog, the manager's authoring surface and the gap list.
+            The badge counts what the signed-in user still owes (open + overdue), never history. */}
+        {mayLearn || can('learning.manage') || can('gaps.read') ? (
+          <>
+            <div className="sec-title">למידה</div>
+            <nav aria-label="למידה">
+              {mayLearn ? item('הלמידה שלי', '/learning', dueLearning || null, true) : null}
+              {can('learning.manage') ? item('ניהול למידה', '/learning/manage') : null}
+              {can('gaps.read') ? item('פערי ידע', '/gaps') : null}
+            </nav>
+          </>
+        ) : null}
 
         <div className="sec-title">מקורות נתונים</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 10px' }}>

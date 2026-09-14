@@ -12,6 +12,7 @@ import { Fmt, Html } from '../Fmt.js';
 import type { ResolvedStep } from '../../lib/steps.js';
 import type { FieldInfo } from '../../lib/format.js';
 import { CardMap } from './CardMap.js';
+import { useDocumentLearning } from '../../api/hooks/learning.js';
 
 type Tab = 'links' | 'notes' | 'versions';
 
@@ -48,6 +49,9 @@ export function Panel({
   const versions = useVersions(doc.id);
   const addNote = useAddNote(doc.id);
   const likeNote = useLikeNote(doc.id);
+  // wave 5 (V6 seam): the briefings and quizzes that teach this document, for anyone who may see
+  // their own learning. Managers get a link into the editor; everyone else into their own list.
+  const learning = useDocumentLearning(doc.id, can('learning.read'));
   /**
    * §5.5: a link to an item that is no longer valid is struck through with a tooltip *for
    * editors*, and hidden from read-only readers — which the API already does by stripping
@@ -120,6 +124,26 @@ export function Panel({
                 )}
               </div>
             </div>
+            {learning.data?.items.length ? (
+              <div className="learning-panel-sec">
+                <div className="eyebrow">פריטי למידה</div>
+                <ul className="learning-panel-list" aria-label="פריטי למידה">
+                  {learning.data.items.map((it) => (
+                    <li key={it.id}>
+                      <a
+                        role="button"
+                        tabIndex={0}
+                        onClick={() =>
+                          go(can('learning.manage') ? `/learning/manage/${it.id}` : '/learning')
+                        }
+                      >
+                        {it.kind === 'quiz' ? 'שאלון' : 'תדריך'} · {it.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <div>
               <div className="eyebrow">שדות CRM במסמך</div>
               <div className="crm-wrap">

@@ -16,7 +16,9 @@ export function RefreshBanner({ documentId }: { documentId: string }) {
   const target = dl.data.refreshAssignmentId;
   const reasons = dl.data.lastSignificantChange?.reasons ?? [];
   return (
-    <div className="banner banner-amber learning-refresh" role="status">
+    // V6: named so the article mount (and the real e2e) can address the live region itself
+    // rather than the sentence inside it, which grows a reason list.
+    <div className="banner banner-amber learning-refresh" role="status" aria-label="רענון ידע נדרש">
       <b>רענון ידע נדרש</b>
       {reasons.length ? <span> · {reasons.join(', ')}</span> : null}
       {target ? (
