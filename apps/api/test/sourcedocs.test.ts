@@ -567,9 +567,14 @@ run('source documents', () => {
    */
   it('backfill: the current version inherits the live etag, older ones get a per-version hash', async () => {
     const { readFileSync } = await import('node:fs');
-    const backfill = [...readFileSync('migrations/0037_source_version_etag.js', 'utf8').matchAll(
-      /pgm\.sql\(`([\s\S]*?)`\)/g,
-    )].map((m) => m[1]);
+    // 0037 also carries A-M13's `document_links` work; take only the two etag statements.
+    const backfill = [
+      ...readFileSync('migrations/0037_source_version_etag.js', 'utf8').matchAll(
+        /pgm\.sql\(`([\s\S]*?)`\)/g,
+      ),
+    ]
+      .map((m) => m[1])
+      .filter((sql) => sql.includes('source_document_versions'));
     expect(backfill).toHaveLength(2);
 
     const sd = await db.pool.query<{ id: string; etag: string; current_version: number }>(

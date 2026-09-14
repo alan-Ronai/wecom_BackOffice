@@ -302,7 +302,7 @@ export class SuggestionService {
           if (st.sourceRef)
             await client.query(
               `insert into document_links(from_document_id, from_step_key, to_source_id, type, origin)
-               values ($1,$2,$3,'derived_from_source','explicit')`,
+               values ($1,$2,$3,'derived_from_source','explicit') on conflict do nothing`,
               [created.id, st.key, sourceId],
             );
         return { versionId };
@@ -334,7 +334,7 @@ export class SuggestionService {
           if (!/[א-ת]/.test(x.num) || x === step) x.num = String(n++);
         await client.query(
           `insert into document_links(from_document_id, from_step_key, to_source_id, type, origin)
-           values ($1,$2,$3,'derived_from_source','explicit')`,
+           values ($1,$2,$3,'derived_from_source','explicit') on conflict do nothing`,
           [doc.id, key, sourceId],
         );
         return { versionId: await publish(doc) };
