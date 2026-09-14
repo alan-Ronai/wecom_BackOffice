@@ -97,10 +97,7 @@ export const useSubmitAttempt = () => {
   return useMutation({
     // V6: api.PUT('/learning/attempts/{id}')
     mutationFn: async ({ attemptId, answers }: { attemptId: string; answers: AttemptAnswers }) =>
-      checked(
-        AttemptResultSchema,
-        await learningRequest('PUT', `/learning/attempts/${attemptId}`, answers),
-      ),
+      checked(AttemptResultSchema, await learningRequest('PUT', `/learning/attempts/${attemptId}`, answers)),
     onSuccess: () => void qc.invalidateQueries(ALL),
   });
 };

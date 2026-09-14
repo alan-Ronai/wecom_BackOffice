@@ -19,9 +19,7 @@ const mount = (id = A_BRIEF) =>
 describe('<BriefingReader>', () => {
   it('renders the intro, the entries with the article step renderer, and acknowledges', async () => {
     mount();
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'תדריך: איטיות גלישה' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'תדריך: איטיות גלישה' })).toBeInTheDocument();
     expect(screen.getByText('מה חדש בטיפול באיטיות גלישה')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: fx.docBrowsing.title })).toBeInTheDocument();
     expect(screen.getByText('שימו לב לסף החדש')).toBeInTheDocument();
