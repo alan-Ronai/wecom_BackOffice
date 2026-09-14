@@ -18,11 +18,16 @@ import { __resetUiPrefsCache } from '../src/api/hooks/uiPrefs.js';
  *
  * `asyncUtilTimeout` is Testing Library's own budget for `waitFor` / `findBy*`, and it is
  * independent of vitest's `testTimeout` (`vite.config.ts`). Its 1000 ms default is what a
- * first-render `waitFor` races under the fully parallel 49-file run: a route that does four to six
- * msw round trips before its first real node appears will intermittently still be showing
- * `route-loading` when the budget expires, so the failing set differs between runs on the same
- * commit. Raising it to 5 s changes nothing about what the assertions mean — a genuinely broken
- * query still fails, it just fails deterministically instead of racing the scheduler.
+ * first-render `waitFor` races under the fully parallel run: before its first real node appears, a
+ * route does four to six msw round trips, and — since the heavy screens became `React.lazy` routes
+ * — a dynamic `import()` that Vite has to transform along with everything it pulls in. That is
+ * comfortably under a second on a warm worker and regularly over it on a cold one, which is why
+ * these specs passed file-by-file, failed in the full suite, and failed in a *different* set every
+ * run on the same commit.
+ *
+ * 5 s is still a real failure signal — `testTimeout` is 15 s and nothing here polls that long on
+ * success. It changes nothing about what the assertions mean: a genuinely broken query still
+ * fails, it just fails for its own reason instead of racing the scheduler.
  */
 configure({
   asyncUtilTimeout: 5000,

@@ -137,14 +137,19 @@ export async function deleteBlock(tx: Tx, id: string, userId: string): Promise<s
 /* ── Stage 4: block page ────────────────────────────────────────────────── */
 
 /** `blockUsage` plus the category the UI groups by — the shape `BlockPageSchema` asks for. */
-export async function blockUsageRows(q: Q, id: string): Promise<BlockPage['usage']> {
+export async function blockUsageRows(
+  q: Q,
+  id: string,
+  scopes: string[] | null = null,
+): Promise<BlockPage['usage']> {
   const r = await q.query(
     `select d.id document_id, d.title, d.category, s.step_key, s.num,
             case when s.block_id = $1 then 'embedded' else 'reference' end mode
        from steps s join documents d on d.id = s.document_id and d.deleted_at is null
-      where s.block_id = $1 or $1 = any(s.block_refs)
+      where (s.block_id = $1 or $1 = any(s.block_refs))
+        and ($2::text[] is null or d.category = any($2))
       order by d.title, s.position`,
-    [id],
+    [id, scopes],
   );
   return r.rows.map((x) => ({
     documentId: x.document_id as string,
@@ -156,10 +161,10 @@ export async function blockUsageRows(q: Q, id: string): Promise<BlockPage['usage
   }));
 }
 
-export async function blockPage(q: Q, id: string): Promise<BlockPage | null> {
+export async function blockPage(q: Q, id: string, scopes: string[] | null = null): Promise<BlockPage | null> {
   const block = await getBlock(q, id);
   if (!block) return null;
-  const [usage, versions] = await Promise.all([blockUsageRows(q, id), listBlockVersions(q, id)]);
+  const [usage, versions] = await Promise.all([blockUsageRows(q, id, scopes), listBlockVersions(q, id)]);
   return { block, usage, versions };
 }
 

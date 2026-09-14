@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { XMLParser } from 'fast-xml-parser';
 import { IdentitySettingsPutSchema, IdentitySettingsSchema, IdentityTestResultSchema } from '@wecom/shared';
 import { audit } from '../../lib/audit.js';
+import { assertProbeUrl, hostAllowlistOf, paloAltoOrigin } from '../../lib/outbound.js';
 import { SESSION_TTL_MS } from '../../lib/session.js';
 import { withTransaction } from '../../lib/sql.js';
 import { SettingsStore, type Q } from './settings-store.js';
@@ -89,9 +90,21 @@ export async function readIdentitySettings(
   };
 }
 
-async function testOidc(issuer: string | null): Promise<z.infer<typeof IdentityTestResultSchema>> {
+async function testOidc(
+  issuer: string | null,
+  allowlist: string[],
+): Promise<z.infer<typeof IdentityTestResultSchema>> {
   if (!issuer) return { provider: 'oidc', ok: false, message: 'לא הוגדר issuer' };
   const url = issuer.replace(/\/+$/, '') + '/.well-known/openid-configuration';
+  // Before the fetch, not after: the probe reports the URL, the HTTP status and the fetch
+  // error text, which is exactly what makes an unguarded one an internal port scanner. The
+  // refusal is an `ok: false` result rather than a 400 — the settings page asked "can you
+  // reach this?", and "I am not allowed to try" is an answer to that question.
+  try {
+    assertProbeUrl(url, allowlist);
+  } catch (err) {
+    return { provider: 'oidc', ok: false, message: (err as Error).message, details: { url } };
+  }
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
     if (!res.ok)
@@ -123,15 +136,30 @@ async function testPaloAlto(
   host: string | null,
   apiKey: string | null,
   scheme: 'https' | 'http',
+  allowlist: string[],
 ): Promise<z.infer<typeof IdentityTestResultSchema>> {
   if (!host) return { provider: 'paloalto', ok: false, message: 'לא הוגדר שרת Palo Alto' };
   if (!apiKey) return { provider: 'paloalto', ok: false, message: 'לא הוגדר מפתח API' };
   // The cheapest authenticated op command: it proves the key is accepted without
   // touching a user mapping that may legitimately be empty.
   const cmd = '<show><system><info></info></system></show>';
-  const url = `${scheme}://${host}/api/?type=op&key=${encodeURIComponent(apiKey)}&cmd=${encodeURIComponent(cmd)}`;
+  let url: string;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+    url = `${paloAltoOrigin(host, scheme, allowlist)}/api/`;
+  } catch (err) {
+    return { provider: 'paloalto', ok: false, message: (err as Error).message, details: { host } };
+  }
+  try {
+    // The key goes in the body, never the query string. PAN-OS accepts `key` as a POST
+    // parameter, and a key in a URL lands in the target's access log — and, when `host` is
+    // whatever an admin last saved, in *somebody's* access log. That is how a write-only
+    // credential becomes exfiltratable by anyone who can reach `PUT /admin/identity`.
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ type: 'op', key: apiKey, cmd }),
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    });
     const text = await res.text();
     const doc = parser.parse(text) as { response?: { '@_status'?: string; msg?: unknown } };
     const status = doc.response?.['@_status'];
@@ -156,6 +184,7 @@ async function testPaloAlto(
 export default async function identitySettingsRoutes(instance: FastifyInstance) {
   const app = instance.withTypeProvider<ZodTypeProvider>();
   const store = new SettingsStore(app.db, app.config.CONNECTOR_KEY);
+  const allowlist = hostAllowlistOf(app.config.CONNECTOR_HOST_ALLOWLIST);
 
   app.get(
     '/identity',
@@ -179,6 +208,10 @@ export default async function identitySettingsRoutes(instance: FastifyInstance) 
     },
     async (req) => {
       const body: Put = req.body;
+      // Validate what is about to be *persisted*, not only what is about to be probed:
+      // `POST /admin/identity/test` reads these back, and so does the sign-in path.
+      if (body.oidc?.issuer) assertProbeUrl(body.oidc.issuer, allowlist);
+      if (body.paloalto?.host) paloAltoOrigin(body.paloalto.host, app.config.PALOALTO_SCHEME, allowlist);
       return withTransaction(app.db, async (tx) => {
         const current = await store.read<StoredValue, StoredSecrets>(tx, IDENTITY_KEY);
         const before = (await readIdentitySettings(app, store, tx)).settings;
@@ -218,6 +251,9 @@ export default async function identitySettingsRoutes(instance: FastifyInstance) 
           requestId: req.id,
           ip: req.ip,
         });
+        // The auth layer caches the effective TTL for a minute; a deliberate change should
+        // take effect on the next sign-in, not on the next cache expiry.
+        app.sessions.invalidateTtl();
         return after;
       });
     },
@@ -237,8 +273,13 @@ export default async function identitySettingsRoutes(instance: FastifyInstance) 
       const { settings, secrets } = await readIdentitySettings(app, store, app.db);
       const result =
         req.body.provider === 'oidc'
-          ? await testOidc(settings.oidc.issuer)
-          : await testPaloAlto(settings.paloalto.host, secrets.paloAltoApiKey, app.config.PALOALTO_SCHEME);
+          ? await testOidc(settings.oidc.issuer, allowlist)
+          : await testPaloAlto(
+              settings.paloalto.host,
+              secrets.paloAltoApiKey,
+              app.config.PALOALTO_SCHEME,
+              allowlist,
+            );
       await app.audit(req, 'admin.identity.test', 'app_settings', IDENTITY_KEY, null, {
         provider: result.provider,
         ok: result.ok,

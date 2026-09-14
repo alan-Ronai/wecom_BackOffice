@@ -3,9 +3,9 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { IdSchema, TemplateBodySchema, TemplateSchema, type Category, type Phase } from '@wecom/shared';
 import { audit } from '../../lib/audit.js';
-import { HttpError, notFound } from '../../lib/http.js';
+import { HttpError, forbidden, notFound } from '../../lib/http.js';
 import { withTransaction, type Queryable } from '../../lib/sql.js';
-import { requireUser } from '../../lib/user.js';
+import { requireUser, type ReqUser } from '../../lib/user.js';
 import { iso } from './repo.js';
 
 type Template = z.infer<typeof TemplateSchema>;
@@ -24,6 +24,21 @@ const toApi = (r: Record<string, unknown>): Template => ({
 const load = async (q: Queryable, id: string): Promise<Template | null> => {
   const r = await q.query('select * from templates where id=$1', [id]);
   return r.rowCount ? toApi(r.rows[0]) : null;
+};
+
+/**
+ * `created_by` was stored and never read, so any `docs.edit` holder could edit or delete
+ * anyone else's custom template — while saved views, the same kind of per-person object, are
+ * owner-only (`views.ts`). The asymmetry looks accidental, so this closes it: your own
+ * template, or a librarian's (`docs.publish`, the permission that already decides what the
+ * floor sees) tidy-up. `TemplateSchema` is untouched; ownership is a check, not a field.
+ */
+const assertOwns = async (q: Queryable, id: string, user: ReqUser): Promise<void> => {
+  if (user.permissions.has('docs.publish')) return;
+  const r = await q.query<{ created_by: string | null }>('select created_by from templates where id=$1', [
+    id,
+  ]);
+  if (r.rows[0]?.created_by !== user.id) throw forbidden();
 };
 
 export default async function templateRoutes(instance: FastifyInstance) {
@@ -100,6 +115,7 @@ export default async function templateRoutes(instance: FastifyInstance) {
       // A built-in is the shared vocabulary the floor already learned; editing one would
       // silently change it for everybody. Duplicate it instead.
       if (before.builtIn) throw new HttpError(409, 'BUILT_IN', 'לא ניתן לערוך תבנית מובנית');
+      await assertOwns(app.db, before.id, user);
       return withTransaction(app.db, async (tx) => {
         await tx.query(
           `update templates set name = coalesce($2,name), description = coalesce($3,description),
@@ -140,6 +156,7 @@ export default async function templateRoutes(instance: FastifyInstance) {
       const before = await load(app.db, req.params.id);
       if (!before) throw notFound('התבנית');
       if (before.builtIn) throw new HttpError(409, 'BUILT_IN', 'לא ניתן למחוק תבנית מובנית');
+      await assertOwns(app.db, before.id, user);
       await withTransaction(app.db, async (tx) => {
         await tx.query('delete from templates where id=$1', [before.id]);
         await audit(tx, {

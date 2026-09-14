@@ -3,15 +3,12 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import { readdir } from 'node:fs/promises';
 import pg from 'pg';
 import { runner } from 'node-pg-migrate';
-import { readdirSync } from 'node:fs';
 import { DEFAULT_ROLES, PERMISSIONS } from '@wecom/shared';
 
 /** However many migrations exist right now — avoids a hardcoded count going stale. */
 const migrationCount = async () => (await readdir('migrations')).filter((f) => f.endsWith('.js')).length;
 
 const run = process.env.RUN_INTEGRATION === '1' ? describe : describe.skip;
-/** Counted, not hard-coded: every lane that adds a migration must still roll back to empty. */
-const MIGRATION_COUNT = readdirSync('migrations').filter((f) => /^\d+_.+\.js$/.test(f)).length;
 run('migrations', () => {
   let c: StartedPostgreSqlContainer;
   let pool: pg.Pool;

@@ -256,6 +256,91 @@ run('stage 5 — collaboration', () => {
     expect(again.statusCode).toBe(400);
   });
 
+  /**
+   * I5: the approval used to publish whatever the document was at decision time. Nothing
+   * recorded what the reviewer was asked to look at, so an author could push edits between
+   * "send to review" and "approve" and have them published under the reviewer's name.
+   */
+  it('refuses to approve a document that changed since the review was requested', async () => {
+    const doc = await makeDoc('שינוי אחרי בקשה', 'tech');
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${doc.id}/request-review`,
+      headers: auth(author),
+      payload: {},
+    });
+
+    // The author edits after asking. `PUT /structure` mints a new etag, which is the baseline
+    // the request recorded — a version number alone would not have moved for a draft edit.
+    const fresh = (
+      await app.inject({ method: 'GET', url: `/api/v1/documents/${doc.id}`, headers: auth(author) })
+    ).headers.etag as string;
+    const edited = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${doc.id}/structure`,
+      headers: { ...auth(author), 'if-match': fresh },
+      payload: {
+        phases: [
+          {
+            id: 'p1',
+            label: 'שלב 1',
+            steps: [
+              {
+                key: 's1',
+                num: '1',
+                title: 'צעד שנוסף אחרי הבקשה',
+                blockRefs: [],
+                deps: [],
+                actions: [{ id: 'a1', text: 'משהו חדש' }],
+                outcomes: [{ kind: 'ok', text: '✓ סיום' }],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(edited.statusCode).toBe(200);
+
+    const stale = await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${doc.id}/review-decision`,
+      headers: auth(lead),
+      payload: { decision: 'approve' },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().code).toBe('REVIEW_STALE');
+    // Nothing was published, and the request is still open for a second look.
+    const after = (
+      await app.inject({ method: 'GET', url: `/api/v1/documents/${doc.id}`, headers: auth(author) })
+    ).json();
+    expect(after.status).toBe('review');
+
+    // Sending it back for changes needs no baseline — it cannot publish anything.
+    const back = await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${doc.id}/review-decision`,
+      headers: auth(lead),
+      payload: { decision: 'changes', note: 'נבדק שוב' },
+    });
+    expect(back.statusCode).toBe(200);
+
+    // Asking again re-baselines on the edited document, and the approval then goes through.
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${doc.id}/request-review`,
+      headers: auth(author),
+      payload: {},
+    });
+    const ok = await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${doc.id}/review-decision`,
+      headers: auth(lead),
+      payload: { decision: 'approve' },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().status).toBe('approved');
+  });
+
   it('saved views: CRUD, and a shared view is visible to everyone', async () => {
     const mine = await app.inject({
       method: 'POST',

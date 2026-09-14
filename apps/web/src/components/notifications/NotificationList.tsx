@@ -15,6 +15,8 @@ const TABS: [Tab, string][] = [
   ['system', 'מערכת'],
 ];
 
+// Exhaustive over `NotificationKindSchema`, so widening the contract is a compile error here
+// rather than a blank glyph in the bell. `feedback` and `source` arrive with wave 4.
 const ICON: Record<Notification['kind'], string> = {
   suggestion: '💡',
   sync: '⟳',
@@ -22,6 +24,8 @@ const ICON: Record<Notification['kind'], string> = {
   review: '📤',
   publish: '✓',
   system: '🗄',
+  feedback: '💬',
+  source: '📄',
 };
 
 /**

@@ -6,7 +6,7 @@ import { badRequest } from '../../lib/http.js';
 import { withTransaction, type Tx } from '../../lib/sql.js';
 import { hasScope, requireUser, type ReqUser } from '../../lib/user.js';
 import { softDelete } from '../documents/repo.js';
-import { leadIds, notify } from './repo.js';
+import { leadIds, notifyMany } from './repo.js';
 
 type Body = import('zod').infer<typeof BulkDocumentsBodySchema>;
 type Action = Body['action'];
@@ -66,6 +66,9 @@ export default async function bulkRoutes(instance: FastifyInstance) {
           [body.ids],
         );
         const found = new Map(rows.rows.map((r) => [r.id, r]));
+        // Hoisted out of the loop: `leadIds` reads the whole role graph, and a 200-document
+        // `request-review` ran the identical query 200 times inside one transaction.
+        const leads = body.action === 'request-review' ? await leadIds(tx, user.id) : [];
         let affected = 0;
         for (const id of body.ids) {
           const doc = found.get(id);
@@ -77,7 +80,7 @@ export default async function bulkRoutes(instance: FastifyInstance) {
             skipped.push({ id, reason: `הקטגוריה ${doc.category} מחוץ להרשאה שלך` });
             continue;
           }
-          await apply(tx, app, req, user, body, doc);
+          await apply(tx, app, req, user, body, doc, leads);
           affected++;
         }
         return { affected, skipped };
@@ -93,6 +96,7 @@ async function apply(
   user: ReqUser,
   body: Body,
   doc: { id: string; category: string; status: string; title: string },
+  leads: string[],
 ): Promise<void> {
   const before: Record<string, unknown> = { category: doc.category, status: doc.status };
   const after: Record<string, unknown> = { action: body.action };
@@ -134,20 +138,19 @@ async function apply(
         "update documents set status='review', updated_by=$2, updated_at=now(), etag=gen_random_uuid()::text where id=$1",
         [doc.id, user.id],
       );
-      for (const userId of await leadIds(tx, user.id))
-        await notify(
-          tx,
-          app.events,
-          {
-            userId,
-            kind: 'review',
-            title: `${user.displayName} ביקש בדיקה: "${doc.title}"`,
-            href: `/doc/${doc.id}`,
-            entityType: 'review_request',
-            entityId: ins.rows[0].id,
-          },
-          user.id,
-        );
+      await notifyMany(
+        tx,
+        app.events,
+        leads.map((userId) => ({
+          userId,
+          kind: 'review' as const,
+          title: `${user.displayName} ביקש בדיקה: "${doc.title}"`,
+          href: `/doc/${doc.id}`,
+          entityType: 'review_request',
+          entityId: ins.rows[0].id,
+        })),
+        user.id,
+      );
       await app.events.publish(
         tx,
         makeEvent('review.requested', {

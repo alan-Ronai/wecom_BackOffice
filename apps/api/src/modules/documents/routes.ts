@@ -514,10 +514,12 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['documents'], params: Params, response: { 200: BacklinksResponseSchema } },
     },
     async (req) => {
-      requireUser(req);
+      const user = requireUser(req);
       const { id } = req.params as { id: string };
       if (!(await repo.getDocument(app.db, id))) throw notFound('המסמך');
-      return { items: await inboundFor(app.db, { kind: 'document', key: id }) };
+      // `config.scope` above gates the *subject* document; the inbound titles are other
+      // documents, so they carry the caller's scope of their own.
+      return { items: await inboundFor(app.db, { kind: 'document', key: id }, user.categoryScopes) };
     },
   );
 }

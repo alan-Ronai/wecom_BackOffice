@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { IdSchema, IsoDateSchema } from './schemas/common.js';
+import { NotificationKindSchema } from './schemas/stage45.js';
 
 export const EVENTS = [
   'document.published',
@@ -71,7 +72,9 @@ const payloads = {
   'notification.created': z.object({
     notificationId: IdSchema,
     userId: IdSchema,
-    kind: z.enum(['suggestion', 'sync', 'mention', 'review', 'publish', 'system']),
+    // Referenced rather than repeated: the bell and the event have to widen together, and
+    // this list had already drifted from `NotificationKindSchema` once.
+    kind: NotificationKindSchema,
     title: z.string(),
   }),
   'comment.created': z.object({
