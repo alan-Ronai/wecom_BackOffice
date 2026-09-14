@@ -22,6 +22,9 @@ export const HEBREW_KEY_ALIASES: Record<string, string> = {
   "'": 'w',
   ל: 'k',
   ג: 'd',
+  // list mode (6a): J/K move, X selects.
+  ח: 'j',
+  ס: 'x',
 };
 
 export const normalizeKey = (key: string): string =>

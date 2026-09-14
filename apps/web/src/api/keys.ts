@@ -5,6 +5,8 @@ export const keys = {
   prefs: ['prefs'] as const,
   providers: ['providers'] as const,
   docs: (q: unknown = '*') => ['documents', q] as const,
+  /** Ids of every pinned document — independent of which library page is loaded (I10). */
+  pins: ['pins'] as const,
   doc: (id: string) => ['document', id] as const,
   related: (id: string) => ['related', id] as const,
   links: (id: string) => ['links', id] as const,
@@ -31,6 +33,14 @@ export const keys = {
   dataFiles: ['dataFiles'] as const,
   dataPreview: (id: string, limit: number) => ['dataPreview', id, limit] as const,
   dashboards: ['dashboards'] as const,
+  /* stage 4–5 (typed from the zod contract — see `src/api/stage45.ts`) */
+  notifications: (q: unknown = '*') => ['notifications', q] as const,
+  mentionable: (q: string) => ['mentionable', q] as const,
+  comments: (id: string) => ['comments', id] as const,
+  reviews: (q: unknown = '*') => ['reviews', q] as const,
+  views: ['views'] as const,
+  templates: ['templates'] as const,
+  presence: (id: string) => ['presence', id] as const,
   admin: {
     users: (q: unknown = '*') => ['admin', 'users', q] as const,
     roles: ['admin', 'roles'] as const,

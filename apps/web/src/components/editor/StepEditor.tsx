@@ -55,7 +55,8 @@ export function StepEditor({
   selected: boolean;
   fields: CrmField[];
   blocks: Block[];
-  onSelect: () => void;
+  /** Receives whether Shift was held, so the page can extend a multi-step selection (6c). */
+  onSelect: (shift: boolean) => void;
   onPatch: Patch;
   onMove: (dir: number) => void;
   onDelete: () => void;
@@ -71,7 +72,7 @@ export function StepEditor({
       <span className="n">{step.num}</span>
       <div
         className={'ebox' + (step.blockId ? ' shared' : '') + (selected ? ' sel' : '')}
-        onClick={onSelect}
+        onClick={(e) => onSelect(e.shiftKey)}
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes('text/kb')) e.preventDefault();
         }}

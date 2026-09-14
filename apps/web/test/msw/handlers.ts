@@ -11,11 +11,19 @@
  * `state.drafts`, …) and is reset between tests by `setup.ts`.
  */
 import { http, HttpResponse, type RequestHandler } from 'msw';
-import type { Document, Note, Suggestion } from '@wecom/shared';
+import {
+  PreferencesSchema,
+  type CrmField,
+  type Document,
+  type Note,
+  type Script,
+  type Suggestion,
+} from '@wecom/shared';
 import * as fixtures from './fixtures.js';
 import { fx } from './fixtures.js';
 import { resetStage4State, stage4Handlers } from './stage4.js';
 import { resetStage5, stage5Handlers } from './stage5.js';
+import { resetStage45, stage45Handlers } from './stage45.js';
 import type { TrashItem } from '../../src/api/types.js';
 
 const B = '/api/v1';
@@ -28,6 +36,8 @@ interface State {
   published: { id: string; label: string }[];
   trash: TrashItem[];
   documents: Map<string, Document>;
+  scripts: Script[];
+  fields: CrmField[];
   views: string[];
   processed: string[];
   publishedSources: string[];
@@ -45,6 +55,8 @@ const initial = (): State => ({
     [fx.docBrowsing.id, fx.docBrowsing],
     [fx.docIntl.id, fx.docIntl],
   ]),
+  scripts: fx.scripts.map((s) => ({ ...s })),
+  fields: fx.fields.map((f) => ({ ...f })),
   views: [],
   processed: [],
   publishedSources: [],
@@ -57,6 +69,7 @@ export function resetState(): void {
   Object.assign(state, initial());
   resetStage4State();
   resetStage5();
+  resetStage45();
 }
 
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
@@ -70,6 +83,15 @@ const nextEtag = () => `e-${++etagSeq}`;
 const draftEnvelope = (id: string, payload: unknown) => ({
   draftKey: id,
   documentId: id,
+  payload,
+  updatedAt: new Date().toISOString(),
+  otherEditors: [] as { userId: string; name: string; updatedAt: string }[],
+});
+
+/** `GET|PUT /drafts/new/:draftId` — same envelope, but no document exists yet. */
+const newDraftEnvelope = (draftKey: string, payload: unknown) => ({
+  draftKey,
+  documentId: null,
   payload,
   updatedAt: new Date().toISOString(),
   otherEditors: [] as { userId: string; name: string; updatedAt: string }[],
@@ -277,6 +299,35 @@ export const handlers: RequestHandler[] = [
     state.drafts.set(id, b.payload);
     return HttpResponse.json(draftEnvelope(id, b.payload));
   }),
+  /**
+   * The server-side draft behind `/edit/new`. Note the different envelope key: `documentId` is
+   * null because the document does not exist yet.
+   */
+  http.get(`${B}/drafts/new/:draftId`, ({ params }) => {
+    const key = `new:${String(params.draftId)}`;
+    const payload = state.drafts.get(key);
+    return payload === undefined ? noContent() : HttpResponse.json(newDraftEnvelope(key, payload));
+  }),
+  http.put(`${B}/drafts/new/:draftId`, async ({ request, params }) => {
+    const key = `new:${String(params.draftId)}`;
+    const { payload } = (await request.json()) as { payload: unknown };
+    state.drafts.set(key, payload);
+    return HttpResponse.json(newDraftEnvelope(key, payload));
+  }),
+  http.delete(`${B}/drafts/new/:draftId`, ({ params }) => {
+    state.drafts.delete(`new:${String(params.draftId)}`);
+    return HttpResponse.json({ auditId: AUDIT });
+  }),
+  http.get(`${B}/drafts`, () =>
+    HttpResponse.json({
+      items: [...state.drafts.keys()].map((k) => ({
+        draftKey: k,
+        documentId: k.startsWith('new:') ? null : k,
+        title: k.startsWith('new:') ? 'פריט ידע חדש' : (state.documents.get(k)?.title ?? ''),
+        updatedAt: new Date().toISOString(),
+      })),
+    }),
+  ),
   http.delete(`${B}/documents/:id/draft`, ({ params }) => {
     state.drafts.delete(String(params.id));
     return noContent();
@@ -315,14 +366,17 @@ export const handlers: RequestHandler[] = [
   ),
 
   // The list endpoint enriches each field with a `usedIn` count (the element schema has none).
-  http.get(`${B}/fields`, () => HttpResponse.json({ items: fx.fields.map((f) => ({ ...f, usedIn: 1 })) })),
+  http.get(`${B}/fields`, () => HttpResponse.json({ items: state.fields.map((f) => ({ ...f, usedIn: 1 })) })),
   http.put(`${B}/fields/:name`, async ({ request, params }) =>
     HttpResponse.json({
       ...fx.fields.find((f) => f.name === decodeURIComponent(String(params.name))),
       ...((await request.json()) as object),
     }),
   ),
-  http.delete(`${B}/fields/:name`, () => HttpResponse.json({ auditId: AUDIT })),
+  http.delete(`${B}/fields/:name`, ({ params }) => {
+    state.fields = state.fields.filter((f) => f.name !== decodeURIComponent(String(params.name)));
+    return HttpResponse.json({ auditId: AUDIT });
+  }),
   // Rows carry `stepKeys: string[]`, not `category`/`currentVersion`.
   http.get(`${B}/fields/:name/usage`, () =>
     HttpResponse.json({
@@ -333,12 +387,37 @@ export const handlers: RequestHandler[] = [
   // …and each script with the documents that reference it.
   http.get(`${B}/scripts`, () =>
     HttpResponse.json({
-      items: fx.scripts.map((s) => ({
+      items: state.scripts.map((s) => ({
         ...s,
         usedIn: [{ documentId: fx.docBrowsing.id, title: fx.docBrowsing.title }],
       })),
     }),
   ),
+  http.post(`${B}/scripts`, async ({ request }) => {
+    const body = (await request.json()) as { title: string; text: string; tags?: string[] };
+    const created = {
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb9',
+      tags: [],
+      ...body,
+      updatedAt: new Date().toISOString(),
+    };
+    state.scripts.push(created);
+    return HttpResponse.json(created);
+  }),
+  http.put(`${B}/scripts/:id`, async ({ params, request }) => {
+    const i = state.scripts.findIndex((s) => s.id === String(params.id));
+    if (i < 0) return notFound();
+    state.scripts[i] = {
+      ...state.scripts[i],
+      ...((await request.json()) as object),
+      updatedAt: new Date().toISOString(),
+    };
+    return HttpResponse.json(state.scripts[i]);
+  }),
+  http.delete(`${B}/scripts/:id`, ({ params }) => {
+    state.scripts = state.scripts.filter((s) => s.id !== String(params.id));
+    return HttpResponse.json({ auditId: AUDIT });
+  }),
 
   http.get(`${B}/search`, ({ request }) => {
     const u = new URL(request.url);
@@ -464,8 +543,12 @@ export const handlers: RequestHandler[] = [
   }),
 
   http.get(`${B}/me/preferences`, () => HttpResponse.json(state.preferences)),
+  // The route validates with `PreferencesPutSchema`, and zod **strips** unknown keys — so the
+  // mock strips them too. Without this the QOL preferences (density, saved view, last-seen map)
+  // would appear to round-trip in tests while being dropped in production.
   http.put(`${B}/me/preferences`, async ({ request }) => {
-    state.preferences = (await request.json()) as typeof state.preferences;
+    const body = (await request.json()) as Record<string, unknown>;
+    state.preferences = PreferencesSchema.parse(body);
     return HttpResponse.json(state.preferences);
   }),
 
@@ -528,6 +611,8 @@ export const handlers: RequestHandler[] = [
   // can be reviewed apart. Registered last; the patterns are disjoint from everything above.
   ...stage4Handlers,
   ...stage5Handlers,
+  /* Stage 4–5 routes, typed from the zod contract — see `test/msw/stage45.ts`. */
+  ...stage45Handlers,
 ];
 
 /** Override `/auth/me` for permission tests. */

@@ -9,6 +9,7 @@ import { useEntityDialogs } from '../library/dialogs.js';
 import { useSettings } from '../settings/SettingsDialog.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
 import { useCan } from '../../api/hooks/me.js';
+import { useTelemetry } from '../../api/hooks/collab.js';
 import { Html } from '../Fmt.js';
 import type { SearchHit } from '../../api/types.js';
 
@@ -69,6 +70,7 @@ export function Palette() {
   const prefs = usePreferences();
   const savePrefs = useSavePreferences();
   const can = useCan();
+  const track = useTelemetry();
 
   const [q, setQ] = useState('');
   const [type, setType] = useState('all');
@@ -133,6 +135,10 @@ export function Palette() {
         run: () => go('/sources'),
       },
       { id: 'trash', title: 'סל מיחזור', icon: '🗑', run: () => go('/trash') },
+      { id: 'reviews', title: 'סקירות ממתינות להחלטה', icon: '📤', run: () => go('/reviews') },
+      { id: 'notifications', title: 'מרכז התראות', icon: '🔔', run: () => go('/notifications') },
+      { id: 'views', title: 'תצוגות שמורות בספרייה', icon: '🗂', run: () => go('/library') },
+      { id: 'templates', title: 'תבניות — פריט ידע חדש מתבנית', icon: '▤', run: () => go('/edit/new') },
       { id: 'pinned', title: 'מוצמדים', icon: '★', run: () => go('/pinned') },
       { id: 'recent', title: 'נצפו לאחרונה', icon: '🕘', run: () => go('/recent') },
       { id: 'fields', title: 'שדות CRM – מה השתנה השבוע', icon: 'CRM', run: () => go('/fields') },
@@ -145,6 +151,7 @@ export function Palette() {
         icon: '▦',
         run: () => go('/dashboards'),
       },
+      { id: 'scripts', title: 'תסריטים – נוסח אחיד ללקוח', icon: '“', run: () => go('/scripts') },
       {
         id: 'font',
         title:
@@ -210,6 +217,12 @@ export function Palette() {
   const choose = (row: Row | undefined, newTab = false) => {
     palette.close();
     if (!row || row.kind === 'group') return;
+    // What people actually reach for through the palette is the input for deciding which of these
+    // deserve their own affordance; batched, so it costs one request per 10 s at most.
+    track({
+      kind: 'palette',
+      ...(row.kind === 'hit' && row.hit.documentId ? { documentId: row.hit.documentId } : {}),
+    });
     if (row.kind === 'action') {
       row.action.run();
       return;

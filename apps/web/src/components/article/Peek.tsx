@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useDocuments } from '../../api/hooks/documents.js';
+import { useDocument } from '../../api/hooks/documents.js';
 import { useNav } from '../shell/navStore.js';
 import { useEntityDialogs } from '../library/dialogs.js';
 import { CATS } from '../../lib/constants.js';
@@ -24,8 +24,15 @@ export function Peek() {
   const go = useNavigate();
   const loc = useLocation();
   const dialogs = useEntityDialogs();
-  const all = useDocuments({ sort: 'wave' });
-  const card = all.data?.items.find((c) => c.id === peek?.docId);
+  /**
+   * I10: one targeted `GET /documents/{id}` for the hovered document. Reading the library list
+   * meant the peek card rendered *nothing* for any document past card #50 — a hover that silently
+   * does nothing is worse than a slow one. The lookup is cached under the same `keys.doc(id)` the
+   * article page uses, so opening the document afterwards is instant.
+   */
+  const docQ = useDocument(peek?.docId);
+  const doc = docQ.data;
+  const stepCount = doc ? doc.phases.reduce((n, p) => n + p.steps.length, 0) : 0;
 
   const hide = useCallback((now = false) => {
     if (showTimer.current) clearTimeout(showTimer.current);
@@ -82,7 +89,14 @@ export function Peek() {
     };
   }, [nav, dialogs, hide]);
 
-  if (!peek || !card) return null;
+  if (!peek) return null;
+  if (!doc)
+    return (
+      <div className="peek" style={{ top: peek.top, left: peek.left }} aria-busy="true">
+        <div className="eyebrow">תצוגה מקדימה · ריחוף על קישור</div>
+        <div className="m">{docQ.isError ? 'המסמך לא נמצא' : 'טוען…'}</div>
+      </div>
+    );
   return (
     <div
       className="peek"
@@ -91,12 +105,11 @@ export function Peek() {
       onMouseLeave={() => hide()}
     >
       <div className="eyebrow">תצוגה מקדימה · ריחוף על קישור</div>
-      <div className="t">{card.title}</div>
+      <div className="t">{doc.title}</div>
       <div className="m">
-        {CATS[card.category].label} · {card.stepCount} שלבים · {PRI[card.priority].label} · v
-        {card.currentVersion}
+        {CATS[doc.category].label} · {stepCount} שלבים · {PRI[doc.priority].label} · v{doc.currentVersion}
       </div>
-      <div className="s">{card.description}</div>
+      <div className="s">{doc.description}</div>
       <div className="b">
         <span
           className="p"
@@ -104,7 +117,7 @@ export function Peek() {
           tabIndex={0}
           onClick={() => {
             hide(true);
-            nav.openDoc(card.id, { title: card.title });
+            nav.openDoc(doc.id, { title: doc.title });
           }}
         >
           פתח
@@ -114,7 +127,7 @@ export function Peek() {
           tabIndex={0}
           onClick={() => {
             hide(true);
-            nav.openDoc(card.id, { title: card.title, newTab: true });
+            nav.openDoc(doc.id, { title: doc.title, newTab: true });
           }}
         >
           פתח בלשונית
@@ -124,8 +137,8 @@ export function Peek() {
           tabIndex={0}
           onClick={() => {
             hide(true);
-            if (/^\/doc\//.test(loc.pathname)) nav.toggleSplit(card.id);
-            else go(`/doc/${card.id}`);
+            if (/^\/doc\//.test(loc.pathname)) nav.toggleSplit(doc.id);
+            else go(`/doc/${doc.id}`);
           }}
         >
           פיצול מסך

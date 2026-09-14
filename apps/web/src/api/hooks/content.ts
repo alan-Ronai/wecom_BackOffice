@@ -1,11 +1,11 @@
 /** Blocks, CRM fields, scripts, notes and drafts — the rest of the content surface. */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Block, CrmField, Note } from '@wecom/shared';
+import type { Block, CrmField, Note, Script } from '@wecom/shared';
 import { api } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap, unwrapMaybe } from '../unwrap.js';
-import type { DraftEnvelope, UpsertBlockBody, UpsertFieldBody } from '../types.js';
+import type { DraftEnvelope, UpsertBlockBody, UpsertFieldBody, UpsertScriptBody } from '../types.js';
 
 /* ── blocks ─────────────────────────────────────────────────────────────── */
 export const useBlocks = () =>
@@ -90,6 +90,10 @@ export const useDeleteField = () => {
       void qc.invalidateQueries({ queryKey: ['fieldUsage'] });
       void qc.invalidateQueries({ queryKey: ['graph'] });
       void qc.invalidateQueries({ queryKey: keys.dashboards });
+      // A deleted field turns every chip that referenced it into "unknown", so the documents
+      // rendering those chips have to be re-read as well.
+      void qc.invalidateQueries({ queryKey: ['documents'] });
+      void qc.invalidateQueries({ queryKey: keys.trash });
     },
   });
 };
@@ -101,6 +105,30 @@ export const useScripts = () =>
     queryFn: async () => unwrap(await api.GET('/scripts')).items,
     staleTime: 30_000,
   });
+
+export const useUpsertScript = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: UpsertScriptBody & { id?: string }): Promise<Script> =>
+      unwrap(
+        id
+          ? await api.PUT('/scripts/{id}', { params: { path: { id } }, body })
+          : await api.POST('/scripts', { body }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.scripts }),
+  });
+};
+
+export const useDeleteScript = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => unwrap(await api.DELETE('/scripts/{id}', { params: { path: { id } } })),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.scripts });
+      void qc.invalidateQueries({ queryKey: keys.trash });
+    },
+  });
+};
 
 /* ── notes ──────────────────────────────────────────────────────────────── */
 export const useNotes = (id: string | undefined) =>
@@ -159,21 +187,36 @@ export const useDeleteNote = (docId: string) => {
 
 /* ── drafts ─────────────────────────────────────────────────────────────── */
 /**
+ * Two draft shapes, one editor.
+ *
+ * An existing document's draft lives at `/documents/:id/draft`. A document that does not exist
+ * yet has nowhere to hang one, so the API keeps it at `/drafts/new/:draftId` — a route that was
+ * shipped in stage 1 and never called (review "missing features"): `/edit/new` lived purely in
+ * React state, so a refresh, a crash or a second machine lost everything typed so far.
+ *
+ * `/edit/new` uses the fixed draft id below, so there is exactly one in-progress new document per
+ * user and reopening the route resumes it.
+ */
+export const NEW_DRAFT_ID = 'new';
+
+/**
  * A document with no saved draft is a normal state, not an error: `unwrapMaybe` maps both 204
  * and 404 to `null` so the editor seeds from the published document instead of parking the
  * query in a permanent error state.
  */
-export const useDraft = (id: string | undefined) =>
+export const useDraft = (id: string | undefined, isNew = false) =>
   useQuery({
-    queryKey: keys.draft(id ?? ''),
+    queryKey: keys.draft(isNew ? `new:${id ?? ''}` : (id ?? '')),
     enabled: !!id,
     retry: false,
     queryFn: async (): Promise<DraftEnvelope | null> =>
-      unwrapMaybe(await api.GET('/documents/{id}/draft', { params: { path: { id: id! } } })),
+      isNew
+        ? unwrapMaybe(await api.GET('/drafts/new/{draftId}', { params: { path: { draftId: id! } } }))
+        : unwrapMaybe(await api.GET('/documents/{id}/draft', { params: { path: { id: id! } } })),
   });
 
 /** Autosave: debounced 600 ms, exposing the "נשמר …" state the editor topbar renders. */
-export function useSaveDraft(id: string, delay = 600) {
+export function useSaveDraft(id: string, delay = 600, isNew = false) {
   const [saving, setSaving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -183,10 +226,12 @@ export function useSaveDraft(id: string, delay = 600) {
     const payload = pending.current;
     if (!payload) return;
     pending.current = null;
-    await api.PUT('/documents/{id}/draft', { params: { path: { id } }, body: { payload } });
+    await (isNew
+      ? api.PUT('/drafts/new/{draftId}', { params: { path: { draftId: id } }, body: { payload } })
+      : api.PUT('/documents/{id}/draft', { params: { path: { id } }, body: { payload } }));
     setSaving(false);
     setLastSavedAt(Date.now());
-  }, [id]);
+  }, [id, isNew]);
 
   const save = useCallback(
     (payload: Record<string, unknown>) => {
@@ -223,5 +268,15 @@ export const useDeleteDraft = (id: string) => {
   return useMutation({
     mutationFn: async () => unwrap(await api.DELETE('/documents/{id}/draft', { params: { path: { id } } })),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.draft(id) }),
+  });
+};
+
+/** Discards the server-side `/edit/new` draft once the document it held has been created. */
+export const useDeleteNewDraft = (draftId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      unwrap(await api.DELETE('/drafts/new/{draftId}', { params: { path: { draftId } } })),
+    onSuccess: () => qc.removeQueries({ queryKey: keys.draft(`new:${draftId}`) }),
   });
 };

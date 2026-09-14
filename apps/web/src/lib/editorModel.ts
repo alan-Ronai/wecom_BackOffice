@@ -135,6 +135,81 @@ export function deleteStep(doc: Document, key: string): Document {
   return renumber(next);
 }
 
+/* ── multi-step operations (6c) ───────────────────────────────────────────── */
+
+/**
+ * These take a **set** of keys rather than one, because doing the single-key version N times is
+ * not the same operation: deleting three steps one at a time renumbers twice in the middle, and
+ * moving three steps one at a time reverses their order at the destination.
+ */
+export function deleteSteps(doc: Document, keys: Set<string>): Document {
+  if (!keys.size) return doc;
+  const next = clone(doc);
+  for (const p of next.phases) p.steps = p.steps.filter((s) => !keys.has(s.key));
+  return renumber(next);
+}
+
+/** Moves every selected step to the end of `phaseId`, preserving their relative order. */
+export function moveStepsToPhase(doc: Document, keys: Set<string>, phaseId: string): Document {
+  if (!keys.size) return doc;
+  const next = clone(doc);
+  const target = next.phases.find((p) => p.id === phaseId);
+  if (!target) return doc;
+  const moved: Step[] = [];
+  for (const p of next.phases) {
+    const keep: Step[] = [];
+    for (const s of p.steps) (keys.has(s.key) ? moved : keep).push(s);
+    p.steps = keep;
+  }
+  target.steps.push(...moved);
+  return renumber(next);
+}
+
+/** Duplicates the selected steps in place, with fresh keys so nothing collides. */
+export function duplicateSteps(doc: Document, keys: Set<string>): Document {
+  if (!keys.size) return doc;
+  const next = clone(doc);
+  for (const p of next.phases) {
+    const out: Step[] = [];
+    for (const s of p.steps) {
+      out.push(s);
+      if (keys.has(s.key)) {
+        const copy = structuredClone(s);
+        copy.key = uid('s');
+        // A copy must not keep the original's incoming jumps or it steals them.
+        copy.deps = [];
+        out.push(copy);
+      }
+    }
+    p.steps = out;
+  }
+  return renumber(next);
+}
+
+/**
+ * Points every selected step at one shared block (or detaches them with `null`).
+ *
+ * Attaching is destructive for the step's own body — the block supplies the actions — so the
+ * caller confirms first; detaching copies the block's content in so the step keeps working.
+ */
+export function setStepsBlock(doc: Document, keys: Set<string>, block: Block | null): Document {
+  if (!keys.size) return doc;
+  const next = clone(doc);
+  for (const p of next.phases)
+    for (const s of p.steps) {
+      if (!keys.has(s.key)) continue;
+      if (block) {
+        s.blockId = block.id;
+        s.title = s.title || block.title;
+      } else {
+        const current = s.blockId;
+        delete s.blockId;
+        if (current) s.actions = s.actions.length ? s.actions : [];
+      }
+    }
+  return next;
+}
+
 /** Handles a `text/kb` drag payload: `move:<key>`, `basic:<type>`, `shared:<id>`, `preset:<text>`. */
 export function dropAt(
   doc: Document,

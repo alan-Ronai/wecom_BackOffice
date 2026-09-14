@@ -38,3 +38,17 @@ Each plan is written for a worker with no prior context: run it with the subagen
 | Content publish | `publishDocument(tx, doc, { actorId, label, suggestionId? })`, `publishBlock(tx, block, { actorId, label })` | L2 |
 
 Each affected plan carries the same list under "Cross-lane reconciliation"; when a plan's body disagrees with it, the reconciliation section wins.
+
+## Wave 4 — PRD gaps (spec `../specs/2026-09-14-kb-wave4-prd-gaps-design.md`, contract `docs/api/CONTRACTS-wave4.md` written by W0 Task 7)
+
+| Lane | Plan | Start after | Produces for |
+|---|---|---|---|
+| W0 Contracts | `2026-09-14-W0-wave4-contracts.md` | — | everyone (wave4 schemas, permissions 0029, events, queues, Notifier/TaxonomyResolver/UsageRecorder holders) |
+| W1 Taxonomy | `2026-09-14-W1-taxonomy.md` | W0 on main | worlds/topics/docType/tags, scripts fold, `PgTaxonomy`, topic page, facets, MetadataPanel |
+| W2 Governance | `2026-09-14-W2-governance.md` | W0 on main | statuses + `invalid`, `visibilityWhere`, ownership, source-review flag |
+| W3 Feedback | `2026-09-14-W3-feedback.md` | W0 on main | feedback module, `PgNotifier`, alerts, queue + analytics UI |
+| W4 Source documents | `2026-09-14-W4-source-documents.md` | W0 on main | sanitizer, docx in/out, source docs + assets, TipTap editor, WP render switch |
+| W5 Usage | `2026-09-14-W5-usage.md` | W0 on main | search log, `PgUsage`, `/analytics` |
+| W6 Integration | `2026-09-14-W6-integration.md` | W1–W5 + wave 3 merged | mounts, seams (0035), real e2e flows, acceptance matrix |
+
+Run order: W0 alone on `main`; W1–W5 in parallel worktrees branched after W0 lands; W6 last. Shared-file rules and the migration numbers are in W0's contract document.

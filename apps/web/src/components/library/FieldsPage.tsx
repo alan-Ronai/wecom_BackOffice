@@ -2,7 +2,11 @@ import { Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { crmChip } from '@wecom/shared';
 import { useDocuments } from '../../api/hooks/documents.js';
-import { useFields } from '../../api/hooks/content.js';
+import { useDeleteField, useFields } from '../../api/hooks/content.js';
+import { useCan } from '../../api/hooks/me.js';
+import { useEntityDialogs } from './dialogs.js';
+import { useModal } from '../ui/Modal.js';
+import { useToast } from '../ui/Toast.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { Html } from '../Fmt.js';
 import { fmtDate } from '../../lib/format.js';
@@ -13,8 +17,33 @@ export function FieldsPage() {
   const go = useNavigate();
   const fields = useFields();
   const docs = useDocuments({ sort: 'wave' });
+  const dialogs = useEntityDialogs();
+  const can = useCan();
+  const modal = useModal();
+  const toast = useToast();
+  const removeField = useDeleteField();
   const list = fields.data ?? [];
   const usage = (name: string) => (docs.data?.items ?? []).filter((c) => c.crmFields.includes(name)).length;
+  /**
+   * `DELETE /fields/{name}` has existed since stage 1 with no UI (review "missing features"), so
+   * a field retired in the CRM could only be removed with curl. Deletion is destructive for every
+   * document that references the field — the chips become "שדה לא מוכר" — so the confirmation
+   * names the count, and the row keeps its "open usage" behaviour for checking first.
+   */
+  const deleteField = async (name: string) => {
+    const n = usage(name);
+    const ok = await modal.confirm(
+      'מחיקת שדה CRM',
+      `השדה ${name} יימחק מ-crm-fields.json.` +
+        (n ? ` ${n} מסמכים מפנים אליו — הצ׳יפים בהם יסומנו כשדה לא מוכר.` : ' אף מסמך לא מפנה אליו.'),
+      'מחק שדה',
+      'danger',
+    );
+    if (!ok) return;
+    await removeField.mutateAsync(name);
+    toast(`השדה ${name} נמחק`, 'ok');
+  };
+
   const groups: [string, typeof list][] = [
     ['שינויים לבדיקה', list.filter((f) => f.status !== 'ok')],
     ['שדות פעילים', list.filter((f) => f.status === 'ok')],
@@ -99,6 +128,19 @@ export function FieldsPage() {
                         <span>ב-{usage(f.name)} מסמכים</span>
                         <span>·</span>
                         <span>עודכן {fmtDate(f.updatedAt)}</span>
+                        {can('fields.edit') ? (
+                          <button
+                            className="btn xs danger card-del"
+                            aria-label={`מחק את השדה ${f.name}`}
+                            title="מחיקת שדה"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void deleteField(f.name);
+                            }}
+                          >
+                            🗑 מחק
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   ))}

@@ -5,10 +5,13 @@ import { LoginPage } from './components/auth/LoginPage.js';
 import { LibraryPage } from './components/library/LibraryPage.js';
 import { FieldsPage } from './components/library/FieldsPage.js';
 import { BlocksPage } from './components/library/BlocksPage.js';
+import { ScriptsPage } from './components/library/ScriptsPage.js';
 import { ArticlePage } from './components/article/ArticlePage.js';
 import { EditorPage } from './components/editor/EditorPage.js';
 import { HistoryPage } from './components/history/HistoryPage.js';
 import { TrashPage } from './components/trash/TrashPage.js';
+import { ReviewsPage } from './components/review/ReviewsPage.js';
+import { NotificationsPage } from './components/notifications/NotificationsPage.js';
 import { SourcesPage } from './components/sources/SourcesPage.js';
 import { DataPage } from './components/data/DataPage.js';
 import { GraphPage } from './components/graph/GraphPage.js';
@@ -51,6 +54,7 @@ export const routeObjects: RouteObject[] = [
       { path: 'fields/:name', element: <FieldPage /> },
       { path: 'blocks', element: <BlocksPage /> },
       { path: 'blocks/:id', element: <BlockPage /> },
+      { path: 'scripts', element: <ScriptsPage /> },
       { path: 'doc/:id', element: <ArticlePage /> },
       { path: 'doc/:id/:step', element: <ArticlePage /> },
       { path: 'edit/:id', element: <EditorPage /> },
@@ -58,6 +62,8 @@ export const routeObjects: RouteObject[] = [
       { path: 'history/:id', element: <HistoryPage /> },
       { path: 'history/:id/:v', element: <HistoryPage /> },
       { path: 'trash', element: <TrashPage /> },
+      { path: 'reviews', element: <ReviewsPage /> },
+      { path: 'notifications', element: <NotificationsPage /> },
       { path: 'sources', element: <SourcesPage /> },
       { path: 'sources/:id', element: <SourcesPage /> },
       { path: 'data', element: <DataPage /> },

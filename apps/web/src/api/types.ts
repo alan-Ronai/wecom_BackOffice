@@ -81,6 +81,10 @@ export type LinkSets = Res<'/documents/{id}/links', 'get'>;
 /** `GET|PUT /documents/{id}/draft` — the full envelope, including `otherEditors`. */
 export type DraftEnvelope = Res<'/documents/{id}/draft', 'get'>;
 export type BlockUsage = ItemOf<Res<'/blocks/{id}/usage', 'get'>>;
+/** `GET /scripts` rows carry `usedIn` on top of `ScriptSchema`. */
+export type ScriptRow = ItemOf<Res<'/scripts', 'get'>>;
+/** `GET|PUT /drafts/new/{draftId}` — the server-side draft behind `/edit/new`. */
+export type NewDraftEnvelope = Res<'/drafts/new/{draftId}', 'get'>;
 export type FieldUsage = ItemOf<Res<'/fields/{name}/usage', 'get'>>;
 export type DocumentDiff = Res<'/documents/{id}/diff', 'get'>;
 export type PublishResult = Res<'/documents/{id}/publish', 'post'>;

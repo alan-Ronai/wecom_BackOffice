@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { Category, Permission } from '@wecom/shared';
-import { useDocuments } from '../../api/hooks/documents.js';
+import { useDocuments, usePinnedIds } from '../../api/hooks/documents.js';
 import { useFields, useScripts } from '../../api/hooks/content.js';
 import { useSources } from '../../api/hooks/pipeline.js';
 import { useDataFiles } from '../../api/hooks/stage4.js';
@@ -11,6 +11,7 @@ import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.
 import { CATS, CAT_KEYS, SOURCE_FILES } from '../../lib/constants.js';
 import { usePalette } from '../palette/paletteStore.js';
 import { useSettings } from '../settings/SettingsDialog.js';
+import { NotificationBell } from '../notifications/NotificationBell.js';
 
 /** Port of legacy renderSidebar: brand, search trigger, nav counts, source files, categories, user. */
 export function Sidebar({
@@ -61,7 +62,7 @@ export function Sidebar({
     : 0;
 
   const all = useDocuments({ sort: 'wave' });
-  const pinned = useDocuments({ pinned: true, sort: 'wave' });
+  const pinned = usePinnedIds();
   const drafts = useDocuments({ drafts: true, sort: 'wave' });
   const trash = useTrash();
   const sources = useSources();
@@ -183,6 +184,7 @@ export function Sidebar({
           wecom.
         </span>
         <span className="tag">מאגר ידע פנימי</span>
+        <NotificationBell onOpenFull={() => go('/notifications')} />
         {!railMode && /^\/(doc|edit|history|sources|data|graph)\b/.test(loc.pathname) ? (
           <span
             className="rail-btn"
@@ -214,10 +216,12 @@ export function Sidebar({
       <div className="scroll">
         <nav>
           {item('ספריית ידע', '/library', cards.length)}
-          {item('מוצמדים', '/pinned', pinned.data?.items.length ?? 0)}
+          {item('מוצמדים', '/pinned', pinned.data?.length ?? 0)}
           {item('נצפו לאחרונה', '/recent')}
           {item('טיוטות', '/drafts', drafts.data?.items.length || null, true)}
           {item('היסטוריית גרסאות', '/history')}
+          {item('התראות', '/notifications')}
+          {can('docs.publish') ? item('סקירות', '/reviews') : null}
           {item('סל מיחזור', '/trash', trash.data?.items.length || null)}
         </nav>
 
@@ -252,7 +256,7 @@ export function Sidebar({
                 onClick={() => {
                   onNavigate();
                   if (src.kind === 'fields') nav('/fields');
-                  else if (src.kind === 'scripts') palette.open({ type: 'script' });
+                  else if (src.kind === 'scripts') nav('/scripts');
                   else nav(src.id === 'intl' ? '/library/intl' : '/library');
                 }}
               >

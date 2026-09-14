@@ -38,6 +38,7 @@ export function TabStrip() {
           <span
             className="x"
             title="סגור (W)"
+            aria-label={`סגור לשונית · ${t.title}`}
             role="button"
             tabIndex={0}
             onClick={(e) => {
@@ -52,6 +53,7 @@ export function TabStrip() {
       <span
         className="plus"
         title="לשונית חדשה · Alt T"
+        aria-label="לשונית חדשה"
         role="button"
         tabIndex={0}
         onClick={() => palette.open({ mode: 'newtab' })}
@@ -59,14 +61,16 @@ export function TabStrip() {
         +
       </span>
       <div className="navbtns">
-        <button title="אחורה · Alt ←" disabled={!nav.canBack} onClick={nav.back}>
+        <button title="אחורה · Alt ←" aria-label="אחורה" disabled={!nav.canBack} onClick={nav.back}>
           {dirBack}
         </button>
-        <button title="קדימה · Alt →" disabled={!nav.canForward} onClick={nav.forward}>
+        <button title="קדימה · Alt →" aria-label="קדימה" disabled={!nav.canForward} onClick={nav.forward}>
           {dirFwd}
         </button>
         <button
           className={nav.split ? 'on' : ''}
+          aria-label="פיצול מסך"
+          aria-pressed={!!nav.split}
           title="פיצול מסך · Ctrl \"
           onClick={() => nav.toggleSplit()}
         >

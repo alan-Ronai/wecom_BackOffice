@@ -1136,12 +1136,13 @@ Replacing a default: W1 calls `setTaxonomy(app, new PgTaxonomy(app.db))`, W3 `se
 | GET | `/tags` | `TagsQuerySchema` | `TagsResponseSchema` | docs.read |
 | GET | `/documents` | + `TaxonomyFilterSchema` | unchanged | — |
 | GET | `/search` | + `TaxonomyFilterSchema`; new group type `tags` | unchanged | — |
-| PATCH | `/documents/:id` | + `docType, tags, worlds, topics, ownerId, editorId, bodyHtml` | `DocumentSchema` | docs.edit |
+| PATCH | `/documents/:id` | + `docType, tags, worlds, topics, bodyHtml` (W1) — `ownerId, editorId` are added by W2 | `DocumentSchema` | docs.edit |
 | * | `/scripts*` | unchanged shapes, served from `doc_type='T'` documents, `deprecated: true` in OpenAPI | as today |
 
 ### W2 Governance
 | POST | `/documents/:id/status` | `SetStatusBodySchema` | `DocumentSchema` | docs.publish |
 | POST | `/documents/:id/source-review/clear` | `SourceReviewClearBodySchema` | `DocumentSchema` | docs.edit |
+| PATCH | `/documents/:id` | + `ownerId, editorId` (nullable) | `DocumentSchema` | docs.edit |
 | DELETE | `/documents/:id` | — | 409 `ONCE_PUBLISHED { allowed: ['invalid','archived'] }` when a published version exists | docs.delete |
 Visibility: without `docs.read_unpublished`, list/get/related/links/backlinks/topic/search return only `published`/`partial`; get on an unpublished id → 404 `NOT_PUBLISHED`.
 
