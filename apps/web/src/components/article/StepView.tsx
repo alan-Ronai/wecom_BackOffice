@@ -23,6 +23,13 @@ export interface StepCtx {
   onShowBlock?: (id: string) => void;
   blocks?: Block[];
   renderConnections?: (step: ResolvedStep) => ReactNode;
+  /**
+   * 6b slots. `StepView` is shared by the article, the split panes and the editor preview, so the
+   * collaboration strip (comments, the script picker) and the head badges are injected rather than
+   * wired in — the editor preview must not start posting comments.
+   */
+  renderFooter?: (step: ResolvedStep) => ReactNode;
+  headBadges?: (step: ResolvedStep) => ReactNode;
 }
 
 const OUT_KBD = ['1', '2', '3'];
@@ -117,6 +124,7 @@ export function StepView({ step, ctx }: { step: ResolvedStep; ctx: StepCtx }) {
               </span>
             ) : null;
           })}
+          {ctx.headBadges?.(step)}
           {cur && ctx.callMode ? (
             <span className="k">↵ · {OUT_KBD.slice(0, Math.max(1, optionCount)).join(' / ')}</span>
           ) : null}
@@ -290,6 +298,7 @@ export function StepView({ step, ctx }: { step: ResolvedStep; ctx: StepCtx }) {
             ) : null}
 
             {cur && ctx.connections ? ctx.renderConnections?.(step) : null}
+            {ctx.renderFooter?.(step)}
           </>
         ) : null}
       </div>

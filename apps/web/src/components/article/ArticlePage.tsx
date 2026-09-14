@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { stripFmt } from '@wecom/shared';
 import {
@@ -8,7 +8,8 @@ import {
   useRecordView,
   useTogglePin,
 } from '../../api/hooks/documents.js';
-import { useAddNote, useBlocks, useFields } from '../../api/hooks/content.js';
+import { useAddNote, useBlocks, useFields, useScripts } from '../../api/hooks/content.js';
+import { useComments, usePresence, useTelemetry } from '../../api/hooks/collab.js';
 import { useCan } from '../../api/hooks/me.js';
 import { ApiError } from '../../api/unwrap.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
@@ -27,7 +28,11 @@ import { StepConnections } from './StepConnections.js';
 import { Panel } from './Panel.js';
 import { SplitView } from './SplitView.js';
 import { useCall } from './useCall.js';
+import { StepCollab } from './StepCollab.js';
+import { QuickSwitch } from './QuickSwitch.js';
+import { PrintFrame } from './PrintFrame.js';
 import type { FieldInfo } from '../../lib/format.js';
+import type { ScriptRow } from '../../api/types.js';
 
 /** Stable empty array so memoised children are not invalidated on every render (M1). */
 const EMPTY_FIELDS: FieldInfo[] = [];
@@ -51,6 +56,10 @@ export function ArticlePage() {
   const isPinned = useIsPinned();
   const ui = useUiPrefs();
   const addNote = useAddNote(id ?? '');
+  const comments = useComments(id);
+  const scriptsQ = useScripts();
+  const editors = usePresence(id);
+  const track = useTelemetry();
 
   const doc = docQ.data;
   const steps = useMemo(() => resolvedSteps(doc, blocks.data), [doc, blocks.data]);
@@ -61,6 +70,32 @@ export function ArticlePage() {
   const callMode = prefs.data?.callMode !== false;
   const showPanel = prefs.data?.panel !== false;
   const call = useCall(doc, steps, callMode);
+  const [summaryExtras, setSummaryExtras] = useState<string[]>([]);
+
+  /**
+   * 6b telemetry. Every event is buffered by `useTelemetry` and flushed in batches — an outcome
+   * pick happens on a keypress mid-call, and one request per keypress is exactly the traffic this
+   * app must not generate on a LAN VM that also runs the model.
+   */
+  const pickOutcome = useCallback(
+    (key: string, res: Parameters<typeof call.pickOutcome>[1]) => {
+      track({ kind: 'outcome', documentId: doc?.id, stepKey: key });
+      call.pickOutcome(key, res);
+    },
+    [call, doc?.id, track],
+  );
+
+  /** The call summary plus anything the agent inserted from a script picker (6b). */
+  const summary = [call.summaryText(), ...summaryExtras].join('\n');
+
+  const completed = useRef('');
+  useEffect(() => {
+    if (!doc || !steps.length || call.done < steps.length) return;
+    const tag = `${doc.id}:${steps.length}`;
+    if (completed.current === tag) return;
+    completed.current = tag;
+    track({ kind: 'call_completed', documentId: doc.id });
+  }, [doc, steps.length, call.done, track]);
   const [panelMobile, setPanelMobile] = useState(false);
   const [jumpBuf, setJumpBuf] = useState<string | null>(null);
   const jumpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -116,8 +151,10 @@ export function ArticlePage() {
     if (jumpTimer.current) clearTimeout(jumpTimer.current);
     setJumpBuf(null);
     const s = steps.find((x) => x.num === buf);
-    if (s) call.setActive(s.key);
-    else toast(`אין שלב ${buf}`, 'warn');
+    if (s) {
+      track({ kind: 'jump', documentId: doc?.id, stepKey: s.key });
+      call.setActive(s.key);
+    } else toast(`אין שלב ${buf}`, 'warn');
   };
 
   const digit = (d: string) => {
@@ -135,14 +172,14 @@ export function ArticlePage() {
     if (!s) return;
     const i = Number(d) - 1;
     if (s.branch?.options[i])
-      call.pickOutcome(s.key, {
+      pickOutcome(s.key, {
         kind: 'branch',
         idx: i,
         label: s.branch.options[i].label,
         goto: s.branch.options[i].goto,
       });
     else if (s.outcomes[i])
-      call.pickOutcome(s.key, {
+      pickOutcome(s.key, {
         kind: 'out',
         idx: i,
         label: stripFmt(s.outcomes[i].text),
@@ -190,7 +227,7 @@ export function ArticlePage() {
         }
       },
       c: () => {
-        void copy(call.summaryText());
+        void copy(summary);
         toast('הועתק ללוח', 'ok');
       },
       e: () => {
@@ -221,6 +258,24 @@ export function ArticlePage() {
     );
 
   const active = steps.find((s) => s.key === call.activeKey);
+
+  /**
+   * Which scripts the "הסבר ללקוח" picker offers for a step: the ones already attached to this
+   * document, then the ones tagged with its category. Falling back to everything would turn a
+   * two-second pick mid-call into a scroll through the whole library of phrasings.
+   */
+  const scriptsFor = (stepKey: string): ScriptRow[] => {
+    const all = scriptsQ.data ?? [];
+    const step = steps.find((x) => x.key === stepKey);
+    const scored = all.filter(
+      (sc) =>
+        sc.usedIn.some((u) => u.documentId === doc.id) ||
+        sc.tags?.includes(doc.category) ||
+        (step?.script ? sc.text.slice(0, 20) === step.script.slice(0, 20) : false),
+    );
+    return scored.length ? scored : all;
+  };
+
   const ctx: StepCtx = {
     activeKey: call.activeKey,
     results: call.state.results,
@@ -232,9 +287,30 @@ export function ArticlePage() {
     docs: docRefs,
     blocks: blocks.data,
     onSelect: (k) => call.setActive(k, false),
-    onOutcome: call.pickOutcome,
+    onOutcome: pickOutcome,
     onNote: (k) => void addNoteFor(k),
     onShowBlock: dialogs.showBlock,
+    headBadges: (s) => {
+      const n = (comments.data ?? []).filter((c) => c.stepKey === s.key && !c.resolvedAt).length;
+      return n ? (
+        <span className="chip chip-gray" title={`${n} תגובות פתוחות`}>
+          💬 {n}
+        </span>
+      ) : null;
+    },
+    renderFooter: (s) => (
+      <StepCollab
+        documentId={doc.id}
+        stepKey={s.key}
+        comments={comments.data ?? []}
+        scripts={scriptsFor(s.key)}
+        onInsertScript={(script) => {
+          setSummaryExtras((prev) => [...prev, `תסריט: ${script.title}`]);
+          void copy(script.text);
+          toast('הנוסח הועתק ונוסף לסיכום', 'ok');
+        }}
+      />
+    ),
     renderConnections: (s) => (
       <StepConnections
         doc={doc}
@@ -253,6 +329,7 @@ export function ArticlePage() {
 
   return (
     <>
+      <PrintFrame doc={doc} steps={steps.length} />
       <div className="topbar h56">
         <Hamburger />
         <div className="crumb">
@@ -267,6 +344,20 @@ export function ArticlePage() {
           <b>{doc.title}</b>
         </div>
         <div className="actions">
+          {editors.length ? (
+            <span
+              className="presence"
+              aria-label={`${editors.map((e) => e.displayName).join(', ')} פתוחים כרגע`}
+              title={editors.map((e) => e.displayName).join(', ')}
+            >
+              {editors.slice(0, 3).map((e) => (
+                <span className="avatar sm" key={e.userId}>
+                  {e.initials}
+                </span>
+              ))}
+              {editors.length > 3 ? <span className="avatar sm more">+{editors.length - 3}</span> : null}
+            </span>
+          ) : null}
           <span
             className={'callpill' + (callMode ? '' : ' off')}
             title="מצב שיחה: ניווט במקלדת, מעקב תוצאות וסיכום לתיעוד"
@@ -302,8 +393,8 @@ export function ArticlePage() {
               </span>
             ) : null}
           </span>
-          <button className="btn sm" onClick={() => window.print()}>
-            הדפסה
+          <button className="btn sm" title="Ctrl P" onClick={() => window.print()}>
+            🖨 הדפסה
           </button>
           <button className="btn sm" onClick={() => togglePin.mutate({ id: doc.id, pinned: !pinned })}>
             {pinned ? '★ מוצמד' : '☆ הצמד'}
@@ -327,14 +418,14 @@ export function ArticlePage() {
           ספרייה
         </a>
         <span>›</span>
-        <a
-          role="button"
-          tabIndex={0}
-          style={{ cursor: 'pointer' }}
-          onClick={() => go(`/library/${doc.category}`)}
-        >
-          {CATS[doc.category].label}
-        </a>
+        <QuickSwitch
+          category={doc.category}
+          currentId={doc.id}
+          onPick={(c) => {
+            track({ kind: 'jump', documentId: c.id });
+            nav.openDoc(c.id, { title: c.title });
+          }}
+        />
         <span>›</span>
         <span style={{ color: 'var(--text)', fontWeight: 500 }}>{doc.title}</span>
         {active ? (
@@ -458,14 +549,14 @@ export function ArticlePage() {
                         סיכום לתיעוד
                       </div>
                       <div className="summary" data-testid="summary">
-                        {call.summaryText()}
+                        {summary}
                       </div>
                       <span
                         className="summary-copy"
                         role="button"
                         tabIndex={0}
                         onClick={() => {
-                          void copy(call.summaryText());
+                          void copy(summary);
                           toast('הועתק ללוח', 'ok');
                         }}
                       >

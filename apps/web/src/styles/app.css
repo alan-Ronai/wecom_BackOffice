@@ -865,3 +865,53 @@ html[data-theme="dark"] .bulkbar { background: var(--surface-3); border: 1px sol
 .bulk-menu .menu { position: absolute; bottom: calc(100% + 6px); inset-inline-start: 0; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); min-width: 130px; padding: 4px; display: flex; flex-direction: column; }
 .bulk-menu .menu button { text-align: start; padding: 7px 10px; border-radius: var(--r-sm); font-size: 12.5px; }
 .bulk-menu .menu button:hover { background: var(--surface-2); }
+
+/* article QOL — presence, comments, mentions, script picker, quick switch (6b) */
+.presence { display: inline-flex; align-items: center; }
+.presence .avatar { margin-inline-start: -6px; border: 2px solid var(--surface); }
+.presence .avatar.more { background: var(--navy); }
+
+.quick-switch { position: relative; display: inline-flex; }
+.qs-trigger { color: inherit; font: inherit; padding: 1px 4px; border-radius: 4px; }
+.qs-trigger:hover { background: var(--surface-2); }
+.qs-menu { position: absolute; top: calc(100% + 6px); inset-inline-start: 0; z-index: 600; min-width: 260px; max-height: 300px; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 6px; display: flex; flex-direction: column; gap: 1px; }
+.qs-menu .eyebrow { padding: 4px 8px; }
+.qs-menu button { display: flex; justify-content: space-between; gap: 10px; align-items: center; text-align: start; padding: 7px 8px; border-radius: var(--r-sm); font-size: 12.5px; }
+.qs-menu button:hover, .qs-menu button.on { background: var(--red-light); color: var(--red-dark); }
+
+.step-collab { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.collab-bar { display: flex; gap: 8px; align-items: center; }
+.comments { display: flex; flex-direction: column; gap: 8px; }
+.comment { display: flex; gap: 8px; align-items: flex-start; }
+.comment.resolved { opacity: .6; }
+.comment .body { flex: 1; min-width: 0; }
+.comment .who { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.comment .tx { font-size: 12.5px; white-space: pre-wrap; margin-top: 2px; }
+.comment .acts { display: flex; gap: 10px; margin-top: 3px; }
+.comment .lnk { font-size: 11.5px; color: var(--muted); background: none; padding: 0; }
+.comment .lnk:hover { color: var(--text); }
+.comment .lnk.danger:hover { color: var(--red-dark); }
+.comment.compose { display: block; }
+
+.mention-input { position: relative; }
+.mention-input textarea { width: 100%; font-size: 12.5px; min-height: 44px; }
+.mention-menu { position: absolute; bottom: calc(100% + 4px); inset-inline-start: 0; z-index: 620; list-style: none; margin: 0; padding: 4px; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); }
+.mention-menu button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: start; padding: 5px 8px; border-radius: var(--r-sm); font-size: 12.5px; }
+.mention-menu button.on, .mention-menu button:hover { background: var(--red-light); color: var(--red-dark); }
+
+.script-picker { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+.script-picker .pick { display: flex; flex-direction: column; gap: 6px; }
+.script-picker .pick .q { font-size: 12.5px; font-style: italic; color: var(--text-2); }
+.script-picker .pick .row { display: flex; gap: 8px; align-items: center; }
+.script-picker .pick .row .muted { margin-inline-end: auto; }
+
+/* print / PDF (6b) */
+.print-head, .print-foot { display: none; }
+@media print {
+  .print-head, .print-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; font-size: 10.5px; color: #444; }
+  .print-head { border-bottom: 1px solid #999; margin-bottom: 10px; }
+  .print-head b { font-size: 14px; color: #000; }
+  .print-foot { border-top: 1px solid #999; margin-top: 12px; }
+  .step-collab, .bulkbar, .quick-switch, .presence, .doc-list, .lib-toolbar { display: none !important; }
+  @page { size: A4; margin: 14mm; }
+}
