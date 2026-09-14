@@ -13,6 +13,9 @@ const TABS: [Tab, string][] = [
   ['mention', 'אזכורים'],
   ['review', 'סקירות'],
   ['system', 'מערכת'],
+  // wave 5 (V4a) — the agent's learning surface and the editor's knowledge-gap queue.
+  ['learning', 'למידה'],
+  ['gap', 'פערי ידע'],
 ];
 
 // Exhaustive over `NotificationKindSchema`, so widening the contract is a compile error here
