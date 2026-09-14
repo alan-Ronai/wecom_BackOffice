@@ -101,12 +101,13 @@ run('connector routes', () => {
     expect(r.json().code).toBe('INVALID_CONFIG');
   });
 
-  it('enqueues a run job', async () => {
+  // Stage-5 contract: "run now" answers with what the run did (`SyncRunResultSchema`),
+  // not a job id — the operator pressing it is watching for those numbers.
+  it('runs a connector and reports the result', async () => {
     const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
     const r = await app.inject({ method: 'POST', url: `/api/v1/connectors/${conn.id}/run` });
-    expect(r.statusCode).toBe(202);
-    expect(r.json().jobId).toMatch(/^job-/);
-    expect(enqueued.at(-1)).toMatchObject({ name: 'connector.run', data: { connectorId: conn.id } });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ imported: 0, pushed: 0, conflicts: 0, errors: [] });
     await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
   });
 

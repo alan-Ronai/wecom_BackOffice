@@ -53,6 +53,8 @@ export interface RunResult {
 export interface ResolveBody {
   resolution: 'ours' | 'theirs' | 'merged';
   merged?: Document;
+  /** Version label for the merge commit; the sync UI passes the reviewer's wording. */
+  label?: string;
 }
 
 /**
@@ -66,6 +68,11 @@ export interface ResolveBody {
  */
 export class SyncService {
   constructor(private d: SyncDeps) {}
+
+  /** Read-through for callers that need the assembled document without the DB shape. */
+  documentOf(documentId: string): Promise<Document | null> {
+    return this.d.documents.getById(documentId);
+  }
 
   private async connectorFor(connectorId: string): Promise<{ conn: Connector<unknown>; cfg: unknown }> {
     const row = await this.d.repo.get(connectorId);
@@ -295,7 +302,7 @@ export class SyncService {
       doc.id,
       body.merged,
       actorId,
-      'מיזוג סנכרון WordPress',
+      body.label ?? 'מיזוג סנכרון WordPress',
     );
     return this.pushLink(conn, cfg, link, merged);
   }

@@ -4,11 +4,13 @@ import { z } from 'zod';
 import {
   ConnectorCreateBodySchema,
   ConnectorPatchBodySchema,
+  ConnectorRowSchema,
   ConnectorSchema,
   ErrorEnvelopeSchema,
   IdSchema,
   SyncLinkSchema,
   SyncResolveBodySchema,
+  SyncRunResultSchema,
   paginated,
   type Permission,
 } from '@wecom/shared';
@@ -28,6 +30,30 @@ const toApi = (row: ConnectorRow, repo: ConnectorsRepo, reg: ConnectorRegistry) 
   health: row.health,
   configMasked: maskConfig(repo.config(row)),
   capabilities: reg.get(row.type).describe().capabilities,
+});
+
+/**
+ * `lastStatus` on the row is free text the engine writes (`ok`, `test-ok`, `error`…);
+ * the UI contract narrows it to the three states a status pill can actually draw.
+ */
+const statusOf = (s: string | null): 'ok' | 'error' | 'never' =>
+  !s ? 'never' : s === 'ok' || s === 'test-ok' ? 'ok' : 'error';
+
+const toRow = (
+  row: ConnectorRow & { links?: number; conflicts?: number },
+  repo: ConnectorsRepo,
+): z.infer<typeof ConnectorRowSchema> => ({
+  id: row.id,
+  type: row.type,
+  name: row.name,
+  enabled: row.enabled,
+  schedule: row.schedule ?? null,
+  lastRunAt: row.last_run_at?.toISOString() ?? null,
+  lastStatus: statusOf(row.last_status),
+  health: row.health ?? null,
+  config: maskConfig(repo.config(row)),
+  links: Number(row.links ?? 0),
+  conflicts: Number(row.conflicts ?? 0),
 });
 
 const linkToApi = (l: SyncLinkRow & { document_title?: string }) => ({
@@ -73,16 +99,21 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
     '/connectors',
     {
       config: manage,
-      schema: { tags: ['connectors'], response: { 200: paginated(ConnectorSchema), 403: E } },
+      schema: {
+        tags: ['connectors'],
+        response: { 200: z.object({ items: z.array(ConnectorRowSchema) }), 403: E },
+      },
     },
+    // The admin list carries the two counts the cards show, so opening the page is one
+    // request rather than one per connector.
     async () => {
-      const rows = await repo.list();
-      return {
-        items: rows.map((r) => toApi(r, repo, registry)),
-        total: rows.length,
-        page: 1,
-        pageSize: rows.length,
-      };
+      const rows = await app.db.query<ConnectorRow & { links: number; conflicts: number }>(
+        `select c.*,
+                (select count(*)::int from sync_links l where l.connector_id = c.id) as links,
+                (select count(*)::int from sync_links l where l.connector_id = c.id and l.state = 'conflict') as conflicts
+           from connectors c order by c.created_at`,
+      );
+      return { items: rows.rows.map((r) => toRow(r, repo)) };
     },
   );
 
@@ -211,26 +242,34 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
     },
   );
 
+  /**
+   * Stage-5 contract: "run now" answers with what the run actually did, because the
+   * operator pressing it is watching for the numbers. The run is synchronous for that
+   * reason; the scheduled path still goes through pg-boss.
+   */
   app.post(
     '/connectors/:id/run',
     {
       config: manage,
-      schema: {
-        tags: ['connectors'],
-        params,
-        response: { 202: z.object({ jobId: z.string() }), 403: E, 404: E },
-      },
+      schema: { tags: ['connectors'], params, response: { 200: SyncRunResultSchema, 403: E, 404: E } },
     },
     async (req, reply) => {
       const row = await repo.get(req.params.id);
       if (!row) return reply.status(404).send(notFound(req, 'מחבר לא נמצא'));
-      const jobId = await opts.enqueue('connector.run', {
-        connectorId: row.id,
-        actorId: userOf(req)?.id ?? null,
-      });
+      const errors: string[] = [];
+      let result = { imported: 0, pushed: 0, conflicts: 0 };
+      try {
+        const r = await sync.runConnector(row.id, userOf(req)?.id ?? null);
+        result = { imported: r.imported + r.linked, pushed: r.pushed, conflicts: r.conflicts };
+      } catch (err) {
+        // A remote that is down is a result to show, not a 500: the rest of the page
+        // still has to render, and the message is what the operator needs.
+        errors.push((err as Error).message);
+        await repo.setRun(row.id, 'error', { lastError: (err as Error).message });
+      }
       // A run writes to the remote system, so it is at least as audit-worthy as a patch.
-      await audit(req, 'connectors.run', 'connector', row.id, null, { jobId });
-      return reply.status(202).send({ jobId });
+      await audit(req, 'connectors.run', 'connector', row.id, null, { ...result, errors });
+      return reply.status(200).send({ ...result, errors });
     },
   );
 
