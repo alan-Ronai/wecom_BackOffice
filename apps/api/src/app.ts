@@ -12,6 +12,7 @@ import type pg from 'pg';
 import { loadConfig, trustProxySetting, type Config } from './config.js';
 import dbPlugin from './plugins/db.js';
 import bossPlugin from './plugins/boss.js';
+import wave4Plugin from './plugins/wave4.js';
 import authPlugin from './plugins/auth.js'; // L3: identity
 import { registerAuth } from './modules/auth/index.js'; // L3: identity
 import adminRoutes from './modules/admin/routes.js'; // L3: identity
@@ -67,6 +68,7 @@ export async function buildApp(
   // Registration order per L1 plan: logging (constructor, above) -> db -> boss -> swagger -> routes.
   await app.register(dbPlugin, { pool: opts.pool });
   await app.register(bossPlugin, { boss: opts.boss });
+  await app.register(wave4Plugin); // W0: app.notifier / app.taxonomy / app.usage defaults
   // L3: identity — session resolution into req.user and `config.requires` enforcement.
   await app.register(authPlugin);
   // L2: content modules — caller-supplied plugins (fake auth in tests, L3's auth in production)
