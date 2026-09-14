@@ -45,8 +45,12 @@ describe('a failed primary query is surfaced, not rendered as empty', () => {
 
   it('admin roles', async () => {
     // The admin area is permission-gated; the point here is the *query* failure, not the guard.
-    server.use(withMe({ roles: ['admin'], permissions: [...PERMISSIONS] }), asDenied('get', '/admin/roles'));
+    // The screen reads `/admin/roles/matrix` since stage 5 — that is the query that must speak up.
+    server.use(
+      withMe({ roles: ['admin'], permissions: [...PERMISSIONS] }),
+      asDenied('get', '/admin/roles/matrix'),
+    );
     renderWithProviders(<App />, { route: '/admin/roles' });
-    expect(await screen.findByText('לא ניתן לטעון תפקידים')).toBeInTheDocument();
+    expect(await screen.findByText('לא ניתן לטעון מטריצת ההרשאות')).toBeInTheDocument();
   });
 });

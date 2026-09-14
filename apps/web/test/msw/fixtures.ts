@@ -790,12 +790,25 @@ export const roles: Role[] = [
 
 export const groupsMap: GroupMap[] = [{ idpGroupId: 'g-leads', idpGroupName: 'KB-Leads', roleId: ROLE_LEAD }];
 
+// Real user-agent strings: the screen parses them into "Chrome · Windows", and a fixture that
+// says `Chrome/128` would let that parser rot untested.
 export const sessions: Session[] = [
   {
     id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1',
     userId: U1,
-    ip: '10.0.0.7',
-    userAgent: 'Chrome/128',
+    ip: '10.20.4.17',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36',
+    createdAt: T,
+    lastSeenAt: T,
+    // Far enough out that "פג" is a state the fixture can still distinguish.
+    expiresAt: '2099-01-01T00:00:00.000Z',
+    revokedAt: null,
+  },
+  {
+    id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2',
+    userId: U2,
+    ip: '10.20.9.4',
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1',
     createdAt: T,
     lastSeenAt: T,
     expiresAt: T,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PERMISSIONS } from '@wecom/shared';
 import { renderWithProviders } from '../render.js';
@@ -45,12 +45,5 @@ describe('admin', () => {
     expect(await screen.findByText('לפני')).toBeInTheDocument();
   });
 
-  it('lists sessions and group mappings', async () => {
-    asAdmin();
-    const { unmount } = renderWithProviders(<App />, { route: '/admin/sessions' });
-    expect(await screen.findByText('Chrome/128')).toBeInTheDocument();
-    unmount();
-    renderWithProviders(<App />, { route: '/admin/groups' });
-    await waitFor(() => expect(screen.getByLabelText('שם קבוצה 1')).toHaveValue('KB-Leads'));
-  });
+  // Sessions and group mappings have their own suite — `test/admin/GroupsSessions.test.tsx`.
 });
