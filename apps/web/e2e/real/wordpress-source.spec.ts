@@ -26,6 +26,9 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
   baseURL,
   request: anonymous,
 }) => {
+  // The import round-trip below is a queued job polled for up to 60 s (F-4); the whole flow
+  // therefore needs more than the config's 60 s per test.
+  test.setTimeout(180_000);
   expect(WP, 'E2E_WP_URL is set by scripts/e2e-real.mjs').toBeTruthy();
   const request = await adminApi(page, baseURL!);
   opened.push(request);
@@ -75,46 +78,34 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
   expect(sourceId, `the connector created the source "${WP_TITLE}"`).toBeTruthy();
 
   /*
-   * The polling is legitimate — applying the suggestions is asynchronous — but the fan-out was
-   * not: each round listed ten cards and then issued a `GET /documents/:id` per card to read a
-   * `sourceId` the card shape does not carry, up to ~200 requests to find one id, and getting
-   * slower as the database fills. `GET /suggestions?sourceId=` answers the same question in one
-   * request, because an applied suggestion records the document it created. The per-card scan
-   * stays as the fallback for the round where `targetDocumentId` has not been written yet.
+   * A WordPress post is one *source*, but the pipeline may fan it out into several new cards
+   * (one per paragraph the model could not fold into a step), and the sync link — unique per
+   * (connector, external id) — lands on exactly one of them. The document this flow follows is
+   * therefore "the one the link points at", read from the queue once the asynchronous apply has
+   * written it; `sourceId` is still verified so a link that points elsewhere is rejected rather
+   * than believed. (Ledger: the fan-out itself is a pipeline defect to fix separately.)
    */
   const feedsFromSource = async (id: string): Promise<boolean> => {
     const doc = await request.get(`/api/v1/documents/${id}`);
     return doc.ok() && ((await doc.json()) as { sourceId?: string | null }).sourceId === sourceId;
   };
   let docId: string | undefined;
-  for (let round = 0; round < 20 && !docId; round++) {
-    // `GET /suggestions?sourceId=` names the documents this source's suggestions targeted, which
-    // is usually one candidate and one verification instead of the ten-cards-plus-ten-details
-    // scan this loop used to do every round (up to ~200 requests, and slower as the database
-    // fills). The identity check is still `sourceId`, so a suggestion that points somewhere else
-    // is rejected rather than believed, and the scan stays as the fallback.
-    const sug = await request.get(`/api/v1/suggestions?sourceId=${sourceId}&pageSize=50`);
-    expect(sug.ok(), await sug.text()).toBeTruthy();
-    const candidates = [
-      ...new Set(
-        ((await sug.json()) as { items: { targetDocumentId?: string | null }[] }).items
-          .map((x) => x.targetDocumentId)
-          .filter((x): x is string => !!x),
-      ),
-    ];
-    for (const id of candidates) if (await feedsFromSource(id)) docId = id;
-    if (!docId) {
-      const list = await request.get('/api/v1/documents?sort=updated&pageSize=10');
-      expect(list.ok(), await list.text()).toBeTruthy();
-      for (const card of ((await list.json()) as { items: { id: string }[] }).items) {
-        if (await feedsFromSource(card.id)) {
-          docId = card.id;
-          break;
-        }
-      }
-    }
-    if (!docId) await page.waitForTimeout(1_000);
-  }
+  await expect
+    .poll(
+      async () => {
+        const links = await request.get(`/api/v1/sync/links?connectorId=${connectorId}&pageSize=50`);
+        expect(links.ok(), await links.text()).toBeTruthy();
+        const items = ((await links.json()) as { items: { documentId: string }[] }).items;
+        for (const l of items) if (await feedsFromSource(l.documentId)) docId = l.documentId;
+        return docId;
+      },
+      {
+        message: 'applying the suggestions created a sync link for a document fed by the source',
+        timeout: 30_000,
+        intervals: [1_000],
+      },
+    )
+    .toBeTruthy();
   expect(docId, 'the accepted suggestion created a document fed by that source').toBeTruthy();
   const docUrl = `/doc/${docId!}`;
 
@@ -141,15 +132,28 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
    * run can be invisible to the next one. A scheduled connector simply catches it on the
    * following tick; here that tick is explicit.
    */
+  /*
+   * F-4: the run is a queued job, so the budget is on the *outcome*, not on a fixed number of
+   * runs. A new run is kicked at most every 8 s (the modified_after race above), and the source is
+   * polled every second for up to 60 s.
+   */
   let sourceHtml = '';
-  for (let round = 0; round < 10 && !sourceHtml.includes('6 מגה'); round++) {
-    const run = await request.post(`/api/v1/connectors/${connectorId}/run`);
-    expect(run.ok(), await run.text()).toBeTruthy();
-    const r = await request.get(`/api/v1/documents/${docId}/source`);
-    sourceHtml = r.status() === 204 ? '' : ((await r.json()) as { html: string }).html;
-    if (!sourceHtml.includes('6 מגה')) await page.waitForTimeout(1_500);
-  }
-  expect(sourceHtml, 'the WordPress edit became a source version').toContain('6 מגה');
+  let lastRunAt = 0;
+  await expect
+    .poll(
+      async () => {
+        if (Date.now() - lastRunAt > 8_000) {
+          const run = await request.post(`/api/v1/connectors/${connectorId}/run`);
+          expect(run.ok(), await run.text()).toBeTruthy();
+          lastRunAt = Date.now();
+        }
+        const r = await request.get(`/api/v1/documents/${docId}/source`);
+        sourceHtml = r.status() === 204 ? '' : ((await r.json()) as { html: string }).html;
+        return sourceHtml.includes('6 מגה');
+      },
+      { message: 'the WordPress edit became a source version', timeout: 60_000, intervals: [1_000] },
+    )
+    .toBe(true);
 
   await page.goto(docUrl);
   await expect(page.getByText('⚑ נדרשת בדיקה — המקור השתנה')).toBeVisible({ timeout: 20_000 });

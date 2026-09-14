@@ -31,6 +31,26 @@
                       "type": "boolean",
                       "nullable": true
                     },
+                    "modelStatus": {
+                      "type": "object",
+                      "properties": {
+                        "reachable": {
+                          "type": "boolean"
+                        },
+                        "tagPresent": {
+                          "type": "boolean"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "reachable",
+                        "tagPresent",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
                     "queue": {
                       "type": "integer",
                       "nullable": true
@@ -55,6 +75,7 @@
                     "ok",
                     "db",
                     "model",
+                    "modelStatus",
                     "queue",
                     "version",
                     "uptimeSec",
@@ -318,7 +339,12 @@
                           "taxonomy.manage",
                           "docs.read_unpublished",
                           "feedback.manage",
-                          "analytics.read"
+                          "analytics.read",
+                          "learning.read",
+                          "learning.manage",
+                          "learning.publish",
+                          "gaps.read",
+                          "gaps.manage"
                         ]
                       }
                     },
@@ -946,7 +972,12 @@
                                 "taxonomy.manage",
                                 "docs.read_unpublished",
                                 "feedback.manage",
-                                "analytics.read"
+                                "analytics.read",
+                                "learning.read",
+                                "learning.manage",
+                                "learning.publish",
+                                "gaps.read",
+                                "gaps.manage"
                               ]
                             }
                           }
@@ -1018,7 +1049,12 @@
                         "taxonomy.manage",
                         "docs.read_unpublished",
                         "feedback.manage",
-                        "analytics.read"
+                        "analytics.read",
+                        "learning.read",
+                        "learning.manage",
+                        "learning.publish",
+                        "gaps.read",
+                        "gaps.manage"
                       ]
                     }
                   }
@@ -1082,7 +1118,12 @@
                           "taxonomy.manage",
                           "docs.read_unpublished",
                           "feedback.manage",
-                          "analytics.read"
+                          "analytics.read",
+                          "learning.read",
+                          "learning.manage",
+                          "learning.publish",
+                          "gaps.read",
+                          "gaps.manage"
                         ]
                       }
                     },
@@ -1148,7 +1189,12 @@
                               "taxonomy.manage",
                               "docs.read_unpublished",
                               "feedback.manage",
-                              "analytics.read"
+                              "analytics.read",
+                              "learning.read",
+                              "learning.manage",
+                              "learning.publish",
+                              "gaps.read",
+                              "gaps.manage"
                             ]
                           },
                           "resource": {
@@ -1208,7 +1254,12 @@
                                 "taxonomy.manage",
                                 "docs.read_unpublished",
                                 "feedback.manage",
-                                "analytics.read"
+                                "analytics.read",
+                                "learning.read",
+                                "learning.manage",
+                                "learning.publish",
+                                "gaps.read",
+                                "gaps.manage"
                               ]
                             }
                           },
@@ -1287,7 +1338,12 @@
                         "taxonomy.manage",
                         "docs.read_unpublished",
                         "feedback.manage",
-                        "analytics.read"
+                        "analytics.read",
+                        "learning.read",
+                        "learning.manage",
+                        "learning.publish",
+                        "gaps.read",
+                        "gaps.manage"
                       ]
                     }
                   }
@@ -1358,7 +1414,12 @@
                           "taxonomy.manage",
                           "docs.read_unpublished",
                           "feedback.manage",
-                          "analytics.read"
+                          "analytics.read",
+                          "learning.read",
+                          "learning.manage",
+                          "learning.publish",
+                          "gaps.read",
+                          "gaps.manage"
                         ]
                       }
                     },
@@ -6213,6 +6274,9 @@
                       "format": "uuid"
                     },
                     "maxItems": 50
+                  },
+                  "significantChange": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -6766,6 +6830,33 @@
                     },
                     "auditId": {
                       "type": "string"
+                    },
+                    "changeFlag": {
+                      "type": "object",
+                      "properties": {
+                        "significant": {
+                          "type": "boolean"
+                        },
+                        "reasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "affectedItems": {
+                          "type": "integer"
+                        },
+                        "refreshAssignments": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "significant",
+                        "reasons",
+                        "affectedItems",
+                        "refreshAssignments"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -9304,6 +9395,33 @@
                     },
                     "auditId": {
                       "type": "string"
+                    },
+                    "changeFlag": {
+                      "type": "object",
+                      "properties": {
+                        "significant": {
+                          "type": "boolean"
+                        },
+                        "reasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "affectedItems": {
+                          "type": "integer"
+                        },
+                        "refreshAssignments": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "significant",
+                        "reasons",
+                        "affectedItems",
+                        "refreshAssignments"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -14000,7 +14118,9 @@
                               "publish",
                               "system",
                               "feedback",
-                              "source"
+                              "source",
+                              "learning",
+                              "gap"
                             ]
                           },
                           "title": {

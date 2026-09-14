@@ -20,6 +20,12 @@ on:
 jobs:
   deploy-smoke:
     runs-on: ubuntu-latest
+    # Expected runtime ~12–16 min on a standard runner: ~1 min for the config/lint checks,
+    # ~2 min for deploy/backup-check.sh, ~6–9 min to build the three images (the api image runs a
+    # full pnpm install and tsc), ~1 min to pull the small CI model, and under a minute for the
+    # stack to come up and answer the smoke test. The cap is generous on purpose — it should fire
+    # only when something is genuinely stuck, not when a runner is slow.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -51,16 +57,41 @@ jobs:
         run: docker run --rm -v "$PWD/deploy/wp-plugin:/app" php:8.2-cli php -l /app/kb-sync.php
 
       # apps/api and apps/web now exist (L2/L4 landed) — the images build and the
-      # composed stack actually comes up, so this is a real gate, not soft-failed.
+      # composed stack actually comes up, so this is a real gate. Nothing in this job is
+      # `continue-on-error`: every step here must pass for the job to be green.
       - name: build images
         id: build
         run: docker compose --env-file deploy/ci.env -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml build
 
-      - name: up + smoke
-        id: smoke
+      - name: up
+        run: docker compose --env-file deploy/ci.env -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml up -d
+
+      # The pull is a one-shot service, so `up -d` returns before it finishes. Waiting on it here
+      # means a pull failure reads as "the model pull failed, and here is its log" instead of
+      # surfacing five minutes later as an unexplained smoke timeout.
+      - name: wait for the model pull
         run: |
-          docker compose --env-file deploy/ci.env -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml up -d
-          SMOKE_REQUIRE_MODEL=false deploy/smoke.sh https://localhost:8443
+          set -euo pipefail
+          compose() { docker compose --env-file deploy/ci.env -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml "$@"; }
+          id=$(compose ps -aq ollama-pull)
+          for i in $(seq 1 120); do
+            state=$(docker inspect -f '{{.State.Status}}' "$id")
+            [ "$state" = "exited" ] && break
+            sleep 5
+          done
+          # --tail: `ollama pull` redraws a progress bar thousands of times even without a TTY,
+          # and the last lines are the ones that say whether it finished.
+          compose logs --tail 20 ollama-pull
+          code=$(docker inspect -f '{{.State.ExitCode}}' "$id")
+          test "$code" = "0" || { echo "ollama-pull exited $code"; exit 1; }
+
+      # No SMOKE_REQUIRE_MODEL=false: the CI stack pulls a real (small) model, so this asserts the
+      # same thing an operator's run on the VM does — db reachable, the configured MODEL_NAME tag
+      # actually present, a request id on the response, the SPA served, and the O-1 security
+      # headers on `GET /`.
+      - name: smoke
+        id: smoke
+        run: deploy/smoke.sh https://localhost:8443
 
       - name: logs on failure
         if: always()

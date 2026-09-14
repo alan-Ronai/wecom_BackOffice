@@ -6,14 +6,32 @@
 # counts apps/api's `documents` table in it, then drops the scratch database.
 # Never touches the real database DATABASE_URL points at.
 #
-# Usage:
-#   DATABASE_URL=postgres://kb:kb@db:5432/kb BACKUP_DIR=/backups deploy/restore-drill.sh [dump-file]
+# Usage, inside the `backup` container (which compose already gives a correct DATABASE_URL —
+# do not pass one, see below):
+#   docker compose -f deploy/docker-compose.yml exec backup restore-drill.sh [dump-file]
 #
 # Exit code is non-zero on any failure (missing dump, restore error, or a
 # document count of zero when the source clearly should have documents).
 set -euo pipefail
 : "${BACKUP_DIR:=/backups}"
 : "${DATABASE_URL:?DATABASE_URL is required (same server the real kb database lives on)}"
+
+# O-3: the documented command used to pass `-e DATABASE_URL=postgres://kb:$POSTGRES_PASSWORD@…`,
+# which the *host* shell expands — and `POSTGRES_PASSWORD` is not set there unless the operator
+# happened to source deploy/.env. Run literally it became `postgres://kb:@db:5432/kb` and failed
+# at authentication with a message that says nothing about the real cause. The documents no
+# longer pass a URL at all; this refuses the empty-password shape outright so the old,
+# copy-pasted spelling fails with the actual explanation.
+case "$DATABASE_URL" in
+  *://*:@*)
+    echo "restore-drill FAILED: DATABASE_URL has an empty password — \$POSTGRES_PASSWORD was not
+set in the shell that expanded it. The backup container already has a correct DATABASE_URL, so
+run this without any -e override:
+  docker compose -f deploy/docker-compose.yml exec backup restore-drill.sh
+or, if you really need to pass one, export it first: set -a; . deploy/.env; set +a" >&2
+    exit 1
+    ;;
+esac
 
 dump="${1:-}"
 if [ -z "$dump" ]; then

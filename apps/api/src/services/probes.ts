@@ -1,6 +1,15 @@
 import type PgBoss from 'pg-boss';
 import { QUEUES } from '../plugins/boss.js';
 
+/**
+ * Ollama stores an untagged pull as `<name>:latest`, so `nomic-embed-text` in the environment and
+ * `nomic-embed-text:latest` in `/api/tags` are the same model. Everything else must match
+ * exactly: the old comparison fell back to `name.split(':')[0]`, which reported `hasModel` for
+ * `qwen2.5:3b` when only `qwen2.5:7b` was pulled — precisely the fat-fingered-`MODEL_NAME` case
+ * O-2 is about.
+ */
+const normalizeTag = (name: string): string => (name.includes(':') ? name : `${name}:latest`);
+
 export async function probeModel(
   modelUrl: string,
   modelName: string,
@@ -13,9 +22,8 @@ export async function probeModel(
     const res = await fetch(new URL('/api/tags', modelUrl), { signal: ctrl.signal });
     if (!res.ok) return { up: false, hasModel: false, latencyMs: Date.now() - t0 };
     const body = (await res.json()) as { models?: { name: string }[] };
-    const hasModel = (body.models ?? []).some(
-      (m) => m.name === modelName || m.name.split(':')[0] === modelName.split(':')[0],
-    );
+    const want = normalizeTag(modelName);
+    const hasModel = (body.models ?? []).some((m) => normalizeTag(m.name) === want);
     return { up: true, hasModel, latencyMs: Date.now() - t0 };
   } catch {
     return { up: false, hasModel: false, latencyMs: Date.now() - t0 };

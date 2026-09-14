@@ -23,10 +23,16 @@ export const PERMISSIONS = [
   'docs.read_unpublished',
   'feedback.manage',
   'analytics.read',
+  // Wave 5 — appended, never reordered.
+  'learning.read',
+  'learning.manage',
+  'learning.publish',
+  'gaps.read',
+  'gaps.manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
-const agent: Permission[] = ['docs.read', 'notes.write'];
+const agent: Permission[] = ['docs.read', 'notes.write', 'learning.read'];
 const editor: Permission[] = [
   ...agent,
   'docs.create',
@@ -36,6 +42,8 @@ const editor: Permission[] = [
   'docs.read_unpublished',
   'feedback.manage',
   'analytics.read',
+  'learning.manage',
+  'gaps.read',
 ];
 const lead: Permission[] = [
   ...editor,
@@ -48,11 +56,29 @@ const lead: Permission[] = [
   'sources.manage',
   'notes.moderate',
   'taxonomy.manage',
+  'learning.publish',
+  'gaps.manage',
 ];
-export const DEFAULT_ROLES = { agent, editor, lead, admin: [...PERMISSIONS] } as const satisfies Record<
-  string,
-  readonly Permission[]
->;
+/**
+ * System role switched on by `workflow.requireApprover` (spec §1.6); no editing rights.
+ * Deliberately not nested in the agent→editor→lead chain: an approver publishes and
+ * applies suggestions without ever being able to edit the content it signs off on.
+ */
+const approver: Permission[] = [
+  'docs.read',
+  'docs.read_unpublished',
+  'notes.write',
+  'docs.publish',
+  'suggestions.apply',
+  'learning.publish',
+];
+export const DEFAULT_ROLES = {
+  agent,
+  editor,
+  lead,
+  approver,
+  admin: [...PERMISSIONS],
+} as const satisfies Record<string, readonly Permission[]>;
 export type DefaultRoleName = keyof typeof DEFAULT_ROLES;
 
 /** Permissions the admin role can never lose. */

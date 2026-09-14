@@ -24,6 +24,8 @@ import {
   VersionSchema,
 } from './content.js';
 import { DocTypeSchema, TaxonomyFilterSchema, WorldSlugSchema } from './wave4.js';
+// `wave5.ts` imports only `common.js`/`content.js`, so this direction introduces no cycle.
+import { ChangeFlagSchema } from './wave5.js';
 import { SuggestionPayloadSchema } from './pipeline.js';
 import { PermissionSchema, PreferencesSchema } from './identity.js';
 
@@ -87,6 +89,11 @@ export const PublishBodySchema = z.object({
   label: z.string().min(1).max(200),
   markPartial: z.boolean().optional(),
   resolveFeedbackIds: z.array(IdSchema).max(50).optional(),
+  /**
+   * Wave 5 (V2): the publish dialog's "שינוי מהותי – דרוש רענון" checkbox, pre-ticked when the
+   * diff detector says so. Omitted = let the detector decide; an explicit value overrides it.
+   */
+  significantChange: z.boolean().optional(),
 });
 export const DiffQuerySchema = z.object({
   from: z.coerce.number().int().min(0),
@@ -200,10 +207,26 @@ export const SuggestionsQuerySchema = PaginationQuerySchema.extend({
   sourceId: IdSchema.optional(),
 });
 
+/**
+ * O-2: `model: true` only ever meant "Ollama answered", so an operator who fat-fingers
+ * `MODEL_NAME` got a green smoke test and discovered the mistake when the first suggestion job
+ * failed. `modelStatus` separates the two facts; `model` stays as the boolean older clients read
+ * and now means "reachable **and** the configured tag is pulled".
+ */
+export const ModelStatusSchema = z.object({
+  /** `GET {MODEL_URL}/api/tags` answered. */
+  reachable: z.boolean(),
+  /** That listing contains `name` — i.e. the configured model is actually pulled. */
+  tagPresent: z.boolean(),
+  /** The configured `MODEL_NAME`, or `rules` when `MODEL_DISABLED=true`. */
+  name: z.string(),
+});
+
 export const HealthResponseSchema = z.object({
   ok: z.boolean(),
   db: z.boolean(),
   model: z.boolean().nullable(),
+  modelStatus: ModelStatusSchema,
   queue: z.number().int().nullable(),
   version: z.string(),
   uptimeSec: z.number(),
@@ -389,6 +412,8 @@ export const PublishResponseSchema = z.object({
   document: DocumentSchema,
   version: z.number().int(),
   auditId: z.string(),
+  /** Wave 5 (V2): what the change did to learning — absent until V2 lands the hook. */
+  changeFlag: ChangeFlagSchema.optional(),
 });
 export const DeleteResponseSchema = z.object({ auditId: z.string(), restoreUntil: IsoDateSchema });
 export const LinksResponseSchema = z.object({

@@ -54,3 +54,17 @@ Each affected plan carries the same list under "Cross-lane reconciliation"; when
 Run order: W0 alone on `main`; W1–W5 in parallel worktrees branched after W0 lands; W6 last. Shared-file rules and the migration numbers are in W0's contract document.
 
 Acceptance: `docs/wave4-acceptance.md` · Merge log: `docs/wave4-merge-log.md`
+
+## Wave 5 — Learning & training (spec `../specs/2026-09-15-kb-wave5-learning-design.md`, contract `docs/api/CONTRACTS-wave5.md` written by V0 Task 5)
+
+| Lane | Plan | Start after | Produces for |
+|---|---|---|---|
+| V0 Contracts | `2026-09-15-V0-wave5-contracts.md` | — | everyone (wave5 schemas + aliases, permissions/approver role 0038, events, notification kinds, queues, `getWorkflowSettings`) |
+| V1 Learning content (api) | `2026-09-15-V1-learning-content.md` | V0 on main | briefings, quizzes, question generation + curation, publish with the document-version snapshot, versions, preview |
+| V2 Assignments & tracking (api) | `2026-09-15-V2-assignments-tracking.md` | V0 on main | audiences, assignments, attempts, acknowledgements, completion + dashboard, significant-change hook, refresh assignments |
+| V3 Approver & gaps (api) | `2026-09-15-V3-approver-gaps.md` | V0 on main | `requireApprover` gate, gap detection job and API, `/admin/workflow` |
+| V4a Agent web | `2026-09-15-V4a-agent-web.md` | V0 on main | `/learning`, briefing reader, quiz player, article banners, notifications wiring |
+| V4b Editor web | `2026-09-15-V4b-editor-web.md` | V0 on main | builders, assign dialog, completion dashboard + CSV, `/gaps`, workflow settings section |
+| V6 Integration | `2026-09-15-V6-integration.md` | V1–V4b merged | mounts, seams (0042), real e2e flows, whole-wave review, and the three wave-4 follow-ups (F-4, A-4, E-1) |
+
+Run order: V0 alone on `main`; V1–V4b in parallel worktrees branched after V0 lands; V6 last. Shared-file rules and the migration numbers are in V0's contract document.

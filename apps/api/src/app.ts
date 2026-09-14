@@ -91,9 +91,28 @@ export async function buildApp(
   });
   app.setErrorHandler((err, req, reply) => {
     const status = (err as { statusCode?: number }).statusCode ?? 500;
+    const validation = (err as { validation?: unknown }).validation;
+    /**
+     * E-3: a schema failure used to fall through as the framework raised it — code
+     * `FST_ERR_VALIDATION`, message `body/note Required`. Every other envelope this API produces
+     * carries an application code and a Hebrew message, so the one error an editor is most
+     * likely to see (a missing required field) was the one that answered in English with a
+     * Fastify internal. It is now `VALIDATION` with a Hebrew message; the machine-readable part
+     * an integrator needs — which field, and why — stays in `details`, unchanged.
+     */
+    const isValidation =
+      status === 400 &&
+      (validation !== undefined ||
+        String((err as { code?: string }).code ?? '').startsWith('FST_ERR_VALIDATION'));
     const body = ErrorEnvelopeSchema.parse({
-      code: (err as { code?: string }).code ?? (status === 500 ? 'INTERNAL' : 'ERROR'),
-      message: status === 500 ? 'שגיאה פנימית' : (err as Error).message,
+      code: isValidation
+        ? 'VALIDATION'
+        : ((err as { code?: string }).code ?? (status === 500 ? 'INTERNAL' : 'ERROR')),
+      message: isValidation
+        ? 'הבקשה אינה תקינה — בדקו את השדות שנשלחו'
+        : status === 500
+          ? 'שגיאה פנימית'
+          : (err as Error).message,
       /**
        * A 400 from Fastify's schema layer carries `validation`; a 400 an application raised
        * through `httpError` carries `details`. Preferring `validation` and *falling back* to
@@ -103,7 +122,7 @@ export async function buildApp(
        */
       details:
         status === 400
-          ? ((err as { validation?: unknown }).validation ?? (err as { details?: unknown }).details)
+          ? (validation ?? (err as { details?: unknown }).details)
           : (err as { details?: unknown }).details, // L3: identity — HttpError details
       requestId: req.id,
     });

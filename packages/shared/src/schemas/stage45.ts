@@ -268,6 +268,9 @@ export const NotificationKindSchema = z.enum([
   'system',
   'feedback',
   'source',
+  // Wave 5 — `0038_wave5_permissions_settings.js` widens the notifications.kind check to match.
+  'learning',
+  'gap',
 ]);
 export const NotificationSchema = z.object({
   id: IdSchema,
