@@ -4,8 +4,9 @@ import { resolvedSteps } from '../../lib/steps.js';
 import type { Check } from '../../lib/editorModel.js';
 import { DocBody, type StepCtx } from '../article/StepView.js';
 import { DiffView } from '../history/DiffView.js';
+import { SourcePane } from '../source/SourcePane.js';
 
-type Tab = 'preview' | 'json' | 'diff';
+type Tab = 'preview' | 'json' | 'diff' | 'source';
 
 /** Port of the legacy right pane: live preview / JSON / diff, plus the pre-publish checks. */
 export function SidePane({
@@ -33,6 +34,9 @@ export function SidePane({
             ['preview', 'תצוגה חיה'],
             ['json', 'JSON'],
             ['diff', 'Diff'],
+            // W4: the source document beside the working view, read-only — editing it is the
+            // `/edit/:id/source` route's job, and a new item has no document to read yet.
+            ...(doc.id === 'new' ? [] : ([['source', 'מקור']] as [Tab, string][])),
           ] as [Tab, string][]
         ).map(([k, l]) => (
           <span
@@ -48,11 +52,13 @@ export function SidePane({
         <span className="hint">
           {tab === 'preview'
             ? 'כמו שהנציג יראה'
-            : tab === 'diff'
-              ? published
-                ? `מול v${published.currentVersion}`
-                : 'מסמך חדש'
-              : 'מבנה הנתונים'}
+            : tab === 'source'
+              ? 'מקור הידע המלא'
+              : tab === 'diff'
+                ? published
+                  ? `מול v${published.currentVersion}`
+                  : 'מסמך חדש'
+                : 'מבנה הנתונים'}
         </span>
       </div>
       <div className="body">
@@ -68,6 +74,8 @@ export function SidePane({
           </div>
         ) : tab === 'json' ? (
           <pre>{JSON.stringify(doc, null, 2)}</pre>
+        ) : tab === 'source' ? (
+          <SourcePane documentId={doc.id} canEdit={false} sourceId={doc.sourceId} />
         ) : (
           <DiffView
             oldDoc={published ?? { ...doc, phases: [] }}

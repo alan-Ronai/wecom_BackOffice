@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Block, Category, Document, Step } from '@wecom/shared';
 import {
   useCreateDocument,
@@ -19,7 +19,7 @@ import {
 } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
 import { ApiError } from '../../api/unwrap.js';
-import { CATS, CAT_KEYS, PRI, SOURCE_FILES } from '../../lib/constants.js';
+import { PRI } from '../../lib/constants.js';
 import { ago, download } from '../../lib/format.js';
 import { useHotkeys } from '../../lib/keys.js';
 import { allSteps } from '../../lib/steps.js';
@@ -55,6 +55,11 @@ import { TemplateGallery } from './TemplateGallery.js';
 import { SourceMap } from './SourceMap.js';
 import { ConflictBanner } from './ConflictBanner.js';
 import { ApiError as ApiErrorClass } from '../../api/unwrap.js';
+import { MetadataPanel, type MetadataValue } from './MetadataPanel.js';
+import { OwnerFields } from '../governance/OwnerFields.js';
+import { ImportExportButtons } from '../source/ImportExportButtons.js';
+import { PublishFeedbackPicker } from '../feedback/PublishFeedbackPicker.js';
+import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 
 const emptyDoc = (cat: Category): Document => ({
   id: 'new',
@@ -76,6 +81,57 @@ const emptyDoc = (cat: Category): Document => ({
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 });
+
+/**
+ * The publish dialog's body: the version label, plus W3's picker of the reports this version
+ * closes. `modal.open` takes a static node, so the state lives here and is reported upward
+ * through the two callbacks rather than lifted into `doPublish`.
+ */
+function PublishBody({
+  documentId,
+  defaultLabel,
+  onLabel,
+  onIds,
+  onSubmit,
+}: {
+  documentId: string | null;
+  defaultLabel: string;
+  onLabel: (v: string) => void;
+  onIds: (v: string[]) => void;
+  onSubmit: () => void;
+}) {
+  const LABEL = 'מה השתנה? (מופיע בהיסטוריית הגרסאות)';
+  const [label, setLabel] = useState(defaultLabel);
+  const [ids, setIds] = useState<string[]>([]);
+  useEffect(() => {
+    onLabel(label);
+  }, [label, onLabel]);
+  useEffect(() => {
+    onIds(ids);
+  }, [ids, onIds]);
+  return (
+    <div className="form" style={{ display: 'grid', gap: 10 }}>
+      <label>
+        {LABEL}
+        <input
+          type="text"
+          aria-label={LABEL}
+          value={label}
+          autoFocus
+          onChange={(e) => setLabel(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              onSubmit();
+            }
+          }}
+        />
+      </label>
+      {/* Renders nothing when the item has no open reports, so mounting it is unconditional. */}
+      {documentId ? <PublishFeedbackPicker documentId={documentId} value={ids} onChange={setIds} /> : null}
+    </div>
+  );
+}
 
 export function EditorPage() {
   const { id = 'new' } = useParams<{ id: string }>();
@@ -103,6 +159,8 @@ export function EditorPage() {
   const saveStructure = useSaveStructure(id);
   const create = useCreateDocument();
   const requestReview = useRequestReviewDialog();
+  /** Only for "is there a source document?" — the pane itself lives on the article and `/source`. */
+  const source = useSourceDocument(isNew ? undefined : id);
 
   const [doc, setDoc] = useState<Document | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -197,6 +255,39 @@ export function EditorPage() {
     [doc, fields.data, blocks.data],
   );
 
+  /**
+   * `MetadataPanel` is controlled on exactly the five fields `PATCH /documents/:id` accepts, so
+   * the mapping to and from the working document is the whole mount.
+   */
+  const metadata: MetadataValue = useMemo(
+    () => ({
+      docType: doc?.docType ?? 'O',
+      category: doc?.category ?? 'tech',
+      worlds: (doc?.worlds ?? []).filter((w) => w !== doc?.category),
+      topics: doc?.topics ?? [],
+      tags: doc?.tags ?? [],
+    }),
+    [doc],
+  );
+  const onMetadata = useCallback(
+    (v: MetadataValue) => {
+      if (!doc) return;
+      update(
+        {
+          ...doc,
+          docType: v.docType,
+          category: v.category,
+          // The primary world is always first and always present (`orderWorlds` on the API side).
+          worlds: [v.category, ...v.worlds.filter((w) => w !== v.category)],
+          topics: v.topics,
+          tags: v.tags,
+        },
+        'מטא-דאטה',
+      );
+    },
+    [doc, update],
+  );
+
   const leave = useCallback(() => go(isNew ? '/library' : `/doc/${id}`), [go, id, isNew]);
   // `Shell` also binds Escape (palette → drawer → split). Without this guard both handlers fire
   // and closing the palette inside the editor also navigated away, discarding the draft.
@@ -266,12 +357,32 @@ export function EditorPage() {
     }
     const partial = checks.some(([, t]) => t.includes('ריק'));
     const nextV = (published.data?.currentVersion ?? 0) + 1;
-    const label = await modal.prompt(
-      `פרסום v${nextV}`,
-      'מה השתנה? (מופיע בהיסטוריית הגרסאות)',
-      isNew ? 'פריט ידע חדש' : '',
-    );
-    if (label == null) return;
+    const box = { label: isNew ? 'פריט ידע חדש' : '', ids: [] as string[] };
+    const ok = await new Promise<boolean>((resolve) => {
+      let dispose = () => {};
+      const submit = () => {
+        resolve(true);
+        dispose();
+      };
+      dispose = modal.open({
+        title: `פרסום v${nextV}`,
+        body: (
+          <PublishBody
+            documentId={isNew ? null : id}
+            defaultLabel={box.label}
+            onLabel={(v) => (box.label = v)}
+            onIds={(v) => (box.ids = v)}
+            onSubmit={submit}
+          />
+        ),
+        buttons: [
+          { label: 'ביטול', onClick: () => resolve(false) },
+          { label: 'אישור', cls: 'primary', onClick: () => resolve(true) },
+        ],
+      });
+    });
+    if (!ok) return;
+    const label = box.label;
     const clean = renumber(doc);
     clean.phases.forEach((p) =>
       p.steps.forEach((s) => {
@@ -288,6 +399,11 @@ export function EditorPage() {
         priority: clean.priority,
         kind: clean.kind,
         phases: clean.phases,
+        docType: clean.docType,
+        tags: clean.tags,
+        worlds: clean.worlds,
+        topics: clean.topics,
+        ...(clean.kind === 'text' ? { bodyHtml: clean.bodyHtml ?? '' } : {}),
       });
       targetId = created.id;
       // The new-document draft has served its purpose; leaving it behind would make the next
@@ -302,6 +418,13 @@ export function EditorPage() {
         category: clean.category,
         wave: clean.wave,
         priority: clean.priority,
+        docType: clean.docType,
+        tags: clean.tags,
+        worlds: clean.worlds,
+        topics: clean.topics,
+        ownerId: clean.ownerId ?? null,
+        editorId: clean.editorId ?? null,
+        ...(clean.kind === 'text' ? { bodyHtml: clean.bodyHtml ?? '' } : {}),
       });
       const etag = patched.etag ?? published.data?.etag;
       if (!etag) {
@@ -321,6 +444,7 @@ export function EditorPage() {
       id: targetId,
       label: label || 'פורסם',
       markPartial: partial,
+      ...(box.ids.length ? { resolveFeedbackIds: box.ids } : {}),
     });
     toast(`פורסם v${version} · הכרטיס בספרייה עודכן`, 'ok');
     go(`/doc/${targetId}`);
@@ -422,6 +546,18 @@ export function EditorPage() {
                 מיפוי מקור ↔ שלבים
               </button>
             ) : null}
+            {!isNew ? (
+              <ImportExportButtons
+                documentId={id}
+                canEdit={can('docs.edit', doc)}
+                hasSource={!!source.data}
+              />
+            ) : null}
+            {!isNew ? (
+              <Link className="btn sm" to={`/edit/${id}/source`}>
+                ערוך מקור
+              </Link>
+            ) : null}
             <button
               className="btn sm"
               onClick={() => download(`${doc.title || 'knowledge-item'}.json`, JSON.stringify(doc, null, 2))}
@@ -478,20 +614,10 @@ export function EditorPage() {
           ) : null}
 
           <div className="ed-fields" hidden={pane === 'source'}>
-            <label>
-              קטגוריה
-              <select
-                aria-label="קטגוריה"
-                value={doc.category}
-                onChange={(e) => update({ ...doc, category: e.target.value as Category }, 'קטגוריה')}
-              >
-                {CAT_KEYS.map((c) => (
-                  <option key={c} value={c}>
-                    {CATS[c].icon} {CATS[c].label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {/* W1 owns the primary world, extra worlds, topics, type and tags — the old free-text
+                "קטגוריה" select and the disabled "קובץ יעד" hint are both subsumed by it. */}
+            <MetadataPanel value={metadata} onChange={onMetadata} disabled={!can('docs.edit', doc)} />
+            <OwnerFields doc={doc} onChange={(patch) => update({ ...doc, ...patch }, 'אחריות')} />
             <label>
               גל כתיבה
               <select
@@ -522,21 +648,6 @@ export function EditorPage() {
                 ))}
               </select>
             </label>
-            <label>
-              קובץ יעד
-              <select
-                className="mono"
-                aria-label="קובץ יעד"
-                value={doc.category === 'intl' ? 'intl' : 'topics'}
-                disabled
-              >
-                {SOURCE_FILES.filter((s) => s.kind === 'docs').map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.file}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
           <input
             className="ed-desc"
@@ -547,110 +658,133 @@ export function EditorPage() {
             onChange={(e) => update({ ...doc, description: e.target.value }, 'תיאור')}
           />
 
-          {pane === 'steps' &&
-            doc.phases.map((p, pi) => (
-              <div key={p.id}>
-                <div className="ed-phase">
-                  <input
-                    type="text"
-                    aria-label={`שם קבוצת שלבים ${pi + 1}`}
-                    placeholder="שם השלב (למשל: שלב 1 – מסנן)"
-                    value={p.label}
-                    onChange={(e) => {
-                      const next = structuredClone(doc);
-                      next.phases[pi].label = e.target.value;
-                      update(next);
-                    }}
-                  />
-                  <span className="line" />
-                  {doc.phases.length > 1 ? (
-                    <span
-                      className="x"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => {
-                        const next = structuredClone(doc);
-                        next.phases.splice(pi, 1);
-                        update(renumber(next));
-                      }}
-                    >
-                      ✕
-                    </span>
-                  ) : null}
-                </div>
-                {p.steps.map((s) => (
-                  <StepEditor
-                    key={s.key}
-                    doc={doc}
-                    step={s}
-                    phase={p}
-                    selected={selected === s.key || multi.has(s.key)}
-                    fields={fields.data ?? []}
-                    blocks={blocks.data ?? []}
-                    onSelect={(shift) => selectStep(s.key, shift)}
-                    onPatch={(m) => patchStep(s.key, m)}
-                    onMove={(dir) => update(moveStep(doc, s.key, dir), `הזזת שלב ${s.num}`)}
-                    onDelete={() => update(deleteStep(doc, s.key), `מחיקת שלב ${s.num}`)}
-                    onDrop={(data) => update(dropAt(doc, data, s.key, blocks.data ?? []), 'גרירה')}
-                    onDetach={() =>
-                      patchStep(s.key, (st) => {
-                        const b = blocks.data?.find((x) => x.id === st.blockId);
-                        if (b) {
-                          st.actions = structuredClone(b.actions);
-                          st.title = st.title || b.title;
-                          if (b.script) st.script = b.script;
+          {/* A type-T (text) item has no steps: its content is one HTML body, which is what
+              the `/scripts` adapters read back. Everything below — the phase editor, the drop
+              zone and the permissions strip — is the steps editor and does not apply. */}
+          {doc.kind === 'text' ? (
+            <label className="ed-body-html">
+              תוכן הפריט
+              <textarea
+                aria-label="תוכן הפריט"
+                rows={14}
+                value={doc.bodyHtml ?? ''}
+                onChange={(e) => update({ ...doc, bodyHtml: e.target.value }, 'תוכן')}
+              />
+              {!isNew ? (
+                <span className="muted">
+                  לעריכה עשירה יותר, עם גרסאות וייבוא מ-Word:{' '}
+                  <Link to={`/edit/${id}/source`}>מסמך המקור</Link>
+                </span>
+              ) : null}
+            </label>
+          ) : (
+            <>
+              {pane === 'steps' &&
+                doc.phases.map((p, pi) => (
+                  <div key={p.id}>
+                    <div className="ed-phase">
+                      <input
+                        type="text"
+                        aria-label={`שם קבוצת שלבים ${pi + 1}`}
+                        placeholder="שם השלב (למשל: שלב 1 – מסנן)"
+                        value={p.label}
+                        onChange={(e) => {
+                          const next = structuredClone(doc);
+                          next.phases[pi].label = e.target.value;
+                          update(next);
+                        }}
+                      />
+                      <span className="line" />
+                      {doc.phases.length > 1 ? (
+                        <span
+                          className="x"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => {
+                            const next = structuredClone(doc);
+                            next.phases.splice(pi, 1);
+                            update(renumber(next));
+                          }}
+                        >
+                          ✕
+                        </span>
+                      ) : null}
+                    </div>
+                    {p.steps.map((s) => (
+                      <StepEditor
+                        key={s.key}
+                        doc={doc}
+                        step={s}
+                        phase={p}
+                        selected={selected === s.key || multi.has(s.key)}
+                        fields={fields.data ?? []}
+                        blocks={blocks.data ?? []}
+                        onSelect={(shift) => selectStep(s.key, shift)}
+                        onPatch={(m) => patchStep(s.key, m)}
+                        onMove={(dir) => update(moveStep(doc, s.key, dir), `הזזת שלב ${s.num}`)}
+                        onDelete={() => update(deleteStep(doc, s.key), `מחיקת שלב ${s.num}`)}
+                        onDrop={(data) => update(dropAt(doc, data, s.key, blocks.data ?? []), 'גרירה')}
+                        onDetach={() =>
+                          patchStep(s.key, (st) => {
+                            const b = blocks.data?.find((x) => x.id === st.blockId);
+                            if (b) {
+                              st.actions = structuredClone(b.actions);
+                              st.title = st.title || b.title;
+                              if (b.script) st.script = b.script;
+                            }
+                            delete st.blockId;
+                          })
                         }
-                        delete st.blockId;
-                      })
-                    }
-                    onEditBlock={() => go('/blocks')}
-                  />
+                        onEditBlock={() => go('/blocks')}
+                      />
+                    ))}
+                  </div>
                 ))}
+
+              <DropZone
+                onCommand={(cmd) => {
+                  if (cmd.kind === 'basic') applyBasic(cmd.value as BasicType);
+                  else if (cmd.kind === 'shared') {
+                    const b = blocks.data?.find((x) => x.id === cmd.value);
+                    if (b) applyShared(b);
+                  } else if (cmd.kind === 'phase') {
+                    const next = structuredClone(doc);
+                    next.phases.push({ id: uid('p'), label: 'קבוצה חדשה', steps: [] });
+                    update(next);
+                  } else if (cmd.kind === 'title') {
+                    const withStep = addBasic(doc, 'step', null, null);
+                    const last = allSteps(withStep).at(-1);
+                    if (last) {
+                      const next = structuredClone(withStep);
+                      const t = next.phases.flatMap((p) => p.steps).find((s) => s.key === last.key);
+                      if (t) t.title = cmd.value;
+                      update(next);
+                    }
+                  }
+                }}
+                onDrop={(data) => update(dropAt(doc, data, null, blocks.data ?? []))}
+                blocks={blocks.data ?? []}
+              />
+
+              <div className="perm">
+                <b>הרשאות</b>
+                <span className="chip chip-navy">עורכים</span>
+                <span className="chip">מנהלי צוות – פרסום</span>
+                <span className="chip">נציגים – הערות בלבד</span>
+                <span className="hist">גרסה נוכחית: v{published.data?.currentVersion ?? 0}</span>
+                <button
+                  className="btn xs"
+                  onClick={() => {
+                    const next = structuredClone(doc);
+                    next.phases.push({ id: uid('p'), label: 'קבוצה חדשה', steps: [] });
+                    update(next);
+                  }}
+                >
+                  + קבוצת שלבים
+                </button>
               </div>
-            ))}
-
-          <DropZone
-            onCommand={(cmd) => {
-              if (cmd.kind === 'basic') applyBasic(cmd.value as BasicType);
-              else if (cmd.kind === 'shared') {
-                const b = blocks.data?.find((x) => x.id === cmd.value);
-                if (b) applyShared(b);
-              } else if (cmd.kind === 'phase') {
-                const next = structuredClone(doc);
-                next.phases.push({ id: uid('p'), label: 'קבוצה חדשה', steps: [] });
-                update(next);
-              } else if (cmd.kind === 'title') {
-                const withStep = addBasic(doc, 'step', null, null);
-                const last = allSteps(withStep).at(-1);
-                if (last) {
-                  const next = structuredClone(withStep);
-                  const t = next.phases.flatMap((p) => p.steps).find((s) => s.key === last.key);
-                  if (t) t.title = cmd.value;
-                  update(next);
-                }
-              }
-            }}
-            onDrop={(data) => update(dropAt(doc, data, null, blocks.data ?? []))}
-            blocks={blocks.data ?? []}
-          />
-
-          <div className="perm">
-            <b>הרשאות</b>
-            <span className="chip chip-navy">עורכים</span>
-            <span className="chip">מנהלי צוות – פרסום</span>
-            <span className="chip">נציגים – הערות בלבד</span>
-            <span className="hist">גרסה נוכחית: v{published.data?.currentVersion ?? 0}</span>
-            <button
-              className="btn xs"
-              onClick={() => {
-                const next = structuredClone(doc);
-                next.phases.push({ id: uid('p'), label: 'קבוצה חדשה', steps: [] });
-                update(next);
-              }}
-            >
-              + קבוצת שלבים
-            </button>
-          </div>
+            </>
+          )}
         </div>
       </div>
 

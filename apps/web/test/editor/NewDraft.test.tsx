@@ -53,7 +53,8 @@ describe('<EditorPage> — the server-side draft behind /edit/new', () => {
 
     await waitFor(() => expect(screen.getByLabelText('שם פריט הידע')).toHaveValue('טיוטה שנשמרה בשרת'));
     expect(screen.getByLabelText('תיאור קצר')).toHaveValue('המשך מהמכונה השנייה');
-    expect(screen.getByLabelText('קטגוריה')).toHaveValue('billing');
+    // Wave 4: the primary world lives in W1's metadata panel, not in a "קטגוריה" select.
+    expect(await screen.findByLabelText('עולם תוכן ראשי')).toHaveValue('billing');
   });
 
   it('discards the new-document draft once the document is created and published', async () => {

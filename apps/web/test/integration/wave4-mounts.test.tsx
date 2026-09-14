@@ -252,3 +252,87 @@ describe('W6 library mounts', () => {
     expect(await within(grid).findByText('לא בתוקף')).toBeInTheDocument();
   });
 });
+
+describe('W6 editor mounts', () => {
+  it('shows the metadata and ownership panels, the source link and the export button', async () => {
+    renderWithProviders(<App />, { route: `/edit/${D_BROWSING}` });
+    await screen.findByPlaceholderText('שם פריט הידע…');
+    expect(await screen.findByLabelText('סוג פריט')).toBeInTheDocument(); // MetadataPanel
+    expect(await screen.findByLabelText('גורם מקצועי אחראי')).toBeInTheDocument(); // OwnerFields
+    expect(screen.getByRole('link', { name: 'ערוך מקור' })).toHaveAttribute(
+      'href',
+      `/edit/${D_BROWSING}/source`,
+    );
+    expect(screen.getByRole('button', { name: 'ייבוא מ-Word' })).toBeInTheDocument();
+    // The old free-text category select is gone — the primary world lives in the metadata panel.
+    expect(screen.queryByLabelText('קובץ יעד')).toBeNull();
+  });
+
+  it('publishes with the feedback the editor ticked', async () => {
+    let body: Record<string, unknown> | null = null;
+    server.use(
+      http.get(`${B}/documents/${D_BROWSING}/feedback`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: '99999999-9999-4999-8999-999999999999',
+              documentId: D_BROWSING,
+              documentVersion: 7,
+              docType: 'R',
+              worldSlug: 'tech',
+              stepKey: 's1',
+              kind: 'error',
+              text: 'טעות בשלב 1',
+              status: 'new',
+              userId: fx.me.user.id,
+              userName: 'דנה',
+              createdAt: T,
+              assigneeId: null,
+              decisionNote: null,
+              decidedBy: null,
+              decidedAt: null,
+              resolvedVersion: null,
+              documentTitle: fx.docBrowsing.title,
+              assigneeName: null,
+            },
+          ],
+        }),
+      ),
+      http.post(`${B}/documents/${D_BROWSING}/publish`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          document: { ...fx.docBrowsing, currentVersion: 8 },
+          version: 8,
+          auditId: '55555555-5555-4555-8555-555555555555',
+        });
+      }),
+    );
+    renderWithProviders(<App />, { route: `/edit/${D_BROWSING}` });
+    await screen.findByPlaceholderText('שם פריט הידע…');
+    await userEvent.click(await screen.findByRole('button', { name: /פרסם v/ }));
+    const dialog = await screen.findByRole('dialog', { name: /פרסום v/ });
+    await userEvent.type(within(dialog).getByLabelText(/מה השתנה/), 'תיקון');
+    await userEvent.click(await within(dialog).findByRole('checkbox'));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'אישור' }));
+    await waitFor(() => expect(body?.resolveFeedbackIds).toEqual(['99999999-9999-4999-8999-999999999999']));
+  });
+
+  it('edits a text-kind item as a body, not as steps', async () => {
+    server.use(
+      http.get(`${B}/documents/${D_BROWSING}`, () =>
+        HttpResponse.json({
+          ...fx.docBrowsing,
+          kind: 'text',
+          docType: 'T',
+          phases: [],
+          bodyHtml: '<p>שלום, מדבר/ת נציג/ה</p>',
+        }),
+      ),
+    );
+    renderWithProviders(<App />, { route: `/edit/${D_BROWSING}` });
+    await screen.findByPlaceholderText('שם פריט הידע…');
+    const body = await screen.findByLabelText('תוכן הפריט');
+    expect(body).toHaveValue('<p>שלום, מדבר/ת נציג/ה</p>');
+    expect(screen.queryByText('+ קבוצת שלבים')).toBeNull();
+  });
+});
