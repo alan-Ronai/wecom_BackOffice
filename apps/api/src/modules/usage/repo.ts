@@ -144,7 +144,11 @@ export async function usageAnalytics(q: Q, query: UsageQuery, caps: Caps): Promi
       displayName: x.display_name as string,
       views: x.views as number,
     })),
-    zeroResultTerms: zero.rows.map((x) => ({ q: x.q as string, count: x.count as number, lastAt: iso(x.last_at as Date)! })),
+    zeroResultTerms: zero.rows.map((x) => ({
+      q: x.q as string,
+      count: x.count as number,
+      lastAt: iso(x.last_at as Date)!,
+    })),
     staleness: stale.rows.map((x) => ({
       documentId: x.document_id as string,
       title: x.title as string,

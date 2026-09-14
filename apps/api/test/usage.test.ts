@@ -26,7 +26,9 @@ run('usage', () => {
       const rec = new PgUsage(db.pool);
       await rec.recordSearch({ userId: u.id, q: 'apn', filters: { types: 'steps' }, results: 0, tookMs: 7 });
       await rec.recordSearch({ userId: null, q: 'apn', filters: {}, results: 3, tookMs: 2 });
-      const rows = await db.pool.query('select user_id, q, filters, results, took_ms from search_log order by at');
+      const rows = await db.pool.query(
+        'select user_id, q, filters, results, took_ms from search_log order by at',
+      );
       expect(rows.rows).toEqual([
         { user_id: u.id, q: 'apn', filters: { types: 'steps' }, results: 0, took_ms: 7 },
         { user_id: null, q: 'apn', filters: {}, results: 3, took_ms: 2 },
@@ -34,15 +36,22 @@ run('usage', () => {
       const topic = '22222222-2222-4222-8222-222222222222';
       await rec.recordTopicView(u.id, topic);
       await rec.recordTopicView(u.id, topic);
-      const tv = await db.pool.query('select count from topic_views where user_id=$1 and topic_id=$2', [u.id, topic]);
+      const tv = await db.pool.query('select count from topic_views where user_id=$1 and topic_id=$2', [
+        u.id,
+        topic,
+      ]);
       expect(tv.rows[0].count).toBe(2);
     });
     it('never throws when the database rejects the write', async () => {
       const broken = new pg.Pool({ connectionString: 'postgres://nobody:x@127.0.0.1:1/none' });
       const warns: unknown[] = [];
       const rec = new PgUsage(broken, { warn: (o: unknown) => warns.push(o) } as never);
-      await expect(rec.recordSearch({ userId: null, q: 'x', filters: {}, results: 0, tookMs: 0 })).resolves.toBeUndefined();
-      await expect(rec.recordTopicView(u.id, '22222222-2222-4222-8222-222222222222')).resolves.toBeUndefined();
+      await expect(
+        rec.recordSearch({ userId: null, q: 'x', filters: {}, results: 0, tookMs: 0 }),
+      ).resolves.toBeUndefined();
+      await expect(
+        rec.recordTopicView(u.id, '22222222-2222-4222-8222-222222222222'),
+      ).resolves.toBeUndefined();
       expect(warns.length).toBe(2);
       await broken.end();
     });
@@ -64,8 +73,17 @@ run('usage', () => {
         [D, E],
       );
       // two users, three views: u→D twice, viewer→D once, viewer→E once
-      for (const [usr, doc] of [[u.id, D], [u.id, D], [viewer.id, D], [viewer.id, E]] as const)
-        await app.inject({ method: 'POST', url: `/api/v1/documents/${doc}/view`, headers: auth(usr === u.id ? u : viewer) });
+      for (const [usr, doc] of [
+        [u.id, D],
+        [u.id, D],
+        [viewer.id, D],
+        [viewer.id, E],
+      ] as const)
+        await app.inject({
+          method: 'POST',
+          url: `/api/v1/documents/${doc}/view`,
+          headers: auth(usr === u.id ? u : viewer),
+        });
       const rec = new PgUsage(db.pool);
       await rec.recordSearch({ userId: u.id, q: 'zzz-none', filters: {}, results: 0, tookMs: 1 });
       await rec.recordSearch({ userId: u.id, q: 'zzz-none', filters: {}, results: 0, tookMs: 1 });
@@ -79,7 +97,10 @@ run('usage', () => {
       const d1 = b.itemViews.find((x: { documentId: string }) => x.documentId === D);
       expect(d1).toMatchObject({ title: 'גלישה איטית', views: 3, viewers: 2 });
       expect(b.topItems[0]).toMatchObject({ documentId: D, views: 3 });
-      expect(b.viewers.find((v: { userId: string }) => v.userId === viewer.id)).toMatchObject({ displayName: 'צופה', views: 2 });
+      expect(b.viewers.find((v: { userId: string }) => v.userId === viewer.id)).toMatchObject({
+        displayName: 'צופה',
+        views: 2,
+      });
       expect(b.zeroResultTerms).toEqual([expect.objectContaining({ q: 'zzz-none', count: 2 })]);
       const stale = b.staleness.find((s: { documentId: string }) => s.documentId === D);
       expect(stale.daysSinceUpdate).toBeGreaterThanOrEqual(39);
@@ -87,7 +108,9 @@ run('usage', () => {
     });
 
     it('filters by world (primary category) and honours from/to', async () => {
-      const r = (await app.inject({ method: 'GET', url: '/api/v1/analytics/usage?world=billing', headers: auth(u) })).json();
+      const r = (
+        await app.inject({ method: 'GET', url: '/api/v1/analytics/usage?world=billing', headers: auth(u) })
+      ).json();
       expect(r.itemViews.map((x: { documentId: string }) => x.documentId)).toEqual([E]);
       const old = (
         await app.inject({
@@ -101,40 +124,73 @@ run('usage', () => {
     });
 
     it('is cached for 60 s per query string', async () => {
-      const before = (await app.inject({ method: 'GET', url: '/api/v1/analytics/usage?limit=5', headers: auth(u) })).json();
-      await new PgUsage(db.pool).recordSearch({ userId: u.id, q: 'zzz-none', filters: {}, results: 0, tookMs: 1 });
-      const again = (await app.inject({ method: 'GET', url: '/api/v1/analytics/usage?limit=5', headers: auth(u) })).json();
+      const before = (
+        await app.inject({ method: 'GET', url: '/api/v1/analytics/usage?limit=5', headers: auth(u) })
+      ).json();
+      await new PgUsage(db.pool).recordSearch({
+        userId: u.id,
+        q: 'zzz-none',
+        filters: {},
+        results: 0,
+        tookMs: 1,
+      });
+      const again = (
+        await app.inject({ method: 'GET', url: '/api/v1/analytics/usage?limit=5', headers: auth(u) })
+      ).json();
       expect(again.zeroResultTerms[0].count).toBe(before.zeroResultTerms[0].count); // stale by design
-      const other = (await app.inject({ method: 'GET', url: '/api/v1/analytics/usage?limit=6', headers: auth(u) })).json();
+      const other = (
+        await app.inject({ method: 'GET', url: '/api/v1/analytics/usage?limit=6', headers: auth(u) })
+      ).json();
       expect(other.zeroResultTerms[0].count).toBe(before.zeroResultTerms[0].count + 1); // different key → fresh
     });
 
     it('denies users without analytics.read', async () => {
       const r = await app.inject({ method: 'GET', url: '/api/v1/analytics/usage', headers: auth(reader) });
       expect(r.statusCode).toBe(403);
-      const s = await app.inject({ method: 'GET', url: '/api/v1/analytics/search-log', headers: auth(reader) });
+      const s = await app.inject({
+        method: 'GET',
+        url: '/api/v1/analytics/search-log',
+        headers: auth(reader),
+      });
       expect(s.statusCode).toBe(403);
     });
 
     it('lists the search log, zero-only when asked', async () => {
-      const all = (await app.inject({ method: 'GET', url: '/api/v1/analytics/search-log', headers: auth(u) })).json();
+      const all = (
+        await app.inject({ method: 'GET', url: '/api/v1/analytics/search-log', headers: auth(u) })
+      ).json();
       expect(all.total).toBeGreaterThanOrEqual(3);
       expect(all.items[0]).toMatchObject({ userName: expect.any(String), filters: {} });
-      const zero = (await app.inject({ method: 'GET', url: '/api/v1/analytics/search-log?zeroOnly=true', headers: auth(u) })).json();
+      const zero = (
+        await app.inject({
+          method: 'GET',
+          url: '/api/v1/analytics/search-log?zeroOnly=true',
+          headers: auth(u),
+        })
+      ).json();
       expect(zero.items.every((i: { results: number }) => i.results === 0)).toBe(true);
     });
 
     it('fills topTopics once W1-shaped worlds/topics tables exist', async () => {
       const W = '55555555-5555-4555-8555-555555555555';
       const T = '66666666-6666-4666-8666-666666666666';
-      await db.pool.query(`create table worlds(id uuid primary key, slug text unique not null, name text not null)`);
-      await db.pool.query(`create table topics(id uuid primary key, world_id uuid not null references worlds(id), slug text not null, name text not null)`);
+      await db.pool.query(
+        `create table worlds(id uuid primary key, slug text unique not null, name text not null)`,
+      );
+      await db.pool.query(
+        `create table topics(id uuid primary key, world_id uuid not null references worlds(id), slug text not null, name text not null)`,
+      );
       await db.pool.query(`insert into worlds(id, slug, name) values ($1,'tech','תמיכה טכנית')`, [W]);
-      await db.pool.query(`insert into topics(id, world_id, slug, name) values ($1,$2,'slow-data','גלישה איטית')`, [T, W]);
+      await db.pool.query(
+        `insert into topics(id, world_id, slug, name) values ($1,$2,'slow-data','גלישה איטית')`,
+        [T, W],
+      );
       const rec = new PgUsage(db.pool);
       await rec.recordTopicView(u.id, T);
       await rec.recordTopicView(viewer.id, T);
-      const r = (await app.inject({ method: 'GET', url: '/api/v1/analytics/usage?limit=9', headers: auth(u) })).json();
+      const r = (
+        await app.inject({ method: 'GET', url: '/api/v1/analytics/usage?limit=9', headers: auth(u) })
+      ).json();
       expect(r.topTopics).toEqual([{ topicId: T, name: 'גלישה איטית', worldSlug: 'tech', views: 2 }]);
       await db.pool.query('drop table topics; drop table worlds');
     });

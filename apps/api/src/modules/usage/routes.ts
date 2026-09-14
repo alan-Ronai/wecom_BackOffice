@@ -8,7 +8,13 @@ import {
 } from '@wecom/shared';
 import { requireUser } from '../../lib/user.js';
 import { TtlCache } from './cache.js';
-import { listSearchLog, probeCapabilities, usageAnalytics, type SearchLogQuery, type UsageQuery } from './repo.js';
+import {
+  listSearchLog,
+  probeCapabilities,
+  usageAnalytics,
+  type SearchLogQuery,
+  type UsageQuery,
+} from './repo.js';
 
 const CACHE_MS = 60_000;
 
@@ -19,7 +25,11 @@ export default async function routes(app: FastifyInstance) {
     '/analytics/usage',
     {
       config: { requires: ['analytics.read'] },
-      schema: { tags: ['analytics'], querystring: UsageAnalyticsQuerySchema, response: { 200: UsageAnalyticsSchema } },
+      schema: {
+        tags: ['analytics'],
+        querystring: UsageAnalyticsQuerySchema,
+        response: { 200: UsageAnalyticsSchema },
+      },
     },
     async (req) => {
       requireUser(req);
@@ -39,7 +49,11 @@ export default async function routes(app: FastifyInstance) {
     '/analytics/search-log',
     {
       config: { requires: ['analytics.read'] },
-      schema: { tags: ['analytics'], querystring: SearchLogQuerySchema, response: { 200: SearchLogResponseSchema } },
+      schema: {
+        tags: ['analytics'],
+        querystring: SearchLogQuerySchema,
+        response: { 200: SearchLogResponseSchema },
+      },
     },
     async (req) => {
       requireUser(req);

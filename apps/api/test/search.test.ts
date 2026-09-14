@@ -93,13 +93,19 @@ run('search', () => {
 
   it('logs each search with its result count without delaying the response', async () => {
     await db.pool.query('delete from search_log');
-    const r = await app.inject({ method: 'GET', url: '/api/v1/search?q=' + encodeURIComponent('אין-כזה-מונח') + '&types=documents', headers: auth(u) });
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/v1/search?q=' + encodeURIComponent('אין-כזה-מונח') + '&types=documents',
+      headers: auth(u),
+    });
     expect(r.statusCode).toBe(200);
     expect(r.json().total).toBe(0);
     // fire-and-forget: give the insert a tick
     await new Promise((res) => setTimeout(res, 50));
     const rows = await db.pool.query('select user_id, q, filters, results from search_log');
-    expect(rows.rows).toEqual([{ user_id: u.id, q: 'אין-כזה-מונח', filters: { types: 'documents' }, results: 0 }]);
+    expect(rows.rows).toEqual([
+      { user_id: u.id, q: 'אין-כזה-מונח', filters: { types: 'documents' }, results: 0 },
+    ]);
   });
 
   it('still answers when the search log cannot be written', async () => {

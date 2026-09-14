@@ -16481,6 +16481,424 @@
         }
       }
     },
+    "/api/v1/analytics/usage": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "from",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "to",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+            },
+            "in": "query",
+            "name": "world",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "to": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "itemViews": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "docType": {
+                            "type": "string",
+                            "enum": [
+                              "M",
+                              "R",
+                              "O",
+                              "E",
+                              "S",
+                              "T",
+                              "I"
+                            ],
+                            "nullable": true
+                          },
+                          "views": {
+                            "type": "integer"
+                          },
+                          "viewers": {
+                            "type": "integer"
+                          },
+                          "lastViewedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "documentId",
+                          "title",
+                          "docType",
+                          "views",
+                          "viewers",
+                          "lastViewedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "topItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "views": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "documentId",
+                          "title",
+                          "views"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "topTopics": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "topicId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "worldSlug": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "views": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "topicId",
+                          "name",
+                          "worldSlug",
+                          "views"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "viewers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "views": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "displayName",
+                          "views"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "zeroResultTerms": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "q": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "integer"
+                          },
+                          "lastAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "q",
+                          "count",
+                          "lastAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "staleness": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "ownerName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "publishedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "daysSinceUpdate": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "documentId",
+                          "title",
+                          "ownerName",
+                          "updatedAt",
+                          "publishedAt",
+                          "daysSinceUpdate"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to",
+                    "itemViews",
+                    "topItems",
+                    "topTopics",
+                    "viewers",
+                    "zeroResultTerms",
+                    "staleness"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/search-log": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "in": "query",
+            "name": "pageSize",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "zeroOnly",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "from",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "to",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "userName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "q": {
+                            "type": "string"
+                          },
+                          "filters": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          "results": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "tookMs": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "at": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "userId",
+                          "userName",
+                          "q",
+                          "filters",
+                          "results",
+                          "tookMs",
+                          "at"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "pageSize": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "page",
+                    "pageSize"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sources": {
       "get": {
         "tags": [
