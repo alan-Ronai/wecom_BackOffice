@@ -116,6 +116,9 @@ export const STATUS_LABEL: Record<string, string> = {
   review: 'בסקירה',
   published: 'פורסם',
   partial: 'מסמך חלקי',
+  // W2 · wave 4 — a once-published item that is no longer correct. It is never deleted, only
+  // marked, so agents stop trusting it while editors keep its history.
+  invalid: 'לא בתוקף',
   archived: 'בארכיון',
 };
 

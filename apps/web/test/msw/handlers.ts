@@ -42,6 +42,9 @@ interface State {
   processed: string[];
   publishedSources: string[];
   preferences: typeof fx.me.preferences;
+  /* wave 4 · W2 governance */
+  statusChanges: { id: string; status: string; reason: string }[];
+  sourceReviewCleared: { id: string; note: string }[];
 }
 
 const initial = (): State => ({
@@ -61,6 +64,8 @@ const initial = (): State => ({
   processed: [],
   publishedSources: [],
   preferences: { ...fx.me.preferences },
+  statusChanges: [],
+  sourceReviewCleared: [],
 });
 
 export const state: State = initial();
@@ -614,6 +619,38 @@ export const handlers: RequestHandler[] = [
   ...stage5Handlers,
   /* Stage 4–5 routes, typed from the zod contract — see `test/msw/stage45.ts`. */
   ...stage45Handlers,
+
+  /* ── wave 4 · W2 governance (appended) ─────────────────────────────────
+   * `POST /documents/:id/status` and `POST /documents/:id/source-review/clear` per
+   * `docs/api/CONTRACTS-wave4.md`. Both answer the full updated document, and both record the
+   * request on `state` so component tests can assert what was actually sent. Registered after the
+   * stage handlers; the patterns are disjoint from everything above.
+   * `GET /users/mentionable`, which `OwnerFields` reads, is already served by `stage45Handlers`. */
+  http.post(`${B}/documents/:id/status`, async ({ params, request }) => {
+    const b = (await request.json()) as { status: Document['status']; reason: string };
+    const id = params.id as string;
+    const doc = state.documents.get(id);
+    if (!doc) return notFound();
+    state.statusChanges.push({ id, status: b.status, reason: b.reason });
+    const next: Document = { ...doc, status: b.status, etag: nextEtag() };
+    state.documents.set(id, next);
+    return HttpResponse.json(next);
+  }),
+  http.post(`${B}/documents/:id/source-review/clear`, async ({ params, request }) => {
+    const b = (await request.json()) as { note: string };
+    const id = params.id as string;
+    const doc = state.documents.get(id);
+    if (!doc) return notFound();
+    state.sourceReviewCleared.push({ id, note: b.note });
+    const next: Document = {
+      ...doc,
+      sourceReviewNeeded: false,
+      sourceReviewReason: null,
+      etag: nextEtag(),
+    };
+    state.documents.set(id, next);
+    return HttpResponse.json(next);
+  }),
 ];
 
 /** Override `/auth/me` for permission tests. */
