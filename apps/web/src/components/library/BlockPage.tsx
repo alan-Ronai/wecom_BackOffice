@@ -5,7 +5,7 @@ import { useDeleteBlock, useFields, useUpsertBlock } from '../../api/hooks/conte
 import { usePublish } from '../../api/hooks/documents.js';
 import { useCan } from '../../api/hooks/me.js';
 import type { BlockPage as BlockPageData } from '../../api/stage4.js';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 import { fmtDate } from '../../lib/format.js';
 import { Fmt } from '../Fmt.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
@@ -269,7 +269,7 @@ function BlockPageBody({
                       onClick={() => go(`/doc/${u.documentId}/${u.stepKey}`)}
                     >
                       <td>
-                        {CATS[u.category].icon} {u.title}
+                        {cat(u.category).icon} {u.title}
                       </td>
                       <td>{u.stepNum}</td>
                       <td>

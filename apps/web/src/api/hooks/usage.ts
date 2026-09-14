@@ -32,8 +32,10 @@ export interface UsageQuery {
   limit?: number;
 }
 
-export const useUsageAnalytics = (q: UsageQuery) =>
+/** `enabled` skips a request the caller already knows will 403 (`analytics.read`). */
+export const useUsageAnalytics = (q: UsageQuery, enabled = true) =>
   useQuery<UsageAnalytics>({
+    enabled,
     queryKey: keys.analytics.usage(q),
     queryFn: async () =>
       checked(UsageAnalyticsSchema, await api.GET('/analytics/usage', { params: { query: clean(q) } })),

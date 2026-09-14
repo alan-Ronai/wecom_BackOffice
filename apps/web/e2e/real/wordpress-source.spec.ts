@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext } from '@playwright/test';
 import { adminApi } from './helpers/users.js';
 
 /**
@@ -10,7 +10,12 @@ import { adminApi } from './helpers/users.js';
  * The stub is the same module the connector unit tests use, started as a process by
  * `scripts/wp-stub.mjs`; `E2E_WP_URL` is where the gate put it.
  */
-test.describe.configure({ mode: 'serial' });
+/** See `taxonomy-visibility.spec.ts`: teardown that survives a failure, in place of the no-op
+    `test.describe.configure({ mode: 'serial' })` this file used to carry. */
+const opened: APIRequestContext[] = [];
+test.afterEach(async () => {
+  for (const a of opened.splice(0)) await a.dispose();
+});
 
 const WP = process.env.E2E_WP_URL!;
 const stamp = Date.now().toString(36);
@@ -23,6 +28,7 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
 }) => {
   expect(WP, 'E2E_WP_URL is set by scripts/e2e-real.mjs').toBeTruthy();
   const request = await adminApi(page, baseURL!);
+  opened.push(request);
 
   /* 1. the connector ------------------------------------------------------- */
   const created = await request.post('/api/v1/connectors', {
@@ -68,15 +74,43 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
   )?.id;
   expect(sourceId, `the connector created the source "${WP_TITLE}"`).toBeTruthy();
 
+  /*
+   * The polling is legitimate — applying the suggestions is asynchronous — but the fan-out was
+   * not: each round listed ten cards and then issued a `GET /documents/:id` per card to read a
+   * `sourceId` the card shape does not carry, up to ~200 requests to find one id, and getting
+   * slower as the database fills. `GET /suggestions?sourceId=` answers the same question in one
+   * request, because an applied suggestion records the document it created. The per-card scan
+   * stays as the fallback for the round where `targetDocumentId` has not been written yet.
+   */
+  const feedsFromSource = async (id: string): Promise<boolean> => {
+    const doc = await request.get(`/api/v1/documents/${id}`);
+    return doc.ok() && ((await doc.json()) as { sourceId?: string | null }).sourceId === sourceId;
+  };
   let docId: string | undefined;
   for (let round = 0; round < 20 && !docId; round++) {
-    const list = await request.get('/api/v1/documents?sort=updated&pageSize=10');
-    expect(list.ok(), await list.text()).toBeTruthy();
-    for (const card of ((await list.json()) as { items: { id: string }[] }).items) {
-      const doc = await request.get(`/api/v1/documents/${card.id}`);
-      if (((await doc.json()) as { sourceId?: string | null }).sourceId === sourceId) {
-        docId = card.id;
-        break;
+    // `GET /suggestions?sourceId=` names the documents this source's suggestions targeted, which
+    // is usually one candidate and one verification instead of the ten-cards-plus-ten-details
+    // scan this loop used to do every round (up to ~200 requests, and slower as the database
+    // fills). The identity check is still `sourceId`, so a suggestion that points somewhere else
+    // is rejected rather than believed, and the scan stays as the fallback.
+    const sug = await request.get(`/api/v1/suggestions?sourceId=${sourceId}&pageSize=50`);
+    expect(sug.ok(), await sug.text()).toBeTruthy();
+    const candidates = [
+      ...new Set(
+        ((await sug.json()) as { items: { targetDocumentId?: string | null }[] }).items
+          .map((x) => x.targetDocumentId)
+          .filter((x): x is string => !!x),
+      ),
+    ];
+    for (const id of candidates) if (await feedsFromSource(id)) docId = id;
+    if (!docId) {
+      const list = await request.get('/api/v1/documents?sort=updated&pageSize=10');
+      expect(list.ok(), await list.text()).toBeTruthy();
+      for (const card of ((await list.json()) as { items: { id: string }[] }).items) {
+        if (await feedsFromSource(card.id)) {
+          docId = card.id;
+          break;
+        }
       }
     }
     if (!docId) await page.waitForTimeout(1_000);
@@ -179,5 +213,4 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
       { timeout: 30_000 },
     )
     .toContain(`נערך במערכת ${stamp}`);
-  await request.dispose();
 });

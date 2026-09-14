@@ -1,6 +1,6 @@
 import type { Template } from '../../api/hooks/collab.js';
 import { useTemplates } from '../../api/hooks/collab.js';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 import { LoadError } from '../ui/index.js';
 
 const stepCount = (t: Template) => t.phases.reduce((n, p) => n + p.steps.length, 0);
@@ -41,7 +41,7 @@ export function TemplateGallery({ onPick, onBlank }: { onPick: (t: Template) => 
           >
             <div className="chips">
               <span className="chip chip-blue">{t.kind === 'retention' ? 'שימור' : 'שלבים'}</span>
-              {t.category ? <span className="chip chip-gray">{CATS[t.category].label}</span> : null}
+              {t.category ? <span className="chip chip-gray">{cat(t.category).label}</span> : null}
               {t.builtIn ? <span className="chip chip-green">מובנה</span> : null}
             </div>
             <div className="title">{t.name}</div>

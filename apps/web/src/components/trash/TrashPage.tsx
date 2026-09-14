@@ -132,11 +132,21 @@ export function TrashPage() {
                   onClick={async () => {
                     const ok = await modal.confirm(
                       'ריקון סל המיחזור',
-                      `כל ${items.length} הפריטים יימחקו לצמיתות. לא ניתן לבטל.`,
+                      // Not "all N will be deleted": an item that was ever published is kept out
+                      // of a manual purge, so the dialog says what the route actually does and
+                      // the toast reports what it actually did.
+                      `עד ${items.length} פריטים יימחקו לצמיתות. פריטים שפורסמו בעבר יישארו בסל. לא ניתן לבטל.`,
                       'רוקן סל',
                       'danger',
                     );
-                    if (ok) await empty.mutateAsync(undefined);
+                    if (!ok) return;
+                    const res = await empty.mutateAsync(undefined);
+                    toast(
+                      res.skipped
+                        ? `נמחקו ${res.purged} · ${res.skipped} נשארו (פורסמו בעבר)`
+                        : `נמחקו ${res.purged} פריטים`,
+                      'ok',
+                    );
                   }}
                 >
                   רוקן סל

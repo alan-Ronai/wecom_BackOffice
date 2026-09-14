@@ -65,3 +65,17 @@ Two further notes for the ledger, neither a parked item:
   orphaned catalogue nodes only `if (scopes)`. W4 gives every source document a `sources` row
   titled after its document, so an unscoped *reader* was handed `source:<id>` nodes labelled with
   the titles of drafts. The gate is now `scopes || !readUnpublished`.
+
+## Fix wave — web
+
+The web half of the wave-4 final review (findings D, and C-C1/C-I1/C-I3/C-I4/C-M3/C-M4/C-M8).
+Everything Critical and Important in that package is fixed on `fix/wave4-web`, built against the
+merged API contracts — `record` on `GET /topics/:id/items` and `SourceDocumentSchema.latestRevisionId`
+are both live, so the two temporary shims the web carried against them are gone. What follows is
+what was deliberately **not** fixed, with the reasoning, in the style of the Parked table above.
+
+| Item | Ruling | Cost if wrong |
+|---|---|---|
+| Worlds and topics are ordered with ↑/↓ buttons, not drag (D-M4) | Spec §5.3 says "drag ordering". The substitution is deliberate and, I think, better: arrow buttons are keyboard-accessible where drag is not, they carry `aria-label`s, and they are correctly `disabled` at the ends of the list. Recorded here so nobody "fixes" it back to drag without reading this. | An admin reordering twenty worlds clicks more than they would drag. Adding drag *on top* of the buttons is self-contained; replacing them with drag would lose the keyboard path. |
+| `TopicPage` is eagerly imported while the other four wave-4 routes are lazy (D-M19) | `routes.tsx:78-83` draws the boundary by "who opens it and when": the topic page is on the agent's ordinary path from the sidebar, so paying for it in the entry chunk is the cheaper trade. The reviewer reached the same conclusion. | `useTopicView` and the taxonomy hooks sit in the entry chunk. One line in `routes.tsx` moves it behind `lazy()` if the entry bundle becomes the thing to cut. |
+| `react/no-unstable-nested-components` is not enabled (D-I11's second half) | The rule needs `eslint-plugin-react`, which this repo does not install; the ruling was "otherwise just hoist", and the component is hoisted (`RichText.tsx`, `ToolbarButton`). | The next component declared inside a render is caught by review rather than by lint. Adding the plugin is a root-`.eslintrc.cjs` change plus one dependency. |

@@ -1,5 +1,4 @@
-import type { CSSProperties } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useUsageAnalytics } from '../../api/hooks/usage.js';
 import { useWorlds } from '../../api/hooks/taxonomy.js';
 import { useCan } from '../../api/hooks/me.js';
@@ -11,15 +10,10 @@ import { fmtDate } from '../../lib/format.js';
  * which searches come back empty, and what has gone stale. Deliberately no wave 3 dashboard
  * cards — W6 may swap the tables for them once both lanes are merged.
  *
- * The grid is styled inline rather than through a class in `src/styles/app.css`: that stylesheet
- * is shared with every other wave 4 lane and is not on W5's append-only list.
+ * The grid used to be an inline `CSSProperties` constant because the per-lane rule forbade
+ * editing the shared stylesheet. That constraint expired at the W6 merge; it is `.analytics-grid`
+ * in `styles/app.css` now, with the rest of the wave-4 block.
  */
-const GRID: CSSProperties = {
-  display: 'grid',
-  gap: 16,
-  gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-  marginTop: 16,
-};
 
 export function AnalyticsPage() {
   const [sp, setSp] = useSearchParams();
@@ -30,7 +24,10 @@ export function AnalyticsPage() {
     to: sp.get('to') ?? undefined,
     world: sp.get('world') ?? undefined,
   };
-  const usage = useUsageAnalytics(q);
+  // Pre-gated rather than handling the 403 after the fact: without the permission the request is
+  // a guaranteed round trip and console error on the way to the same empty state.
+  const mayRead = can('analytics.read');
+  const usage = useUsageAnalytics(q, mayRead);
   /** W6: the world filter is data now (W1's `/worlds`), not the six hard-coded slugs. */
   const worlds = useWorlds();
   const set = (k: string, v: string) => {
@@ -39,11 +36,27 @@ export function AnalyticsPage() {
     else next.delete(k);
     setSp(next, { replace: true });
   };
-  const toIso = (d: string, endOfDay = false) =>
-    d ? new Date(d + (endOfDay ? 'T23:59:59.999Z' : 'T00:00:00.000Z')).toISOString() : '';
-  const day = (iso?: string) => (iso ? iso.slice(0, 10) : '');
+  /**
+   * `<input type="date">` gives a *local* calendar day, so the instant is built with the local
+   * constructor and converted. `new Date(d + 'T00:00:00.000Z')` read it as UTC — in Israel
+   * (UTC+2/+3) "from the 14th" started at 03:00 on the 14th and lost the first hours of the day.
+   */
+  const toIso = (d: string, endOfDay = false) => {
+    if (!d) return '';
+    const [y, m, day_] = d.split('-').map(Number) as [number, number, number];
+    return endOfDay
+      ? new Date(y, m - 1, day_, 23, 59, 59, 999).toISOString()
+      : new Date(y, m - 1, day_, 0, 0, 0, 0).toISOString();
+  };
+  /** Back to a local calendar day for the input, mirroring `toIso`. */
+  const day = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
 
-  if (usage.error instanceof ApiError && usage.error.status === 403)
+  if (!mayRead || (usage.error instanceof ApiError && usage.error.status === 403))
     return (
       <div className="empty">
         <b>אין הרשאה לצפות בנתוני שימוש</b>
@@ -86,7 +99,7 @@ export function AnalyticsPage() {
       {!d ? (
         <div className="empty">{usage.isLoading ? 'טוען…' : 'לא ניתן לטעון נתוני שימוש'}</div>
       ) : (
-        <div style={GRID}>
+        <div className="analytics-grid">
           <section className="card">
             <h2>פריטים נצפים</h2>
             <table className="table">
@@ -103,15 +116,8 @@ export function AnalyticsPage() {
                 {d.itemViews.map((r) => (
                   <tr key={r.documentId}>
                     <td>
-                      <a
-                        href={`/doc/${r.documentId}`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          nav(`/doc/${r.documentId}`);
-                        }}
-                      >
-                        {r.title}
-                      </a>
+                      {/* `<Link>`, not an `<a>` with `preventDefault` + `nav()` reimplementing it. */}
+                      <Link to={`/doc/${r.documentId}`}>{r.title}</Link>
                     </td>
                     <td>{r.docType ?? '—'}</td>
                     <td>{r.views}</td>

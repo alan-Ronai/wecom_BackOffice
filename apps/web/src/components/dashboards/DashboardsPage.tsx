@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useDashboards } from '../../api/hooks/stage4.js';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 import { ago, fmtDate } from '../../lib/format.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { LoadError } from '../ui/index.js';
@@ -71,10 +71,10 @@ export function DashboardsPage() {
                 <BarList
                   caption="כיסוי לפי קטגוריה"
                   bars={d.coverage.byCategory.map((c) => ({
-                    label: CATS[c.category].label,
+                    label: cat(c.category).label,
                     value: c.withDocument,
                     of: c.cards,
-                    color: CATS[c.category].color,
+                    color: cat(c.category).color,
                     onClick: () => go(`/library/${c.category}`),
                   }))}
                 />
@@ -101,7 +101,7 @@ export function DashboardsPage() {
                   caption="חציון ימים מאז עדכון, לפי קטגוריה"
                   suffix=" ימים"
                   bars={d.freshness.byCategory.map((c) => ({
-                    label: CATS[c.category].label,
+                    label: cat(c.category).label,
                     value: Math.round(c.median_days),
                     color:
                       c.median_days > 180 ? 'var(--red)' : c.median_days > 90 ? 'var(--warn)' : 'var(--ok)',
@@ -114,7 +114,7 @@ export function DashboardsPage() {
                     .map((c) => (
                       <li key={c.category}>
                         <span className="chip chip-amber">ישן</span>
-                        {CATS[c.category].label} · עודכן לאחרונה{' '}
+                        {cat(c.category).label} · עודכן לאחרונה{' '}
                         {c.lastUpdatedAt ? fmtDate(c.lastUpdatedAt) : 'מעולם לא'}
                       </li>
                     ))}

@@ -21,11 +21,14 @@ const B = '/api/v1';
 export interface TaxonomyState {
   worlds: World[];
   topics: Topic[];
+  /** Topic ids `GET /topics/:id/items` was asked to record a view for (i.e. without `record=false`). */
+  topicViews: string[];
 }
 
 export const initialTaxonomy = (): TaxonomyState => ({
   worlds: fx.worlds.map((w) => ({ ...w })),
   topics: fx.topics.map((t) => ({ ...t })),
+  topicViews: [],
 });
 
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
@@ -90,11 +93,14 @@ export const taxonomyHandlers = (state: TaxonomyState): RequestHandler[] => [
     w.active = false;
     return noContent();
   }),
-  http.get(`${B}/worlds/:slug/topics`, ({ params }) =>
-    HttpResponse.json({
-      items: state.topics.filter((t) => t.worldSlug === params.slug && t.active).sort(byPosition),
-    }),
-  ),
+  http.get(`${B}/worlds/:slug/topics`, ({ params, request }) => {
+    const inactive = new URL(request.url).searchParams.get('includeInactive') === 'true';
+    return HttpResponse.json({
+      items: state.topics
+        .filter((t) => t.worldSlug === params.slug && (inactive || t.active))
+        .sort(byPosition),
+    });
+  }),
   http.post(`${B}/worlds/:slug/topics`, async ({ params, request }) => {
     const body = (await request.json()) as { slug: string; name: string; description?: string };
     const t: Topic = {
@@ -131,9 +137,15 @@ export const taxonomyHandlers = (state: TaxonomyState): RequestHandler[] => [
     t.active = false;
     return noContent();
   }),
-  http.get(`${B}/topics/:id/items`, ({ params }) =>
-    params.id === fx.topics[0]!.id ? HttpResponse.json(fx.topicView) : notFound(),
-  ),
+  /**
+   * `?record=false` suppresses the server-side topic view (W1). The stub counts what it was asked
+   * to record so a test can assert that an article open does not write one.
+   */
+  http.get(`${B}/topics/:id/items`, ({ params, request }) => {
+    if (params.id !== fx.topics[0]!.id) return notFound();
+    if (new URL(request.url).searchParams.get('record') !== 'false') state.topicViews.push(String(params.id));
+    return HttpResponse.json(fx.topicView);
+  }),
   http.get(`${B}/tags`, ({ request }) => {
     const q = new URL(request.url).searchParams.get('q') ?? '';
     return HttpResponse.json({ items: fx.tags.filter((t) => t.tag.includes(q)) });

@@ -4,11 +4,13 @@ import type { DocRef, Document } from '@wecom/shared';
 import { api } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap } from '../unwrap.js';
+import { invalidateContent } from '../invalidate.js';
 import type {
   CreateDocumentBody,
   ListDocumentsQuery,
   ListDocumentsResponse,
   PatchDocumentBody,
+  PublishBody,
   RelatedDoc,
 } from '../types.js';
 
@@ -118,6 +120,31 @@ export function useDocRefs(id: string | undefined): DocRef[] {
   );
 }
 
+/**
+ * Statuses for a set of link targets, for §5.5's invalid-link rendering.
+ *
+ * Neither `GET /documents/:id/related` nor `/links` carries the target's status, so the only way
+ * to know a link points at an item marked "לא בתוקף" is to look at the item. Three things keep
+ * that honest: it is capped, it shares `keys.doc(id)` with `useDocRefs` and with opening the
+ * link itself (so most of these are already in cache and cost nothing), and it is `enabled` only
+ * for editors — a read-only reader never needs it, because the API strips non-published targets
+ * from their `related`/`links` in the first place.
+ */
+export function useDocStatuses(ids: string[], enabled: boolean): Map<string, string> {
+  const wanted = useMemo(() => [...new Set(ids)].slice(0, MAX_DOC_REF_LOOKUPS), [ids]);
+  return useQueries({
+    queries: wanted.map((docId) => ({
+      queryKey: keys.doc(docId),
+      enabled,
+      staleTime: 60_000,
+      retry: false,
+      queryFn: async () => unwrap(await api.GET('/documents/{id}', { params: { path: { id: docId } } })),
+    })),
+    combine: (results) =>
+      new Map(results.flatMap((r) => (r.data ? [[r.data.id, r.data.status] as const] : []))),
+  });
+}
+
 export const useVersions = (id: string | undefined) =>
   useQuery({
     queryKey: keys.versions(id ?? ''),
@@ -198,22 +225,20 @@ export const usePublish = () => {
   const qc = useQueryClient();
   return useMutation({
     // `resolveFeedbackIds` (wave 4, W3) closes the reports the editor ticked in the publish
-    // dialog. It is not in the generated contract yet — W3-api adds it to `PublishBodySchema`
-    // and regenerates `openapi.json`; until then it simply rides along in the body.
-    mutationFn: async ({
-      id,
-      ...body
-    }: {
-      id: string;
-      label: string;
-      markPartial?: boolean;
-      resolveFeedbackIds?: string[];
-    }) => unwrap(await api.POST('/documents/{id}/publish', { params: { path: { id } }, body })),
+    // dialog. It is in `PublishBodySchema` and the generated contract now, so the body is typed
+    // from there rather than restated here.
+    mutationFn: async ({ id, ...body }: { id: string } & PublishBody) =>
+      unwrap(await api.POST('/documents/{id}/publish', { params: { path: { id } }, body })),
     onSuccess: (res, { id }) => {
       qc.setQueryData(keys.doc(id), res.document);
       void qc.invalidateQueries({ queryKey: keys.versions(id) });
-      void qc.invalidateQueries(ALL_DOCS);
       qc.removeQueries({ queryKey: keys.draft(id) });
+      // Publishing closes the feedback the editor ticked. The server also emits `feedback.updated`
+      // per closed id, but SSE reconnect backoff runs to 30 s — every other mutation here heals
+      // its own effects locally and leaves SSE for the *other* clients.
+      void qc.invalidateQueries({ queryKey: ['feedback'] });
+      void qc.invalidateQueries({ queryKey: keys.docFeedback(id) });
+      invalidateContent(qc);
     },
   });
 };
@@ -255,7 +280,8 @@ export const usePatchDocument = (id: string) => {
       unwrap(await api.PATCH('/documents/{id}', { params: { path: { id } }, body })),
     onSuccess: (d) => {
       qc.setQueryData(keys.doc(id), d);
-      void qc.invalidateQueries(ALL_DOCS);
+      // `worlds`, `topics` and `tags` are patchable, and every taxonomy count derives from them.
+      invalidateContent(qc);
     },
   });
 };
@@ -269,7 +295,7 @@ export const useRestore = (id: string) => {
     onSuccess: (res) => {
       qc.setQueryData(keys.doc(id), res.document);
       void qc.invalidateQueries({ queryKey: keys.versions(id) });
-      void qc.invalidateQueries(ALL_DOCS);
+      invalidateContent(qc);
     },
   });
 };
@@ -285,10 +311,7 @@ export const useDeleteDocument = () => {
   return useMutation({
     mutationFn: async (id: string) =>
       unwrap(await api.DELETE('/documents/{id}', { params: { path: { id } } })),
-    onSuccess: () => {
-      void qc.invalidateQueries(ALL_DOCS);
-      void qc.invalidateQueries({ queryKey: keys.trash });
-    },
+    onSuccess: () => invalidateContent(qc),
   });
 };
 
@@ -297,7 +320,7 @@ export const useCreateDocument = () => {
   return useMutation({
     mutationFn: async (body: CreateDocumentBody): Promise<Document> =>
       unwrap(await api.POST('/documents', { body })),
-    onSuccess: () => qc.invalidateQueries(ALL_DOCS),
+    onSuccess: () => invalidateContent(qc),
   });
 };
 

@@ -14,7 +14,7 @@ import { useCan } from '../../api/hooks/me.js';
 import { ApiError } from '../../api/unwrap.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
 import { useUiPrefs } from '../../api/hooks/uiPrefs.js';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 import { copy } from '../../lib/format.js';
 import { useHotkeys, type ActiveScope } from '../../lib/keys.js';
 import { resolvedSteps } from '../../lib/steps.js';
@@ -89,9 +89,24 @@ export function ArticlePage() {
    */
   const [paneMode, setPaneMode] = useState<PaneMode | null>(null);
   const source = useSourceDocument(id);
-  const effectivePane: PaneMode = paneMode ?? prefs.data?.paneMode ?? 'work';
-  /** W1: the topic view is what "previous / next in this topic" means (PRD §4). */
-  const topicView = useTopicView(doc?.topics?.[0]);
+  /**
+   * `paneMode` is a *global* preference but whether a document has a source is per-document, so
+   * the wanted mode is clamped to what this one supports. Without the clamp an agent who switched
+   * to "מקור" on one item opened the next one to the source pane's empty state instead of the
+   * article — mid-call, reading as "the document is empty". `isPending` keeps the clamp from
+   * firing (and the toggle from flashing disabled) while the source query is still in flight.
+   */
+  const hasSource = !!source.data || source.isPending;
+  const wantedPane: PaneMode = paneMode ?? prefs.data?.paneMode ?? 'work';
+  const effectivePane: PaneMode = hasSource ? wantedPane : 'work';
+  /**
+   * W1: the topic view is what "previous / next in this topic" means (PRD §4).
+   *
+   * `record: false` because this is not a topic browse. The route records a topic view by
+   * default, and an article open is not one — counting it would make `/analytics`'s "נושאים
+   * נצפים" measure "articles opened that happen to sit in a topic" instead.
+   */
+  const topicView = useTopicView(doc?.topics?.[0], { record: false });
   const topicNeighbours = useMemo(() => {
     const flat = (topicView.data?.groups ?? []).flatMap((g) => g.items);
     const i = flat.findIndex((x) => x.id === doc?.id);
@@ -341,7 +356,15 @@ export function ArticlePage() {
       ) : null;
     },
     renderStepFeedback: (s) => (
-      <FeedbackButton size="xs" documentId={doc.id} documentVersion={doc.currentVersion} stepKey={s.key} />
+      <FeedbackButton
+        size="xs"
+        documentId={doc.id}
+        documentVersion={doc.currentVersion}
+        stepKey={s.key}
+        documentTitle={doc.title}
+        docType={doc.docType}
+        worldSlug={doc.category}
+      />
     ),
     renderFooter: (s) => (
       <StepCollab
@@ -373,9 +396,7 @@ export function ArticlePage() {
         <div className="meta">
           {doc.docType ? <TypeBadge docType={doc.docType} /> : null}
           <span className="chip chip-blue">
-            {doc.kind === 'retention'
-              ? 'שימור לקוחות'
-              : `תפעולי – ${CATS[doc.category]?.short ?? doc.category}`}
+            {doc.kind === 'retention' ? 'שימור לקוחות' : `תפעולי – ${cat(doc.category).short}`}
           </span>
           <span className="chip chip-gray">v{doc.currentVersion}</span>
           <span className="chip chip-gray">{steps.length} שלבים</span>
@@ -398,7 +419,7 @@ export function ArticlePage() {
         <h1>{doc.title}</h1>
         <p>{doc.description}</p>
         {topicNeighbours.prev || topicNeighbours.next ? (
-          <div className="topic-nav" style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <div className="topic-nav">
             {topicNeighbours.prev ? (
               <button className="btn xs" onClick={() => go(`/doc/${topicNeighbours.prev!.id}`)}>
                 → הקודם בנושא: {topicNeighbours.prev.title} ({DOC_TYPE_LABELS[topicNeighbours.prev.docType]})
@@ -420,7 +441,7 @@ export function ArticlePage() {
     effectivePane === 'source' ? (
       <SourcePane documentId={doc.id} canEdit={can('docs.edit', doc)} sourceId={doc.sourceId} />
     ) : effectivePane === 'split' ? (
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, minWidth: 0 }}>
+      <div className="split-panes">
         {workView}
         <SourcePane documentId={doc.id} canEdit={can('docs.edit', doc)} sourceId={doc.sourceId} />
       </div>
@@ -461,7 +482,7 @@ export function ArticlePage() {
           </a>
           <span className="sep">/</span>
           <a role="button" tabIndex={0} onClick={() => go(`/library/${doc.category}`)}>
-            {CATS[doc.category]?.label ?? doc.category}
+            {cat(doc.category).label}
           </a>
           <span className="sep">/</span>
           <b>{doc.title}</b>
@@ -519,10 +540,16 @@ export function ArticlePage() {
               </span>
             ) : null}
           </span>
-          <FeedbackButton documentId={doc.id} documentVersion={doc.currentVersion} />
+          <FeedbackButton
+            documentId={doc.id}
+            documentVersion={doc.currentVersion}
+            documentTitle={doc.title}
+            docType={doc.docType}
+            worldSlug={doc.category}
+          />
           <PaneModeToggle
             value={effectivePane}
-            hasSource={!!source.data}
+            hasSource={hasSource}
             onChange={(m) => {
               setPaneMode(m);
               savePrefs.mutate({

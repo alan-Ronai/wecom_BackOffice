@@ -29,15 +29,32 @@ export function FeedbackDrawer({ id, onClose }: { id: string; onClose: () => voi
   const [note, setNote] = useState('');
   const [version, setVersion] = useState<string>('');
 
+  /**
+   * Seed the form from the report — keyed on its **id**, not on `detail.data`'s identity. Keyed on
+   * the object, an ordinary window-focus refetch produced a new identity and silently wiped a
+   * half-typed decision note; the save path re-seeds explicitly below instead.
+   */
+  const loaded = detail.data;
   useEffect(() => {
-    if (!detail.data) return;
-    setStatus(detail.data.status);
-    setAssignee(detail.data.assigneeId ?? '');
-    setNote(detail.data.decisionNote ?? '');
+    if (!loaded) return;
+    setStatus(loaded.status);
+    setAssignee(loaded.assigneeId ?? '');
+    setNote(loaded.decisionNote ?? '');
     // Prefill with the newest version published after the report (spec §5.4).
-    const latest = detail.data.laterVersions.at(-1);
+    const latest = loaded.laterVersions.at(-1);
     setVersion(latest ? String(latest.version) : '');
-  }, [detail.data]);
+    // Intentionally only the id: see the note above. (No react-hooks plugin in this repo's
+    // eslint config, so there is no rule to silence — the reason is the comment.)
+  }, [loaded?.id]);
+
+  // A drawer that traps attention has to be dismissible from the keyboard (wave 3's `Modal` bar).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   if (detail.isPending)
     return (
@@ -54,7 +71,10 @@ export function FeedbackDrawer({ id, onClose }: { id: string; onClose: () => voi
   const f = detail.data;
 
   const save = async () => {
-    await patch.mutateAsync({ id, status, assigneeId: assignee || null, decisionNote: note });
+    const saved = await patch.mutateAsync({ id, status, assigneeId: assignee || null, decisionNote: note });
+    setStatus(saved.status);
+    setAssignee(saved.assigneeId ?? '');
+    setNote(saved.decisionNote ?? '');
     toast('ההחלטה נשמרה', 'ok');
   };
   const close = async () => {
@@ -67,9 +87,9 @@ export function FeedbackDrawer({ id, onClose }: { id: string; onClose: () => voi
     <aside className="drawer feedback-drawer" aria-label="פרטי משוב">
       <div className="hd">
         <b>{FEEDBACK_KIND_LABELS[f.kind]}</b>
-        <span className="x" role="button" tabIndex={0} title="סגור" onClick={onClose}>
+        <button type="button" className="x" title="סגור" aria-label="סגור" onClick={onClose}>
           ✕
-        </span>
+        </button>
       </div>
       <div className="small muted">
         {f.documentTitle} · ניתן על גרסה v{f.documentVersion}

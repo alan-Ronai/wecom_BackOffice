@@ -29,6 +29,7 @@ export type SourceDraft = z.infer<typeof SourceDraftSchema>;
 
 /* ── source document ────────────────────────────────────────────────────── */
 
+/** Carries `latestRevisionId` (W4), which is what makes the raw-docx download reachable (§5.1). */
 export const useSourceDocument = (id: string | undefined) =>
   useQuery({
     queryKey: keys.source(id ?? ''),

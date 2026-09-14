@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { FEEDBACK_KINDS, FEEDBACK_KIND_LABELS, type FeedbackKind } from '@wecom/shared';
 import { useCreateFeedback } from '../../api/hooks/feedback.js';
 import { useModal } from '../ui/Modal.js';
@@ -9,6 +9,12 @@ export interface FeedbackButtonProps {
   documentVersion: number;
   stepKey?: string;
   size?: 'xs' | 'sm';
+  /* §5.4 lists the auto-context as (item, type, world, version, step). The first three are on
+     screen behind the modal, but the point of the block is to show exactly what is being sent —
+     and the callers have all of them, so passing them costs nothing. */
+  documentTitle?: string;
+  docType?: string;
+  worldSlug?: string;
 }
 
 export const FEEDBACK_TITLE = 'דיווח על בעיה / משוב';
@@ -17,6 +23,9 @@ function FeedbackForm({
   documentId,
   documentVersion,
   stepKey,
+  documentTitle,
+  docType,
+  worldSlug,
   onDone,
 }: FeedbackButtonProps & { onDone: () => void }) {
   const [kind, setKind] = useState<FeedbackKind | null>(null);
@@ -58,15 +67,22 @@ function FeedbackForm({
       </label>
       {/* PRD §12: the agent never retypes what the system already knows. */}
       <div className="small muted feedback-context">
-        נשמר אוטומטית: <span>גרסה v{documentVersion}</span>
-        {stepKey ? (
-          <>
-            {' · '}
-            <span>שלב {stepKey}</span>
-          </>
-        ) : null}
-        {' · '}
-        משתמש ותאריך
+        נשמר אוטומטית:{' '}
+        {[
+          documentTitle,
+          docType ? `סוג ${docType}` : null,
+          worldSlug ? `עולם ${worldSlug}` : null,
+          `גרסה v${documentVersion}`,
+          stepKey ? `שלב ${stepKey}` : null,
+          'משתמש ותאריך',
+        ]
+          .filter(Boolean)
+          .map((part, i) => (
+            <Fragment key={i}>
+              {i ? ' · ' : ''}
+              <span>{part}</span>
+            </Fragment>
+          ))}
       </div>
       <div className="foot">
         <button type="button" className="btn" onClick={onDone}>

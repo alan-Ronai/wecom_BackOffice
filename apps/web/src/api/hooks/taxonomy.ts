@@ -23,6 +23,7 @@ import { api } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap } from '../unwrap.js';
 import { checked } from '../stage45.js';
+import { invalidateContent } from '../invalidate.js';
 
 export interface TagCount {
   tag: string;
@@ -42,24 +43,50 @@ export const useWorlds = (includeInactive = false) =>
     staleTime: 60_000,
   });
 
-export const useTopics = (worldSlug: string | undefined) =>
+/** `includeInactive` is for the admin screen, which has to be able to reactivate what it hid. */
+export const useTopics = (worldSlug: string | undefined, includeInactive = false) =>
   useQuery({
-    queryKey: keys.topics(worldSlug ?? ''),
+    queryKey: [...keys.topics(worldSlug ?? ''), includeInactive],
     enabled: !!worldSlug,
     queryFn: async (): Promise<Topic[]> =>
       checked(
         TopicsResponseSchema,
-        await api.GET('/worlds/{slug}/topics', { params: { path: { slug: worldSlug! } } }),
+        await api.GET('/worlds/{slug}/topics', {
+          params: {
+            path: { slug: worldSlug! },
+            query: includeInactive ? { includeInactive: true } : {},
+          },
+        }),
       ).items,
     staleTime: 60_000,
   });
 
-export const useTopicView = (id: string | undefined) =>
+/**
+ * `GET /topics/:id/items` is not a read-only route: it records a topic view (W5's `topic_views`,
+ * which is what `/analytics`'s "נושאים נצפים" card counts). So the caller has to say whether this
+ * read *is* a topic browse.
+ *
+ * `TopicPage` is one and takes the default. `ArticlePage` is not — it reads the same list only to
+ * compute prev/next inside the topic, and left unqualified it made every article open write a
+ * `topic_views` row indistinguishable from a real one, which is a data-repair job rather than a
+ * code fix once it has run for a while.
+ *
+ * The cache key deliberately does not include `record`: both callers want the same list, and the
+ * shared key is what keeps `invalidateContent` and the SSE `taxonomy.changed` fan-out working.
+ * A `TopicPage` mount refetches the stale entry and records the view then.
+ */
+export const useTopicView = (id: string | undefined, opts: { record?: boolean } = {}) =>
   useQuery({
     queryKey: keys.topic(id ?? ''),
     enabled: !!id,
     queryFn: async (): Promise<TopicView> =>
-      checked(TopicViewSchema, await api.GET('/topics/{id}/items', { params: { path: { id: id! } } })),
+      checked(
+        TopicViewSchema,
+        // The server defaults to `record=true`, so only the suppressing case is worth sending.
+        await api.GET('/topics/{id}/items', {
+          params: { path: { id: id! }, query: opts.record === false ? { record: false } : {} },
+        }),
+      ),
   });
 
 export const useTags = (q = '') =>
@@ -73,13 +100,12 @@ export const useTags = (q = '') =>
     staleTime: 30_000,
   });
 
-/** Every taxonomy mutation can change counts on any of the three lists, so all three go stale. */
-const invalidateTaxonomy = (qc: ReturnType<typeof useQueryClient>): void => {
-  void qc.invalidateQueries({ queryKey: ['worlds'] });
-  void qc.invalidateQueries({ queryKey: ['topics'] });
-  void qc.invalidateQueries({ queryKey: ['topic'] });
-  void qc.invalidateQueries({ queryKey: ['tags'] });
-};
+/**
+ * Every taxonomy mutation can change what a document list shows and what a world or topic counts,
+ * so it goes through the shared helper rather than a taxonomy-only list — renaming a world used to
+ * leave every cached library card and search result on the old name.
+ */
+const invalidateTaxonomy = (qc: ReturnType<typeof useQueryClient>): void => invalidateContent(qc);
 
 export const useCreateWorld = () => {
   const qc = useQueryClient();

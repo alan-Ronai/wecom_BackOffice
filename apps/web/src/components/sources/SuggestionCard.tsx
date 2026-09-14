@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Suggestion, SuggestionPayload } from '@wecom/shared';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 
 const TAG: Record<Suggestion['type'], { label: string; tone: string }> = {
   'update-step': { label: 'עדכון שלב', tone: 'amber' },
@@ -17,7 +17,7 @@ export function payloadSummary(p: SuggestionPayload): string {
     case 'update-step':
       return p.addActions.length ? '+ ' + p.addActions.join(' · ') : 'עדכון שדות השלב';
     case 'new-card':
-      return `כרטיס: ${CATS[p.category].label} · גל ${p.wave} · ${p.phases.flatMap((x) => x.steps).length} שלבים`;
+      return `כרטיס: ${cat(p.category).label} · גל ${p.wave} · ${p.phases.flatMap((x) => x.steps).length} שלבים`;
     case 'new-step':
       return `${p.title} · ${p.actions.length} פעולות`;
     case 'update-block':

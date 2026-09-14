@@ -263,7 +263,9 @@ export function StepView({ step, ctx }: { step: ResolvedStep; ctx: StepCtx }) {
               </div>
             ) : null}
 
-            {step.outcomes.length || (ctx.callMode && cur) ? (
+            {/* `renderStepFeedback` is part of the condition, not just the contents: §5.4's
+                per-step report button has to exist on a step that has no outcomes either. */}
+            {step.outcomes.length || (ctx.callMode && cur) || ctx.renderStepFeedback ? (
               <div className="outs">
                 {step.outcomes.map((o, i) => (
                   <span
@@ -300,7 +302,12 @@ export function StepView({ step, ctx }: { step: ResolvedStep; ctx: StepCtx }) {
                     ＋ הערת נציג<kbd>N</kbd>
                   </span>
                 ) : null}
-                {ctx.callMode && cur ? ctx.renderStepFeedback?.(step) : null}
+                {/* Not gated on `callMode && cur` like the two affordances above it: those are
+                    keyboard hints that only mean something for the active step, while §5.4 asks
+                    for the report button "per step" so an agent reports from where the problem is
+                    without hunting for it. The slot is already `undefined` for the editor preview
+                    and the split panes, so the callers that must not offer feedback still do not. */}
+                {ctx.renderStepFeedback?.(step)}
               </div>
             ) : null}
 

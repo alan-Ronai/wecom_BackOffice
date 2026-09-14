@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { PERMISSIONS } from '@wecom/shared';
 import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
@@ -30,6 +31,56 @@ describe('admin taxonomy', () => {
     await userEvent.click(screen.getByRole('button', { name: '✚ נושא' }));
     expect(await within(await screen.findByTestId('topics-list')).findByText(/נתבים/)).toBeInTheDocument();
     expect(state.topics.some((t) => t.slug === 'routers' && t.worldSlug === 'tech')).toBe(true);
+  });
+
+  it('asks before forcing a 409, and refuses to force past any other error', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/admin/taxonomy' });
+    const worlds = await screen.findByTestId('worlds-list');
+    await within(worlds).findByText('תמיכה טכנית');
+    const row = within(worlds).getAllByRole('listitem')[0]!; // 'sim', itemCount 3 → 409
+    await userEvent.click(within(row).getByRole('button', { name: 'השבת' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'אישור' }));
+    // The 409 is the *only* answer that means "it still has items in it".
+    await userEvent.click(await screen.findByRole('button', { name: 'אישור' }));
+    await waitFor(() => expect(state.worlds.find((w) => w.slug === 'sim')!.active).toBe(false));
+
+    // A 500 must not be reported as WORLD_IN_USE, and must never be retried with force.
+    let forced = false;
+    server.use(
+      http.delete('/api/v1/worlds/:slug', ({ request }) => {
+        if (new URL(request.url).searchParams.get('force') === 'true') forced = true;
+        return HttpResponse.json({ code: 'INTERNAL', message: 'תקלה' }, { status: 500 });
+      }),
+    );
+    const tech = within(await screen.findByTestId('worlds-list')).getAllByRole('listitem')[1]!;
+    await userEvent.click(within(tech).getByRole('button', { name: 'השבת' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'אישור' }));
+    expect(await screen.findByText('השבתת עולם התוכן נכשלה')).toBeInTheDocument();
+    expect(forced).toBe(false);
+  });
+
+  it('reactivates a deactivated topic and rejects a slug the contract would 400', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/admin/taxonomy' });
+    const worlds = await screen.findByTestId('worlds-list');
+    await userEvent.click(await within(worlds).findByText('תמיכה טכנית'));
+    const topics = await screen.findByTestId('topics-list');
+    const first = within(topics).getAllByRole('listitem')[0]!;
+    await userEvent.click(within(first).getByRole('button', { name: 'השבת' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'אישור' }));
+    // Deactivation used to be one-way: the row offered "השבת" and never "הפעל".
+    const back = await within(await screen.findByTestId('topics-list')).findByRole('button', {
+      name: 'הפעל',
+    });
+    await userEvent.click(back);
+    await waitFor(() => expect(state.topics.every((t) => t.active)).toBe(true));
+
+    await userEvent.type(screen.getByLabelText('שם נושא חדש'), 'נתבים');
+    await userEvent.type(screen.getByLabelText('מזהה נושא חדש'), 'נתבים');
+    await userEvent.click(screen.getByRole('button', { name: '✚ נושא' }));
+    expect(await screen.findByText(/המזהה חייב להיות/)).toBeInTheDocument();
+    expect(state.topics.some((t) => t.name === 'נתבים')).toBe(false);
   });
 
   it('hides mutations without taxonomy.manage', async () => {

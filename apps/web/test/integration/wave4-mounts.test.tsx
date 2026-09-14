@@ -12,7 +12,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../msw/server.js';
 import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
-import { fx, D_BROWSING, T } from '../msw/fixtures.js';
+import { fx, D_BROWSING, REV_1, SRC_TECH, T } from '../msw/fixtures.js';
 
 const B = '/api/v1';
 const side = async () => within(await screen.findByRole('complementary', { name: 'ניווט ראשי' }));
@@ -105,6 +105,21 @@ describe('W6 article mounts', () => {
     expect(buttons.length).toBeGreaterThanOrEqual(2); // header + active step
   });
 
+  it('offers the feedback button on every step, not only the active one in call mode', async () => {
+    // §5.4 says "fixed … in the article header and per step": the point of the per-step entry is
+    // that the agent reports from where the problem is. Gated on `callMode && cur` it existed on
+    // one step at a time, and only inside call mode — and `>= 2` could not tell the difference.
+    server.use(
+      http.get(`${B}/me/preferences`, () => HttpResponse.json({ ...fx.me.preferences, callMode: false })),
+    );
+    renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
+    await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title });
+    const steps = document.querySelectorAll('[data-step]');
+    expect(steps.length).toBeGreaterThan(1);
+    const buttons = await screen.findAllByRole('button', { name: 'דיווח על בעיה / משוב' });
+    expect(buttons.length).toBe(steps.length + 1); // one per step, plus the header
+  });
+
   it('shows the unavailable page on NOT_PUBLISHED instead of "moved to the trash"', async () => {
     server.use(
       http.get(`${B}/documents/${D_BROWSING}`, () =>
@@ -116,6 +131,29 @@ describe('W6 article mounts', () => {
     expect(screen.getByText('הפריט קיים אך אינו מפורסם, אינו בתוקף או הועבר לארכיון.')).toBeInTheDocument();
     // Not the generic "gone" page: telling a reader to check the trash sends them the wrong way.
     expect(screen.queryByText(/סל המיחזור/)).toBeNull();
+  });
+
+  it('opens an article in a world the seed table does not know', async () => {
+    // The regression this locks down: `CATS[slug].label` on an admin-created world threw inside
+    // `QuickSwitch`/`PrintFrame`, and with no error boundary the whole root unmounted — a blank
+    // page with the URL still in the bar, which is exactly what spec §9 promises will work.
+    server.use(
+      http.get(`${B}/worlds`, () =>
+        HttpResponse.json({
+          items: [
+            ...fx.worlds,
+            { ...fx.worlds[0]!, id: 'aaaaaaaa-aaaa-4aaa-8aaa-000000000099', slug: 'field', name: 'שטח' },
+          ],
+        }),
+      ),
+      http.get(`${B}/documents/${D_BROWSING}`, () =>
+        HttpResponse.json({ ...fx.docBrowsing, category: 'field', worlds: ['field'] }),
+      ),
+    );
+    renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
+    expect(await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title })).toBeInTheDocument();
+    // Falls back to the slug rather than crashing on `undefined.label`.
+    expect(screen.getAllByText(/field/).length).toBeGreaterThan(0);
   });
 
   it('switches to the source pane and back', async () => {
@@ -130,15 +168,72 @@ describe('W6 article mounts', () => {
           updatedById: null,
           updatedByName: null,
           updatedAt: T,
+          latestRevisionId: REV_1,
         }),
+      ),
+      http.get(`${B}/documents/${D_BROWSING}`, () =>
+        HttpResponse.json({ ...fx.docBrowsing, sourceId: SRC_TECH }),
       ),
     );
     renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
     await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title });
     await userEvent.click(await screen.findByRole('button', { name: 'מקור' }));
     expect(await screen.findByText('טקסט מקור')).toBeInTheDocument();
+    // D-I9: the raw download reads its revision off the source document, so the mount — not just
+    // the component with a hand-passed prop — actually renders it.
+    expect(screen.getByRole('link', { name: 'הורד קובץ מקור' })).toHaveAttribute(
+      'href',
+      expect.stringContaining(`/sources/${SRC_TECH}/revisions/${REV_1}/raw`),
+    );
     await userEvent.click(screen.getByRole('button', { name: 'תצוגת עבודה' }));
     expect(await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title })).toBeVisible();
+  });
+
+  it('falls back to the working view when a persisted pane mode has no source to show', async () => {
+    // `paneMode` is a global preference; whether a document has a source is per-document. An
+    // agent who switched to "מקור" on one item used to open the next one on the source pane's
+    // empty state instead of the article — mid-call, reading as "the document is empty".
+    server.use(
+      http.get(`${B}/me/preferences`, () => HttpResponse.json({ ...fx.me.preferences, paneMode: 'source' })),
+      http.get(`${B}/documents/${D_BROWSING}/source`, () =>
+        HttpResponse.json({ code: 'NOT_FOUND', message: 'אין מקור' }, { status: 404 }),
+      ),
+    );
+    renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
+    expect(await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'מקור' })).toBeDisabled());
+    expect(screen.queryByText('אין עדיין מסמך מקור לפריט זה')).toBeNull();
+  });
+
+  it('persists the pane choice through the preferences round trip', async () => {
+    // Every PUT, not just the last: the shell writes preferences of its own (`lastSeen`,
+    // `sidebarExpanded`), and whichever lands last would otherwise decide the assertion.
+    const saved: Record<string, unknown>[] = [];
+    server.use(
+      http.get(`${B}/documents/${D_BROWSING}/source`, () =>
+        HttpResponse.json({
+          documentId: D_BROWSING,
+          html: '<p>טקסט מקור</p>',
+          text: 'טקסט מקור',
+          version: 1,
+          etag: 's1',
+          updatedById: null,
+          updatedByName: null,
+          updatedAt: T,
+          latestRevisionId: null,
+        }),
+      ),
+      http.put(`${B}/me/preferences`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        saved.push(body);
+        return HttpResponse.json(body);
+      }),
+    );
+    renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
+    await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title });
+    await userEvent.click(await screen.findByRole('button', { name: 'מפוצל' }));
+    // The choice has to follow the agent to the next machine, so it is written back, not local.
+    await waitFor(() => expect(saved.some((b) => b.paneMode === 'split')).toBe(true));
   });
 
   it('offers prev/next inside the topic', async () => {
@@ -253,6 +348,24 @@ describe('W6 library mounts', () => {
   });
 });
 
+describe('W6 source editor route', () => {
+  it('gives an editor the editing surface', async () => {
+    renderWithProviders(<App />, { route: `/edit/${D_BROWSING}/source` });
+    expect(await screen.findByRole('button', { name: 'שמור גרסה' })).toBeInTheDocument();
+    expect(screen.queryByText('אין הרשאה לערוך את מסמך המקור')).toBeNull();
+  });
+
+  it('refuses the editing surface to a reader who guesses the URL', async () => {
+    // The chrome was gated but the editor itself was not: a read-only agent got a working TipTap
+    // surface and an autosave firing `PUT …/source/draft` every three seconds against a server
+    // that refuses all of it.
+    server.use(http.get(`${B}/auth/me`, () => HttpResponse.json({ ...fx.me, permissions: ['docs.read'] })));
+    renderWithProviders(<App />, { route: `/edit/${D_BROWSING}/source` });
+    expect(await screen.findByText('אין הרשאה לערוך את מסמך המקור')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'שמור גרסה' })).toBeNull();
+  });
+});
+
 describe('W6 editor mounts', () => {
   it('shows the metadata and ownership panels, the source link and the export button', async () => {
     renderWithProviders(<App />, { route: `/edit/${D_BROWSING}` });
@@ -331,8 +444,16 @@ describe('W6 editor mounts', () => {
     );
     renderWithProviders(<App />, { route: `/edit/${D_BROWSING}` });
     await screen.findByPlaceholderText('שם פריט הידע…');
+    // §5.3: the same TipTap component in a compact mode, not a raw-HTML textarea. The rendered
+    // text is the assertion; the markup is the editor's business.
     const body = await screen.findByLabelText('תוכן הפריט');
-    expect(body).toHaveValue('<p>שלום, מדבר/ת נציג/ה</p>');
+    expect(body).toHaveTextContent('שלום, מדבר/ת נציג/ה');
+    expect(within(body).queryByRole('textbox')).toBeNull(); // it *is* the textbox
+    expect(screen.getByRole('button', { name: 'מודגש' })).toBeInTheDocument();
+    // Compact drops the table and image controls; the raw HTML stays behind an explicit toggle.
+    expect(screen.queryByRole('button', { name: 'טבלה' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'עריכת HTML' }));
+    expect(await screen.findByLabelText('תוכן הפריט (HTML)')).toHaveValue('<p>שלום, מדבר/ת נציג/ה</p>');
     expect(screen.queryByText('+ קבוצת שלבים')).toBeNull();
   });
 });

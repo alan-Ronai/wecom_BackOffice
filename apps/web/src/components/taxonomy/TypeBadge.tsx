@@ -1,5 +1,5 @@
 import { DOC_TYPE_LABELS, type DocType } from '@wecom/shared';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 
 /** One chip per PRD item type; colour by type so agents tell diagnosis from operation at a glance. */
 const TONE: Record<DocType, string> = {
@@ -34,8 +34,9 @@ export function TypeBadge({ docType, compact = false }: { docType: DocType; comp
 
 /**
  * Worlds are admin-managed data now, so `CATS` is a display hint for the six seeded slugs
- * rather than an exhaustive map; anything else falls back to the slug itself.
+ * rather than an exhaustive map; anything else falls back to the slug itself. Both of these are
+ * thin names over `cat()`, kept because "world label" reads better at the call site than a
+ * table lookup does.
  */
-const CAT = CATS as Record<string, { label: string; short: string } | undefined>;
-export const worldShort = (slug: string): string => CAT[slug]?.short ?? slug;
-export const worldLabel = (slug: string): string => CAT[slug]?.label ?? slug;
+export const worldShort = (slug: string): string => cat(slug).short;
+export const worldLabel = (slug: string): string => cat(slug).label;

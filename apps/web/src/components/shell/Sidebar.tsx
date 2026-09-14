@@ -9,7 +9,7 @@ import { useTrash } from '../../api/hooks/trash.js';
 import { useCan, useMe } from '../../api/hooks/me.js';
 import { useSyncLinks } from '../../api/hooks/stage5.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
-import { CATS, SOURCE_FILES } from '../../lib/constants.js';
+import { cat, SOURCE_FILES } from '../../lib/constants.js';
 import { useWorlds, useTopics } from '../../api/hooks/taxonomy.js';
 import { useFeedbackList } from '../../api/hooks/feedback.js';
 import { usePalette } from '../palette/paletteStore.js';
@@ -338,7 +338,7 @@ export function Sidebar({
                 }}
               >
                 <span>
-                  <span aria-hidden="true">{CATS[w.slug]?.icon ?? '▸'} </span>
+                  <span aria-hidden="true">{cat(w.slug).icon} </span>
                   <span className="world-name">{w.name}</span>
                 </span>
                 <span>{String(counts[w.slug] ?? 0)}</span>

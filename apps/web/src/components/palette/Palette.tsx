@@ -227,11 +227,11 @@ export function Palette() {
     });
     // W5 §13: a *search* result that was actually opened, distinct from the palette being used
     // at all — the pair is what says whether the search answered the question.
-    if (row.kind === 'hit')
-      track({
-        kind: 'search_click',
-        ...((row.hit.documentId ?? row.hit.id) ? { documentId: row.hit.documentId ?? row.hit.id } : {}),
-      });
+    // Only when there really is a document behind the hit. `row.hit.id` for a field, block or tag
+    // is not a document id, and `telemetry_events.document_id` is an FK — the server dropped those
+    // rows silently, so `search_click` was under-reporting without saying so.
+    if (row.kind === 'hit' && row.hit.documentId)
+      track({ kind: 'search_click', documentId: row.hit.documentId });
     if (row.kind === 'action') {
       row.action.run();
       return;

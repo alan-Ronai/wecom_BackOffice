@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DOC_TYPES, DOC_TYPE_LABELS, type DocType } from '@wecom/shared';
+import { useDebounced } from '../../lib/useDebounced.js';
 import { useTags } from '../../api/hooks/taxonomy.js';
 
 export interface TaxonomyFacetValue {
@@ -16,7 +17,8 @@ export function TaxonomyFacets({
   onChange: (v: TaxonomyFacetValue) => void;
 }) {
   const [q, setQ] = useState('');
-  const tags = useTags(q);
+  // The query key is the debounced value: typing a five-character tag used to issue five requests.
+  const tags = useTags(useDebounced(q, 250));
   const suggestions = (tags.data ?? []).filter((t) => !value.tags.includes(t.tag)).slice(0, 8);
   const toggleType = (t: DocType) => onChange({ ...value, docType: value.docType === t ? null : t });
   const addTag = (t: string) => onChange({ ...value, tags: [...value.tags, t] });

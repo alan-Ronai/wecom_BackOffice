@@ -25,6 +25,26 @@ describe('MetadataPanel', () => {
     expect(onChange).toHaveBeenLastCalledWith({ ...base, tags: ['apn'] });
   });
 
+  it('moving the primary world drops it from the extras and clears the topics', async () => {
+    // The one non-trivial branch in the panel, and the one the tests started from empty
+    // `worlds`/`topics` and therefore never exercised: the topics belong to the world being left.
+    const onChange = vi.fn();
+    const filled: MetadataValue = {
+      ...base,
+      worlds: ['sim', 'billing'],
+      topics: [fx.topics[0]!.id],
+    };
+    renderWithProviders(<MetadataPanel value={filled} onChange={onChange} />);
+    await screen.findByRole('option', { name: 'SIM / eSIM' });
+    await userEvent.selectOptions(screen.getByLabelText('עולם תוכן ראשי'), 'sim');
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...filled,
+      category: 'sim',
+      worlds: ['billing'],
+      topics: [],
+    });
+  });
+
   it('does not list the primary world among the extra worlds and removes tags', async () => {
     const onChange = vi.fn();
     renderWithProviders(<MetadataPanel value={{ ...base, tags: ['apn', 'x'] }} onChange={onChange} />);

@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { useDocument } from '../../api/hooks/documents.js';
 import { useCan } from '../../api/hooks/me.js';
+import { Empty } from '../ui/index.js';
 import { SourceEditor } from './SourceEditor.js';
 import { SourceHistory } from './SourceHistory.js';
 import { ImportExportButtons } from './ImportExportButtons.js';
@@ -24,7 +25,18 @@ export function SourceEditPage() {
           לתצוגת הנציג
         </Link>
       </header>
-      <SourceEditor documentId={id} />
+      {/* Gate the body, not just the chrome. A read-only agent who follows this URL used to get a
+          working TipTap surface, a "שמור גרסה" button and an autosave firing
+          `PUT /documents/:id/source/draft` every three seconds — all of it refused by the server,
+          so the invitation to type was the whole of the damage. Held until the document query
+          settles so an editor never sees it flash. */}
+      {doc.data && !canEdit ? (
+        <Empty title="אין הרשאה לערוך את מסמך המקור">
+          אפשר לקרוא את המקור בתצוגת הנציג. לעריכה יש לפנות למנהל הצוות.
+        </Empty>
+      ) : (
+        <SourceEditor documentId={id} />
+      )}
       <details className="source-history-wrap">
         <summary>היסטוריית גרסאות מקור</summary>
         <SourceHistory documentId={id} canEdit={canEdit} />

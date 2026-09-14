@@ -20,7 +20,7 @@ import {
   type Suggestion,
 } from '@wecom/shared';
 import * as fixtures from './fixtures.js';
-import { fx } from './fixtures.js';
+import { fx, REV_1 } from './fixtures.js';
 import { resetStage4State, stage4Handlers } from './stage4.js';
 import { resetStage5, stage5Handlers } from './stage5.js';
 import { resetStage45, stage45Handlers } from './stage45.js';
@@ -56,6 +56,8 @@ interface State extends TaxonomyState {
       version: number;
       etag: string;
       versions: { version: number; label: string; html: string }[];
+      /** Set for an imported source; the raw-docx download hangs off it. */
+      latestRevisionId?: string | null;
     }
   >;
   assets: string[];
@@ -507,10 +509,13 @@ export const handlers: RequestHandler[] = [
     state.trash = [];
     return HttpResponse.json({ restored });
   }),
+  // A-C1: the route now answers `{ purged, skipped }` — a once-published item is never purged by
+  // hand, so "empty the bin" cannot promise it emptied. Nothing in the fixture is skipped; a test
+  // that wants the skipped path overrides this handler.
   http.delete(`${B}/trash`, () => {
     const purged = state.trash.length;
     state.trash = [];
-    return HttpResponse.json({ purged });
+    return HttpResponse.json({ purged, skipped: 0 });
   }),
 
   http.get(`${B}/sources`, () => HttpResponse.json({ items: fx.sources })),
@@ -703,6 +708,9 @@ export const handlers: RequestHandler[] = [
         updatedById: fx.me.user.id,
         updatedByName: fx.me.user.displayName,
         updatedAt: '2026-09-14T10:00:00.000Z',
+        // W4: the revision behind the current version, which is what makes the raw docx
+        // download reachable. Null for a source authored in the editor rather than imported.
+        latestRevisionId: s.latestRevisionId ?? null,
       },
       { headers: { etag: s.etag } },
     );
@@ -712,7 +720,11 @@ export const handlers: RequestHandler[] = [
     const body = (await request.json()) as { html: string; label?: string };
     const cur = state.sourceDocs.get(id);
     const ifMatch = request.headers.get('if-match');
-    if (cur && ifMatch && ifMatch !== cur.etag)
+    // B-I3: on an *existing* source the header is mandatory, so a client that forgets it gets a
+    // 428 rather than silently clobbering someone else's version.
+    if (cur && !ifMatch)
+      return HttpResponse.json({ code: 'IF_MATCH_REQUIRED', message: 'if-match required' }, { status: 428 });
+    if (cur && ifMatch !== cur.etag)
       return HttpResponse.json({ code: 'ETAG_MISMATCH', message: 'stale' }, { status: 412 });
     const version = (cur?.version ?? 0) + 1;
     const next = {
@@ -721,6 +733,7 @@ export const handlers: RequestHandler[] = [
       version,
       etag: 'e' + version,
       versions: [...(cur?.versions ?? []), { version, label: body.label ?? '', html: body.html }],
+      latestRevisionId: cur?.latestRevisionId ?? null,
     };
     state.sourceDocs.set(id, next);
     state.sourceDrafts.delete(id); // a saved version clears the autosave
@@ -734,6 +747,7 @@ export const handlers: RequestHandler[] = [
         updatedById: fx.me.user.id,
         updatedByName: fx.me.user.displayName,
         updatedAt: '2026-09-14T10:00:00.000Z',
+        latestRevisionId: next.latestRevisionId,
       },
       { headers: { etag: next.etag } },
     );
@@ -765,6 +779,7 @@ export const handlers: RequestHandler[] = [
       updatedById: null,
       updatedByName: null,
       updatedAt: '2026-09-14T10:00:00.000Z',
+      latestRevisionId: null,
     });
   }),
   http.post(`${B}/documents/:id/source/restore/:v`, ({ params }) => {
@@ -779,6 +794,7 @@ export const handlers: RequestHandler[] = [
       version,
       etag: 'e' + version,
       versions: [...cur.versions, { version, label: `שוחזר מגרסה ${from.version}`, html: from.html }],
+      latestRevisionId: cur.latestRevisionId ?? null,
     };
     state.sourceDocs.set(id, next);
     return HttpResponse.json({
@@ -790,6 +806,7 @@ export const handlers: RequestHandler[] = [
       updatedById: fx.me.user.id,
       updatedByName: fx.me.user.displayName,
       updatedAt: '2026-09-14T10:00:00.000Z',
+      latestRevisionId: next.latestRevisionId,
     });
   }),
   http.post(`${B}/documents/:id/source/import`, async ({ params, request }) => {
@@ -807,6 +824,8 @@ export const handlers: RequestHandler[] = [
       version,
       etag: 'e' + version,
       versions: [...(cur?.versions ?? []), { version, label: 'יובא מ-Word', html }],
+      // An import is exactly the case that has a raw revision behind it.
+      latestRevisionId: REV_1,
     };
     state.sourceDocs.set(id, next);
     return HttpResponse.json({
@@ -818,6 +837,7 @@ export const handlers: RequestHandler[] = [
       updatedById: fx.me.user.id,
       updatedByName: fx.me.user.displayName,
       updatedAt: '2026-09-14T10:00:00.000Z',
+      latestRevisionId: next.latestRevisionId,
     });
   }),
   http.post(`${B}/assets`, () => {

@@ -2,7 +2,10 @@ import { useNavigate } from 'react-router-dom';
 import type { Document } from '@wecom/shared';
 import { crmChip, crmIn, stepText, stripFmt } from '@wecom/shared';
 import { useBlockUsage } from '../../api/hooks/content.js';
+import { useDocStatuses } from '../../api/hooks/documents.js';
+import { useReadOnlyReader } from '../../api/hooks/governance.js';
 import { useSources } from '../../api/hooks/pipeline.js';
+import { STATUS_LABEL } from '../../lib/constants.js';
 import { Html } from '../Fmt.js';
 import type { ResolvedStep } from '../../lib/steps.js';
 import type { FieldInfo } from '../../lib/format.js';
@@ -36,6 +39,16 @@ export function StepConnections({
     i >= 0 && i < steps.length - 1 ? `הבא ${steps[i + 1].num}` : null,
   ].filter(Boolean);
   const src = sources.data?.find((s) => s.id === doc.sourceId);
+  // §5.5, editors only — see the note in `Panel`. A reader's list never contains these targets.
+  const readOnly = useReadOnlyReader();
+  const statuses = useDocStatuses(
+    sameBlock.slice(0, 3).map((u) => u.documentId),
+    !readOnly,
+  );
+  const invalidTitle = (id: string): string | undefined => {
+    const st = statuses.get(id);
+    return st === 'invalid' || st === 'archived' ? STATUS_LABEL[st] : undefined;
+  };
 
   return (
     <div className="conn">
@@ -48,7 +61,11 @@ export function StepConnections({
               ? sameBlock.slice(0, 3).map((u, n) => (
                   <span key={u.documentId}>
                     {n ? ' · ' : ''}
-                    <a className="doc-link" data-doc={u.documentId}>
+                    <a
+                      className={'doc-link' + (invalidTitle(u.documentId) ? ' link-invalid' : '')}
+                      title={invalidTitle(u.documentId)}
+                      data-doc={u.documentId}
+                    >
                       {u.title}
                     </a>
                   </span>

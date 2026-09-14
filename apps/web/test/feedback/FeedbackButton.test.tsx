@@ -16,6 +16,9 @@ const mount = (stepKey?: string) =>
           documentId={fx.docBrowsing.id}
           documentVersion={fx.docBrowsing.currentVersion}
           stepKey={stepKey}
+          documentTitle={fx.docBrowsing.title}
+          docType={fx.docBrowsing.docType}
+          worldSlug={fx.docBrowsing.category}
         />
       </ModalProvider>
     </ToastProvider>,
@@ -29,6 +32,10 @@ describe('<FeedbackButton>', () => {
     expect(within(dialog).getAllByRole('radio')).toHaveLength(7);
     expect(within(dialog).getByText(/גרסה v\d+/)).toBeInTheDocument();
     expect(within(dialog).getByText('שלב s3')).toBeInTheDocument();
+    // §5.4's five auto-context fields, not three of them: the block's point is to show exactly
+    // what is being sent, and the caller has the item, its type and its world.
+    expect(within(dialog).getByText(fx.docBrowsing.title)).toBeInTheDocument();
+    expect(within(dialog).getByText(/עולם tech/)).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'שלח' })).toBeDisabled();
     await userEvent.click(within(dialog).getByRole('radio', { name: 'התהליך לא עובד בפועל' }));
     await userEvent.type(within(dialog).getByRole('textbox'), 'השדה כבר לא קיים');

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { adminApi, createUser, signInAs } from './helpers/users.js';
 
 /**
@@ -10,7 +10,17 @@ import { adminApi, createUser, signInAs } from './helpers/users.js';
  * the draft next to it" are the same assertion seen from two sides, and splitting them would let
  * one pass while the other silently stopped being about the same item.
  */
-test.describe.configure({ mode: 'serial' });
+/**
+ * Teardown that survives a failure. Closing the contexts after the last assertion means a
+ * mid-test failure leaks them until the worker exits — which costs debuggability rather than
+ * correctness, but a leaked context is exactly what you do not want while debugging a failure.
+ * (`test.describe.configure({ mode: 'serial' })` used to sit here and was a no-op: one test.)
+ */
+const opened: { pages: Page[]; apis: APIRequestContext[] } = { pages: [], apis: [] };
+test.afterEach(async () => {
+  for (const p of opened.pages.splice(0)) await p.context().close();
+  for (const a of opened.apis.splice(0)) await a.dispose();
+});
 
 const stamp = Date.now().toString(36);
 const WORLD = { slug: `w-${stamp}`, name: `עולם בדיקה ${stamp}` };
@@ -25,14 +35,16 @@ test('W4-E2E-2 admin adds a world and topic; an editor files items; a reader see
   baseURL,
 }) => {
   const request = await adminApi(page, baseURL!);
+  opened.apis.push(request);
   /* 1. the admin adds a world and a topic, with no deploy ------------------- */
   await page.goto('/admin/taxonomy');
   await page.getByRole('button', { name: '✚ עולם תוכן' }).click();
   const nameDlg = page.getByRole('dialog', { name: 'עולם תוכן חדש' });
   await nameDlg.getByLabel('שם', { exact: true }).fill(WORLD.name);
   await nameDlg.getByRole('button', { name: 'אישור' }).click();
-  const slugDlg = page.getByRole('dialog', { name: /מזהה/ });
-  await slugDlg.getByLabel('slug', { exact: true }).fill(WORLD.slug);
+  // Both prompts are titled "עולם תוכן חדש"; the slug one is identified by its field label.
+  const slugDlg = page.getByRole('dialog', { name: 'עולם תוכן חדש' });
+  await slugDlg.getByLabel(/מזהה/).fill(WORLD.slug);
   await slugDlg.getByRole('button', { name: 'אישור' }).click();
   const worldsList = page.getByTestId('worlds-list');
   await expect(worldsList.getByText(WORLD.name)).toBeVisible();
@@ -52,6 +64,7 @@ test('W4-E2E-2 admin adds a world and topic; an editor files items; a reader see
   /* 2. an editor files one published item through the editor ---------------- */
   const editor = await createUser(request, 'lead');
   const e = await signInAs(browser, editor, baseURL!);
+  opened.pages.push(e);
   await e.goto('/edit/new');
   await e.getByPlaceholder('שם פריט הידע…').fill(PUBLISHED_TITLE);
   await e.getByLabel('סוג פריט').selectOption('O');
@@ -75,6 +88,13 @@ test('W4-E2E-2 admin adds a world and topic; an editor files items; a reader see
   expect(pubRes.status(), await pubRes.text()).toBe(200);
   // The editor navigates to the published item; that, not the toast, is the durable outcome.
   await expect(e).toHaveURL(/\/doc\/[0-9a-f-]+/, { timeout: 20_000 });
+  /*
+   * …and the article actually rendered. The URL alone is satisfied by a blank page — which is
+   * precisely what this spec used to pass over: `CATS[slug].label` threw for an admin-created
+   * world, the React root unmounted, and the URL stayed in the bar. The heading is the assertion
+   * that can tell those two apart.
+   */
+  await expect(e.getByRole('heading', { level: 1, name: PUBLISHED_TITLE })).toBeVisible();
 
   /* 3. …and one that stays a draft. `POST /documents` creates drafts, and the editor only
         publishes, so the draft is made through the API rather than invented in the UI. ------ */
@@ -104,11 +124,11 @@ test('W4-E2E-2 admin adds a world and topic; an editor files items; a reader see
   await expect(e.getByText(PUBLISHED_TITLE)).toBeVisible();
   await expect(e.getByText(DRAFT_TITLE)).toBeVisible();
   await expect(e.getByText('טיוטה').first()).toBeVisible();
-  await e.context().close();
 
   /* 5. the reader finds the published item by tag, and the draft nowhere ------------------- */
   const agent = await createUser(request, 'agent');
   const a = await signInAs(browser, agent, baseURL!);
+  opened.pages.push(a);
   await a.goto(`/library?tag=${TAG}`);
   await expect(a.getByText(PUBLISHED_TITLE)).toBeVisible();
   await expect(a.getByText(DRAFT_TITLE)).toHaveCount(0);
@@ -119,9 +139,13 @@ test('W4-E2E-2 admin adds a world and topic; an editor files items; a reader see
   // No status chips for a reader: every item they can see is published, so a chip would be noise.
   await expect(a.getByText('טיוטה')).toHaveCount(0);
 
+  // The reader *opens* it, rather than only seeing it in a list: the reader half of this spec
+  // never reached the article, which is the screen the new world actually has to render.
+  await a.getByText(PUBLISHED_TITLE).click();
+  await expect(a).toHaveURL(/\/doc\/[0-9a-f-]+/);
+  await expect(a.getByRole('heading', { level: 1, name: PUBLISHED_TITLE })).toBeVisible();
+
   // …and the direct link says "not available", not "not found" and not "forbidden".
   await a.goto(`/doc/${draftId}`);
   await expect(a.getByRole('heading', { name: 'פריט זה אינו זמין כרגע' })).toBeVisible();
-  await a.context().close();
-  await request.dispose();
 });
