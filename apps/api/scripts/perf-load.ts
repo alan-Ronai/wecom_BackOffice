@@ -28,6 +28,7 @@ import fakeAuth from '../test/helpers/fakeAuth.js';
 import { makeUser, auth } from '../test/helpers/fixtures.js';
 import { seedPerfCorpus } from './perf-seed.js';
 import { buildQueryMix, LatencyRecorder, QUERY_CLASSES, type PerfQuery } from './perf-mix.js';
+import { isStepsStatement, maybeRewrite } from './perf-rewrite.js';
 
 const args = process.argv.slice(2);
 const argNum = (name: string, def: number): number => {
@@ -49,6 +50,18 @@ const PER_CLASS = argNum('--per-class', 40);
 const OUT = argStr('--out');
 const EXPLAIN = flag('--explain');
 const GATE_MS = flag('--no-gate') ? Infinity : argNum('--gate', 500);
+/**
+ * Measure the *proposed* `steps` predicate (`perf-rewrite.ts`) instead of the one in `repo.ts`.
+ * The rewrite is applied to the SQL text on its way to the driver, so the route, `search()`, the
+ * parameters and the bindings are all unchanged — this lane does not own `repo.ts` and does not
+ * edit it. Without the flag, the run measures main as it stands.
+ */
+const REWRITE_STEPS = flag('--rewrite-steps');
+/**
+ * On top of `--rewrite-steps`, drop `search_hebrew_stopwords` words from the `ilike` conjunction
+ * — proposal 2 in the report. Implies `--rewrite-steps`.
+ */
+const DROP_STOPWORDS = flag('--drop-stopwords');
 
 /** The three query classes whose statements get an EXPLAIN (ANALYZE, BUFFERS) in the report. */
 const EXPLAIN_TOP_N = 3;
@@ -60,6 +73,9 @@ interface RecordedStatement {
   cls: string;
 }
 
+/** `search_hebrew_stopwords`, loaded once under `--drop-stopwords`; undefined otherwise. */
+let stopwords: ReadonlySet<string> | undefined;
+
 async function main() {
   console.log(`perf-load: starting Postgres and migrating...`);
   const db = await startTestDb();
@@ -67,6 +83,18 @@ async function main() {
   // concurrency turns the measurement into a queueing experiment on the pool rather than on the
   // query, and a production API would be sized for its own concurrency.
   const pool = new pg.Pool({ connectionString: db.url, max: POOL_MAX });
+  if (DROP_STOPWORDS)
+    stopwords = new Set(
+      (await db.pool.query('select word from search_hebrew_stopwords')).rows.map((r) => r.word as string),
+    );
+  if (REWRITE_STEPS || DROP_STOPWORDS) {
+    // Swap the statement text on its way out, one layer below `search()`. Text only: the
+    // parameters, their order and their bindings are exactly what `repo.ts` built.
+    const original = pool.query.bind(pool) as (text: string, params?: unknown[]) => Promise<unknown>;
+    (pool as unknown as { query: unknown }).query = (text: string, params?: unknown[]) =>
+      original(typeof text === 'string' ? maybeRewrite(text, { params, stopwords }) : text, params);
+    console.log(`perf-load: measuring the PROPOSED steps predicate${stopwords ? ' + stopword drop' : ''}`);
+  }
   try {
     console.log(`perf-load: seeding ${DOCS} documents...`);
     const seeded = await seedPerfCorpus(db.pool, {
@@ -205,7 +233,9 @@ async function explainSlowest(
     query: async (text: string, params?: unknown[]) => {
       const t0 = performance.now();
       const r = await pool.query(text, params as never);
-      recorded.push({ sql: text, params: params ?? [], ms: performance.now() - t0, cls });
+      // Record what the database saw, which under `--rewrite-steps` is the proposal.
+      const effective = REWRITE_STEPS || DROP_STOPWORDS ? maybeRewrite(text, { params, stopwords }) : text;
+      recorded.push({ sql: effective, params: params ?? [], ms: performance.now() - t0, cls });
       return r;
     },
   };
