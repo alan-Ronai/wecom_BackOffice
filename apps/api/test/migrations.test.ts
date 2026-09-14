@@ -288,8 +288,13 @@ run('migrations', () => {
         ignorePattern: 'package\\.json',
         log: () => undefined,
       });
-    const wave4 = (await readdir('migrations')).filter((f) => /^00(3[0-9])_/.test(f)).length;
-    await move('down', wave4);
+    // Everything from 0030 up — wave 4 and whatever later waves added on top of it — so the
+    // rollback really stops at 0029 whatever the highest number currently is.
+    const fromWave4 = (await readdir('migrations')).filter((f) => {
+      const n = Number(/^(\d{4})_/.exec(f)?.[1] ?? NaN);
+      return n >= 30;
+    }).length;
+    await move('down', fromWave4);
     await pool.query(
       `insert into documents(slug, title, description, category, wave, priority)
        values ('w6-stop','חוב של לקוח','', 'tech', 1, 'm')`,
