@@ -205,6 +205,33 @@ describe('W6 article mounts', () => {
     expect(screen.queryByText('אין עדיין מסמך מקור לפריט זה')).toBeNull();
   });
 
+  it('persists the pane choice through the preferences round trip', async () => {
+    let saved: Record<string, unknown> | null = null;
+    server.use(
+      http.get(`${B}/documents/${D_BROWSING}/source`, () =>
+        HttpResponse.json({
+          documentId: D_BROWSING,
+          html: '<p>טקסט מקור</p>',
+          text: 'טקסט מקור',
+          version: 1,
+          etag: 's1',
+          updatedById: null,
+          updatedByName: null,
+          updatedAt: T,
+        }),
+      ),
+      http.put(`${B}/me/preferences`, async ({ request }) => {
+        saved = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(saved);
+      }),
+    );
+    renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
+    await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title });
+    await userEvent.click(await screen.findByRole('button', { name: 'מפוצל' }));
+    // The choice has to follow the agent to the next machine, so it is written back, not local.
+    await waitFor(() => expect(saved?.paneMode).toBe('split'));
+  });
+
   it('offers prev/next inside the topic', async () => {
     const topicId = fx.topics[0]!.id;
     server.use(
