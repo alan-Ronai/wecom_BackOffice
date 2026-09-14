@@ -33,6 +33,7 @@ import { inboundFor } from '../graph/repo.js';
 import { clearSourceReview } from './sourceReview.js';
 import { updateEmbedding } from '../search/repo.js';
 import { resolveFeedback } from '../feedback/repo.js'; // W3: close reports with the published version
+import { applyChangeFlag } from '../learning/tracking/refresh.js'; // V2: knowledge refresh on publish
 
 const Params = z.object({ id: IdSchema });
 
@@ -357,6 +358,18 @@ export default async function routes(app: FastifyInstance) {
           label: body.label,
           markPartial: body.markPartial,
         });
+        // V2: knowledge refresh — record the change flag; a significant change fans out refresh assignments.
+        const changeFlag = await applyChangeFlag(
+          tx,
+          { notifier: app.notifier, events: app.events },
+          {
+            documentId: id,
+            version,
+            after: doc,
+            override: body.significantChange,
+            actorId: user.id,
+          },
+        );
         if (body.resolveFeedbackIds?.length) {
           const closed = await resolveFeedback(tx, body.resolveFeedbackIds, id, version, user.id);
           for (const fid of closed)
@@ -379,7 +392,7 @@ export default async function routes(app: FastifyInstance) {
           tx,
           makeEvent('document.published', { documentId: id, version, actorId: user.id }),
         );
-        return { document: doc, version, auditId };
+        return { document: doc, version, auditId, changeFlag };
       });
       await pushOnPublish(app, req, id, user.id);
       // Best-effort, outside the transaction: a model outage must never fail a publish.

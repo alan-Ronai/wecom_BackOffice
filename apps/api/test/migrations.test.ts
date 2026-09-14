@@ -326,14 +326,14 @@ run('migrations', () => {
         ignorePattern: 'package\\.json',
         log: () => undefined,
       });
-    // Roll back everything above 0029 — wave 4 and every later wave — so the schema sits exactly
-    // where 0029 left it. Counting only `003x` silently stopped short once wave 5 added 0040+:
-    // the rollback then left 0030 (the migration that dropped 0027's filter) in place.
-    const afterWave3 = (await readdir('migrations')).filter((f) => {
-      const n = /^(\d{4})_/.exec(f);
-      return n !== null && Number(n[1]) >= 30;
-    }).length;
-    await move('down', afterWave3);
+    // Everything numbered 0030 and up: rolling "only wave 4" means coming down *through* 0030,
+    // so the count must follow the top of the stack as later waves add migrations. Counting only
+    // `003x` silently stopped short once wave 5 added 0040+, leaving 0030 — the migration that
+    // drops 0027's Hebrew stopword filter — still applied, and the assertion below failing.
+    const wave4 = (await readdir('migrations')).filter(
+      (f) => /^\d{4}_.*\.js$/.test(f) && Number(f.slice(0, 4)) >= 30,
+    ).length;
+    await move('down', wave4);
     await pool.query(
       `insert into documents(slug, title, description, category, wave, priority)
        values ('w6-stop','חוב של לקוח','', 'tech', 1, 'm')`,
@@ -353,6 +353,23 @@ run('migrations', () => {
     await pool.query(`delete from documents where slug='w6-stop'`);
     await move('up');
   }, 120000);
+
+  it('creates the wave 5 tracking tables (0040)', async () => {
+    const r = await pool.query(
+      "select table_name from information_schema.tables where table_schema='public' and table_name in ('learning_audiences','learning_assignments','learning_attempts','learning_acknowledgements','document_change_flags') order by 1",
+    );
+    expect(r.rows.map((x) => x.table_name)).toEqual([
+      'document_change_flags',
+      'learning_acknowledgements',
+      'learning_assignments',
+      'learning_attempts',
+      'learning_audiences',
+    ]);
+    const cols = await pool.query(
+      "select column_name from information_schema.columns where table_name='learning_assignments' and column_name in ('reminded_at','refresh_reason','item_version')",
+    );
+    expect(cols.rowCount).toBe(3);
+  });
 
   it('rolls back cleanly', async () => {
     await runner({

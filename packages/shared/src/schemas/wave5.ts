@@ -435,3 +435,8 @@ export const LearningPublishResponseSchema = z.object({
   version: z.number().int(),
 });
 export type LearningPublishResponse = z.infer<typeof LearningPublishResponseSchema>;
+
+/* ── V2 additive: dashboard query ────────────────────────────────────────── */
+/** Querystring of `GET /learning/dashboard`; the manager's world scope narrows it further. */
+export const LearningDashboardQuerySchema = z.object({ world: z.string().optional() });
+export type LearningDashboardQuery = z.infer<typeof LearningDashboardQuerySchema>;

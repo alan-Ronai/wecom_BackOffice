@@ -18,6 +18,7 @@ import feedback from './feedback/index.js'; // wave 4 W3: agent feedback
 import usage from './usage/index.js'; // wave 4 (W5): usage analytics + PgUsage
 import gaps from './gaps/index.js'; // wave 5 V3: knowledge gaps
 import learning from './learning/index.js'; // wave 5 V1: learning content
+import learningTracking from './learning/tracking/index.js'; // wave 5 V2: assignments, attempts, refresh
 import { startJobs } from '../jobs/index.js';
 
 /**
@@ -45,6 +46,7 @@ export async function registerModules(v1: FastifyInstance) {
     usage,
     gaps,
     learning,
+    learningTracking,
   ])
     await v1.register(m);
   // L2 background workers (trash.purge, search.reindex) bind to L1's `app.boss` once it is up.

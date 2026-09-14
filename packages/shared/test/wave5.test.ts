@@ -10,6 +10,8 @@ import {
   WORKFLOW_SETTINGS_KEY,
   PublishBodySchema,
   PublishResponseSchema,
+  AssignResultSchema,
+  LearningDashboardQuerySchema,
   type LearningItemCreate,
   type Gap,
 } from '../src/index.js';
@@ -95,5 +97,13 @@ describe('wave5 schemas (approved spec)', () => {
     const g = { id: U } as unknown as Gap;
     expect(c.kind).toBe('briefing');
     expect(g.id).toBe(U);
+  });
+});
+
+describe('wave5 V2 additive schemas', () => {
+  it('assign result and dashboard query', () => {
+    expect(AssignResultSchema.parse({ assigned: 2, skipped: 1 })).toEqual({ assigned: 2, skipped: 1 });
+    expect(LearningDashboardQuerySchema.parse({}).world).toBeUndefined();
+    expect(LearningDashboardQuerySchema.parse({ world: 'tech' }).world).toBe('tech');
   });
 });
