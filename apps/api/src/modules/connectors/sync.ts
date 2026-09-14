@@ -50,6 +50,10 @@ export interface RunResult {
   linked: number;
 }
 
+/** Result of `syncLink`: either the requested direction ran, or both sides had moved. */
+export type SyncLinkOutcome =
+  { conflict: false; result: RunResult; link: SyncLinkRow } | { conflict: true; link: SyncLinkRow };
+
 export interface ResolveBody {
   resolution: 'ours' | 'theirs' | 'merged';
   merged?: Document;
@@ -176,6 +180,78 @@ export class SyncService {
       }),
     );
     result.conflicts++;
+  }
+
+  /**
+   * `POST /sync/links/:id/sync` — the per-row "ייבא עכשיו" / "דחוף עכשיו". Unlike
+   * `runConnector`, the operator picked a direction, but the conflict rule still
+   * applies first: if both sides moved since the baseline, neither direction may
+   * overwrite the other silently, so this records the conflict (same shape
+   * `reconcile` writes, visible through `GET /sync/links/:id/conflict`) and hands
+   * the caller the link row back rather than the requested result.
+   */
+  async syncLink(
+    link: SyncLinkRow,
+    direction: 'import' | 'push',
+    actorId: string | null,
+  ): Promise<SyncLinkOutcome> {
+    const { conn, cfg } = await this.connectorFor(link.connector_id);
+    const doc = await this.d.documents.getById(link.document_id);
+    if (!doc) throw new Error('document not found');
+    const content = await conn.fetch(cfg, link.external_id);
+    const remoteChanged = content.hash !== link.base_remote_hash;
+    const localChanged = doc.currentVersion !== link.base_local_version;
+    const result: RunResult = { imported: 0, pushed: 0, conflicts: 0, linked: 0 };
+
+    if (remoteChanged && localChanged) {
+      const base = await this.d.documents.getVersionSnapshot(doc.id, link.base_local_version);
+      const remoteUpdatedAt = (content.meta?.modifiedAt as string | undefined) ?? new Date().toISOString();
+      await this.d.repo.setLinkState(link.id, 'conflict', {
+        base,
+        remote: content.paragraphs,
+        local: doc,
+        remoteHash: content.hash,
+        remoteUpdatedAt,
+        detectedAt: new Date().toISOString(),
+      });
+      this.d.events.publish(
+        makeEvent('sync.conflict', {
+          connectorId: link.connector_id,
+          documentId: doc.id,
+          externalId: link.external_id,
+        }),
+      );
+      const fresh = (await this.d.repo.linkById(link.id)) ?? { ...link, state: 'conflict' as const };
+      return { conflict: true, link: fresh };
+    }
+
+    if (direction === 'import') {
+      if (remoteChanged) {
+        if (link.source_id) await this.d.revisions.ingest(link.source_id, content, actorId);
+        await this.d.repo.setLinkState(link.id, 'pending_import');
+        result.imported = 1;
+      } else if (!localChanged && link.state !== 'synced') {
+        await this.d.repo.setLinkState(link.id, 'synced');
+      }
+    } else {
+      if (localChanged) {
+        await this.pushLink(conn, cfg, link, doc);
+        result.pushed = 1;
+      } else if (!remoteChanged && link.state !== 'synced') {
+        await this.d.repo.setLinkState(link.id, 'synced');
+      }
+    }
+
+    this.d.events.publish(
+      makeEvent('sync.completed', {
+        connectorId: link.connector_id,
+        imported: result.imported,
+        pushed: result.pushed,
+        conflicts: result.conflicts,
+      }),
+    );
+    const fresh = (await this.d.repo.linkById(link.id)) ?? link;
+    return { conflict: false, result, link: fresh };
   }
 
   private async pushLink(
