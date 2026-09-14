@@ -17,6 +17,11 @@ export const EVENTS = [
   'review.requested',
   'review.decided',
   'presence.changed',
+  // Wave 4 — feedback, source documents, taxonomy (additive; appended, never reordered).
+  'feedback.created',
+  'feedback.updated',
+  'source_document.saved',
+  'taxonomy.changed',
 ] as const;
 export type EventName = (typeof EVENTS)[number];
 
@@ -92,6 +97,15 @@ const payloads = {
     userId: IdSchema,
     editors: z.number().int().nonnegative(),
   }),
+  /* ── Wave 4: feedback, source documents, taxonomy ────────────────────── */
+  'feedback.created': z.object({ feedbackId: IdSchema, documentId: IdSchema, kind: z.string() }),
+  'feedback.updated': z.object({ feedbackId: IdSchema, documentId: IdSchema, status: z.string() }),
+  'source_document.saved': z.object({
+    documentId: IdSchema,
+    version: z.number().int(),
+    actorId: IdSchema.nullable(),
+  }),
+  'taxonomy.changed': z.object({ entity: z.enum(['world', 'topic']), id: IdSchema }),
 } as const;
 export type EventPayloads = { [K in EventName]: z.infer<(typeof payloads)[K]> };
 

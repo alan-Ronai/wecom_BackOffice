@@ -18,11 +18,25 @@ export const PERMISSIONS = [
   'roles.manage',
   'audit.read',
   'system.admin',
+  // Wave 4 — appended, never reordered.
+  'taxonomy.manage',
+  'docs.read_unpublished',
+  'feedback.manage',
+  'analytics.read',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
 const agent: Permission[] = ['docs.read', 'notes.write'];
-const editor: Permission[] = [...agent, 'docs.create', 'docs.edit', 'suggestions.review', 'scripts.edit'];
+const editor: Permission[] = [
+  ...agent,
+  'docs.create',
+  'docs.edit',
+  'suggestions.review',
+  'scripts.edit',
+  'docs.read_unpublished',
+  'feedback.manage',
+  'analytics.read',
+];
 const lead: Permission[] = [
   ...editor,
   'docs.publish',
@@ -33,6 +47,7 @@ const lead: Permission[] = [
   'suggestions.apply',
   'sources.manage',
   'notes.moderate',
+  'taxonomy.manage',
 ];
 export const DEFAULT_ROLES = { agent, editor, lead, admin: [...PERMISSIONS] } as const satisfies Record<
   string,

@@ -11,6 +11,9 @@ export const QUEUES = {
   trashPurge: 'trash.purge', // L2: nightly hard delete after 30 days
   searchReindex: 'search.reindex', // L2: rebuild search_text / embeddings
   backupCheck: 'system.backup-check', // L1: verify last backup age
+  feedbackDigest: 'feedback.digest', // W3: daily per-editor summary of open feedback
+  feedbackAlerts: 'feedback.alerts', // W3: every 10 min, repeat/anomaly windows
+  assetsGc: 'assets.gc', // W4: weekly, delete assets no source version references
 } as const;
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 

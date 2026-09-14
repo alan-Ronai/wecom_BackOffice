@@ -23,7 +23,19 @@ describe('permissions', () => {
       'roles.manage',
       'audit.read',
       'system.admin',
+      'taxonomy.manage',
+      'docs.read_unpublished',
+      'feedback.manage',
+      'analytics.read',
     ]);
+  });
+  it('grants the wave 4 permissions to the right roles', () => {
+    expect(DEFAULT_ROLES.agent).not.toContain('docs.read_unpublished');
+    expect(DEFAULT_ROLES.editor).toEqual(
+      expect.arrayContaining(['docs.read_unpublished', 'feedback.manage', 'analytics.read']),
+    );
+    expect(DEFAULT_ROLES.editor).not.toContain('taxonomy.manage');
+    expect(DEFAULT_ROLES.lead).toContain('taxonomy.manage');
   });
   it('nests default roles', () => {
     expect(DEFAULT_ROLES.editor).toEqual(expect.arrayContaining(DEFAULT_ROLES.agent));
