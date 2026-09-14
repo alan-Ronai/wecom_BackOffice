@@ -154,9 +154,10 @@ run('governance', () => {
       });
       expect(r.statusCode).toBe(200);
       expect(r.json().status).toBe('invalid');
-      const a = await db.pool.query("select after from audit_log where action='docs.status' and entity_id=$1", [
-        id,
-      ]);
+      const a = await db.pool.query(
+        "select after from audit_log where action='docs.status' and entity_id=$1",
+        [id],
+      );
       expect(a.rows[0].after).toEqual({ status: 'invalid', reason: 'הוחלף בנוהל חדש' });
       // hidden from readers now
       const g = await app.inject({ method: 'GET', url: `/api/v1/documents/${id}`, headers: auth(reader) });
