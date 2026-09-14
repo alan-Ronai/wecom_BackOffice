@@ -29,12 +29,17 @@ import {
   addShared,
   checkList,
   deleteStep,
+  deleteSteps,
   dropAt,
+  duplicateSteps,
   moveStep,
+  moveStepsToPhase,
   renumber,
+  setStepsBlock,
   uid,
   type BasicType,
 } from '../../lib/editorModel.js';
+import { useEditorHistory } from '../../lib/editorHistory.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { usePalette } from '../palette/paletteStore.js';
 import { useModal } from '../ui/Modal.js';
@@ -44,6 +49,12 @@ import { StepEditor } from './StepEditor.js';
 import { DropZone } from './DropZone.js';
 import { SidePane } from './SidePane.js';
 import { useRequestReviewDialog } from '../review/RequestReview.js';
+import { HistoryStrip } from './HistoryStrip.js';
+import { StepSelectionBar } from './StepSelectionBar.js';
+import { TemplateGallery } from './TemplateGallery.js';
+import { SourceMap } from './SourceMap.js';
+import { ConflictBanner } from './ConflictBanner.js';
+import { ApiError as ApiErrorClass } from '../../api/unwrap.js';
 
 const emptyDoc = (cat: Category): Document => ({
   id: 'new',
@@ -91,7 +102,14 @@ export function EditorPage() {
 
   const [doc, setDoc] = useState<Document | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  /** Shift-click extends from `selected` to the clicked step (6c). */
+  const [multi, setMulti] = useState<Set<string>>(new Set());
   const [dirty, setDirty] = useState(false);
+  const [pane, setPane] = useState<'steps' | 'source'>('steps');
+  const [conflict, setConflict] = useState<{ who: string | null } | null>(null);
+  /** A fresh `/edit/new` offers the template gallery until something is actually typed. */
+  const [pickedStart, setPickedStart] = useState(false);
+  const history = useEditorHistory();
   const seeded = useRef('');
 
   useEffect(() => {
@@ -106,6 +124,9 @@ export function EditorPage() {
       const base = fromDraft ?? addBasic(emptyDoc('tech'), 'step', null, null);
       setDoc(structuredClone(base));
       setSelected(allSteps(base)[0]?.key ?? null);
+      history.reset(base, 'נטען');
+      // A resumed draft already has content; only a genuinely fresh one gets the gallery.
+      if (fromDraft) setPickedStart(true);
       return;
     }
     if (published.isPending) return;
@@ -114,12 +135,30 @@ export function EditorPage() {
     seeded.current = id;
     setDoc(structuredClone(base));
     setSelected(allSteps(base)[0]?.key ?? null);
-  }, [id, isNew, draft.data, draft.isPending, published.data, published.isPending]);
+    history.reset(base, 'נטען');
+  }, [id, isNew, draft.data, draft.isPending, published.data, published.isPending, history]);
 
   const update = useCallback(
-    (next: Document) => {
+    (next: Document, label = 'שינוי') => {
       setDoc(next);
       setDirty(true);
+      history.push(next, label);
+      autosave.save(next as unknown as Record<string, unknown>);
+    },
+    [autosave, history],
+  );
+
+  /**
+   * Undo/redo restore the document **without** pushing a new history entry — otherwise undoing
+   * would append a state and make redo unreachable — but they do autosave, because the draft on
+   * the server has to match what is on screen.
+   */
+  const restore = useCallback(
+    (next: Document | null) => {
+      if (!next) return;
+      setDoc(next);
+      setDirty(true);
+      setMulti(new Set());
       autosave.save(next as unknown as Record<string, unknown>);
     },
     [autosave],
@@ -157,17 +196,74 @@ export function EditorPage() {
   const leave = useCallback(() => go(isNew ? '/library' : `/doc/${id}`), [go, id, isNew]);
   // `Shell` also binds Escape (palette → drawer → split). Without this guard both handlers fire
   // and closing the palette inside the editor also navigated away, discarding the draft.
+  /** Shift-click selects a contiguous run between the anchor and the clicked step. */
+  const selectStep = useCallback(
+    (key: string, shift: boolean) => {
+      if (!doc || !shift) {
+        setSelected(key);
+        setMulti(new Set());
+        return;
+      }
+      const order = allSteps(doc).map((x) => x.key);
+      const a = order.indexOf(selected ?? key);
+      const b = order.indexOf(key);
+      if (a < 0 || b < 0) return;
+      const [from, to] = a <= b ? [a, b] : [b, a];
+      setMulti(new Set(order.slice(from, to + 1)));
+    },
+    [doc, selected],
+  );
+
   useHotkeys(
     {
-      Escape: () => modal.count === 0 && !palette.state.open && leave(),
+      // `useHotkeys` lower-cases bare keys, so Ctrl Shift Z arrives here as `ctrl+z` with the
+      // shift flag set — one binding covers both directions. Ctrl Y is the Windows habit.
+      'ctrl+z': (e) => {
+        e.preventDefault();
+        restore(e.shiftKey ? history.redo() : history.undo());
+      },
+      'ctrl+y': (e) => {
+        e.preventDefault();
+        restore(history.redo());
+      },
+      Escape: () => {
+        if (multi.size) {
+          setMulti(new Set());
+          return;
+        }
+        return modal.count === 0 && !palette.state.open && leave();
+      },
       // `R` rather than `r`: `useHotkeys` normalises bare keys to lower case, so only the
       // un-normalised fallback matches — which is exactly the Shift R the keymap advertises.
       R: () => {
         if (!isNew && doc && can('docs.edit', doc)) requestReview({ id, title: doc.title });
       },
     },
-    [leave, modal.count, palette.state.open, isNew, doc, can, requestReview, id],
+    [
+      leave,
+      modal.count,
+      palette.state.open,
+      isNew,
+      doc,
+      can,
+      requestReview,
+      id,
+      history,
+      restore,
+      multi.size,
+    ],
   );
+
+  /**
+   * 412 means someone else published while this editor was open. Neither outcome is safe to pick
+   * automatically — the draft stays on the server and the banner offers reload or diff — so the
+   * publish stops here rather than retrying with a fresh etag, which would silently clobber them.
+   */
+  const onConflict = (e: unknown): boolean => {
+    if (!(e instanceof ApiErrorClass) || (e.status !== 412 && e.status !== 428)) return false;
+    setConflict({ who: draft.data?.otherEditors?.[0]?.name ?? null });
+    return true;
+  };
 
   const doPublish = async () => {
     if (!doc) return;
@@ -220,7 +316,12 @@ export function EditorPage() {
         toast('לא ניתן לשמור: חסר מזהה גרסה (etag) · רעננו ונסו שוב', 'warn');
         return;
       }
-      await saveStructure.mutateAsync({ phases: clean.phases, related: clean.related, etag });
+      try {
+        await saveStructure.mutateAsync({ phases: clean.phases, related: clean.related, etag });
+      } catch (e) {
+        if (onConflict(e)) return;
+        throw e;
+      }
     }
     // `targetId` — not `id` — so creating a knowledge item actually publishes the new document
     // instead of POSTing to the literal path segment `new`.
@@ -256,8 +357,21 @@ export function EditorPage() {
   const otherEditors = draft.data?.otherEditors ?? [];
   const anotherEditor = otherEditors.length > 0;
   const nextV = (published.data?.currentVersion ?? 0) + 1;
-  const applyBasic = (t: BasicType) => update(addBasic(doc, t, selected, selected));
-  const applyShared = (b: Block) => update(addShared(doc, b, null));
+  const applyBasic = (t: BasicType) => update(addBasic(doc, t, selected, selected), 'שלב חדש');
+  const applyShared = (b: Block) => update(addShared(doc, b, null), `בלוק · ${b.title}`);
+  const showGallery = isNew && !pickedStart && !doc.title.trim();
+
+  const applyTemplate = (t: { name: string; kind: Document['kind']; phases: Document['phases'] }) => {
+    setPickedStart(true);
+    const next = renumber({ ...doc, kind: t.kind, phases: structuredClone(t.phases) });
+    setSelected(allSteps(next)[0]?.key ?? null);
+    update(next, `תבנית · ${t.name}`);
+  };
+
+  const bulkOnSelection = (fn: () => Document, label: string) => {
+    update(fn(), label);
+    setMulti(new Set());
+  };
 
   return (
     <div className="ed-layout">
@@ -295,7 +409,27 @@ export function EditorPage() {
               {dirty ? 'שומר…' : autosave.lastSavedAt ? `נשמר · ${ago(autosave.lastSavedAt)}` : 'טרם נשמר'}
             </span>
           </span>
+          <HistoryStrip
+            history={history}
+            onUndo={() => restore(history.undo())}
+            onRedo={() => restore(history.redo())}
+            onJump={(i) => restore(history.jump(i))}
+          />
           <div className="actions">
+            {isNew ? (
+              <button className="btn sm" onClick={() => setPickedStart(false)}>
+                תבניות
+              </button>
+            ) : null}
+            {doc.sourceId ? (
+              <button
+                className="btn sm"
+                aria-pressed={pane === 'source'}
+                onClick={() => setPane((p) => (p === 'source' ? 'steps' : 'source'))}
+              >
+                מיפוי מקור ↔ שלבים
+              </button>
+            ) : null}
             <button
               className="btn sm"
               onClick={() => download(`${doc.title || 'knowledge-item'}.json`, JSON.stringify(doc, null, 2))}
@@ -320,7 +454,38 @@ export function EditorPage() {
         </div>
 
         <div className="ed-body">
-          <div className="ed-fields">
+          {conflict ? (
+            <ConflictBanner
+              who={conflict.who}
+              onReload={() => {
+                setConflict(null);
+                seeded.current = '';
+                void published.refetch();
+                void draft.refetch();
+              }}
+              onShowDiff={() => go(`/history/${id}`)}
+              onDismiss={() => setConflict(null)}
+            />
+          ) : null}
+
+          {showGallery ? (
+            <TemplateGallery onPick={applyTemplate} onBlank={() => setPickedStart(true)} />
+          ) : null}
+
+          {pane === 'source' ? (
+            <SourceMap
+              doc={doc}
+              selectedKey={selected}
+              onSelectStep={setSelected}
+              onAssignRef={(key, ref) =>
+                patchStep(key, (st) => {
+                  st.sourceRef = ref;
+                })
+              }
+            />
+          ) : null}
+
+          <div className="ed-fields" hidden={pane === 'source'}>
             <label>
               קטגוריה
               <select
@@ -388,66 +553,67 @@ export function EditorPage() {
             onChange={(e) => update({ ...doc, description: e.target.value })}
           />
 
-          {doc.phases.map((p, pi) => (
-            <div key={p.id}>
-              <div className="ed-phase">
-                <input
-                  type="text"
-                  aria-label={`שם קבוצת שלבים ${pi + 1}`}
-                  placeholder="שם השלב (למשל: שלב 1 – מסנן)"
-                  value={p.label}
-                  onChange={(e) => {
-                    const next = structuredClone(doc);
-                    next.phases[pi].label = e.target.value;
-                    update(next);
-                  }}
-                />
-                <span className="line" />
-                {doc.phases.length > 1 ? (
-                  <span
-                    className="x"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
+          {pane === 'steps' &&
+            doc.phases.map((p, pi) => (
+              <div key={p.id}>
+                <div className="ed-phase">
+                  <input
+                    type="text"
+                    aria-label={`שם קבוצת שלבים ${pi + 1}`}
+                    placeholder="שם השלב (למשל: שלב 1 – מסנן)"
+                    value={p.label}
+                    onChange={(e) => {
                       const next = structuredClone(doc);
-                      next.phases.splice(pi, 1);
-                      update(renumber(next));
+                      next.phases[pi].label = e.target.value;
+                      update(next);
                     }}
-                  >
-                    ✕
-                  </span>
-                ) : null}
+                  />
+                  <span className="line" />
+                  {doc.phases.length > 1 ? (
+                    <span
+                      className="x"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        const next = structuredClone(doc);
+                        next.phases.splice(pi, 1);
+                        update(renumber(next));
+                      }}
+                    >
+                      ✕
+                    </span>
+                  ) : null}
+                </div>
+                {p.steps.map((s) => (
+                  <StepEditor
+                    key={s.key}
+                    doc={doc}
+                    step={s}
+                    phase={p}
+                    selected={selected === s.key || multi.has(s.key)}
+                    fields={fields.data ?? []}
+                    blocks={blocks.data ?? []}
+                    onSelect={(shift) => selectStep(s.key, shift)}
+                    onPatch={(m) => patchStep(s.key, m)}
+                    onMove={(dir) => update(moveStep(doc, s.key, dir), `הזזת שלב ${s.num}`)}
+                    onDelete={() => update(deleteStep(doc, s.key), `מחיקת שלב ${s.num}`)}
+                    onDrop={(data) => update(dropAt(doc, data, s.key, blocks.data ?? []), 'גרירה')}
+                    onDetach={() =>
+                      patchStep(s.key, (st) => {
+                        const b = blocks.data?.find((x) => x.id === st.blockId);
+                        if (b) {
+                          st.actions = structuredClone(b.actions);
+                          st.title = st.title || b.title;
+                          if (b.script) st.script = b.script;
+                        }
+                        delete st.blockId;
+                      })
+                    }
+                    onEditBlock={() => go('/blocks')}
+                  />
+                ))}
               </div>
-              {p.steps.map((s) => (
-                <StepEditor
-                  key={s.key}
-                  doc={doc}
-                  step={s}
-                  phase={p}
-                  selected={selected === s.key}
-                  fields={fields.data ?? []}
-                  blocks={blocks.data ?? []}
-                  onSelect={() => setSelected(s.key)}
-                  onPatch={(m) => patchStep(s.key, m)}
-                  onMove={(dir) => update(moveStep(doc, s.key, dir))}
-                  onDelete={() => update(deleteStep(doc, s.key))}
-                  onDrop={(data) => update(dropAt(doc, data, s.key, blocks.data ?? []))}
-                  onDetach={() =>
-                    patchStep(s.key, (st) => {
-                      const b = blocks.data?.find((x) => x.id === st.blockId);
-                      if (b) {
-                        st.actions = structuredClone(b.actions);
-                        st.title = st.title || b.title;
-                        if (b.script) st.script = b.script;
-                      }
-                      delete st.blockId;
-                    })
-                  }
-                  onEditBlock={() => go('/blocks')}
-                />
-              ))}
-            </div>
-          ))}
+            ))}
 
           <DropZone
             onCommand={(cmd) => {
@@ -493,6 +659,19 @@ export function EditorPage() {
           </div>
         </div>
       </div>
+
+      <StepSelectionBar
+        count={multi.size}
+        phases={doc.phases}
+        blocks={blocks.data ?? []}
+        onMoveToPhase={(pid) => bulkOnSelection(() => moveStepsToPhase(doc, multi, pid), 'הזזת שלבים')}
+        onDuplicate={() => bulkOnSelection(() => duplicateSteps(doc, multi), 'שכפול שלבים')}
+        onSetBlock={(b) =>
+          bulkOnSelection(() => setStepsBlock(doc, multi, b), b ? 'בלוק משותף' : 'ניתוק בלוק')
+        }
+        onDelete={() => bulkOnSelection(() => deleteSteps(doc, multi), `מחיקת ${multi.size} שלבים`)}
+        onClear={() => setMulti(new Set())}
+      />
 
       <SidePane
         doc={doc}
