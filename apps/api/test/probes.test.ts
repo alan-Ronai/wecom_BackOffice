@@ -8,7 +8,11 @@ beforeAll(async () => {
   server = http.createServer((req, res) => {
     if (req.url === '/api/tags') {
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ models: [{ name: 'qwen2.5:3b-instruct-q4_K_M' }] }));
+      res.end(
+        JSON.stringify({
+          models: [{ name: 'qwen2.5:3b-instruct-q4_K_M' }, { name: 'nomic-embed-text:latest' }],
+        }),
+      );
       return;
     }
     res.statusCode = 404;
@@ -28,6 +32,13 @@ describe('probeModel', () => {
   });
   it('reports missing model', async () => {
     expect((await probeModel(url, 'llama3:8b')).hasModel).toBe(false);
+  });
+  /** O-2: the old comparison fell back to the name before the ':' and called this a match. */
+  it('does not accept a different tag of the same model', async () => {
+    expect((await probeModel(url, 'qwen2.5:7b-instruct')).hasModel).toBe(false);
+  });
+  it('treats an untagged name as :latest, the way ollama stores it', async () => {
+    expect((await probeModel(url, 'nomic-embed-text')).hasModel).toBe(true);
   });
   it('reports down on connection error', async () => {
     const r = await probeModel('http://127.0.0.1:1', 'x', 300);

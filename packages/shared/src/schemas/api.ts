@@ -188,10 +188,26 @@ export const SuggestionsQuerySchema = PaginationQuerySchema.extend({
   sourceId: IdSchema.optional(),
 });
 
+/**
+ * O-2: `model: true` only ever meant "Ollama answered", so an operator who fat-fingers
+ * `MODEL_NAME` got a green smoke test and discovered the mistake when the first suggestion job
+ * failed. `modelStatus` separates the two facts; `model` stays as the boolean older clients read
+ * and now means "reachable **and** the configured tag is pulled".
+ */
+export const ModelStatusSchema = z.object({
+  /** `GET {MODEL_URL}/api/tags` answered. */
+  reachable: z.boolean(),
+  /** That listing contains `name` — i.e. the configured model is actually pulled. */
+  tagPresent: z.boolean(),
+  /** The configured `MODEL_NAME`, or `rules` when `MODEL_DISABLED=true`. */
+  name: z.string(),
+});
+
 export const HealthResponseSchema = z.object({
   ok: z.boolean(),
   db: z.boolean(),
   model: z.boolean().nullable(),
+  modelStatus: ModelStatusSchema,
   queue: z.number().int().nullable(),
   version: z.string(),
   uptimeSec: z.number(),

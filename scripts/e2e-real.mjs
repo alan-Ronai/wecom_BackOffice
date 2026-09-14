@@ -28,7 +28,9 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { E2E_OIDC_CLIENT, E2E_OIDC_USER } from './e2e-oidc-issuer.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -62,9 +64,62 @@ let issuerUrl = null;
 let tornDown = false;
 
 function run(cmd, args, opts = {}) {
-  const r = spawnSync(cmd, args, { cwd: ROOT, stdio: 'inherit', ...opts });
+  // `input` needs a piped stdin; everything else keeps inheriting the terminal.
+  const stdio = opts.input === undefined ? 'inherit' : ['pipe', 'inherit', 'inherit'];
+  const r = spawnSync(cmd, args, { cwd: ROOT, stdio, ...opts });
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} exited ${r.status ?? r.signal}`);
   return r;
+}
+
+/**
+ * Runs Playwright and, when it fails, prints the failing **spec names** in a grep-friendly block.
+ *
+ * `list`'s output is streamed live but scrolls past hundreds of lines of API and browser log, and
+ * the coordinator reading these runs wants one thing: which specs are red. The `json` reporter
+ * writes a report beside it; this reads that report rather than the terminal, so a spec whose own
+ * output happens to contain the word "failed" cannot confuse the summary.
+ */
+function runPlaywright(args, jsonReport, opts) {
+  rmSync(jsonReport, { force: true });
+  const r = spawnSync('pnpm', args, { cwd: ROOT, stdio: 'inherit', ...opts });
+  const failures = readFailingSpecs(jsonReport);
+  rmSync(jsonReport, { force: true });
+  if (failures.length) {
+    console.error(`\n── failing specs (${failures.length}) ──────────────`);
+    for (const f of failures) console.error(`FAILED SPEC: ${f}`);
+    console.error('');
+  }
+  if (r.status !== 0) {
+    throw new Error(
+      failures.length
+        ? `playwright: ${failures.length} spec(s) failed:\n  ${failures.join('\n  ')}`
+        : `playwright exited ${r.status ?? r.signal} with no failing spec in the report (a crash, a timeout before the first test, or a config error — see the output above)`,
+    );
+  }
+  return r;
+}
+
+/** `file:line › [project] title path` for every spec the JSON report marks not-ok. */
+function readFailingSpecs(jsonReport) {
+  let report;
+  try {
+    report = JSON.parse(readFileSync(jsonReport, 'utf8'));
+  } catch {
+    return []; // playwright died before writing one; the thrown error says so
+  }
+  const out = [];
+  const walk = (suite, titles) => {
+    const next = suite.title && suite.title !== suite.file ? [...titles, suite.title] : titles;
+    for (const spec of suite.specs ?? []) {
+      if (spec.ok) continue;
+      const project = spec.tests?.[0]?.projectName;
+      const where = `${spec.file ?? suite.file ?? '?'}:${spec.line ?? '?'}`;
+      out.push(`${where} › ${project ? `[${project}] ` : ''}${[...next, spec.title].join(' › ')}`);
+    }
+    for (const child of suite.suites ?? []) walk(child, next);
+  };
+  for (const suite of report.suites ?? []) walk(suite, []);
+  return out;
 }
 
 /**
@@ -183,6 +238,45 @@ const httpOk = (url) => async () => {
  * check, so the run proceeds and every spec fails against a server wired to a database that no
  * longer exists. Better to stop and say so.
  */
+/**
+ * Ports the WHATWG fetch standard refuses outright ("bad ports"), so neither Node's `fetch` nor
+ * any browser will connect to them whatever is listening.
+ *
+ * This cost a full 120 s timeout to diagnose: a run with `E2E_WEB_PORT=4190` (sieve) started
+ * `vite preview` perfectly — the banner said `http://127.0.0.1:4190/`, and `curl` got a 200 — and
+ * then died at `timed out waiting for web serving at http://127.0.0.1:4190`, because
+ * `fetch(...)` rejects such a URL with `TypeError: fetch failed / cause: bad port` before opening
+ * a socket. Playwright would have refused it next. The failure reads as "the web server never
+ * came up", which is the one thing that was not wrong, so the gate says so up front instead.
+ *
+ * Source: https://fetch.spec.whatwg.org/#bad-port
+ */
+const BAD_PORTS = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104,
+  109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515,
+  526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049,
+  3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
+]);
+
+/**
+ * Refuses a port the HTTP clients in this gate cannot reach. Postgres is exempt: `pg` opens a
+ * plain socket, and nothing ever fetches it.
+ */
+function assertPortsFetchable() {
+  const bad = [
+    ['api', API_PORT, 'E2E_API_PORT'],
+    ['web', WEB_PORT, 'E2E_WEB_PORT'],
+    ...(WITH_OIDC ? [['oidc', OIDC_PORT, 'E2E_OIDC_PORT']] : []),
+  ].filter(([, port]) => BAD_PORTS.has(port));
+  if (bad.length)
+    throw new Error(
+      "port blocked by the WHATWG fetch standard — neither node's fetch nor a browser will " +
+        'connect to it, whatever is listening:\n' +
+        bad.map(([name, port, env]) => `  :${port} (${name}, ${env}) — pick another`).join('\n') +
+        '\n  see https://fetch.spec.whatwg.org/#bad-port',
+    );
+}
+
 function assertPortsFree() {
   const busy = [];
   for (const [name, port] of [
@@ -207,6 +301,7 @@ function assertPortsFree() {
 async function main() {
   const passthrough = process.argv.slice(2);
 
+  assertPortsFetchable();
   assertPortsFree();
 
   console.log('\n── 1. postgres (pgvector/pgvector:pg16) ──────────────────────');
@@ -224,12 +319,37 @@ async function main() {
     `${PG_PORT}:5432`,
     'pgvector/pgvector:pg16',
   ]);
-  await waitFor(`postgres accepting connections on :${PG_PORT}`, () => {
-    const r = spawnSync('docker', ['exec', CONTAINER, 'pg_isready', '-U', 'postgres'], { stdio: 'ignore' });
-    return r.status === 0;
-  });
-  // pg_isready goes green a moment before the server finishes its first-boot restart.
-  await sleep(1000);
+  /**
+   * F-2: `pg_isready` plus a fixed `sleep(1000)` was a heuristic, and it lost. The pgvector image
+   * starts Postgres once to run its init scripts, shuts it down, and starts it again for real —
+   * so the *first* green `pg_isready` is against a server that is about to go away, and the next
+   * step (`seed`) died with "Connection terminated unexpectedly" on a slow machine.
+   *
+   * Two greens at least `MIN_READY_GAP_MS` apart cannot both fall inside that window: the
+   * shutdown between them makes the second probe fail and resets the count. Any failure at any
+   * point discards the streak, so this is a *consecutive* pair, not two greens ever.
+   */
+  const MIN_READY_GAP_MS = 500;
+  let firstReadyAt = 0;
+  await waitFor(
+    `postgres accepting connections on :${PG_PORT} (two consecutive probes ≥${MIN_READY_GAP_MS}ms apart)`,
+    () => {
+      const ready =
+        spawnSync('docker', ['exec', CONTAINER, 'pg_isready', '-U', 'postgres'], { stdio: 'ignore' })
+          .status === 0;
+      if (!ready) {
+        firstReadyAt = 0; // the restart happened — start the streak again
+        return false;
+      }
+      const now = Date.now();
+      if (!firstReadyAt) {
+        firstReadyAt = now;
+        return false;
+      }
+      return now - firstReadyAt >= MIN_READY_GAP_MS;
+    },
+    { everyMs: 250 },
+  );
 
   const dbEnv = { ...process.env, DATABASE_URL };
 
@@ -237,6 +357,9 @@ async function main() {
   run('pnpm', ['--filter', '@wecom/api', 'migrate'], { env: dbEnv });
   run('pnpm', ['--filter', '@wecom/api', 'seed'], { env: dbEnv });
   // No `--` separator: pnpm forwards these already, and a literal `--` reaches `parseArgs`.
+  // The password goes in on stdin, not the command line: pnpm echoes the resolved command, so
+  // `--password …` printed it to the log (acceptance review O-6) — and the CLI no longer has
+  // that flag at all.
   run(
     'pnpm',
     [
@@ -245,12 +368,11 @@ async function main() {
       'create-admin',
       '--email',
       ADMIN_EMAIL,
-      '--password',
-      ADMIN_PASSWORD,
+      '--password-stdin',
       '--name',
       'E2E Admin',
     ],
-    { env: dbEnv },
+    { env: dbEnv, input: ADMIN_PASSWORD },
   );
 
   console.log('\n── 2b. wordpress stub ───────────────────────────────────────');
@@ -366,8 +488,10 @@ async function main() {
   });
 
   console.log('\n── 5. playwright (no mocks) ─────────────────────────────────\n');
-  run(
-    'pnpm',
+  // A second, machine-readable reporter alongside `list`, so a failure can be summarised by spec
+  // name (see `reportFailingSpecs`). `list` still streams to the terminal exactly as before.
+  const jsonReport = join(tmpdir(), `wecom-e2e-real-${process.pid}.json`);
+  runPlaywright(
     [
       '--filter',
       '@wecom/web',
@@ -376,11 +500,14 @@ async function main() {
       'test',
       '--config',
       'playwright.real.config.ts',
+      '--reporter=list,json',
       ...passthrough,
     ],
+    jsonReport,
     {
       env: {
         ...process.env,
+        PLAYWRIGHT_JSON_OUTPUT_NAME: jsonReport,
         E2E_REAL_BASE_URL: WEB_URL,
         E2E_ADMIN_EMAIL: ADMIN_EMAIL,
         E2E_ADMIN_PASSWORD: ADMIN_PASSWORD,

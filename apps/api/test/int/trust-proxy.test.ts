@@ -11,12 +11,22 @@ describe('trustProxySetting', () => {
   const cfg = (over: Record<string, unknown>) =>
     loadConfig({ DATABASE_URL: 'postgres://x/y', NODE_ENV: 'test', ...over });
 
-  it('defaults to true only in production', () => {
-    expect(
-      trustProxySetting(
-        cfg({ NODE_ENV: 'production', SESSION_SECRET: 'x'.repeat(32), CONNECTOR_KEY: 'ab'.repeat(32) }),
-      ),
-    ).toBe(true);
+  /**
+   * §5 / item 18: production may no longer *fall into* `trustProxy: true`. Trusting any
+   * X-Forwarded-For — including one forged by a client that bypasses nginx — is the wrong thing
+   * to acquire by omission, since req.ip gates the Palo Alto allowlist, the auth rate-limit
+   * buckets and the audit trail. The fallback itself is unchanged for a hand-built config.
+   */
+  it('is required in production, and defaults to false elsewhere', () => {
+    const prod = {
+      NODE_ENV: 'production',
+      SESSION_SECRET: 'x'.repeat(32),
+      CONNECTOR_KEY: 'ab'.repeat(32),
+      CONNECTOR_HOST_ALLOWLIST: 'wp.wecom.local',
+    };
+    expect(() => cfg(prod)).toThrow(/TRUST_PROXY/);
+    expect(trustProxySetting(cfg({ ...prod, TRUST_PROXY: '172.16.0.0/12' }))).toEqual(['172.16.0.0/12']);
+    expect(trustProxySetting({ ...cfg({}), NODE_ENV: 'production', TRUST_PROXY: undefined })).toBe(true);
     expect(trustProxySetting(cfg({}))).toBe(false);
     expect(trustProxySetting(cfg({ NODE_ENV: 'development' }))).toBe(false);
   });

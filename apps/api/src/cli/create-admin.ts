@@ -43,16 +43,107 @@ export async function createAdmin(
   return { id, created };
 }
 
+const USAGE = `usage: create-admin --email <email> [--name <display name>] (--password-stdin | interactive prompt)
+
+The password is never taken from the command line: pnpm echoes the resolved command, so
+\`--password 'S3cret…'\` ended up in the terminal transcript and in shell history (acceptance
+review O-6). Either pipe it in —
+
+  printf '%s' 'the password' | … create-admin --email admin@wecom.local --password-stdin
+
+— or run the command on a terminal and answer the prompt (the typed characters are not echoed).`;
+
+/** Reads the password from a pipe (`--password-stdin`). Trailing newline from `echo` is dropped. */
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const c of process.stdin) chunks.push(Buffer.from(c));
+  return Buffer.concat(chunks)
+    .toString('utf8')
+    .replace(/\r?\n$/, '');
+}
+
+/** Prompts on the TTY with the echo turned off, so the password never appears on screen. */
+async function promptPassword(prompt: string): Promise<string> {
+  process.stderr.write(prompt);
+  const stdin = process.stdin;
+  const wasRaw = stdin.isRaw;
+  stdin.setRawMode?.(true);
+  stdin.resume();
+  stdin.setEncoding('utf8');
+  let value = '';
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const onData = (ch: string) => {
+        for (const c of ch) {
+          if (c === '\r' || c === '\n' || c === '\u0004') {
+            stdin.off('data', onData);
+            resolve();
+            return;
+          }
+          if (c === '\u0003') {
+            stdin.off('data', onData);
+            reject(new Error('cancelled'));
+            return;
+          }
+          if (c === '\u007f' || c === '\b') value = value.slice(0, -1);
+          else value += c;
+        }
+      };
+      stdin.on('data', onData);
+    });
+  } finally {
+    stdin.setRawMode?.(wasRaw ?? false);
+    stdin.pause();
+    process.stderr.write('\n');
+  }
+  return value;
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const { values } = parseArgs({
-    options: { email: { type: 'string' }, password: { type: 'string' }, name: { type: 'string' } },
+    options: {
+      email: { type: 'string' },
+      name: { type: 'string' },
+      'password-stdin': { type: 'boolean', default: false },
+      // Still declared so the old spelling gets an explanation instead of parseArgs' bare
+      // "Unknown option" throw — an operator with the previous runbook line deserves to know why.
+      password: { type: 'string' },
+    },
   });
-  if (!values.email || !values.password) {
-    console.error('usage: create-admin --email <email> --password <password> [--name <display name>]');
+  if (values.password !== undefined) {
+    console.error(
+      'create-admin: --password is not accepted any more — it put the password in the terminal transcript and in shell history.\n',
+    );
+    console.error(USAGE);
+    process.exit(2);
+  }
+  if (!values.email) {
+    console.error(USAGE);
+    process.exit(2);
+  }
+  const password = values['password-stdin']
+    ? await readStdin()
+    : process.stdin.isTTY
+      ? await (async () => {
+          const first = await promptPassword('New admin password (not echoed): ');
+          const again = await promptPassword('Repeat it: ');
+          if (first !== again) {
+            console.error('the two passwords do not match');
+            process.exit(2);
+          }
+          return first;
+        })()
+      : '';
+  if (!password) {
+    console.error(
+      values['password-stdin']
+        ? 'create-admin: --password-stdin was given but nothing arrived on stdin'
+        : USAGE,
+    );
     process.exit(2);
   }
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-  createAdmin(pool, values.email, values.password, values.name)
+  createAdmin(pool, values.email, password, values.name)
     .then((r) => {
       console.log(`${r.created ? 'created' : 'updated'} admin ${r.id}`);
       return pool.end();

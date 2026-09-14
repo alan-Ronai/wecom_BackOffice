@@ -33,10 +33,14 @@ database on the same Postgres server, counts `documents`, then drops the scratch
 it never touches the real `kb` database:
 
 ```bash
-docker compose -f deploy/docker-compose.yml exec \
-  -e DATABASE_URL=postgres://kb:$POSTGRES_PASSWORD@db:5432/kb \
-  backup restore-drill.sh
+docker compose -f deploy/docker-compose.yml exec backup restore-drill.sh
 ```
+
+Pass **no** `-e DATABASE_URL=…`: compose already sets a correct one inside the `backup` container.
+The older spelling expanded `$POSTGRES_PASSWORD` in the *host* shell — unset there unless you ran
+`set -a; . deploy/.env; set +a` first — so it silently became `postgres://kb:@db:5432/kb` and died
+at authentication (acceptance review O-3). `restore-drill.sh` now rejects an empty-password URL
+with that explanation rather than the raw Postgres error.
 
 Run it:
 - after any change to the backup/retention configuration,
@@ -68,7 +72,10 @@ connector's `path` must resolve inside `CONNECTOR_FILE_ROOT`. Add the connector 
 `/admin/connectors`, **Test** before **Run**, and watch `GET /api/v1/admin/system` →
 `connectors[]` (`lastStatus`, `lastRunAt`, `conflicts`) after the first scheduled run.
 
-> **`CONNECTOR_HOST_ALLOWLIST` is required for a hardened install.** Leaving it empty means
+> **`CONNECTOR_HOST_ALLOWLIST` is now required when `NODE_ENV=production`** — the API refuses to
+> start with it empty, the same way it refuses the development `SESSION_SECRET` (acceptance
+> review §5 / item 18). Write `*` if you genuinely want "any public host": the point is that it is
+> a decision on the record, not a blank line. Leaving it empty used to mean
 > **any reachable host** — including private ranges and loopback. This is deliberate: the KB is
 > a LAN product and the WordPress instance normally *is* on a private address, so the allowlist
 > is the control and not the private-range check (`packages/connectors/src/guards.ts`). The only

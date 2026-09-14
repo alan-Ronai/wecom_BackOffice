@@ -5,12 +5,33 @@ Target: one VMware VM, Ubuntu 22.04/24.04, 4 vCPU, 16 GB RAM, 80 GB disk, Docker
 ## Clean install
 1. Install Docker: `curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER` (log out and in).
 2. Clone: `git clone <repo-url> /opt/wecom-kb && cd /opt/wecom-kb`.
-3. Configure: `cp deploy/.env.example deploy/.env`, then set `POSTGRES_PASSWORD`, `SESSION_SECRET` (`openssl rand -hex 32`), `CONNECTOR_KEY` (`openssl rand -hex 32` — required even if you add the WordPress connector later; it encrypts connector secrets at rest), `PUBLIC_URL` (the DNS name users will open), and the identity settings below. `SESSION_SECRET` and `CONNECTOR_KEY` have development defaults that the API **refuses to start with** when `NODE_ENV=production`, so a half-filled `.env` fails loudly at step 5 rather than silently storing secrets under a known key.
+3. Configure: `cp deploy/.env.example deploy/.env`, then set `POSTGRES_PASSWORD`, `SESSION_SECRET` (`openssl rand -hex 32`), `CONNECTOR_KEY` (`openssl rand -hex 32` — required even if you add the WordPress connector later; it encrypts connector secrets at rest), `PUBLIC_URL` (the DNS name users will open), and the identity settings below. `SESSION_SECRET` and `CONNECTOR_KEY` have development defaults that the API **refuses to start with** when `NODE_ENV=production`, and `CONNECTOR_HOST_ALLOWLIST` and `TRUST_PROXY` must be set there too (both have permissive fallbacks — "any public host" and "trust any `X-Forwarded-For`" — that a production deployment should not arrive at by omission; see the WordPress connector and reverse-proxy sections). A half-filled `.env` therefore fails loudly at step 5 rather than silently running open.
 4. TLS: place `cert.pem` and `key.pem` in `deploy/certs/` (see "TLS certificate").
 5. Start: `docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build`.
    First start pulls the model (~2 GB, 5–20 min on the LAN); progress: `docker compose -f deploy/docker-compose.yml logs -f ollama-pull`.
 6. Verify: `deploy/smoke.sh https://<PUBLIC_URL host>` prints `smoke passed`.
-7. Create the break-glass admin (`--password` is required; the command exits with a usage message without it): `docker compose -f deploy/docker-compose.yml exec api pnpm --filter @wecom/api create-admin --email admin@wecom.local --password '<a strong password>' --name 'מנהל'`.
+   The check waits for the database **and** for the exact `MODEL_NAME` tag to appear in Ollama's
+   `ollama list` — not merely for Ollama to answer — so a mistyped `MODEL_NAME` fails here
+   (`waiting for the model tag '<tag>' to be pulled`) instead of at the first suggestion job. It
+   also asserts the five security response headers on `GET /`. Run it with
+   `SMOKE_REQUIRE_MODEL=false deploy/smoke.sh …` if you are deliberately running without a model.
+7. Create the break-glass admin. There is no `--password` flag: `pnpm` echoes the resolved command
+   line, so a password given there lands in the terminal transcript and in your shell history
+   (acceptance review O-6). Either answer the prompt on a terminal —
+   ```bash
+   docker compose -f deploy/docker-compose.yml exec api \
+     pnpm --filter @wecom/api create-admin --email admin@wecom.local --name 'מנהל'
+   ```
+   (`exec` allocates a TTY, and the typed characters are not echoed; you are asked to repeat it)
+   — or pipe it in for an unattended install, with `exec -T` so stdin reaches the command:
+   ```bash
+   printf '%s' '<a strong password>' | docker compose -f deploy/docker-compose.yml exec -T api \
+     pnpm --filter @wecom/api create-admin --email admin@wecom.local --name 'מנהל' --password-stdin
+   ```
+   (a leading space keeps that line out of history in bash/zsh with `HISTCONTROL=ignorespace` /
+   `setopt histignorespace`; a password file read with `<` avoids the question entirely).
+   Minimum length is 12 characters. Re-running the command rotates the password of the existing
+   account rather than creating a second one.
 8. Seed the initial library: `docker compose -f deploy/docker-compose.yml exec api pnpm --filter @wecom/api seed` (lane L2).
 
 ## Upgrade
@@ -36,12 +57,16 @@ deploy/smoke.sh https://<host>
 
 **Restore drill (non-destructive — leaves the real database untouched):**
 ```bash
-docker compose -f deploy/docker-compose.yml exec -e DATABASE_URL=postgres://kb:$POSTGRES_PASSWORD@db:5432/kb backup restore-drill.sh
+docker compose -f deploy/docker-compose.yml exec backup restore-drill.sh
 ```
+Pass no `-e DATABASE_URL=…`: compose already gives the `backup` container the right one. The
+older spelling interpolated `$POSTGRES_PASSWORD` in the **host** shell, where it is unset unless
+you sourced `deploy/.env` first, and silently became `postgres://kb:@db:5432/kb` (O-3). The script
+now refuses an empty-password URL with that explanation instead of a bare authentication error.
 Restores the newest `kb-*.dump` into a throwaway `kb_restore_drill_*` database on the same server, counts `documents`, then drops the scratch database. This is what actually proves a backup is restorable rather than merely present — run it after every change to the backup/retention config, and periodically (e.g. monthly) as its own check independent of the quarterly full restore above. The `system.backup-check` worker's own result (age of the *latest* dump, not whether it restores) is visible at `GET /api/v1/admin/system` → `backup.lastBackupAt` / `backup.lastBackupOk`, and on `GET /api/v1/system/health`.
 
 ## Reverse proxy and client IPs
-`nginx` terminates TLS and forwards `X-Real-IP` / `X-Forwarded-For`. The API only believes those headers when `TRUST_PROXY` allows the peer, so leave it set (default `172.16.0.0/12`, the docker bridge range; `true` trusts any peer, `false` trusts none). `req.ip` is what the Palo Alto subnet allowlist, the per-IP auth rate limits and the `audit_log.ip` / `sessions.ip` columns record — with the wrong value the allowlist evaluates nginx's own address and every login shares one rate-limit bucket. Check it after install: `curl -sk https://<host>/api/v1/auth/me` from a workstation and confirm the workstation's address (not `172.x`) appears in `/admin/sessions`.
+`nginx` terminates TLS and forwards `X-Real-IP` / `X-Forwarded-For`. The API only believes those headers when `TRUST_PROXY` allows the peer. It is **required** when `NODE_ENV=production` — unset, it used to fall back to `true`, i.e. trust an `X-Forwarded-For` from any peer, including a client that reaches the API without going through nginx. `deploy/.env.example` ships `172.16.0.0/12`, the docker bridge range; `true` trusts any peer, `false` trusts none. `req.ip` is what the Palo Alto subnet allowlist, the per-IP auth rate limits and the `audit_log.ip` / `sessions.ip` columns record — with the wrong value the allowlist evaluates nginx's own address and every login shares one rate-limit bucket. Check it after install: `curl -sk https://<host>/api/v1/auth/me` from a workstation and confirm the workstation's address (not `172.x`) appears in `/admin/sessions`.
 
 ## TLS certificate
 Request a server certificate for `PUBLIC_URL`'s host from the internal CA (`deploy/certs/README.md`). Users' machines already trust the internal CA through GlobalProtect / domain policy, so no browser warning appears. Renewal: replace the two files and `docker compose -f deploy/docker-compose.yml restart web`.
@@ -56,7 +81,7 @@ Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST`
 1. Generate the config-encryption key once and put it in `deploy/.env`: `CONNECTOR_KEY=$(openssl rand -hex 32)`. Connector configs are stored AES-256-GCM encrypted with it — rotating the key makes existing connectors unreadable, so keep it with the database backups.
 2. In WordPress, create a dedicated editor user for the KB and issue an **application password** (*Users → Profile → Application Passwords*). The REST API is reached at `https://<wp-host>/wp-json/wp/v2/…`.
 3. Copy `deploy/wp-plugin` to `wp-content/plugins/kb-sync`, activate **KB Sync**, and fill *Settings → KB Sync*: webhook URL `https://<kb-host>/api/v1/connectors/<connectorId>/webhook`, the shared secret, and the post types to sync (see `deploy/wp-plugin/README.md`). Lint the plugin's PHP after editing it: `docker run --rm -v "$PWD/deploy/wp-plugin:/app" php:8.2-cli php -l /app/kb-sync.php` (also run in CI on every push).
-4. In the KB, add the connector under `/admin/connectors` with `baseUrl`, `username`, `applicationPassword`, `postTypes`, `categoryMap` (WP category slug → KB category) and `webhookSecret` (the same secret as step 3), then **Test** and **Run**. The default schedule is every 15 minutes; each connector gets its own cron job. A `json` connector's `path` must resolve inside `CONNECTOR_FILE_ROOT` (default `/data/connectors`) — this is what stops a connector reading arbitrary files on the container. `CONNECTOR_HOST_ALLOWLIST` (comma-separated, empty = any public host) restricts which hosts outbound connector HTTP (a WordPress `baseUrl`) may reach; private/loopback/link-local targets are always refused unless the host is listed — this is the SSRF guard, so widen it rather than leaving it empty if the WordPress host is on a private LAN address (which it normally is here).
+4. In the KB, add the connector under `/admin/connectors` with `baseUrl`, `username`, `applicationPassword`, `postTypes`, `categoryMap` (WP category slug → KB category) and `webhookSecret` (the same secret as step 3), then **Test** and **Run**. The default schedule is every 15 minutes; each connector gets its own cron job. A `json` connector's `path` must resolve inside `CONNECTOR_FILE_ROOT` (default `/data/connectors`) — this is what stops a connector reading arbitrary files on the container. `CONNECTOR_HOST_ALLOWLIST` (comma-separated) restricts which hosts outbound connector HTTP (a WordPress `baseUrl`) may reach — this is the SSRF guard. It is **required** when `NODE_ENV=production`: the API refuses to start with it empty, because empty means "any public host". Put the WordPress host in it (an entry starting with `.` matches any subdomain, e.g. `wp.wecom.local,.wecom.local`); write `*` only if you deliberately accept any public host. Link-local/cloud-metadata addresses (`169.254.0.0/16`, `fe80::/10`) are refused whatever the list says.
 5. Verify both directions: edit a post in WordPress → suggestions appear in the review queue, and accepting + publishing them creates the `sync_links` row; publish a linked card in the KB → the post is updated (the push runs after the publish transaction commits, so a WordPress outage never blocks a local publish — it shows up as a `job.failed` event and an `api` log line). When both sides changed since the last sync the link goes to `conflict` and waits for a lead — nothing is overwritten automatically.
 
 ## Retention
@@ -67,7 +92,11 @@ Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST`
 
 ## Troubleshooting
 - `health` shows `db:false` → `docker compose logs db`; check `POSTGRES_PASSWORD` matches in `.env`.
-- `model:false` → `docker compose logs ollama-pull`; rerun with `docker compose up ollama-pull`.
+- `model:false` → look at `modelStatus` in the same body. `reachable:false` means Ollama itself is
+  down (`docker compose logs ollama`); `reachable:true, tagPresent:false` means Ollama is up but
+  `modelStatus.name` has never been pulled — check `MODEL_NAME` in `deploy/.env` against
+  `docker compose exec ollama ollama list`, then `docker compose logs ollama-pull` and rerun with
+  `docker compose up ollama-pull`.
 - Browser certificate error → the cert's CN/SAN does not match `PUBLIC_URL`, or the CA is not trusted on that machine.
 - Slow suggestions → expected on CPU (10–40 s per paragraph); jobs are queued, see `GET /api/v1/admin/system` (queue depths, model reachability, last backup age).
 - Logs: `docker compose logs -f api` (JSON lines; filter by `requestId` shown in error messages).

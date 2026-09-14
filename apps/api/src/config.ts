@@ -92,6 +92,34 @@ export const ConfigSchema = BaseConfigSchema.superRefine((c, ctx) => {
       path: ['CONNECTOR_KEY'],
       message: 'CONNECTOR_KEY is still the all-zero default — set it (`openssl rand -hex 32`)',
     });
+  /**
+   * §5 / item 18: an empty allowlist means "any public host", so a connector with a
+   * `baseUrl` an editor typed — or one an attacker who reached the connector API supplied — is
+   * an outbound request to anywhere the VM can see. The link-local/metadata refusal in
+   * `@wecom/connectors`' guards is unconditional, but nothing else is. A deployment must decide
+   * this explicitly, exactly as it must decide SESSION_SECRET. `*` is the written-down way to say
+   * "yes, really, any public host".
+   */
+  if (!c.CONNECTOR_HOST_ALLOWLIST.trim())
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['CONNECTOR_HOST_ALLOWLIST'],
+      message:
+        'CONNECTOR_HOST_ALLOWLIST is empty, which allows outbound connector requests to any public host — list the connector hosts (e.g. `wp.wecom.local`), or set it to `*` to accept that risk deliberately',
+    });
+  /**
+   * `req.ip` gates the Palo Alto subnet allowlist, the per-IP auth rate-limit buckets and the
+   * audit/session IP columns. Unset, it defaulted to `true` in production — trust *any*
+   * X-Forwarded-For, including one forged by a client that reaches the API directly, bypassing
+   * nginx. That is the wrong default to arrive at silently, so production must name it.
+   */
+  if (!c.TRUST_PROXY?.trim())
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['TRUST_PROXY'],
+      message:
+        'TRUST_PROXY must be set in production — the docker bridge CIDR (`172.16.0.0/12`) for the standard Compose install, or `true`/`false` if you know the topology differs. It decides whether a forged X-Forwarded-For can spoof req.ip.',
+    });
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
