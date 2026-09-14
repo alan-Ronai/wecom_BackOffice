@@ -24795,7 +24795,8 @@
                   },
                   "schedule": {
                     "type": "string",
-                    "pattern": "^(\\S+\\s+){4}\\S+$"
+                    "pattern": "^(\\S+\\s+){4}\\S+$",
+                    "nullable": true
                   },
                   "enabled": {
                     "type": "boolean"
@@ -25110,7 +25111,8 @@
                   },
                   "schedule": {
                     "type": "string",
-                    "pattern": "^(\\S+\\s+){4}\\S+$"
+                    "pattern": "^(\\S+\\s+){4}\\S+$",
+                    "nullable": true
                   },
                   "enabled": {
                     "type": "boolean"

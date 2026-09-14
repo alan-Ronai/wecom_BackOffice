@@ -6,7 +6,8 @@ export interface ConnectorRow {
   type: string;
   name: string;
   enabled: boolean;
-  schedule: string;
+  /** `null` = "ללא תזמון" — the connector runs on demand only, never on a cron. */
+  schedule: string | null;
   last_run_at: Date | null;
   last_status: string | null;
   health: Record<string, unknown>;
@@ -53,26 +54,48 @@ export class ConnectorsRepo {
   }
 
   async create(
-    b: { type: string; name: string; config: Record<string, unknown>; schedule?: string; enabled?: boolean },
+    b: {
+      type: string;
+      name: string;
+      config: Record<string, unknown>;
+      schedule?: string | null;
+      enabled?: boolean;
+    },
     actorId: string | null,
   ): Promise<ConnectorRow> {
+    // Same tri-state as `update`: omitted `schedule` defaults to the standard cron;
+    // an explicit `null` means "ללא תזמון" from the moment the connector is created.
+    const schedule = Object.prototype.hasOwnProperty.call(b, 'schedule')
+      ? (b.schedule ?? null)
+      : '*/15 * * * *';
     const r = await this.db.query<ConnectorRow>(
-      "insert into connectors(type,name,config_encrypted,schedule,enabled,created_by) values ($1,$2,$3,coalesce($4,'*/15 * * * *'),coalesce($5,true),$6) returning *",
-      [b.type, b.name, encryptConfig(this.keyHex, b.config), b.schedule ?? null, b.enabled ?? null, actorId],
+      'insert into connectors(type,name,config_encrypted,schedule,enabled,created_by) values ($1,$2,$3,$4,coalesce($5,true),$6) returning *',
+      [b.type, b.name, encryptConfig(this.keyHex, b.config), schedule, b.enabled ?? null, actorId],
     );
     return r.rows[0];
   }
 
   async update(
     id: string,
-    p: { name?: string; config?: Record<string, unknown>; schedule?: string; enabled?: boolean },
+    p: { name?: string; config?: Record<string, unknown>; schedule?: string | null; enabled?: boolean },
   ): Promise<ConnectorRow | null> {
+    // `schedule` is tri-state on write (leave it / set it / clear it to null), which
+    // `coalesce` cannot express — an explicit `null` and "not sent" would collapse to the
+    // same thing. `hasSchedule` tells Postgres which of the two an absent value means.
+    const hasSchedule = Object.prototype.hasOwnProperty.call(p, 'schedule');
     const r = await this.db.query<ConnectorRow>(
-      'update connectors set name=coalesce($2,name), config_encrypted=coalesce($3,config_encrypted), schedule=coalesce($4,schedule), enabled=coalesce($5,enabled), updated_at=now() where id=$1 returning *',
+      `update connectors set
+         name = coalesce($2, name),
+         config_encrypted = coalesce($3, config_encrypted),
+         schedule = case when $4 then $5 else schedule end,
+         enabled = coalesce($6, enabled),
+         updated_at = now()
+       where id=$1 returning *`,
       [
         id,
         p.name ?? null,
         p.config ? encryptConfig(this.keyHex, p.config) : null,
+        hasSchedule,
         p.schedule ?? null,
         p.enabled ?? null,
       ],

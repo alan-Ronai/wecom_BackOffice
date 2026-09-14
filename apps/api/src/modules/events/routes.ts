@@ -27,8 +27,19 @@ const documentIdOf = (e: Event): string | null =>
  */
 const PER_RECIPIENT = new Set<Event['name']>(['notification.created']);
 
-const recipientOf = (e: Event): string | null =>
-  PER_RECIPIENT.has(e.name) ? ((e.payload as { userId?: string }).userId ?? null) : null;
+/**
+ * `drop: true` — a per-recipient event whose payload has no `userId` to address it to.
+ * That should not happen (every current `notification.created` publisher sets it), but the
+ * safe default for "this event is addressed to one person and we don't know who" is to fail
+ * closed and deliver to nobody, not to fall open into a broadcast.
+ */
+export type RecipientDecision = { drop: true } | { drop: false; onlyTo: string | null };
+
+export const recipientDecision = (e: Event): RecipientDecision => {
+  if (!PER_RECIPIENT.has(e.name)) return { drop: false, onlyTo: null };
+  const userId = (e.payload as { userId?: string }).userId;
+  return userId ? { drop: false, onlyTo: userId } : { drop: true };
+};
 
 export default async function routes(app: FastifyInstance) {
   let open = 0;
@@ -66,9 +77,14 @@ export default async function routes(app: FastifyInstance) {
       const off = app.events.subscribe((e) => {
         void (async () => {
           // A per-recipient event goes to that recipient's connections and to no others,
-          // whatever their scope or permissions.
-          const recipient = recipientOf(e);
-          if (recipient !== null && recipient !== user.id) return;
+          // whatever their scope or permissions. A malformed one (no recipient to address
+          // it to) goes to nobody rather than falling open into a broadcast.
+          const decision = recipientDecision(e);
+          if (decision.drop) {
+            app.log.warn({ event: e.name }, 'per-recipient event missing userId; dropped');
+            return;
+          }
+          if (decision.onlyTo !== null && decision.onlyTo !== user.id) return;
           // A category-scoped user must not learn about documents outside their scope.
           if (scopes) {
             const id = documentIdOf(e);

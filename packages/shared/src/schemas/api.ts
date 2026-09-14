@@ -256,9 +256,12 @@ export const ConnectorCreateBodySchema = z.object({
   type: z.string().min(1),
   name: z.string().min(1).max(80),
   config: z.record(z.unknown()),
+  // Omitted = leave the schedule alone on a PATCH (or default it on a POST); `null` is
+  // the explicit "ללא תזמון" — stop running this connector on a timer.
   schedule: z
     .string()
     .regex(/^(\S+\s+){4}\S+$/)
+    .nullable()
     .optional(),
   enabled: z.boolean().optional(),
 });
