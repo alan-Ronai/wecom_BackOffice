@@ -862,8 +862,8 @@ export interface TaxonomyResolver { worldsOf(documentId: string): Promise<string
 export interface SearchLogInput { userId: string | null; q: string; filters: Record<string, unknown>; results: number; tookMs: number }
 export interface UsageRecorder { recordTopicView(userId: string, topicId: string): Promise<void>; recordSearch(entry: SearchLogInput): Promise<void> }
 ```
-- Produces (api): `app.notifier`, `app.taxonomy`, `app.usage` decorators; `QUEUES.feedbackDigest`, `QUEUES.feedbackAlerts`, `QUEUES.assetsGc`; classes `LogNotifier`, `NullTaxonomy`, `NullUsage` exported from `plugins/wave4.ts`; plugin option `{ notifier?, taxonomy?, usage? }` so a lane can override at registration.
-- Replacement rule for lanes: W3 provides the production `Notifier` (writes wave 3's `notifications` table when it exists; until then keeps `LogNotifier`), W1 provides `TaxonomyResolver`, W5 provides `UsageRecorder`. Each lane replaces the default by calling `app.register(wave4Plugin, { taxonomy: new PgTaxonomy(app.db) })`-style overrides **from its own module's `index.ts`**, not by editing `app.ts` (see `docs/api/CONTRACTS-wave4.md`).
+- Produces (api): `app.notifier: NotifierHolder`, `app.taxonomy: TaxonomyHolder`, `app.usage: UsageHolder` (delegating holders with `swap(impl)`, decorated once on the root so a swap from any child context is visible everywhere); `QUEUES.feedbackDigest`, `QUEUES.feedbackAlerts`, `QUEUES.assetsGc`; classes `LogNotifier`, `NullTaxonomy`, `NullUsage` exported from `plugins/wave4.ts`; plugin option `{ notifier?, taxonomy?, usage? }` so a lane can override at registration.
+- Replacement rule for lanes: W3 provides the production `Notifier` (writes wave 3's `notifications` table when it exists; until then keeps `LogNotifier`), W1 provides `TaxonomyResolver`, W5 provides `UsageRecorder`. Each lane replaces the default by calling `setTaxonomy(app, new PgTaxonomy(app.db))` / `setNotifier(...)` / `setUsage(...)` **from its own module's `index.ts`** (any context — the holders delegate), never by editing `app.ts` or reassigning the decorator (see `docs/api/CONTRACTS-wave4.md`).
 
 - [ ] **Step 1: Write the failing unit test**
 
@@ -871,7 +871,7 @@ export interface UsageRecorder { recordTopicView(userId: string, topicId: string
 ```ts
 import { describe, it, expect } from 'vitest';
 import Fastify from 'fastify';
-import wave4Plugin, { LogNotifier, NullTaxonomy, NullUsage } from '../../src/plugins/wave4.js';
+import wave4Plugin, { LogNotifier, NullTaxonomy, NullUsage, setUsage } from '../../src/plugins/wave4.js';
 import { QUEUES } from '../../src/plugins/boss.js';
 
 describe('wave4 plugin', () => {
@@ -879,9 +879,9 @@ describe('wave4 plugin', () => {
     const app = Fastify({ logger: false });
     await app.register(wave4Plugin);
     await app.ready();
-    expect(app.notifier).toBeInstanceOf(LogNotifier);
-    expect(app.taxonomy).toBeInstanceOf(NullTaxonomy);
-    expect(app.usage).toBeInstanceOf(NullUsage);
+    expect(app.notifier.impl).toBeInstanceOf(LogNotifier);
+    expect(app.taxonomy.impl).toBeInstanceOf(NullTaxonomy);
+    expect(app.usage.impl).toBeInstanceOf(NullUsage);
     await expect(app.notifier.notify({ userIds: ['u1'], kind: 'system', title: 'x' })).resolves.toBeUndefined();
     await expect(app.taxonomy.worldsOf('d1')).resolves.toEqual([]);
     await expect(app.taxonomy.usersWithPermissionInWorld('docs.publish', 'sim')).resolves.toEqual([]);
@@ -897,6 +897,22 @@ describe('wave4 plugin', () => {
     await app.ready();
     await app.notifier.notify({ userIds: [], kind: 'feedback', title: 'hello' });
     expect(calls).toEqual(['hello']);
+    await app.close();
+  });
+  it('swaps an implementation from an encapsulated child context', async () => {
+    const app = Fastify({ logger: false });
+    await app.register(wave4Plugin);
+    const seen: string[] = [];
+    // A lane's module is a plain (encapsulated) plugin, like every entry in registerModules().
+    await app.register(async (child) => {
+      setUsage(child, { recordTopicView: async () => {}, recordSearch: async (e) => { seen.push(e.q); } });
+    });
+    await app.register(async (sibling) => {
+      sibling.get('/probe', async () => { await sibling.usage.recordSearch({ userId: null, q: 'from-sibling', filters: {}, results: 1, tookMs: 1 }); return {}; });
+    });
+    await app.ready();
+    await app.inject({ method: 'GET', url: '/probe' });
+    expect(seen).toEqual(['from-sibling']);
     await app.close();
   });
   it('registers the wave 4 queues', () => {
@@ -979,9 +995,9 @@ import type { Notifier, NotifyInput, SearchLogInput, TaxonomyResolver, UsageReco
 
 declare module 'fastify' {
   interface FastifyInstance {
-    notifier: Notifier;
-    taxonomy: TaxonomyResolver;
-    usage: UsageRecorder;
+    notifier: NotifierHolder;
+    taxonomy: TaxonomyHolder;
+    usage: UsageHolder;
   }
 }
 
@@ -1003,26 +1019,47 @@ export class NullUsage implements UsageRecorder {
   async recordSearch(_e: SearchLogInput): Promise<void> {}
 }
 
+/**
+ * Holders delegate to a swappable implementation. They are decorated ONCE on the root
+ * instance, so `swap()` from any encapsulated child context (a lane's module) is seen by
+ * every sibling module and by jobs — plain reassignment of `app.usage` inside a child
+ * plugin would only shadow the property in that child.
+ */
+export class NotifierHolder implements Notifier {
+  constructor(public impl: Notifier) {}
+  swap(impl: Notifier) { this.impl = impl; }
+  notify(input: NotifyInput) { return this.impl.notify(input); }
+}
+export class TaxonomyHolder implements TaxonomyResolver {
+  constructor(public impl: TaxonomyResolver) {}
+  swap(impl: TaxonomyResolver) { this.impl = impl; }
+  worldsOf(documentId: string) { return this.impl.worldsOf(documentId); }
+  usersWithPermissionInWorld(permission: string, world: string) { return this.impl.usersWithPermissionInWorld(permission, world); }
+}
+export class UsageHolder implements UsageRecorder {
+  constructor(public impl: UsageRecorder) {}
+  swap(impl: UsageRecorder) { this.impl = impl; }
+  recordTopicView(userId: string, topicId: string) { return this.impl.recordTopicView(userId, topicId); }
+  recordSearch(entry: SearchLogInput) { return this.impl.recordSearch(entry); }
+}
+
 export interface Wave4PluginOptions {
   notifier?: Notifier;
   taxonomy?: TaxonomyResolver;
   usage?: UsageRecorder;
 }
 
-/**
- * Decorates `app.notifier`, `app.taxonomy`, `app.usage`. Registered once in app.ts with no
- * options; lanes replace an implementation by calling the matching `set*` from their module.
- */
+/** Registered once in app.ts (root context) with no options; tests may pass overrides. */
 export default fp(async (app, opts: Wave4PluginOptions) => {
-  app.decorate('notifier', opts.notifier ?? new LogNotifier(app.log));
-  app.decorate('taxonomy', opts.taxonomy ?? new NullTaxonomy());
-  app.decorate('usage', opts.usage ?? new NullUsage());
+  app.decorate('notifier', new NotifierHolder(opts.notifier ?? new LogNotifier(app.log)));
+  app.decorate('taxonomy', new TaxonomyHolder(opts.taxonomy ?? new NullTaxonomy()));
+  app.decorate('usage', new UsageHolder(opts.usage ?? new NullUsage()));
 });
 
-/** Lane hooks: replace a default after boot without touching app.ts (decorators are plain properties). */
-export const setNotifier = (app: { notifier: Notifier }, n: Notifier) => { app.notifier = n; };
-export const setTaxonomy = (app: { taxonomy: TaxonomyResolver }, t: TaxonomyResolver) => { app.taxonomy = t; };
-export const setUsage = (app: { usage: UsageRecorder }, u: UsageRecorder) => { app.usage = u; };
+/** Lane hooks: W3 → setNotifier, W1 → setTaxonomy, W5 → setUsage, called from the lane's module index (any context). */
+export const setNotifier = (app: { notifier: NotifierHolder }, n: Notifier) => app.notifier.swap(n);
+export const setTaxonomy = (app: { taxonomy: TaxonomyHolder }, t: TaxonomyResolver) => app.taxonomy.swap(t);
+export const setUsage = (app: { usage: UsageHolder }, u: UsageRecorder) => app.usage.swap(u);
 ```
 
 `apps/api/src/app.ts` — after the line `await app.register(bossPlugin, { boss: opts.boss });` add:
@@ -1079,7 +1116,7 @@ Wave 3 owns `0010`, `0011`, `0020`.
 ## Shared files a lane may touch (append-only)
 `apps/api/src/modules/index.ts` (one import + one list entry), `apps/web/src/routes.tsx` (route entries), `packages/shared/src/events.ts` (new names + payloads only), `packages/shared/src/permissions.ts` (new names + role additions only), `apps/api/src/plugins/boss.ts` (`QUEUES` entries), `apps/web/src/api/keys.ts` (new keys).
 **Never** edit: `packages/shared/src/schemas/stage45.ts`, `apps/api/src/app.ts`, `apps/web/src/components/shell/*`, `ArticlePage.tsx`, `EditorPage.tsx`, `LibraryPage.tsx`. Ship a component + a documented one-line mount in your lane report; W6 mounts it.
-Replacing a default: W1 calls `setTaxonomy(app, new PgTaxonomy(app.db))`, W3 `setNotifier(...)`, W5 `setUsage(...)` from the lane's own module `index.ts` (imported from `apps/api/src/plugins/wave4.ts`).
+Replacing a default: W1 calls `setTaxonomy(app, new PgTaxonomy(app.db))`, W3 `setNotifier(...)`, W5 `setUsage(...)` from the lane's own module `index.ts` (imported from `apps/api/src/plugins/wave4.ts`). The decorators are delegating holders, so the call works from an encapsulated module context; never reassign `app.usage = …` (it would only shadow the property in that child).\nTelemetry kinds `view_topic` / `search_click` are added to wave 3's `TelemetryEventSchema` by W6 after merge (W5 must not edit `stage45.ts`). W5 filters by primary world (`documents.category`) until W6 widens to `document_worlds`.
 
 ## Routes
 ### W1 Taxonomy
