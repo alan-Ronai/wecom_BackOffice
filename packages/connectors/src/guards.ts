@@ -15,7 +15,9 @@ export interface ConnectorGuards {
    * Hostnames an outbound connector may talk to. Empty means "unrestricted" —
    * this is a LAN product and the WordPress instance is normally on a private
    * address, so private ranges are deliberately NOT blocked by default; the
-   * allowlist is the control. An entry starting with `.` matches any subdomain.
+   * allowlist is the control. An entry starting with `.` matches any subdomain, and the single
+   * entry `*` means "any public host" — the explicit spelling of what an empty list does, which
+   * `ConfigSchema` requires a production deployment to write down rather than fall into (§5).
    */
   hostAllowlist?: string[];
 }
@@ -57,6 +59,8 @@ export function assertAllowedHost(url: string, allowlist: string[] | undefined):
   };
   if (ALWAYS_BLOCKED.test(host)) deny('link-local');
   if (!allowlist?.length) return;
+  // `*` is the deliberate "any public host" setting; link-local is still refused above.
+  if (allowlist.some((e) => e.trim() === '*')) return;
   const ok = allowlist.some((entry) => {
     const e = entry.trim().toLowerCase();
     if (!e) return false;

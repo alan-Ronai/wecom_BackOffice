@@ -31,4 +31,16 @@ describe('assertAllowedHost', () => {
     expect(() => assertAllowedHost('https://example.com/x', allow)).not.toThrow();
     expect(() => assertAllowedHost('https://evil.test/x', allow)).toThrow(/CONNECTOR_HOST_ALLOWLIST/);
   });
+  /**
+   * §5: production must set CONNECTOR_HOST_ALLOWLIST, so `*` exists as the written-down way to
+   * say "any public host" — what an empty value silently did. It must not weaken the
+   * unconditional link-local refusal.
+   */
+  it('treats `*` as any public host, but still refuses link-local', () => {
+    expect(() => assertAllowedHost('https://anything.test/x', ['*'])).not.toThrow();
+    expect(() => assertAllowedHost('https://wp.wecom.local/x', ['*', 'other.test'])).not.toThrow();
+    expect(() => assertAllowedHost('http://169.254.169.254/latest/meta-data', ['*'])).toThrow(
+      /link-local/,
+    );
+  });
 });

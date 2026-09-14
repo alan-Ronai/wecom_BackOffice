@@ -72,7 +72,10 @@ connector's `path` must resolve inside `CONNECTOR_FILE_ROOT`. Add the connector 
 `/admin/connectors`, **Test** before **Run**, and watch `GET /api/v1/admin/system` →
 `connectors[]` (`lastStatus`, `lastRunAt`, `conflicts`) after the first scheduled run.
 
-> **`CONNECTOR_HOST_ALLOWLIST` is required for a hardened install.** Leaving it empty means
+> **`CONNECTOR_HOST_ALLOWLIST` is now required when `NODE_ENV=production`** — the API refuses to
+> start with it empty, the same way it refuses the development `SESSION_SECRET` (acceptance
+> review §5 / item 18). Write `*` if you genuinely want "any public host": the point is that it is
+> a decision on the record, not a blank line. Leaving it empty used to mean
 > **any reachable host** — including private ranges and loopback. This is deliberate: the KB is
 > a LAN product and the WordPress instance normally *is* on a private address, so the allowlist
 > is the control and not the private-range check (`packages/connectors/src/guards.ts`). The only

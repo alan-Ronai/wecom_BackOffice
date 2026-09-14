@@ -7,6 +7,8 @@ const prod = {
   NODE_ENV: 'production' as const,
   SESSION_SECRET: 'a'.repeat(32),
   CONNECTOR_KEY: 'ab'.repeat(32),
+  CONNECTOR_HOST_ALLOWLIST: 'wp.wecom.local',
+  TRUST_PROXY: '172.16.0.0/12',
 };
 
 describe('ConfigSchema', () => {
@@ -26,6 +28,28 @@ describe('ConfigSchema', () => {
     // A known SESSION_SECRET lets an attacker forge the signed OIDC handshake cookie.
     expect(() => loadConfig({ ...prod, SESSION_SECRET: DEV_SESSION_SECRET })).toThrow(/SESSION_SECRET/);
     expect(() => loadConfig(prod)).not.toThrow();
+  });
+
+  /**
+   * §5 / item 18. An empty CONNECTOR_HOST_ALLOWLIST means "any public host", and an unset
+   * TRUST_PROXY meant "trust every X-Forwarded-For" in production. Both are decisions a
+   * deployment has to write down, like SESSION_SECRET — not defaults to arrive at by omission.
+   */
+  it('requires CONNECTOR_HOST_ALLOWLIST and TRUST_PROXY in production', () => {
+    expect(() => loadConfig({ ...prod, CONNECTOR_HOST_ALLOWLIST: '' })).toThrow(
+      /CONNECTOR_HOST_ALLOWLIST/,
+    );
+    expect(() => loadConfig({ ...prod, CONNECTOR_HOST_ALLOWLIST: '   ' })).toThrow(
+      /CONNECTOR_HOST_ALLOWLIST/,
+    );
+    expect(() => loadConfig({ ...prod, TRUST_PROXY: '' })).toThrow(/TRUST_PROXY/);
+    expect(() => loadConfig({ ...prod, TRUST_PROXY: undefined })).toThrow(/TRUST_PROXY/);
+    // `*` is the explicit way to say "any public host" — allowed, but written down.
+    expect(() => loadConfig({ ...prod, CONNECTOR_HOST_ALLOWLIST: '*' })).not.toThrow();
+    // Neither is required outside production, where the dev defaults stand.
+    expect(() =>
+      loadConfig({ ...base, NODE_ENV: 'test', CONNECTOR_HOST_ALLOWLIST: '', TRUST_PROXY: '' }),
+    ).not.toThrow();
   });
 
   it('reads MODEL_DISABLED as a real boolean', () => {
