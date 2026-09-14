@@ -74,6 +74,15 @@ describe('<FeedbackPage>', () => {
     expect(await screen.findByText('המשוב נסגר')).toBeInTheDocument();
   });
 
+  it('analytics tab renders the PRD metrics', async () => {
+    renderWithProviders(<App />, { route: '/feedback/analytics' });
+    expect(await screen.findByText('זמן ממוצע לטיפול')).toBeInTheDocument();
+    expect(screen.getByText('30.5 שעות')).toBeInTheDocument();
+    expect(screen.getByText('50%')).toBeInTheDocument(); // change rate
+    expect(screen.getByText(/מצאתי טעות/)).toBeInTheDocument(); // by kind
+    expect(screen.getByRole('table', { name: 'פריטים עם הכי הרבה דיווחים' })).toBeInTheDocument();
+  });
+
   it('is not available without feedback.manage', async () => {
     server.use(withMe({ permissions: ['docs.read'] }));
     renderWithProviders(<App />, { route: '/feedback' });

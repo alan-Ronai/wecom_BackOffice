@@ -102,7 +102,5 @@ export const useDocumentFeedback = (documentId: string | undefined, enabled = tr
     queryKey: keys.docFeedback(documentId ?? ''),
     enabled: !!documentId && enabled,
     queryFn: () =>
-      stageJson(DocumentFeedbackResponseSchema, `/documents/${documentId!}/feedback`).then(
-        (r) => r.items,
-      ),
+      stageJson(DocumentFeedbackResponseSchema, `/documents/${documentId!}/feedback`).then((r) => r.items),
   });

@@ -197,8 +197,18 @@ export function useTogglePin() {
 export const usePublish = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...body }: { id: string; label: string; markPartial?: boolean }) =>
-      unwrap(await api.POST('/documents/{id}/publish', { params: { path: { id } }, body })),
+    // `resolveFeedbackIds` (wave 4, W3) closes the reports the editor ticked in the publish
+    // dialog. It is not in the generated contract yet — W3-api adds it to `PublishBodySchema`
+    // and regenerates `openapi.json`; until then it simply rides along in the body.
+    mutationFn: async ({
+      id,
+      ...body
+    }: {
+      id: string;
+      label: string;
+      markPartial?: boolean;
+      resolveFeedbackIds?: string[];
+    }) => unwrap(await api.POST('/documents/{id}/publish', { params: { path: { id } }, body })),
     onSuccess: (res, { id }) => {
       qc.setQueryData(keys.doc(id), res.document);
       void qc.invalidateQueries({ queryKey: keys.versions(id) });

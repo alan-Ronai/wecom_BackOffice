@@ -72,14 +72,14 @@ export const feedbackHandlers: RequestHandler[] = [
     });
     feedbackState.items.push(row);
     // The 201 body is `FeedbackSchema`, a subset of the row shape the queue reads.
-    const { documentTitle: _t, assigneeName: _a, ...plain } = row;
+    const plain: Partial<FeedbackRow> = { ...row };
+    delete plain.documentTitle;
+    delete plain.assigneeName;
     return HttpResponse.json(plain, { status: 201 });
   }),
   http.get(`${B}/documents/:id/feedback`, ({ params }) =>
     HttpResponse.json({
-      items: feedbackState.items.filter(
-        (f) => f.documentId === params.id && OPEN.includes(f.status),
-      ),
+      items: feedbackState.items.filter((f) => f.documentId === params.id && OPEN.includes(f.status)),
     }),
   ),
   // Declared before `/feedback/:id` so the literal segment wins.

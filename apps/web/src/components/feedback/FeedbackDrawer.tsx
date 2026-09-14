@@ -124,7 +124,12 @@ export function FeedbackDrawer({ id, onClose }: { id: string; onClose: () => voi
             onChange={(e) => setNote(e.target.value)}
           />
         </label>
-        <button type="button" className="btn primary sm" disabled={patch.isPending} onClick={() => void save()}>
+        <button
+          type="button"
+          className="btn primary sm"
+          disabled={patch.isPending}
+          onClick={() => void save()}
+        >
           שמור
         </button>
       </div>
