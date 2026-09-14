@@ -7,7 +7,7 @@
  * `checked` against `@wecom/shared`. V6 swaps each `w5(...)` for the generated `api.*` call.
  */
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { z } from 'zod';
+import { z } from 'zod';
 import {
   AssignResultSchema,
   AudienceSchema,
@@ -34,6 +34,17 @@ import { w5, w5Void } from '../wave5.js';
 
 export type LearningItemsQuery = Partial<z.input<typeof LearningItemsQuerySchema>>;
 type QueryParams = Record<string, string | number | undefined>;
+
+/**
+ * `POST /learning/items/:id/publish` answers `{ item, version }` — the V1 ruling, which corrects
+ * what `CONTRACTS-wave5.md` said (a bare `LearningVersion`). V1 appends
+ * `LearningPublishResponseSchema` to `@wecom/shared`; until that lands on this branch the shape is
+ * composed here from the shared item schema rather than re-declared, and V6 swaps the import in.
+ */
+const PublishResponseSchema = z.object({
+  item: LearningItemSchema,
+  version: z.number().int().nonnegative(),
+});
 
 export const useLearningItems = (q: LearningItemsQuery = {}, enabled = true) =>
   useQuery({
@@ -114,9 +125,9 @@ export const usePublishLearningItem = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: z.input<typeof LearningPublishBodySchema>) =>
-      w5(LearningItemSchema, 'POST', `/learning/items/${id}/publish`, { body }),
-    onSuccess: (item) => {
-      qc.setQueryData(keys.learning.item(id), item);
+      w5(PublishResponseSchema, 'POST', `/learning/items/${id}/publish`, { body }),
+    onSuccess: (res) => {
+      qc.setQueryData(keys.learning.item(id), res.item);
       invalidateLearning(qc, id);
     },
   });

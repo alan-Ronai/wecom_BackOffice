@@ -95,6 +95,20 @@ const TaxonomyPage = () =>
   import('./components/admin/TaxonomyPage.js').then((m) => ({ default: m.TaxonomyPage }));
 
 /**
+ * Wave 5 (V4b). Editor tooling, so lazy: the learning manager and its builders are a writing
+ * surface, and the gaps queue is a lead's weekly screen — neither is somewhere an agent lands
+ * mid-call.
+ */
+const LearningManagePage = () =>
+  import('./components/learning/manage/LearningManagePage.js').then((m) => ({
+    default: m.LearningManagePage,
+  }));
+const LearningItemEditor = () =>
+  import('./components/learning/manage/LearningItemEditor.js').then((m) => ({
+    default: m.LearningItemEditor,
+  }));
+
+/**
  * One boundary around the whole lazy area rather than one per route.
  *
  * `Suspense` resolves to the nearest boundary above the suspending component, so a single wrapper
@@ -167,6 +181,11 @@ export const routeObjects: RouteObject[] = [
       { path: 'feedback/:id', element: split(FeedbackPage) },
       // W5. The sidebar entry that leads here is W6's mount; the route stands on its own.
       { path: 'analytics', element: split(AnalyticsPage) },
+      // wave 5 (V4b). `manage` and `manage/new` precede V4a's `learning/:assignmentId`, or a
+      // manager would try to open an assignment called "manage". V6 keeps this order.
+      { path: 'learning/manage', element: split(LearningManagePage) },
+      { path: 'learning/manage/new', element: split(LearningItemEditor) },
+      { path: 'learning/manage/:id', element: split(LearningItemEditor) },
       {
         path: 'admin',
         element: split(AdminLayout),

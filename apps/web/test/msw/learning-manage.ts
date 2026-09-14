@@ -175,7 +175,8 @@ export const learningManageHandlers: RequestHandler[] = [
     i.status = 'published';
     i.currentVersion += 1;
     i.publishedAt = T;
-    return HttpResponse.json(i);
+    // V1 ruling: the route answers `{ item, version }`, not a bare version row.
+    return HttpResponse.json({ item: i, version: i.currentVersion });
   }),
   http.get(`${B}/learning/items/:id/versions`, ({ params }) => {
     const i = find(params.id);
