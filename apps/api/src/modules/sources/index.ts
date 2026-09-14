@@ -22,6 +22,7 @@ export async function registerSourcesModule(app: FastifyInstance): Promise<Pipel
   const revisions = new SourceRevisionService(app.db, {
     send: async (name, data, opts) => (app.boss ? app.boss.send(name, data, opts ?? {}) : null),
   });
+  app.decorate('revisions', revisions); // W4: the sourcedocs module ingests through the same service
   const mapping = new MappingService(app.db);
   const deps: PipelineDeps = {
     revisions,

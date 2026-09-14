@@ -358,3 +358,7 @@ export const UsageAnalyticsSchema = z.object({
   ),
 });
 export type UsageAnalytics = z.infer<typeof UsageAnalyticsSchema>;
+
+/* ── Source autosave (W4 contract addition) ────────────────────────────── */
+export const SourceDraftSchema = z.object({ html: z.string(), updatedAt: IsoDateSchema });
+export const PutSourceDraftBodySchema = z.object({ html: z.string().max(2_000_000) });
