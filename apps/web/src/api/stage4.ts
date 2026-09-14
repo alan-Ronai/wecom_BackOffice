@@ -2,16 +2,16 @@
  * Stage 4 ("connected data") API surface: graph, field/block pages, the data explorer and the
  * dashboards.
  *
- * Every request and response below is typed with `z.infer` off the **zod schemas** in
- * `@wecom/shared` (`packages/shared/src/schemas/stage45.ts`), which are the contract that
- * `docs/api/openapi.json` is itself generated from — the same source of truth as the rest of the
- * app, one step upstream. Backend lane A is publishing these routes concurrently; until they
- * appear in the OpenAPI file the generated `paths` map has no entries for them, so `openapi-fetch`
- * cannot type the calls. When they land, each wrapper becomes a one-line `api.GET(...)` and the
- * exported types do not move.
+ * Transport is the **generated** client (`api`, typed by `schema.d.ts` from
+ * `docs/api/openapi.json`), like every other call in this app — there is exactly one contract and
+ * a route that changes shape becomes a typecheck error here rather than a runtime `TypeError` in
+ * front of a user. See `README.md`: no second, hand-maintained contract.
  *
- * This is deliberately **not** a second hand-maintained contract (see `README.md`): nothing here
- * describes a shape, it only names a path and defers every shape to the shared schema.
+ * The exported *types*, though, are `z.infer` off the shared zod schemas in
+ * `packages/shared/src/schemas/stage45.ts`, which are what validate these routes server-side and
+ * what the OpenAPI file is generated from. Annotating each function with the zod type while the
+ * body returns the generated one makes the two sides check against each other: if the published
+ * contract ever drifts from the schema that is supposed to produce it, this file stops compiling.
  */
 import type { z } from 'zod';
 import type {
@@ -36,7 +36,7 @@ import type {
   ReimportResultSchema,
   TelemetryBatchSchema,
 } from '@wecom/shared';
-import { API_BASE } from './client.js';
+import { api, apiUpload } from './client.js';
 import { unwrap } from './unwrap.js';
 
 /* ── types, every one of them inferred from the shared zod schemas ────────── */
@@ -63,88 +63,58 @@ export type ReimportResult = z.infer<typeof ReimportResultSchema>;
 export type Dashboard = z.infer<typeof DashboardSchema>;
 export type TelemetryBatch = z.input<typeof TelemetryBatchSchema>;
 
-/* ── transport ────────────────────────────────────────────────────────────── */
-
-/**
- * Same base and same cookie policy as `api` (`credentials: 'include'`), and the same typed
- * `ApiError` on failure, so a stage-4 call is indistinguishable from a generated one at the call
- * site. `fetch` is resolved per call rather than captured, so msw (tests) and instrumentation
- * intercept it exactly as they do for `openapi-fetch`.
- */
-async function s4<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await globalThis.fetch(`${API_BASE}${path}`, { credentials: 'include', ...init });
-  const body: unknown = response.status === 204 ? undefined : await response.json().catch(() => undefined);
-  return unwrap<T>(response.ok ? { data: body as T, response } : { error: body, response });
-}
-
-const json = (method: string, body: unknown): RequestInit => ({
-  method,
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify(body),
-});
-
-/** `?a=1&b=2`, skipping anything the caller left undefined. */
-const qs = (q: Record<string, string | number | undefined>): string => {
-  const p = new URLSearchParams();
-  for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '') p.set(k, String(v));
-  const s = p.toString();
-  return s ? `?${s}` : '';
-};
-
-/**
- * Node ids carry a `kind:` prefix and a free-form tail (`field:שירות נדידה`), so the whole id is
- * one path segment and must be escaped as such.
- */
-const seg = (v: string): string => encodeURIComponent(v);
-
 /* ── graph ────────────────────────────────────────────────────────────────── */
 
-export const getGraph = (q: GraphQuery = {}): Promise<GraphResponse> =>
-  s4(
-    `/graph${qs({
-      focus: q.focus,
-      depth: q.depth,
-      types: q.types,
-      category: q.category,
-      kinds: q.kinds,
-      limit: q.limit,
-    })}`,
-  );
+export const getGraph = async (query: GraphQuery = {}): Promise<GraphResponse> =>
+  unwrap(await api.GET('/graph', { params: { query } }));
 
-export const getImpact = (nodeId: string): Promise<ImpactResponse> => s4(`/graph/impact/${seg(nodeId)}`);
+/**
+ * A node id is `<kind>:<tail>` where the tail is free-form (`field:שירות נדידה`), so it is one
+ * path segment — which `openapi-fetch` percent-encodes for us.
+ */
+export const getImpact = async (nodeId: string): Promise<ImpactResponse> =>
+  unwrap(await api.GET('/graph/impact/{nodeId}', { params: { path: { nodeId } } }));
 
 /* ── field & block pages ──────────────────────────────────────────────────── */
 
-export const getFieldPage = (name: string): Promise<FieldPage> => s4(`/fields/${seg(name)}/page`);
+export const getFieldPage = async (name: string): Promise<FieldPage> =>
+  unwrap(await api.GET('/fields/{name}/page', { params: { path: { name } } }));
 
-export const renameField = (name: string, body: FieldRenameBody): Promise<FieldRenameResult> =>
-  s4(`/fields/${seg(name)}/rename`, json('POST', body));
+export const renameField = async (name: string, body: FieldRenameBody): Promise<FieldRenameResult> =>
+  unwrap(await api.POST('/fields/{name}/rename', { params: { path: { name } }, body }));
 
-export const getBlockPage = (id: string): Promise<BlockPage> => s4(`/blocks/${seg(id)}/page`);
+export const getBlockPage = async (id: string): Promise<BlockPage> =>
+  unwrap(await api.GET('/blocks/{id}/page', { params: { path: { id } } }));
 
 /* ── data explorer ────────────────────────────────────────────────────────── */
 
-export const getDataFiles = (): Promise<DataFilesResponse> => s4('/data/files');
+export const getDataFiles = async (): Promise<DataFilesResponse> => unwrap(await api.GET('/data/files'));
 
-export const getDataPreview = (sourceId: string, q: DataPreviewQuery = {}): Promise<DataPreview> =>
-  s4(`/data/files/${seg(sourceId)}/preview${qs({ limit: q.limit })}`);
+export const getDataPreview = async (sourceId: string, query: DataPreviewQuery = {}): Promise<DataPreview> =>
+  unwrap(await api.GET('/data/files/{sourceId}/preview', { params: { path: { sourceId }, query } }));
 
-export const putMapping = (sourceId: string, body: PutMappingBody): Promise<DataFile> =>
-  s4(`/data/files/${seg(sourceId)}/mapping`, json('PUT', body));
+export const putMapping = async (sourceId: string, body: PutMappingBody): Promise<DataFile> =>
+  unwrap(await api.PUT('/data/files/{sourceId}/mapping', { params: { path: { sourceId } }, body }));
 
-export const reimportDataFile = (sourceId: string): Promise<ReimportResult> =>
-  s4(`/data/files/${seg(sourceId)}/reimport`, { method: 'POST' });
+export const reimportDataFile = async (sourceId: string): Promise<ReimportResult> =>
+  unwrap(await api.POST('/data/files/{sourceId}/reimport', { params: { path: { sourceId } } }));
 
-/** multipart — the body is `FormData`, so no content-type header (the browser sets the boundary). */
+/**
+ * OpenAPI describes this route with a multipart body, which `openapi-fetch` cannot type or
+ * serialise, so it goes through `apiUpload` — the same escape hatch `/sources/upload` uses. The
+ * response is still the contract's `DataFile`.
+ */
 export const uploadDataFile = (file: File): Promise<DataFile> => {
   const form = new FormData();
   form.append('file', file);
-  return s4('/data/files', { method: 'POST', body: form });
+  return apiUpload<DataFile>('/data/files', form).then(unwrap);
 };
 
 /* ── dashboards & telemetry ───────────────────────────────────────────────── */
 
-export const getDashboards = (): Promise<Dashboard> => s4('/dashboards');
+export const getDashboards = async (): Promise<Dashboard> => unwrap(await api.GET('/dashboards'));
 
 /** 204, so nothing is unwrapped — usage tiles are only real if the web actually reports. */
-export const postTelemetry = (body: TelemetryBatch): Promise<void> => s4('/telemetry', json('POST', body));
+export const postTelemetry = async (body: TelemetryBatch): Promise<void> => {
+  unwrap(await api.POST('/telemetry', { body }));
+};
