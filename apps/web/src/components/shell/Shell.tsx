@@ -7,6 +7,7 @@ import { Palette } from '../palette/Palette.js';
 import { usePalette } from '../palette/paletteStore.js';
 import { Peek } from '../article/Peek.js';
 import { useModal } from '../ui/Modal.js';
+import { useToast } from '../ui/Toast.js';
 import { NavProvider, useNav } from './navStore.js';
 import { Sidebar } from './Sidebar.js';
 import { TabStrip } from './TabStrip.js';
@@ -27,6 +28,7 @@ function ShellInner() {
   const modal = useModal();
   const nav = useNav();
   const drawer = useDrawer();
+  const toast = useToast();
   useEvents();
 
   const expanded = prefs.data?.sidebarExpanded ?? false;
@@ -55,11 +57,12 @@ function ShellInner() {
       callMode: true,
       sidebarExpanded: false,
     };
-    savePrefs.mutate({
-      ...base,
-      theme: document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark',
-    });
-  }, [prefs.data, savePrefs]);
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    savePrefs.mutate({ ...base, theme: next });
+    // Legacy confirmed the switch. Ctrl D is pressed without looking, and in a dim room the two
+    // themes are not instantly distinguishable — the toast is how the chord reports it landed.
+    toast(next === 'dark' ? '◐ מצב כהה' : '○ מצב בהיר');
+  }, [prefs.data, savePrefs, toast]);
 
   useHotkeys('global', {
     'ctrl+k': (e) => {

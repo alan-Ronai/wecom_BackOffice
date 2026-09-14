@@ -10,6 +10,8 @@ import {
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { setActiveScope as publishActiveScope, type ActiveScope } from '../../lib/keys.js';
+import { usePalette } from '../palette/paletteStore.js';
+import { useToast } from '../ui/Toast.js';
 
 export interface Tab {
   docId: string;
@@ -65,6 +67,8 @@ const load = <T,>(k: string, d: T): T => {
 export function NavProvider({ children }: { children: ReactNode }) {
   const nav = useNavigate();
   const loc = useLocation();
+  const palette = usePalette();
+  const toast = useToast();
   const [tabs, setTabs] = useState<Tab[]>(() => load('kb.tabs', [] as Tab[]));
   const [activeTab, setActiveTab] = useState(() => load('kb.activeTab', 0));
   const [split, setSplit] = useState<Split>(null);
@@ -153,22 +157,32 @@ export function NavProvider({ children }: { children: ReactNode }) {
   const toggleSplit = useCallback(
     (rightId?: string) => {
       const m = /^\/doc\/([^/]+)/.exec(loc.pathname);
-      if (!m) return;
+      // Legacy answered all three dead ends out loud rather than returning silently: Ctrl \ is
+      // pressed blind, so "nothing happened" reads as a broken chord.
+      if (!m) {
+        toast('פיצול מסך זמין מתוך מסמך', 'warn');
+        return;
+      }
       if (split && !rightId) {
         setSplit(null);
         // Closing the split leaves one article on screen, and the keys have to follow it back —
         // otherwise they stay addressed to a pane that no longer exists and nothing responds.
         setActiveScope('article');
+        toast('פיצול מסך בוטל');
         return;
       }
       const right = rightId ?? tabs.find((t) => t.docId !== m[1])?.docId;
-      if (right) {
-        setSplit({ left: m[1], right });
-        // Opening the split makes the pane you were already reading the active one.
-        setActiveScope('split-left');
+      // One open tab is the normal state at the start of a shift. Legacy asked which document to
+      // put on the other side instead of doing nothing.
+      if (!right) {
+        palette.open({ mode: 'split' });
+        return;
       }
+      setSplit({ left: m[1], right });
+      // Opening the split makes the pane you were already reading the active one.
+      setActiveScope('split-left');
     },
-    [loc.pathname, split, tabs, setActiveScope],
+    [loc.pathname, split, tabs, setActiveScope, palette, toast],
   );
 
   const value = useMemo<Nav>(
