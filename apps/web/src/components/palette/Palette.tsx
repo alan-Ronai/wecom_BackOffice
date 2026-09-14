@@ -103,6 +103,12 @@ export function Palette() {
         run: () => go(`/history/${docId}`),
       });
       list.push({ id: 'edit', title: 'ערוך את המסמך', kbd: 'E', icon: '✏', run: () => go(`/edit/${docId}`) });
+      list.push({
+        id: 'graph-focus',
+        title: 'גרף קשרים – מקד על המסמך הנוכחי',
+        icon: '⁂',
+        run: () => go(`/graph?focus=doc:${docId}&depth=2`),
+      });
     }
     list.push(
       { id: 'new', title: 'צור פריט ידע חדש', kbd: 'Ctrl N', icon: '✚', run: () => go('/edit/new') },
@@ -129,6 +135,14 @@ export function Palette() {
       { id: 'recent', title: 'נצפו לאחרונה', icon: '🕘', run: () => go('/recent') },
       { id: 'fields', title: 'שדות CRM – מה השתנה השבוע', icon: 'CRM', run: () => go('/fields') },
       { id: 'blocks', title: 'בלוקים משותפים', icon: '⧉', run: () => go('/blocks') },
+      { id: 'data', title: 'קבצי נתונים (JSON / CSV) – מיפוי וייבוא', icon: '📊', run: () => go('/data') },
+      { id: 'graph', title: 'גרף קשרים – מה מפנה למה', icon: '⁂', run: () => go('/graph') },
+      {
+        id: 'dashboards',
+        title: 'לוחות בקרה – כיסוי, רעננות, שימוש',
+        icon: '▦',
+        run: () => go('/dashboards'),
+      },
       {
         id: 'font',
         title:
