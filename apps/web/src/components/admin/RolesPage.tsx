@@ -51,6 +51,83 @@ export function RolesPage() {
   const isDirty = (r: MatrixRole) => !!draft[r.id] && !sameSet(draft[r.id], r.permissions);
   const dirty = roles.filter(isDirty);
 
+  /**
+   * roleId → the role it is a strict superset of, if any (card 3c's "ירושה מתפקיד נמוך").
+   *
+   * The roles are not a declared hierarchy — the contract publishes a flat list — but the system
+   * roles are one in practice (`agent ⊂ lead ⊂ admin`), and that containment is visible in the
+   * data. Computing it rather than hard-coding the three names means a system role added later
+   * slots into the picture on its own, and one that breaks the pattern shows no inheritance
+   * instead of a wrong one.
+   *
+   * Only **system** roles can be a base. A custom role is an ad-hoc set, not a rung: "צוות חו״ל"
+   * happening to be a subset of `lead` is a coincidence of who was given what, and describing
+   * lead as built on it would be both wrong and unstable — every custom role anyone adds would
+   * rewrite the picture for the roles that actually are a ladder.
+   *
+   * Among the eligible bases, each role takes the **largest** one it strictly contains, so
+   * `admin` reads as inheriting from `lead` rather than from `agent` — the nearest rung, which is
+   * the one an operator would name.
+   */
+  const inheritsFrom = useMemo(() => {
+    const out: Record<string, MatrixRole | undefined> = {};
+    for (const r of roles) {
+      const mine = new Set(permsOf(r));
+      out[r.id] = roles
+        .filter((o) => o.system && o.id !== r.id && o.permissions.length < mine.size)
+        .filter((o) => o.permissions.every((p) => mine.has(p)))
+        .sort((a, b) => b.permissions.length - a.permissions.length)[0];
+    }
+    return out;
+    // `draft` rather than `permsOf`: the picture has to follow unsaved edits, or a cell the
+    // operator just ticked would keep describing the state before they touched it.
+  }, [roles, draft]);
+
+  /** Held here, and also held by the role this one is built on — so it is not a free choice. */
+  const inherited = (r: MatrixRole, p: Permission) =>
+    permsOf(r).includes(p) && !!inheritsFrom[r.id]?.permissions.includes(p);
+
+  /**
+   * The "מה משתנה" preview: every cell that differs from what the server currently has, in
+   * words, before anything is written.
+   *
+   * `שמור (3 שינויים)` counts *roles*, which answers "how many requests" and not "what did I
+   * actually do" — and after five minutes of ticking, the second question is the one an operator
+   * cannot answer from the grid alone.
+   */
+  const changes = useMemo(
+    () =>
+      roles.flatMap((r) => {
+        const before = new Set(r.permissions);
+        const after = new Set(permsOf(r));
+        return [
+          ...[...after].filter((p) => !before.has(p)).map((p) => ({ role: r, perm: p, added: true })),
+          ...[...before].filter((p) => !after.has(p)).map((p) => ({ role: r, perm: p, added: false })),
+        ];
+      }),
+    [roles, draft],
+  );
+
+  const showChanges = () =>
+    modal.open({
+      title: 'מה משתנה',
+      body: (
+        <div className="change-preview">
+          {changes.map(({ role, perm, added }) => (
+            <div key={`${role.id}:${perm}`} className="change-row">
+              <span className={added ? 'added' : 'removed'}>{added ? '✚' : '✕'}</span>
+              <b>{role.name}</b>
+              <bdi className="lat" dir="ltr">
+                {perm}
+              </bdi>
+              <span className="small muted">{role.users} משתמשים</span>
+            </div>
+          ))}
+        </div>
+      ),
+      buttons: [{ label: 'סגור' }],
+    });
+
   /** The admin role must keep the keys to the building — the server refuses this too. */
   const locked = (r: MatrixRole, p: Permission) => r.name === 'admin' && ADMIN_LOCKED.includes(p);
 
@@ -91,12 +168,15 @@ export function RolesPage() {
             >
               ✚ תפקיד
             </button>
+            <button className="btn sm" disabled={!changes.length} onClick={showChanges}>
+              מה משתנה
+            </button>
             <button
               className="btn primary sm"
               disabled={!dirty.length || upsert.isPending}
               onClick={() => void save()}
             >
-              {dirty.length ? `שמור (${dirty.length} שינויים)` : 'שמור'}
+              {changes.length ? `שמור (${changes.length} שינויים)` : 'שמור'}
             </button>
           </div>
         ) : null}
@@ -111,6 +191,9 @@ export function RolesPage() {
                 <th key={r.id} className={isDirty(r) ? 'dirty' : ''}>
                   {r.name}
                   <div className="small muted">{r.users} משתמשים</div>
+                  {inheritsFrom[r.id] ? (
+                    <div className="small muted">כולל את {inheritsFrom[r.id]!.name}</div>
+                  ) : null}
                 </th>
               ))}
             </tr>
@@ -131,14 +214,25 @@ export function RolesPage() {
                     </td>
                     {roles.map((r) => {
                       const isLocked = locked(r, p.name);
+                      const isInherited = !isLocked && inherited(r, p.name);
+                      const base = inheritsFrom[r.id];
                       return (
-                        <td key={r.id}>
+                        <td key={r.id} className={isInherited ? 'inherited' : ''}>
                           <input
                             type="checkbox"
+                            // The label *names* the cell and nothing else; the state goes in
+                            // `title`, which AT reads as the description. A name that changes
+                            // when the state does is a name you cannot refer to.
                             aria-label={`${p.name} · ${r.name}`}
                             checked={permsOf(r).includes(p.name)}
                             disabled={!mayEdit || isLocked}
-                            title={isLocked ? 'נעול בתפקיד מנהל' : undefined}
+                            title={
+                              isLocked
+                                ? 'נעול בתפקיד מנהל'
+                                : isInherited
+                                  ? `בירושה מתפקיד ${base!.name}`
+                                  : undefined
+                            }
                             onChange={(e) => toggle(r, p.name, e.target.checked)}
                           />
                           {isLocked ? <span aria-hidden="true"> 🔒</span> : null}

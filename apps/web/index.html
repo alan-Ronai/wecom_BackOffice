@@ -4,6 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>wecom · מאגר ידע פנימי</title>
+    <script>
+      /*
+        Stamps the theme before the first paint.
+
+        `applyPrefs` already resolves the same thing — the stored choice, or the OS preference when
+        there is none — but it cannot run until `/me/preferences` has answered, so a user whose OS
+        is dark, or who chose dark last week, got a full light-themed paint first and a flash when
+        the app caught up. This reads the same `localStorage` mirror `useUiPrefs` writes and
+        applies the same rule, so the two can never disagree about what "no choice" means.
+
+        Deliberately not a `@media (prefers-color-scheme: dark)` block in the stylesheet: that
+        would mean maintaining the dark palette twice, under two selectors, and a token added to
+        one and not the other is a bug nothing would catch.
+      */
+      (function () {
+        try {
+          var stored = JSON.parse(localStorage.getItem('wecom.ui-prefs') || '{}').theme;
+          var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.documentElement.dataset.theme = stored || (dark ? 'dark' : 'light');
+        } catch (e) {
+          /* private mode, blocked storage — the app applies the theme a moment later */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

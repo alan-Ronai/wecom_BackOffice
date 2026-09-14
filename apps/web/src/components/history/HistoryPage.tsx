@@ -17,6 +17,7 @@ import type { Blame } from '../../lib/diffSteps.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
+import { LoadError } from '../ui/index.js';
 import { DiffView } from './DiffView.js';
 
 /** Document picker when no `:id` is in the route (legacy history view). */
@@ -119,6 +120,7 @@ export function HistoryPage() {
   if (!id) return <Picker />;
   if (docQ.isPending) return <div className="route-loading">טוען…</div>;
   const doc = docQ.data;
+  if (docQ.isError) return <LoadError what="המסמך" error={docQ.error} />;
   if (!doc)
     return (
       <div className="empty">

@@ -159,7 +159,8 @@ export function ReviewsPage() {
           </div>
           {reviews.isError ? <LoadError what="סקירות" error={reviews.error} /> : null}
           <div className="grid">
-            {!rows.length && !reviews.isError ? (
+            {reviews.isPending ? <div className="route-loading">טוען…</div> : null}
+            {!rows.length && !reviews.isError && !reviews.isPending ? (
               <div className="empty" style={{ gridColumn: '1/-1' }}>
                 <b>{tab === 'open' ? 'אין פריטים שממתינים לסקירה' : 'אין פריטים בסטטוס הזה'}</b>
                 {tab === 'open' ? 'כותבים שולחים לסקירה מתוך העורך' : ''}

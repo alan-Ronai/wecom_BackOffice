@@ -218,49 +218,33 @@ export function EditorPage() {
     [doc, selected],
   );
 
-  useHotkeys(
-    'editor',
-    {
-      // `useHotkeys` lower-cases bare keys, so Ctrl Shift Z arrives here as `ctrl+z` with the
-      // shift flag set — one binding covers both directions. Ctrl Y is the Windows habit.
-      'ctrl+z': (e) => {
-        e.preventDefault();
-        restore(e.shiftKey ? history.redo() : history.undo());
-      },
-      'ctrl+y': (e) => {
-        e.preventDefault();
-        restore(history.redo());
-      },
-      Escape: () => {
-        if (multi.size) {
-          setMulti(new Set());
-          return;
-        }
-        // A modal or the palette is in front of the editor and is not the editor's to close, so
-        // decline and let the global scope handle it.
-        if (modal.count !== 0 || palette.state.open) return false;
-        leave();
-      },
-      // `R` rather than `r`: `useHotkeys` normalises bare keys to lower case, so only the
-      // un-normalised fallback matches — which is exactly the Shift R the keymap advertises.
-      R: () => {
-        if (!isNew && doc && can('docs.edit', doc)) requestReview({ id, title: doc.title });
-      },
+  useHotkeys('editor', {
+    // `useHotkeys` lower-cases bare keys, so Ctrl Shift Z arrives here as `ctrl+z` with the
+    // shift flag set — one binding covers both directions. Ctrl Y is the Windows habit.
+    'ctrl+z': (e) => {
+      e.preventDefault();
+      restore(e.shiftKey ? history.redo() : history.undo());
     },
-    [
-      leave,
-      modal.count,
-      palette.state.open,
-      isNew,
-      doc,
-      can,
-      requestReview,
-      id,
-      history,
-      restore,
-      multi.size,
-    ],
-  );
+    'ctrl+y': (e) => {
+      e.preventDefault();
+      restore(history.redo());
+    },
+    Escape: () => {
+      if (multi.size) {
+        setMulti(new Set());
+        return;
+      }
+      // A modal or the palette is in front of the editor and is not the editor's to close, so
+      // decline and let the global scope handle it.
+      if (modal.count !== 0 || palette.state.open) return false;
+      leave();
+    },
+    // `R` rather than `r`: `useHotkeys` normalises bare keys to lower case, so only the
+    // un-normalised fallback matches — which is exactly the Shift R the keymap advertises.
+    R: () => {
+      if (!isNew && doc && can('docs.edit', doc)) requestReview({ id, title: doc.title });
+    },
+  });
 
   /**
    * 412 means someone else published while this editor was open. Neither outcome is safe to pick
@@ -403,7 +387,7 @@ export function EditorPage() {
             placeholder="שם פריט הידע…"
             aria-label="שם פריט הידע"
             value={doc.title}
-            onChange={(e) => update({ ...doc, title: e.target.value })}
+            onChange={(e) => update({ ...doc, title: e.target.value }, 'שם הפריט')}
           />
           <span className="chip chip-amber">
             {published.data ? `טיוטה על v${published.data.currentVersion}` : 'טיוטה'}
@@ -499,7 +483,7 @@ export function EditorPage() {
               <select
                 aria-label="קטגוריה"
                 value={doc.category}
-                onChange={(e) => update({ ...doc, category: e.target.value as Category })}
+                onChange={(e) => update({ ...doc, category: e.target.value as Category }, 'קטגוריה')}
               >
                 {CAT_KEYS.map((c) => (
                   <option key={c} value={c}>
@@ -513,7 +497,7 @@ export function EditorPage() {
               <select
                 aria-label="גל כתיבה"
                 value={doc.wave}
-                onChange={(e) => update({ ...doc, wave: Number(e.target.value) as 1 | 2 | 3 })}
+                onChange={(e) => update({ ...doc, wave: Number(e.target.value) as 1 | 2 | 3 }, 'גל')}
               >
                 {[1, 2, 3].map((w) => (
                   <option key={w} value={w}>
@@ -527,7 +511,9 @@ export function EditorPage() {
               <select
                 aria-label="שכיחות"
                 value={doc.priority}
-                onChange={(e) => update({ ...doc, priority: e.target.value as Document['priority'] })}
+                onChange={(e) =>
+                  update({ ...doc, priority: e.target.value as Document['priority'] }, 'עדיפות')
+                }
               >
                 {Object.entries(PRI).map(([k, v]) => (
                   <option key={k} value={k}>
@@ -558,7 +544,7 @@ export function EditorPage() {
             aria-label="תיאור קצר"
             placeholder="תיאור קצר לנציגים (מוצג בכרטיס)"
             value={doc.description}
-            onChange={(e) => update({ ...doc, description: e.target.value })}
+            onChange={(e) => update({ ...doc, description: e.target.value }, 'תיאור')}
           />
 
           {pane === 'steps' &&

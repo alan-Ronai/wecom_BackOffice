@@ -12,6 +12,7 @@ import { CATS, CAT_KEYS, SOURCE_FILES } from '../../lib/constants.js';
 import { usePalette } from '../palette/paletteStore.js';
 import { useSettings } from '../settings/SettingsDialog.js';
 import { NotificationBell } from '../notifications/NotificationBell.js';
+import { useFocusTrap } from '../ui/useFocusTrap.js';
 
 /** Port of legacy renderSidebar: brand, search trigger, nav counts, source files, categories, user. */
 export function Sidebar({
@@ -27,6 +28,7 @@ export function Sidebar({
   onCollapse: () => void;
   onNavigate: () => void;
 }) {
+  const drawer = useFocusTrap<HTMLElement>(!!drawerOpen);
   const nav = useNavigate();
   const loc = useLocation();
   const palette = usePalette();
@@ -112,9 +114,15 @@ export function Sidebar({
 
   return (
     <aside
+      ref={drawer}
       className={'sidebar' + (railMode ? ' rail-mode' : '') + (drawerOpen ? ' open' : '')}
       id="sidebar"
       aria-label="ניווט ראשי"
+      // At 390 px this element *is* the drawer: it slides in over the content behind a scrim,
+      // which makes it modal in fact, so it says so and traps focus while it is open. On a wide
+      // screen it is ordinary page furniture and neither applies.
+      aria-modal={drawerOpen || undefined}
+      role={drawerOpen ? 'dialog' : undefined}
     >
       <div className="rail-only">
         <span className="rail-logo" title="ספרייה" role="button" tabIndex={0} onClick={() => go('/library')}>

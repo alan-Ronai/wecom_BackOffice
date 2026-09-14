@@ -1,3 +1,4 @@
+import { Suspense, lazy, type ComponentType, type ReactElement } from 'react';
 import { Navigate, type RouteObject } from 'react-router-dom';
 import { Shell } from './components/shell/Shell.js';
 import { RequireAuth } from './components/auth/RequireAuth.js';
@@ -12,25 +13,83 @@ import { HistoryPage } from './components/history/HistoryPage.js';
 import { TrashPage } from './components/trash/TrashPage.js';
 import { ReviewsPage } from './components/review/ReviewsPage.js';
 import { NotificationsPage } from './components/notifications/NotificationsPage.js';
-import { SourcesPage } from './components/sources/SourcesPage.js';
-import { DataPage } from './components/data/DataPage.js';
-import { GraphPage } from './components/graph/GraphPage.js';
 import { FieldPage } from './components/library/FieldPage.js';
 import { BlockPage } from './components/library/BlockPage.js';
-import { DashboardsPage } from './components/dashboards/DashboardsPage.js';
-import { SyncQueuePage } from './components/sync/SyncQueuePage.js';
-import { ParityPage } from './components/sync/ParityPage.js';
-import { ConflictPage } from './components/sync/ConflictPage.js';
-import { AdminLayout } from './components/admin/AdminLayout.js';
-import { UsersPage } from './components/admin/UsersPage.js';
-import { RolesPage } from './components/admin/RolesPage.js';
-import { GroupsMapPage } from './components/admin/GroupsMapPage.js';
-import { SessionsPage } from './components/admin/SessionsPage.js';
-import { AuditPage } from './components/admin/AuditPage.js';
-import { IdentityPage } from './components/admin/IdentityPage.js';
-import { ConnectorsPage } from './components/admin/ConnectorsPage.js';
-import { ConnectorWizard } from './components/admin/ConnectorWizard.js';
-import { SystemPage } from './components/admin/SystemPage.js';
+
+/**
+ * ## What is in the entry chunk, and why
+ *
+ * Everything above is the path an agent takes on a call: log in, find the document, read it,
+ * maybe fix a step, check the history, look at the review queue. It ships in the first paint
+ * because waiting on a chunk while a customer is on the line is not a trade worth making for a
+ * few kilobytes.
+ *
+ * Everything below is lazy. The graph carries a force layout and an SVG renderer; the dashboards
+ * carry five hand-written charts; the admin console is nine screens most of these users will
+ * never have permission to open; and the data explorer, sources and sync screens are operator
+ * tools, reached deliberately. Before this split the production build was a single 600 kB chunk,
+ * so opening the library on a call downloaded the entire admin console first.
+ *
+ * The boundary is drawn by *who opens it and when*, not by size — which is why `HistoryPage` and
+ * `ReviewsPage` stay eager despite not being tiny, and `SourcesPage` goes lazy despite being
+ * modest. A route an agent might reach mid-call is not somewhere to put a network round trip.
+ */
+const lazyRoute = (load: () => Promise<{ default: ComponentType }>) => {
+  const C = lazy(load);
+  return <C />;
+};
+
+/**
+ * Named exports, wrapped so `lazy` gets the default export it requires.
+ *
+ * Written out per module rather than through a helper taking a module path, because Vite's
+ * analyser has to see a literal `import()` specifier to split on it at all — a dynamic one
+ * silently produces no chunk, which is the failure mode this whole change exists to fix.
+ */
+const DataPage = () => import('./components/data/DataPage.js').then((m) => ({ default: m.DataPage }));
+const GraphPage = () => import('./components/graph/GraphPage.js').then((m) => ({ default: m.GraphPage }));
+const SourcesPage = () =>
+  import('./components/sources/SourcesPage.js').then((m) => ({ default: m.SourcesPage }));
+const DashboardsPage = () =>
+  import('./components/dashboards/DashboardsPage.js').then((m) => ({ default: m.DashboardsPage }));
+const SyncQueuePage = () =>
+  import('./components/sync/SyncQueuePage.js').then((m) => ({ default: m.SyncQueuePage }));
+const ParityPage = () => import('./components/sync/ParityPage.js').then((m) => ({ default: m.ParityPage }));
+const ConflictPage = () =>
+  import('./components/sync/ConflictPage.js').then((m) => ({ default: m.ConflictPage }));
+const AdminLayout = () =>
+  import('./components/admin/AdminLayout.js').then((m) => ({ default: m.AdminLayout }));
+const UsersPage = () => import('./components/admin/UsersPage.js').then((m) => ({ default: m.UsersPage }));
+const RolesPage = () => import('./components/admin/RolesPage.js').then((m) => ({ default: m.RolesPage }));
+const GroupsMapPage = () =>
+  import('./components/admin/GroupsMapPage.js').then((m) => ({ default: m.GroupsMapPage }));
+const SessionsPage = () =>
+  import('./components/admin/SessionsPage.js').then((m) => ({ default: m.SessionsPage }));
+const AuditPage = () => import('./components/admin/AuditPage.js').then((m) => ({ default: m.AuditPage }));
+const IdentityPage = () =>
+  import('./components/admin/IdentityPage.js').then((m) => ({ default: m.IdentityPage }));
+const ConnectorsPage = () =>
+  import('./components/admin/ConnectorsPage.js').then((m) => ({ default: m.ConnectorsPage }));
+const ConnectorWizard = () =>
+  import('./components/admin/ConnectorWizard.js').then((m) => ({ default: m.ConnectorWizard }));
+const SystemPage = () => import('./components/admin/SystemPage.js').then((m) => ({ default: m.SystemPage }));
+
+/**
+ * One boundary around the whole lazy area rather than one per route.
+ *
+ * `Suspense` resolves to the nearest boundary above the suspending component, so a single wrapper
+ * inside `Shell`'s outlet would do — except that `AdminLayout` is itself lazy and renders its own
+ * `<Outlet/>`, so a nested admin route suspends twice, and the fallback has to exist at both
+ * levels. Wrapping each element keeps that from being something a future route has to know about.
+ *
+ * The fallback is the same `route-loading` the eager routes render while their queries settle, so
+ * the chunk fetch is not visually a different kind of wait from the data fetch that follows it.
+ */
+const withSuspense = (element: ReactElement): ReactElement => (
+  <Suspense fallback={<div className="route-loading">טוען…</div>}>{element}</Suspense>
+);
+
+const split = (load: () => Promise<{ default: ComponentType }>) => withSuspense(lazyRoute(load));
 
 /** Routes mirror the legacy hashes one-to-one (spec §5). */
 export const routeObjects: RouteObject[] = [
@@ -64,31 +123,31 @@ export const routeObjects: RouteObject[] = [
       { path: 'trash', element: <TrashPage /> },
       { path: 'reviews', element: <ReviewsPage /> },
       { path: 'notifications', element: <NotificationsPage /> },
-      { path: 'sources', element: <SourcesPage /> },
-      { path: 'sources/:id', element: <SourcesPage /> },
-      { path: 'data', element: <DataPage /> },
-      { path: 'data/:sourceId', element: <DataPage /> },
-      { path: 'graph', element: <GraphPage /> },
-      { path: 'dashboards', element: <DashboardsPage /> },
-      { path: 'sync', element: <SyncQueuePage /> },
-      { path: 'sync/parity', element: <ParityPage /> },
-      { path: 'sync/conflicts/:id', element: <ConflictPage /> },
+      { path: 'sources', element: split(SourcesPage) },
+      { path: 'sources/:id', element: split(SourcesPage) },
+      { path: 'data', element: split(DataPage) },
+      { path: 'data/:sourceId', element: split(DataPage) },
+      { path: 'graph', element: split(GraphPage) },
+      { path: 'dashboards', element: split(DashboardsPage) },
+      { path: 'sync', element: split(SyncQueuePage) },
+      { path: 'sync/parity', element: split(ParityPage) },
+      { path: 'sync/conflicts/:id', element: split(ConflictPage) },
       {
         path: 'admin',
-        element: <AdminLayout />,
+        element: split(AdminLayout),
         children: [
           { index: true, element: <Navigate to="users" replace /> },
-          { path: 'users', element: <UsersPage /> },
-          { path: 'roles', element: <RolesPage /> },
-          { path: 'groups', element: <GroupsMapPage /> },
-          { path: 'sessions', element: <SessionsPage /> },
-          { path: 'audit', element: <AuditPage /> },
-          { path: 'identity', element: <IdentityPage /> },
-          { path: 'connectors', element: <ConnectorsPage /> },
+          { path: 'users', element: split(UsersPage) },
+          { path: 'roles', element: split(RolesPage) },
+          { path: 'groups', element: split(GroupsMapPage) },
+          { path: 'sessions', element: split(SessionsPage) },
+          { path: 'audit', element: split(AuditPage) },
+          { path: 'identity', element: split(IdentityPage) },
+          { path: 'connectors', element: split(ConnectorsPage) },
           // `new` before `:id`, or the wizard would try to load a connector called "new".
-          { path: 'connectors/new', element: <ConnectorWizard /> },
-          { path: 'connectors/:id', element: <ConnectorWizard /> },
-          { path: 'system', element: <SystemPage /> },
+          { path: 'connectors/new', element: split(ConnectorWizard) },
+          { path: 'connectors/:id', element: split(ConnectorWizard) },
+          { path: 'system', element: split(SystemPage) },
         ],
       },
       { path: '*', element: <Navigate to="/library" replace /> },

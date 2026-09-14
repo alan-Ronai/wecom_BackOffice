@@ -488,7 +488,7 @@ export const stage5Handlers: RequestHandler[] = [
   http.post(`${B}/connectors/test`, async ({ request }) => {
     const { config } = (await request.json()) as { type: string; config: Record<string, unknown> };
     return typeof config?.baseUrl === 'string' && String(config.baseUrl).startsWith('https://')
-      ? HttpResponse.json({ ok: true, message: 'מחובר · WordPress 6.6 · 38 עמודים', details: { pages: 38 } })
+      ? HttpResponse.json({ ok: true, message: 'מחובר · WordPress 6.6 · 38 עמודים' })
       : HttpResponse.json({ ok: false, message: 'כתובת האתר חייבת להיות https' });
   }),
   http.get(`${B}/connectors`, () => HttpResponse.json({ items: stage5State.connectors })),
@@ -527,6 +527,8 @@ export const stage5Handlers: RequestHandler[] = [
     if (b.name !== undefined) c.name = b.name;
     if (b.enabled !== undefined) c.enabled = b.enabled;
     if (b.schedule !== undefined) c.schedule = b.schedule;
+    // Merge, not replace — the client sends only the keys that changed, precisely so the secrets
+    // it was never given survive a save.
     if (b.config) c.config = { ...c.config, ...b.config };
     return HttpResponse.json(c);
   }),

@@ -218,10 +218,16 @@ function GraphCanvas({
   const at = new Map(positions.map((p) => [p.id, p]));
 
   return (
+    /*
+      `role="group"`, not `role="img"`. An image is an opaque leaf — AT is told there is nothing
+      inside worth visiting — and every node in here is a `role="button" tabIndex={0}` that a
+      keyboard user is expected to reach. Declaring both says two contradictory things about the
+      same subtree, and the one that wins is the one that hides the interactive half.
+    */
     <svg
       className="graph-svg"
       viewBox={`0 0 ${W} ${H}`}
-      role="img"
+      role="group"
       aria-label={`גרף קשרים · ${data.nodes.length} צמתים · ${data.edges.length} קשרים`}
       data-testid="graph-svg"
     >

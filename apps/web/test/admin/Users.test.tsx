@@ -114,6 +114,64 @@ describe('admin · users', () => {
     expect(await screen.findByText('החשבון הושבת')).toBeInTheDocument();
   });
 
+  it('offers an undo on a deactivation, and the undo puts it back (3b)', async () => {
+    asAdmin();
+    const bodies: unknown[] = [];
+    server.use(
+      http.patch('/api/v1/admin/users/:id', async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({ ok: true, auditId: 'a' });
+      }),
+    );
+    renderWithProviders(<App />, { route: '/admin/users' });
+    await userEvent.click(await screen.findByLabelText('פעיל: דנה ר.'));
+
+    // Deactivating is one click from locking somebody out mid-shift; the toast is the pause.
+    await screen.findByText('החשבון הושבת');
+    await userEvent.click(screen.getByRole('button', { name: 'בטל' }));
+
+    await waitFor(() => expect(bodies).toEqual([{ active: false }, { active: true }]));
+    expect(await screen.findByText('ההשבתה בוטלה')).toBeInTheDocument();
+  });
+
+  it('assigns one role across a selection in one pass (3b)', async () => {
+    asAdmin();
+    const patched: { id: string; body: { roles?: unknown } }[] = [];
+    server.use(
+      http.patch('/api/v1/admin/users/:id', async ({ params, request }) => {
+        patched.push({ id: String(params.id), body: (await request.json()) as { roles?: unknown } });
+        return HttpResponse.json({ ok: true, auditId: 'a' });
+      }),
+    );
+    renderWithProviders(<App />, { route: '/admin/users' });
+
+    await userEvent.click(await screen.findByLabelText('בחר את ענבר ל.'));
+    await userEvent.click(screen.getByLabelText('בחר את דנה ר.'));
+    expect(screen.getByText('2 נבחרו')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'הקצה תפקיד' }));
+    const roleSelect = await screen.findByLabelText('תפקיד');
+    // Options carry role ids as values, so select by the label the operator actually reads.
+    await userEvent.selectOptions(roleSelect, within(roleSelect).getByRole('option', { name: 'admin' }));
+    await userEvent.click(screen.getByRole('button', { name: 'שמור תפקיד' }));
+
+    await waitFor(() => expect(patched).toHaveLength(2));
+    expect(patched.every((p) => Array.isArray(p.body.roles))).toBe(true);
+    expect(await screen.findByText('התפקיד הוקצה ל-2 משתמשים')).toBeInTheDocument();
+    // The selection is spent, so a second click on the same button cannot repeat it by accident.
+    expect(screen.queryByText('2 נבחרו')).not.toBeInTheDocument();
+  });
+
+  it('drops the selection when the filter changes, so a bulk action cannot reach a hidden row', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/admin/users' });
+    await userEvent.click(await screen.findByLabelText('בחר את ענבר ל.'));
+    expect(screen.getByText('1 נבחרו')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'מקומי' }));
+    expect(screen.queryByText(/נבחרו/)).not.toBeInTheDocument();
+  });
+
   it('creates a local account and refuses a password the route would reject', async () => {
     asAdmin();
     let body: unknown;

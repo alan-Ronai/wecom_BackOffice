@@ -84,7 +84,8 @@ export function NotificationList({ onNavigate }: { onNavigate?: () => void }) {
       {list.isError ? <LoadError what="התראות" error={list.error} /> : null}
 
       <div className="notif-rows">
-        {!items.length && !list.isError ? (
+        {list.isPending ? <div className="route-loading">טוען…</div> : null}
+        {!items.length && !list.isError && !list.isPending ? (
           <div className="empty">
             <b>אין התראות</b>
             {tab === 'all' ? 'כשמשהו יקרה — הצעה חדשה, אזכור, סקירה — זה יופיע כאן' : ''}

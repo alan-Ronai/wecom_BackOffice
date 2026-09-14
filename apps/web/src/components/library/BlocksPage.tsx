@@ -63,6 +63,13 @@ export function BlocksPage() {
             </div>
           </div>
           {blocks.isError ? <LoadError what="בלוקים משותפים" error={blocks.error} /> : null}
+          {blocks.isPending ? <div className="route-loading">טוען…</div> : null}
+          {!list.length && !blocks.isPending && !blocks.isError ? (
+            <div className="empty">
+              <b>אין בלוקים משותפים</b>
+              בלוק נוצר מתוך שלב קיים בעורך, ומשם אפשר להטמיע אותו במסמכים אחרים
+            </div>
+          ) : null}
           <div className="grid">
             {list.map((b) => (
               <div

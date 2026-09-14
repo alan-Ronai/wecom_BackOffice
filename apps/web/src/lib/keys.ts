@@ -38,10 +38,13 @@ import { isTyping, normalizeKey } from './keyboard.js';
 /**
  * Scopes, **most local first** — this order is the dispatch order.
  *
- * `editor`, `article` and `library` are route scopes; `global` is the shell, which is mounted
- * behind all of them.
+ * `overlay` is anything rendered *on top of* the app — a modal, and whatever joins it later. It
+ * comes first because that is what "on top" means for the keyboard too: a dialog owns `Escape`
+ * while it is open, and no route underneath should have to know a dialog exists in order to
+ * decline it. `editor`, `article` and `library` are route scopes; `global` is the shell, which is
+ * mounted behind all of them.
  */
-export const SCOPES = ['editor', 'article', 'library', 'global'] as const;
+export const SCOPES = ['overlay', 'editor', 'article', 'library', 'global'] as const;
 export type Scope = (typeof SCOPES)[number];
 
 export interface KeyBinding {
@@ -59,6 +62,11 @@ export interface KeyBinding {
  * within a scope it must appear once.
  */
 export const KEYS: readonly KeyBinding[] = [
+  /* ── overlay: whatever is rendered on top of the app ────────────────────── */
+  // Not in the `?` overlay: "Esc closes the window" is already listed under `global`, and the
+  // same sentence twice would describe two features.
+  { scope: 'overlay', combos: ['Escape'] },
+
   /* ── global: the shell ──────────────────────────────────────────────────── */
   { scope: 'global', combos: ['ctrl+k'], display: 'Ctrl K', label: 'חיפוש בכל המקורות' },
   { scope: 'global', combos: ['ctrl+d'], display: 'Ctrl D', label: 'מצב כהה / בהיר' },
@@ -159,7 +167,14 @@ function dispatch(e: KeyboardEvent): void {
   const bare = !mod && !e.altKey;
   // Modifier combos fire even while typing; bare keys never do, or `p` would pin the document
   // halfway through a comment.
-  if (bare && isTyping()) return;
+  //
+  // `Escape` is the exception, and it is the only one. Every other bare key is a character
+  // somebody might be trying to type; `Escape` is the universal "get me out of this" and there is
+  // no text field in which it means anything else. Without this, `Escape` from the editor's title
+  // input neither cleared a multi-selection nor left the editor, and the two screens where it did
+  // work — the modal and the palette — only worked because each had bound its own `document`
+  // capture listener, which is precisely the per-screen duplication this registry replaced.
+  if (bare && e.key !== 'Escape' && isTyping()) return;
   const combo = comboFor(e);
 
   for (const scope of SCOPES) {
@@ -185,8 +200,15 @@ function bind(): () => void {
  *
  * Pass `{}` to bind nothing — the library's list-mode bindings are registered that way so the
  * card grid keeps behaving the way it always has.
+ *
+ * There is deliberately no dependency array. Registration depends on the scope and nothing else:
+ * the map is read live through a ref at dispatch time, so a handler closing over fresh state is
+ * already current without re-registering. The signature used to take one, inherited from the four
+ * separate `window` listeners this replaced, and every caller passed a different-length array into
+ * `[scope, ...deps]` — a variable-length dependency list, which React warns about and which
+ * re-runs unpredictably the moment a caller's array changes length. Nothing was gained by it.
  */
-export function useHotkeys(scope: Scope, map: HotkeyMap, deps: unknown[] = []): void {
+export function useHotkeys(scope: Scope, map: HotkeyMap): void {
   if (import.meta.env.DEV) {
     const allowed = declared.get(scope)!;
     const undeclared = Object.keys(map).filter((k) => !allowed.has(k));
@@ -199,7 +221,14 @@ export function useHotkeys(scope: Scope, map: HotkeyMap, deps: unknown[] = []): 
   }
 
   const ref = useRef(map);
-  ref.current = map;
+  // In an effect, not during render. A render React discards — StrictMode's double-invoke, a
+  // concurrent pass that gets interrupted — would otherwise leave the ref holding handlers that
+  // close over state from a pass that never committed, and the next keystroke would act on it.
+  // Effects only run for committed renders, and they run before any keystroke can be dispatched.
+  useEffect(() => {
+    ref.current = map;
+  });
+
   useEffect(() => {
     const entry: Entry = { ref };
     const set = registry.get(scope)!;
@@ -209,7 +238,5 @@ export function useHotkeys(scope: Scope, map: HotkeyMap, deps: unknown[] = []): 
       set.delete(entry);
       unbind();
     };
-    // `deps` is the caller's own list, as it was before this became a registry — the map itself
-    // is read through a ref, so re-registering is only about the scope changing.
-  }, [scope, ...deps]);
+  }, [scope]);
 }

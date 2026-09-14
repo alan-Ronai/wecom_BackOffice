@@ -81,6 +81,7 @@ export function FieldsPage() {
             </div>
           </div>
           {fields.isError ? <LoadError what="שדות CRM" error={fields.error} /> : null}
+          {fields.isPending ? <div className="route-loading">טוען…</div> : null}
           <div className="grid">
             {groups.map(([label, fs]) =>
               fs.length ? (

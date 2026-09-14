@@ -14,6 +14,15 @@
  * the contract fails at the call site instead of rendering `undefined` three components away; once
  * they are real it means a backend that answers a different shape surfaces as a typed, readable
  * error instead of a blank screen.
+ *
+ * That claim is now load-bearing rather than aspirational: every response-carrying call in
+ * `src/api/stage4.ts` and `src/api/stage5.ts` goes through `checked`, as do the collab and
+ * preferences hooks. The routes that do not are exactly the ones with nothing to parse —
+ * `POST /telemetry` and `DELETE /connectors/{id}` answer 204. It is worth saying why the two
+ * layers are not redundant: for a whole wave the connector-detail routes were typed by hand as the
+ * list's row shape while the contract published a masked-detail shape, and neither the compiler
+ * (which saw a hand-written type) nor the tests (which mocked the hand-written type) could see it.
+ * A runtime parse against the schema is what turns that class of mistake into a readable error.
  */
 import type { z } from 'zod';
 import { ApiError, unwrap } from './unwrap.js';
