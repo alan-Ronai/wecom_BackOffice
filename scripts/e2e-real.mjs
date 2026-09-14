@@ -114,9 +114,7 @@ function readFailingSpecs(jsonReport) {
       if (spec.ok) continue;
       const project = spec.tests?.[0]?.projectName;
       const where = `${spec.file ?? suite.file ?? '?'}:${spec.line ?? '?'}`;
-      out.push(
-        `${where} › ${project ? `[${project}] ` : ''}${[...next, spec.title].join(' › ')}`,
-      );
+      out.push(`${where} › ${project ? `[${project}] ` : ''}${[...next, spec.title].join(' › ')}`);
     }
     for (const child of suite.suites ?? []) walk(child, next);
   };
@@ -324,7 +322,16 @@ async function main() {
   // that flag at all.
   run(
     'pnpm',
-    ['--filter', '@wecom/api', 'create-admin', '--email', ADMIN_EMAIL, '--password-stdin', '--name', 'E2E Admin'],
+    [
+      '--filter',
+      '@wecom/api',
+      'create-admin',
+      '--email',
+      ADMIN_EMAIL,
+      '--password-stdin',
+      '--name',
+      'E2E Admin',
+    ],
     { env: dbEnv, input: ADMIN_PASSWORD },
   );
 
@@ -417,7 +424,18 @@ async function main() {
   start(
     'web',
     'pnpm',
-    ['--filter', '@wecom/web', 'exec', 'vite', 'preview', '--host', '127.0.0.1', '--port', String(WEB_PORT), '--strictPort'],
+    [
+      '--filter',
+      '@wecom/web',
+      'exec',
+      'vite',
+      'preview',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(WEB_PORT),
+      '--strictPort',
+    ],
     {
       env: { ...process.env, E2E_API_URL: API_URL },
     },

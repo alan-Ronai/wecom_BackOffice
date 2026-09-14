@@ -94,8 +94,7 @@ run('routes with no other integration coverage', () => {
     });
     const id = doomed.json().id;
     expect(
-      (await app.inject({ method: 'DELETE', url: `/api/v1/documents/${id}`, headers: auth(u) }))
-        .statusCode,
+      (await app.inject({ method: 'DELETE', url: `/api/v1/documents/${id}`, headers: auth(u) })).statusCode,
     ).toBeLessThan(300);
     const before = await app.inject({ method: 'GET', url: '/api/v1/trash', headers: auth(u) });
     expect(before.json().items.length).toBeGreaterThan(0);

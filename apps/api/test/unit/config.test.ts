@@ -36,9 +36,7 @@ describe('ConfigSchema', () => {
    * deployment has to write down, like SESSION_SECRET — not defaults to arrive at by omission.
    */
   it('requires CONNECTOR_HOST_ALLOWLIST and TRUST_PROXY in production', () => {
-    expect(() => loadConfig({ ...prod, CONNECTOR_HOST_ALLOWLIST: '' })).toThrow(
-      /CONNECTOR_HOST_ALLOWLIST/,
-    );
+    expect(() => loadConfig({ ...prod, CONNECTOR_HOST_ALLOWLIST: '' })).toThrow(/CONNECTOR_HOST_ALLOWLIST/);
     expect(() => loadConfig({ ...prod, CONNECTOR_HOST_ALLOWLIST: '   ' })).toThrow(
       /CONNECTOR_HOST_ALLOWLIST/,
     );

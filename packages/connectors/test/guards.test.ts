@@ -39,8 +39,6 @@ describe('assertAllowedHost', () => {
   it('treats `*` as any public host, but still refuses link-local', () => {
     expect(() => assertAllowedHost('https://anything.test/x', ['*'])).not.toThrow();
     expect(() => assertAllowedHost('https://wp.wecom.local/x', ['*', 'other.test'])).not.toThrow();
-    expect(() => assertAllowedHost('http://169.254.169.254/latest/meta-data', ['*'])).toThrow(
-      /link-local/,
-    );
+    expect(() => assertAllowedHost('http://169.254.169.254/latest/meta-data', ['*'])).toThrow(/link-local/);
   });
 });

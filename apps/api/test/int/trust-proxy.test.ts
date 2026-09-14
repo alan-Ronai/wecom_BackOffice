@@ -25,12 +25,8 @@ describe('trustProxySetting', () => {
       CONNECTOR_HOST_ALLOWLIST: 'wp.wecom.local',
     };
     expect(() => cfg(prod)).toThrow(/TRUST_PROXY/);
-    expect(trustProxySetting(cfg({ ...prod, TRUST_PROXY: '172.16.0.0/12' }))).toEqual([
-      '172.16.0.0/12',
-    ]);
-    expect(trustProxySetting({ ...cfg({}), NODE_ENV: 'production', TRUST_PROXY: undefined })).toBe(
-      true,
-    );
+    expect(trustProxySetting(cfg({ ...prod, TRUST_PROXY: '172.16.0.0/12' }))).toEqual(['172.16.0.0/12']);
+    expect(trustProxySetting({ ...cfg({}), NODE_ENV: 'production', TRUST_PROXY: undefined })).toBe(true);
     expect(trustProxySetting(cfg({}))).toBe(false);
     expect(trustProxySetting(cfg({ NODE_ENV: 'development' }))).toBe(false);
   });

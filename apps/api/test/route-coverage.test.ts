@@ -114,9 +114,7 @@ const pathMatcher = (openapiPath: string): RegExp =>
     `^${openapiPath
       .split('/')
       .map((seg) =>
-        /^\{.*\}$/.test(seg)
-          ? '(?:\\$\\{[^}]*\\}|[^/]+)'
-          : seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        /^\{.*\}$/.test(seg) ? '(?:\\$\\{[^}]*\\}|[^/]+)' : seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
       )
       .join('/')}$`,
   );
@@ -156,9 +154,7 @@ describe('OpenAPI route coverage', () => {
 
   it('carries no stale allowlist entries', () => {
     const unknown = Object.keys(allowlist).filter((k) => !operations.some((op) => op.key === k));
-    expect(unknown, 'allowlisted operations that no longer exist in the OpenAPI document').toEqual(
-      [],
-    );
+    expect(unknown, 'allowlisted operations that no longer exist in the OpenAPI document').toEqual([]);
     const nowCovered = Object.keys(allowlist).filter((k) => {
       const op = operations.find((o) => o.key === k);
       return op && covered(op.path, op.m);

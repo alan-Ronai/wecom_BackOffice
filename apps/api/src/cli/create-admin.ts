@@ -57,7 +57,9 @@ review O-6). Either pipe it in —
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const c of process.stdin) chunks.push(Buffer.from(c));
-  return Buffer.concat(chunks).toString('utf8').replace(/\r?\n$/, '');
+  return Buffer.concat(chunks)
+    .toString('utf8')
+    .replace(/\r?\n$/, '');
 }
 
 /** Prompts on the TTY with the echo turned off, so the password never appears on screen. */
