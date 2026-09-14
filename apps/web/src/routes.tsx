@@ -101,6 +101,21 @@ const AssignmentPage = () =>
   import('./components/learning/AssignmentPage.js').then((m) => ({ default: m.AssignmentPage }));
 
 /**
+ * Wave 5 (V4b). Editor tooling, so lazy: the learning manager and its builders are a writing
+ * surface, and the gaps queue is a lead's weekly screen — neither is somewhere an agent lands
+ * mid-call.
+ */
+const LearningManagePage = () =>
+  import('./components/learning/manage/LearningManagePage.js').then((m) => ({
+    default: m.LearningManagePage,
+  }));
+const LearningItemEditor = () =>
+  import('./components/learning/manage/LearningItemEditor.js').then((m) => ({
+    default: m.LearningItemEditor,
+  }));
+const GapsPage = () => import('./components/gaps/GapsPage.js').then((m) => ({ default: m.GapsPage }));
+
+/**
  * One boundary around the whole lazy area rather than one per route.
  *
  * `Suspense` resolves to the nearest boundary above the suspending component, so a single wrapper
@@ -173,10 +188,14 @@ export const routeObjects: RouteObject[] = [
       { path: 'feedback/:id', element: split(FeedbackPage) },
       // W5. The sidebar entry that leads here is W6's mount; the route stands on its own.
       { path: 'analytics', element: split(AnalyticsPage) },
-      // wave 5 (V4a) — the agent's learning surface. V6 orders `learning/manage*` (V4b) before
-      // `learning/:assignmentId`, or the editor route would load as an assignment id.
+      // wave 5 — the agent's learning surface (V4a) and the manager's (V4b). Every `manage`
+      // route precedes `learning/:assignmentId`, or the builder would load as an assignment id.
       { path: 'learning', element: split(MyLearningPage) },
+      { path: 'learning/manage', element: split(LearningManagePage) },
+      { path: 'learning/manage/new', element: split(LearningItemEditor) },
+      { path: 'learning/manage/:id', element: split(LearningItemEditor) },
       { path: 'learning/:assignmentId', element: split(AssignmentPage) },
+      { path: 'gaps', element: split(GapsPage) },
       {
         path: 'admin',
         element: split(AdminLayout),

@@ -1457,3 +1457,30 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .ed-body-head { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
 .ed-body-head .lbl { font-weight: 600; }
 .ed-body-html textarea { font-family: var(--mono); font-size: 12px; direction: ltr; }
+
+/* wave 5 — V4b (learning manager, builders, assign, gaps, workflow settings) */
+.learning-dashboard { display: grid; gap: 12px; margin-bottom: 14px; }
+.learning-dashboard .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.learning-dashboard .stat.warn b { color: var(--red); }
+.failed-questions ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.learning-manage .grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.item-editor { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; }
+.item-editor .side { display: grid; gap: 12px; align-content: start; }
+.builder-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.builder-list > li { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 12px 14px; display: grid; gap: 8px; }
+.builder-list .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.question-editor .options { display: grid; gap: 6px; }
+.question-editor .option { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.doc-picker { position: relative; }
+.doc-picker .results { position: absolute; inset-inline: 0; top: 100%; z-index: 5; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow); max-height: 280px; overflow: auto; }
+.doc-picker .results button { display: block; width: 100%; text-align: start; padding: 8px 10px; background: none; border: 0; cursor: pointer; color: var(--text); }
+.doc-picker .results button:hover, .doc-picker .results button:focus-visible { background: var(--bg-2); outline: none; }
+.assign-dialog fieldset { border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; margin: 0 0 10px; }
+.assign-dialog .checks { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.gaps-page .gap-list { display: grid; gap: 10px; }
+.gaps-page .gap { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.gaps-page .score { font-size: 22px; font-weight: 700; color: var(--red); }
+.gaps-page .evidence { font-size: 12px; color: var(--muted); font-family: var(--mono); white-space: pre-wrap; }
+.workflow-section .form label { display: grid; gap: 4px; }
+.workflow-section .form label.row { display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 900px) { .item-editor { grid-template-columns: 1fr; } .gaps-page .gap { grid-template-columns: 1fr; } }

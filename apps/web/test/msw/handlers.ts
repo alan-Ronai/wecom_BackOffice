@@ -20,6 +20,10 @@ import { resetStage45, stage45Handlers } from './stage45.js';
 import { initialTaxonomy, taxonomyHandlers, type TaxonomyState } from './taxonomy.js';
 import { feedbackHandlers, resetFeedbackState } from './feedback-handlers.js';
 import { learningHandlers, resetLearningState } from './learning-handlers.js';
+import {
+  learningManageHandlers,
+  resetLearningState as resetLearningManageState,
+} from './learning-manage.js';
 import type { TrashItem } from '../../src/api/types.js';
 
 const B = '/api/v1';
@@ -90,6 +94,7 @@ export function resetState(): void {
   resetStage45();
   resetFeedbackState();
   resetLearningState();
+  resetLearningManageState();
 }
 
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
@@ -120,9 +125,11 @@ const newDraftEnvelope = (draftKey: string, payload: unknown) => ({
 export const handlers: RequestHandler[] = [
   // First, so `/feedback/analytics` is matched before any generic `:id` route another lane adds.
   ...feedbackHandlers,
-  // wave 5 (V4a) — before the generic document routes, so `/documents/:id/learning` is not
-  // swallowed by a `:id` handler further down.
+  // wave 5 (V4a, then V4b) — before the generic document routes, so `/documents/:id/learning` is
+  // not swallowed by a `:id`-shaped handler further down. V4a's agent routes come first: where the
+  // two lanes stub the same path, the agent's view is the one `CONTRACTS-wave5.md` describes.
   ...learningHandlers,
+  ...learningManageHandlers,
   http.get(`${B}/auth/me`, () => HttpResponse.json({ ...fx.me, preferences: { ...state.preferences } })),
   // Bare provider ids plus a fallback — not `{ id, label }` objects.
   http.get(`${B}/auth/providers`, () =>
