@@ -474,6 +474,10 @@ html[data-theme="dark"] .palette .ri .ic.round { background: var(--surface-3); c
 .modal.wide { width: min(860px, 100%); }
 .modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
 .modal h2 .x { margin-inline-start: auto; font-size: 16px; color: var(--muted); cursor: pointer; padding: 2px 8px; }
+/* Names the item a dialog acts on, under the title. The border is what keeps it from reading as
+   the first line of the body. */
+.modal-subtitle { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -2px 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border-soft); }
+.modal-subtitle-text { font-size: 13px; font-weight: 600; color: var(--text-2); min-width: 0; overflow-wrap: anywhere; }
 .modal p { font-size: 13.5px; color: var(--text-2); line-height: 1.6; }
 .modal .foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 .modal pre { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r); padding: 12px; font-family: var(--mono); font-size: 12px; direction: ltr; text-align: left; overflow: auto; max-height: 55vh; margin: 12px 0 0; }

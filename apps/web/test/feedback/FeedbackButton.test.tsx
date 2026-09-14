@@ -8,7 +8,9 @@ import { FeedbackButton } from '../../src/components/feedback/FeedbackButton.js'
 import { feedbackState } from '../msw/feedback-handlers.js';
 import { fx } from '../msw/fixtures.js';
 
-const mount = (stepKey?: string) =>
+// `docBrowsing` carries no `docType` (it predates the field), so the type is passed explicitly —
+// otherwise the A-4 assertion below would pass against a dialog that simply renders no badge.
+const mount = (stepKey?: string, docType: string | undefined = 'T') =>
   renderWithProviders(
     <ToastProvider>
       <ModalProvider>
@@ -17,7 +19,7 @@ const mount = (stepKey?: string) =>
           documentVersion={fx.docBrowsing.currentVersion}
           stepKey={stepKey}
           documentTitle={fx.docBrowsing.title}
-          docType={fx.docBrowsing.docType}
+          docType={docType}
           worldSlug={fx.docBrowsing.category}
         />
       </ModalProvider>
@@ -32,10 +34,11 @@ describe('<FeedbackButton>', () => {
     expect(within(dialog).getAllByRole('radio')).toHaveLength(7);
     expect(within(dialog).getByText(/גרסה v\d+/)).toBeInTheDocument();
     expect(within(dialog).getByText('שלב s3')).toBeInTheDocument();
-    // §5.4's five auto-context fields, not three of them: the block's point is to show exactly
-    // what is being sent, and the caller has the item, its type and its world.
+    // §5.4's five auto-context fields are all on screen; the item and its type are the header,
+    // the rest are the "נשמר אוטומטית" line. A-4: both read as labels, not as the slug and the
+    // bare storage letter — the type appears as the same `TypeBadge` the article header uses.
     expect(within(dialog).getByText(fx.docBrowsing.title)).toBeInTheDocument();
-    // A-4: the world and the type read as labels, not as the slug and the storage letter.
+    expect(within(dialog).getByTitle('תסריט')).toBeInTheDocument();
     expect(within(dialog).getByText(/עולם תמיכה טכנית/)).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'שלח' })).toBeDisabled();
     await userEvent.click(within(dialog).getByRole('radio', { name: 'התהליך לא עובד בפועל' }));
