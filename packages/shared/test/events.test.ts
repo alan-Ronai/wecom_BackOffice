@@ -20,7 +20,29 @@ describe('events', () => {
       'review.requested',
       'review.decided',
       'presence.changed',
+      // Wave 4 — appended, never reordered.
+      'feedback.created',
+      'feedback.updated',
+      'source_document.saved',
+      'taxonomy.changed',
     ]);
+  });
+  it('validates the wave 4 events', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    expect(
+      EventSchema.parse(makeEvent('feedback.created', { feedbackId: id, documentId: id, kind: 'error' }))
+        .name,
+    ).toBe('feedback.created');
+    expect(EventSchema.parse(makeEvent('taxonomy.changed', { entity: 'world', id })).name).toBe(
+      'taxonomy.changed',
+    );
+    expect(
+      EventSchema.safeParse({
+        name: 'source_document.saved',
+        payload: { documentId: id },
+        at: new Date().toISOString(),
+      }).success,
+    ).toBe(false);
   });
   it('validates a stage-5 payload', () => {
     const e = makeEvent('review.decided', {
