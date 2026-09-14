@@ -101,19 +101,21 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
     },
   });
   expect(edited.ok(), await edited.text()).toBeTruthy();
-  const run2 = await request.post(`/api/v1/connectors/${connectorId}/run`);
-  expect(run2.ok(), await run2.text()).toBeTruthy();
-
-  await expect
-    .poll(
-      async () => {
-        const r = await request.get(`/api/v1/documents/${docId}/source`);
-        if (r.status() === 204) return '';
-        return ((await r.json()) as { html: string }).html;
-      },
-      { timeout: 30_000 },
-    )
-    .toContain('6 מגה');
+  /*
+   * Run until the import lands, rather than once: the remote listing is filtered by
+   * `modified_after` at one-second resolution, so an edit made in the same second as the previous
+   * run can be invisible to the next one. A scheduled connector simply catches it on the
+   * following tick; here that tick is explicit.
+   */
+  let sourceHtml = '';
+  for (let round = 0; round < 10 && !sourceHtml.includes('6 מגה'); round++) {
+    const run = await request.post(`/api/v1/connectors/${connectorId}/run`);
+    expect(run.ok(), await run.text()).toBeTruthy();
+    const r = await request.get(`/api/v1/documents/${docId}/source`);
+    sourceHtml = r.status() === 204 ? '' : ((await r.json()) as { html: string }).html;
+    if (!sourceHtml.includes('6 מגה')) await page.waitForTimeout(1_500);
+  }
+  expect(sourceHtml, 'the WordPress edit became a source version').toContain('6 מגה');
 
   await page.goto(docUrl);
   await expect(page.getByText('⚑ נדרשת בדיקה — המקור השתנה')).toBeVisible({ timeout: 20_000 });
@@ -147,6 +149,26 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
   await pub.getByLabel(/מה השתנה/).fill('דחיפה ל-WordPress');
   await pub.getByRole('button', { name: 'אישור' }).click();
   await expect(page.getByText(/פורסם v/)).toBeVisible({ timeout: 20_000 });
+
+  /*
+   * Publishing does not push by itself, and the next run does not either: the remote moved in
+   * step 3 and the local moved here, so the link is a genuine two-sided conflict. Resolving it
+   * as "ours" is the operator's answer — the working view is the one that is right — and that is
+   * what sends the source HTML to WordPress.
+   */
+  const run3 = await request.post(`/api/v1/connectors/${connectorId}/run`);
+  expect(run3.ok(), await run3.text()).toBeTruthy();
+
+  const links = await request.get('/api/v1/sync/links?pageSize=50');
+  expect(links.ok(), await links.text()).toBeTruthy();
+  const link = ((await links.json()) as { items: { id: string; documentId: string }[] }).items.find(
+    (l) => l.documentId === docId,
+  );
+  expect(link, 'applying the suggestions created a sync link for the document').toBeTruthy();
+  const resolved = await request.post(`/api/v1/sync/links/${link!.id}/resolve`, {
+    data: { resolution: 'ours' },
+  });
+  expect(resolved.ok(), await resolved.text()).toBeTruthy();
 
   await expect
     .poll(
