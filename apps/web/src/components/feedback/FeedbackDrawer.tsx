@@ -11,6 +11,7 @@ import { useMentionable } from '../../api/hooks/collab.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
 import { fmtDate } from '../../lib/format.js';
+import { docTypeLabel, worldLabel } from '../taxonomy/TypeBadge.js';
 
 /**
  * One report: where it came from, what was decided, and which published version closes it.
@@ -97,8 +98,9 @@ export function FeedbackDrawer({ id, onClose }: { id: string; onClose: () => voi
         {f.stepKey ? ` · שלב ${f.stepKey}` : ''}
       </div>
       <div className="small muted">
-        {f.userName} · {fmtDate(f.createdAt)} · עולם תוכן {f.worldSlug}
-        {f.docType ? ` · סוג ${f.docType}` : ''}
+        {f.userName} · {fmtDate(f.createdAt)} · עולם תוכן {worldLabel(f.worldSlug)}
+        {/* A-4: `T · תסריט`, the spelling every other surface uses — not the bare storage code. */}
+        {f.docType ? ` · סוג ${docTypeLabel(f.docType)}` : ''}
       </div>
       {f.text ? (
         <blockquote className="feedback-text">{f.text}</blockquote>

@@ -33,6 +33,21 @@ export function TypeBadge({ docType, compact = false }: { docType: DocType; comp
 }
 
 /**
+ * `T · תסריט` — the doc type as text, where a chip does not fit (A-4, review §3).
+ *
+ * The feedback modal and drawer used to print `סוג T`: the bare storage code, in the one place an
+ * agent is being asked to describe a problem. Every other surface in the app spells it out, and
+ * two spellings inside one component family is how a product starts reading as unfinished.
+ *
+ * Takes a `string` rather than a `DocType` because the feedback payload carries whatever the API
+ * stored; an unrecognised code degrades to itself instead of `T · undefined`.
+ */
+export const docTypeLabel = (code: string): string => {
+  const label = DOC_TYPE_LABELS[code as DocType];
+  return label ? `${code} · ${label}` : code;
+};
+
+/**
  * Worlds are admin-managed data now, so `CATS` is a display hint for the six seeded slugs
  * rather than an exhaustive map; anything else falls back to the slug itself. Both of these are
  * thin names over `cat()`, kept because "world label" reads better at the call site than a

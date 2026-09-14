@@ -21,6 +21,7 @@ import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { SuggestionCard } from './SuggestionCard.js';
 import { LoadError } from '../ui/index.js';
+import { plural } from '@wecom/shared';
 
 /** Port of views-sources.js on the pipeline API: tracked changes plus the review panel. */
 export function SourcesPage() {
@@ -60,7 +61,11 @@ export function SourcesPage() {
     if (!current) return;
     const ok = await modal.confirm(
       'פרסום לספרייה',
-      `${accepted} הצעות יוחלו על הספרייה ויירשמו כגרסאות חדשות.`,
+      plural(accepted, {
+        one: 'הצעה אחת תוחל על הספרייה ותירשם כגרסה חדשה.',
+        two: 'שתי הצעות יוחלו על הספרייה ויירשמו כגרסאות חדשות.',
+        many: '# הצעות יוחלו על הספרייה ויירשמו כגרסאות חדשות.',
+      }),
       'פרסם',
       'primary',
     );

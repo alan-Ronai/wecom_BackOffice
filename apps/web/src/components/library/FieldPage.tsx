@@ -12,6 +12,7 @@ import { Hamburger } from '../shell/MobileDrawer.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
+import { counted, documents as nDocs, versions as nVersions } from '../../lib/count.js';
 
 const ALERT_TONE: Record<string, string> = {
   renamed: 'chip-red',
@@ -132,7 +133,7 @@ function FieldPageBody({ data, canEdit }: { data: FieldPageData; canEdit: boolea
               .then((res) => {
                 toast(
                   res.updatedDocuments
-                    ? `השם עודכן · ${res.updatedDocuments} מסמכים עודכנו ו-${res.versionsCreated} גרסאות נוצרו`
+                    ? `השם עודכן · ${counted(res.updatedDocuments, nDocs, 'עודכן', 'עודכנו')} ו-${counted(res.versionsCreated, nVersions, 'נוצרה', 'נוצרו')}`
                     : 'השם עודכן · ההפניות לא שונו',
                   'ok',
                 );

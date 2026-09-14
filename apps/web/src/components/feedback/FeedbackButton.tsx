@@ -3,6 +3,7 @@ import { FEEDBACK_KINDS, FEEDBACK_KIND_LABELS, type FeedbackKind } from '@wecom/
 import { useCreateFeedback } from '../../api/hooks/feedback.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
+import { docTypeLabel, worldLabel } from '../taxonomy/TypeBadge.js';
 
 export interface FeedbackButtonProps {
   documentId: string;
@@ -70,8 +71,11 @@ function FeedbackForm({
         נשמר אוטומטית:{' '}
         {[
           documentTitle,
-          docType ? `סוג ${docType}` : null,
-          worldSlug ? `עולם ${worldSlug}` : null,
+          // A-4 (review §3): the modal used to read `סוג T` where every other surface in the app
+          // reads `T · תסריט`. Same component family, two spellings — and the bare letter is a
+          // storage code, not a label anyone outside the team can read.
+          docType ? `סוג ${docTypeLabel(docType)}` : null,
+          worldSlug ? `עולם ${worldLabel(worldSlug)}` : null,
           `גרסה v${documentVersion}`,
           stepKey ? `שלב ${stepKey}` : null,
           'משתמש ותאריך',

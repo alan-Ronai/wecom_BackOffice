@@ -10,6 +10,7 @@ import { Hamburger } from '../shell/MobileDrawer.js';
 import { Html } from '../Fmt.js';
 import { fmtDate } from '../../lib/format.js';
 import { LoadError } from '../ui/index.js';
+import { counted, documents as nDocs } from '../../lib/count.js';
 
 /** Port of legacy KB.views.fields. */
 export function FieldsPage() {
@@ -33,7 +34,9 @@ export function FieldsPage() {
     const ok = await modal.confirm(
       'מחיקת שדה CRM',
       `השדה ${name} יימחק מ-crm-fields.json.` +
-        (n ? ` ${n} מסמכים מפנים אליו — הצ׳יפים בהם יסומנו כשדה לא מוכר.` : ' אף מסמך לא מפנה אליו.'),
+        (n
+          ? ` ${counted(n, nDocs, 'מפנה', 'מפנים')} אליו — הצ׳יפים יסומנו כשדה לא מוכר.`
+          : ' אף מסמך לא מפנה אליו.'),
       'מחק שדה',
       'danger',
     );
@@ -124,7 +127,7 @@ export function FieldsPage() {
                       />
                       <div className="desc">{f.path}</div>
                       <div className="meta">
-                        <span>ב-{usage(f.name)} מסמכים</span>
+                        <span>ב-{nDocs(usage(f.name))}</span>
                         <span>·</span>
                         <span>עודכן {fmtDate(f.updatedAt)}</span>
                         {can('fields.edit') ? (

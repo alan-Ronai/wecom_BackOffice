@@ -19,6 +19,7 @@ import { cat } from '../../lib/constants.js';
 import { copy } from '../../lib/format.js';
 import { useHotkeys, type ActiveScope } from '../../lib/keys.js';
 import { resolvedSteps } from '../../lib/steps.js';
+import { nextHint } from '../../lib/nextHint.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { useNav } from '../shell/navStore.js';
 import { useModal } from '../ui/Modal.js';
@@ -513,6 +514,14 @@ export function ArticlePage() {
   const ai = steps.findIndex((s) => s.key === call.activeKey);
   const railSteps = steps.filter((s) => !s.phase.route || s.phase.id === active?.phase.id);
   const hidden = steps.length - railSteps.length;
+  /**
+   * A-1 (review §3, §7 item 15). The aside used to advertise `1-3 בחירת תוצאה` unconditionally —
+   * the review drove a document whose four steps carry no rule, where `1`/`2`/`3` did nothing and
+   * progress sat at 0% while the panel kept telling the agent to press them. The keys row now
+   * describes the step the agent is on, and where there is no outcome it says where the call goes
+   * next instead of naming an inert shortcut.
+   */
+  const hint = active ? nextHint(active, steps) : null;
 
   return (
     <>
@@ -732,13 +741,24 @@ export function ArticlePage() {
                         ))}
                         {hidden ? <div className="rail-more">+ {hidden} שלבים לפי מסלול</div> : null}
                       </div>
+                      {hint ? (
+                        <div className="aside-next" data-testid="aside-next">
+                          {hint.text}
+                        </div>
+                      ) : null}
                       <div className="keys">
                         <span>
                           <kbd>↑↓</kbd> מעבר שלב
                         </span>
-                        <span>
-                          <kbd>1-3</kbd> בחירת תוצאה
-                        </span>
+                        {hint && hint.choices === 0 ? null : (
+                          <span>
+                            {/* One outcome is `1`, not `1-1`. */}
+                            <kbd>
+                              {!hint || hint.choices >= 3 ? '1-3' : hint.choices === 1 ? '1' : '1-2'}
+                            </kbd>{' '}
+                            בחירת תוצאה
+                          </span>
+                        )}
                         <span>
                           <kbd>N</kbd> הערה
                         </span>

@@ -11,9 +11,9 @@ test('open a shared block from the list and republish every document that embeds
   // Only the embeds need a republish; the reference always reads the latest text.
   await page.getByRole('button', { name: 'עדכן את כל ההפניות (2)' }).click();
   const dialog = page.getByRole('dialog', { name: 'עדכון כל ההפניות' });
-  await expect(dialog.getByText(/2 מסמכים מטמיעים את הבלוק/)).toBeVisible();
+  await expect(dialog.getByText(/שני מסמכים מטמיעים את הבלוק/)).toBeVisible();
   await dialog.getByRole('button', { name: 'עדכן הכל' }).click();
-  await expect(page.getByText('2 מסמכים עודכנו')).toBeVisible();
+  await expect(page.getByText('שני מסמכים עודכנו')).toBeVisible();
 });
 
 test('edit a shared block and open a using document at its step', async ({ page }) => {
@@ -38,7 +38,7 @@ test('deleting a shared block warns about the documents that use it', async ({ p
   await page.locator('.tcard', { hasText: 'ריענון SIM' }).click();
   await page.getByRole('button', { name: '🗑 מחק בלוק' }).click();
   const dialog = page.getByRole('dialog', { name: 'מחיקת בלוק משותף' });
-  await expect(dialog.getByText(/2 מסמכים משתמשים בבלוק/)).toBeVisible();
+  await expect(dialog.getByText(/שני מסמכים משתמשים בבלוק/)).toBeVisible();
   await dialog.getByRole('button', { name: 'מחק בלוק' }).click();
   await expect(page.getByText('הבלוק הועבר לסל המיחזור')).toBeVisible();
 });

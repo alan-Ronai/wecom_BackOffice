@@ -65,6 +65,6 @@ describe('scripts are type-T documents', () => {
     const picker = await screen.findByRole('dialog', { name: 'תסריטים לשלב זה' });
     // `bodyHtml` decoded back to the text an agent reads out — not the markup, not the title.
     expect(within(picker).getByText(/אתה לא גולש בכלל/)).toBeInTheDocument();
-    expect(within(picker).getAllByText(/משמש ב-1 מסמכים/).length).toBeGreaterThan(0);
+    expect(within(picker).getAllByText(/משמש ב-מסמך אחד/).length).toBeGreaterThan(0);
   });
 });

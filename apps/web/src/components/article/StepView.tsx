@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import type { Block, CrmField, Document } from '@wecom/shared';
 import { crmIn, stepText, stripFmt } from '@wecom/shared';
 import type { ResolvedStep } from '../../lib/steps.js';
+import { nextHints, type NextHint } from '../../lib/nextHint.js';
 import type { CallResult } from '../../lib/callState.js';
 import { Fmt } from '../Fmt.js';
 import type { DocRef, FieldInfo } from '../../lib/format.js';
@@ -57,8 +58,13 @@ function stepHint(s: ResolvedStep, fieldNames: string[]): string {
   return bits.join(' · ');
 }
 
-/** Port of legacy KB.renderStep — shared by the article, the split panes and the editor preview. */
-export function StepView({ step, ctx }: { step: ResolvedStep; ctx: StepCtx }) {
+/**
+ * Port of legacy KB.renderStep — shared by the article, the split panes and the editor preview.
+ *
+ * `hint` is A-1's per-step "what next", handed down by `DocBody` (which is the only caller that
+ * knows the step *list*, and therefore the only one that can say where an outcome leads).
+ */
+export function StepView({ step, ctx, hint }: { step: ResolvedStep; ctx: StepCtx; hint?: NextHint }) {
   const cur = ctx.activeKey === step.key;
   const res = ctx.results?.[step.key];
   const done = !!res;
@@ -137,7 +143,10 @@ export function StepView({ step, ctx }: { step: ResolvedStep; ctx: StepCtx }) {
             ) : null;
           })}
           {ctx.renderHeadBadges?.(step)}
-          {cur && ctx.callMode ? (
+          {/* A-1: the digits are advertised only where they do something. On a document whose
+              steps carry no rule — the review drove one — the old unconditional hint told the
+              agent to press keys that were inert. */}
+          {cur && ctx.callMode && (!hint || hint.choices > 0) ? (
             <span className="k">↵ · {OUT_KBD.slice(0, Math.max(1, optionCount)).join(' / ')}</span>
           ) : null}
         </div>
@@ -317,6 +326,16 @@ export function StepView({ step, ctx }: { step: ResolvedStep; ctx: StepCtx }) {
               </div>
             ) : null}
 
+            {/* A-1 (review §7 item 15): one line saying where the call goes from here — the next
+                step, the steps the outcomes branch to, or "סיום השיחה". Under the outcomes, where
+                the agent is looking when they decide, and derived from the document rather than
+                from call state so it reads the same before anything is picked. */}
+            {hint ? (
+              <div className="next-hint" data-terminal={hint.terminal ? '' : undefined}>
+                {hint.text}
+              </div>
+            ) : null}
+
             {cur && ctx.connections ? ctx.renderConnections?.(step) : null}
             {ctx.renderFooter?.(step)}
           </>
@@ -328,6 +347,9 @@ export function StepView({ step, ctx }: { step: ResolvedStep; ctx: StepCtx }) {
 
 /** Port of legacy KB.renderDocBody. */
 export function DocBody({ doc, ctx, steps }: { doc: Document; ctx: StepCtx; steps: ResolvedStep[] }) {
+  // Computed here rather than per step: this is the one component that holds the whole ordered
+  // list, which is what "where does outcome 2 lead" needs. One pass per body render.
+  const hints = useMemo(() => nextHints(steps), [steps]);
   if (!steps.length)
     return (
       <div className="doc-body">
@@ -351,7 +373,7 @@ export function DocBody({ doc, ctx, steps }: { doc: Document; ctx: StepCtx; step
           ) : null}
           {p.steps.map((s) => {
             const resolved = steps.find((x) => x.key === s.key);
-            return resolved ? <StepView key={s.key} step={resolved} ctx={ctx} /> : null;
+            return resolved ? <StepView key={s.key} step={resolved} ctx={ctx} hint={hints[s.key]} /> : null;
           })}
         </div>
       ))}

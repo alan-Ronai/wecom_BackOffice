@@ -11,8 +11,11 @@ import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.
 import { useCan } from '../../api/hooks/me.js';
 import { useTelemetry } from '../../api/hooks/collab.js';
 import { Html } from '../Fmt.js';
+import { TypeBadge, worldShort } from '../taxonomy/TypeBadge.js';
+import { hitLabel } from './hitLabel.js';
 import { useFocusTrap } from '../ui/useFocusTrap.js';
 import type { SearchHit } from '../../api/types.js';
+import { results as nResults } from '../../lib/count.js';
 
 /**
  * Tab cycles these filters, and the key is sent verbatim as `?types=` — so the keys must be the
@@ -267,7 +270,7 @@ export function Palette() {
   };
 
   let selIdx = -1;
-  const stat = `${search.data?.total ?? selectable.length} תוצאות ב-${search.data?.files ?? 0} קבצים · ${Math.max(1, Math.round(search.data?.tookMs ?? 1))}ms`;
+  const stat = `${nResults(search.data?.total ?? selectable.length)} ב-${search.data?.files ?? 0} קבצים · ${Math.max(1, Math.round(search.data?.tookMs ?? 1))}ms`;
 
   return (
     <div
@@ -366,12 +369,16 @@ export function Palette() {
                   </div>
                 );
               const h = row.hit;
+              const label = hitLabel(h);
               return (
                 <div
                   key={`${h.type}:${h.id}`}
                   className={'ri' + (isOn ? ' on' : '')}
                   role="button"
                   tabIndex={0}
+                  // A-2: the keyboard and a screen reader get the same label the eye gets — the
+                  // item type, the world and the knowledge item, not the ingest filename.
+                  aria-label={label.aria}
                   onMouseEnter={() => setSel(mine)}
                   onClick={(e) => choose(row, e.ctrlKey || e.metaKey)}
                 >
@@ -380,7 +387,14 @@ export function Palette() {
                   </span>
                   <div className="tx">
                     <Html className="t" as="div" html={hi(h.title, debounced.trim())} />
-                    <div className="m">{h.meta}</div>
+                    <div className="m">
+                      {/* The same two chips the library card renders, in the same order, so a
+                          result and a card describe an item identically (A-2). */}
+                      {label.world ? <span className="chip chip-blue">{worldShort(label.world)}</span> : null}
+                      {label.docType ? <TypeBadge docType={label.docType} compact /> : null}
+                      {label.item ? <span className="hit-item">{label.item}</span> : null}
+                      {label.rest.length ? <span className="hit-rest">{label.rest.join(' · ')}</span> : null}
+                    </div>
                   </div>
                   {isOn ? <kbd>↵</kbd> : null}
                 </div>
