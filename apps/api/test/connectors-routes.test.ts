@@ -73,10 +73,18 @@ run('connector routes', () => {
     const created = await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() });
     expect(created.statusCode).toBe(201);
     const conn = created.json();
-    expect(conn.configMasked.applicationPassword).toBe('••••');
-    expect(conn.configMasked.webhookSecret).toBe('••••');
-    expect(conn.configMasked.baseUrl).toBe(stub.url);
-    expect(conn.capabilities.write).toBe(true);
+    // Every connector route answers `ConnectorRowSchema` — the same shape the list returns,
+    // so `config` (not `configMasked`) plus the two counts, and no per-type `capabilities`
+    // (those belong to `GET /connectors/types`).
+    expect(conn.config.applicationPassword).toBe('••••');
+    expect(conn.config.webhookSecret).toBe('••••');
+    expect(conn.config.baseUrl).toBe(stub.url);
+    expect(conn).toMatchObject({ links: 0, conflicts: 0, lastStatus: 'never' });
+    expect(conn.capabilities).toBeUndefined();
+    const fetched = await app.inject({ method: 'GET', url: `/api/v1/connectors/${conn.id}` });
+    const listed = (await app.inject({ method: 'GET', url: '/api/v1/connectors' })).json().items[0];
+    // The by-id route and the list are one resource, so they are byte-identical.
+    expect(fetched.json()).toEqual(listed);
     const test = await app.inject({ method: 'POST', url: `/api/v1/connectors/${conn.id}/test` });
     expect(test.json().ok).toBe(true);
     expect((await app.inject({ method: 'GET', url: '/api/v1/connectors' })).json().items).toHaveLength(1);
@@ -162,7 +170,7 @@ run('connector routes', () => {
     expect(onlySchedule.statusCode).toBe(200);
     expect(onlySchedule.json()).toMatchObject({ schedule: '*/5 * * * *', name: 'שם אחר' });
     // None of the three PATCHes carried a config, so the stored secret survived untouched.
-    expect(onlySchedule.json().configMasked.applicationPassword).toBe('••••');
+    expect(onlySchedule.json().config.applicationPassword).toBe('••••');
     await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
   });
 
@@ -184,7 +192,7 @@ run('connector routes', () => {
       },
     });
     expect(patched.statusCode).toBe(200);
-    expect(patched.json().configMasked).toMatchObject({
+    expect(patched.json().config).toMatchObject({
       applicationPassword: '••••',
       webhookSecret: '••••',
       username: 'kb2',

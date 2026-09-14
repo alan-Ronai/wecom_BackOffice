@@ -5,7 +5,6 @@ import {
   ConnectorCreateBodySchema,
   ConnectorPatchBodySchema,
   ConnectorRowSchema,
-  ConnectorSchema,
   ConnectorTestBodySchema,
   ErrorEnvelopeSchema,
   IdSchema,
@@ -25,19 +24,6 @@ import {
 } from './repo.js';
 import type { SyncService } from './sync.js';
 import { auditOf, userOf, type Enqueue } from './context.js';
-
-const toApi = (row: ConnectorRow, repo: ConnectorsRepo, reg: ConnectorRegistry) => ({
-  id: row.id,
-  type: row.type,
-  name: row.name,
-  enabled: row.enabled,
-  schedule: row.schedule,
-  lastRunAt: row.last_run_at?.toISOString() ?? null,
-  lastStatus: row.last_status,
-  health: row.health,
-  configMasked: maskConfig(repo.config(row)),
-  capabilities: reg.get(row.type).describe().capabilities,
-});
 
 /**
  * `lastStatus` on the row is free text the engine writes (`ok`, `test-ok`, `error`…);
@@ -62,6 +48,21 @@ const toRow = (
   links: Number(row.links ?? 0),
   conflicts: Number(row.conflicts ?? 0),
 });
+
+/**
+ * `GET /connectors` and the three single-connector routes answer the *same* resource, so they
+ * answer the same schema. They used to disagree — the list returned `ConnectorRowSchema`
+ * (`config`, `links`, `conflicts`, nullable `schedule`) and `GET`/`POST`/`PATCH` on one
+ * connector returned the older `ConnectorSchema` (`configMasked`, `capabilities`, no counts) —
+ * which forced `apps/web/src/api/stage5.ts` to bypass the generated client for all three.
+ * `capabilities` is no loss: it is per *type*, and the screens already read it from
+ * `GET /connectors/types`.
+ */
+const WITH_COUNTS = `
+  select c.*,
+         (select count(*)::int from sync_links l where l.connector_id = c.id) as links,
+         (select count(*)::int from sync_links l where l.connector_id = c.id and l.state = 'conflict') as conflicts
+    from connectors c`;
 
 const linkToApi = (l: SyncLinkRow & { document_title?: string }) => ({
   id: l.id,
@@ -101,6 +102,14 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
   const refresh = async () => {
     if (opts.refresh) await opts.refresh();
   };
+  /** One connector in the exact shape `GET /connectors` answers, counts included. */
+  const rowById = async (id: string) => {
+    const r = await app.db.query<ConnectorRow & { links: number; conflicts: number }>(
+      `${WITH_COUNTS} where c.id = $1`,
+      [id],
+    );
+    return r.rows[0] ? toRow(r.rows[0], repo) : null;
+  };
 
   app.get(
     '/connectors',
@@ -115,10 +124,7 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
     // request rather than one per connector.
     async () => {
       const rows = await app.db.query<ConnectorRow & { links: number; conflicts: number }>(
-        `select c.*,
-                (select count(*)::int from sync_links l where l.connector_id = c.id) as links,
-                (select count(*)::int from sync_links l where l.connector_id = c.id and l.state = 'conflict') as conflicts
-           from connectors c order by c.created_at`,
+        `${WITH_COUNTS} order by c.created_at`,
       );
       return { items: rows.rows.map((r) => toRow(r, repo)) };
     },
@@ -131,7 +137,7 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
       schema: {
         tags: ['connectors'],
         body: ConnectorCreateBodySchema,
-        response: { 201: ConnectorSchema, 400: E, 403: E },
+        response: { 201: ConnectorRowSchema, 400: E, 403: E },
       },
     },
     async (req, reply) => {
@@ -150,7 +156,7 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
       );
       await audit(req, 'connectors.create', 'connector', row.id, null, { type: row.type, name: row.name });
       await refresh();
-      return reply.status(201).send(toApi(row, repo, registry));
+      return reply.status(201).send((await rowById(row.id))!);
     },
   );
 
@@ -158,12 +164,12 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
     '/connectors/:id',
     {
       config: manage,
-      schema: { tags: ['connectors'], params, response: { 200: ConnectorSchema, 403: E, 404: E } },
+      schema: { tags: ['connectors'], params, response: { 200: ConnectorRowSchema, 403: E, 404: E } },
     },
     async (req, reply) => {
-      const row = await repo.get(req.params.id);
+      const row = await rowById(req.params.id);
       if (!row) return reply.status(404).send(notFound(req, 'מחבר לא נמצא'));
-      return reply.send(toApi(row, repo, registry));
+      return reply.send(row);
     },
   );
 
@@ -175,7 +181,7 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
         tags: ['connectors'],
         params,
         body: ConnectorPatchBodySchema,
-        response: { 200: ConnectorSchema, 400: E, 403: E, 404: E },
+        response: { 200: ConnectorRowSchema, 400: E, 403: E, 404: E },
       },
     },
     async (req, reply) => {
@@ -215,7 +221,7 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
         { name: updated.name, enabled: updated.enabled },
       );
       await refresh();
-      return reply.send(toApi(updated, repo, registry));
+      return reply.send((await rowById(updated.id))!);
     },
   );
 
