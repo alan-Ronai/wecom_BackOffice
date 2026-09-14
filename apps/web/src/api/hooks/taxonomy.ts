@@ -82,15 +82,9 @@ export const useTopicView = (id: string | undefined, opts: { record?: boolean } 
     queryFn: async (): Promise<TopicView> =>
       checked(
         TopicViewSchema,
+        // The server defaults to `record=true`, so only the suppressing case is worth sending.
         await api.GET('/topics/{id}/items', {
-          // The server defaults to `record=true`, so only the suppressing case is sent. The cast
-          // is the single place that knows `record` is arriving: the API half of this fix adds it
-          // to `docs/api/openapi.json`, and until that lands `schema.d.ts` types this route's
-          // query as `undefined`. It becomes a no-op the moment the client is regenerated.
-          params: {
-            path: { id: id! },
-            ...(opts.record === false ? { query: { record: false } } : {}),
-          } as { path: { id: string } },
+          params: { path: { id: id! }, query: opts.record === false ? { record: false } : {} },
         }),
       ),
   });

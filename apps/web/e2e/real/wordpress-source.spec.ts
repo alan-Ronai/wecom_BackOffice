@@ -82,19 +82,32 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
    * request, because an applied suggestion records the document it created. The per-card scan
    * stays as the fallback for the round where `targetDocumentId` has not been written yet.
    */
+  const feedsFromSource = async (id: string): Promise<boolean> => {
+    const doc = await request.get(`/api/v1/documents/${id}`);
+    return doc.ok() && ((await doc.json()) as { sourceId?: string | null }).sourceId === sourceId;
+  };
   let docId: string | undefined;
   for (let round = 0; round < 20 && !docId; round++) {
+    // `GET /suggestions?sourceId=` names the documents this source's suggestions targeted, which
+    // is usually one candidate and one verification instead of the ten-cards-plus-ten-details
+    // scan this loop used to do every round (up to ~200 requests, and slower as the database
+    // fills). The identity check is still `sourceId`, so a suggestion that points somewhere else
+    // is rejected rather than believed, and the scan stays as the fallback.
     const sug = await request.get(`/api/v1/suggestions?sourceId=${sourceId}&pageSize=50`);
     expect(sug.ok(), await sug.text()).toBeTruthy();
-    docId = ((await sug.json()) as { items: { targetDocumentId?: string | null }[] }).items.find(
-      (x) => x.targetDocumentId,
-    )?.targetDocumentId as string | undefined;
+    const candidates = [
+      ...new Set(
+        ((await sug.json()) as { items: { targetDocumentId?: string | null }[] }).items
+          .map((x) => x.targetDocumentId)
+          .filter((x): x is string => !!x),
+      ),
+    ];
+    for (const id of candidates) if (await feedsFromSource(id)) docId = id;
     if (!docId) {
       const list = await request.get('/api/v1/documents?sort=updated&pageSize=10');
       expect(list.ok(), await list.text()).toBeTruthy();
       for (const card of ((await list.json()) as { items: { id: string }[] }).items) {
-        const doc = await request.get(`/api/v1/documents/${card.id}`);
-        if (((await doc.json()) as { sourceId?: string | null }).sourceId === sourceId) {
+        if (await feedsFromSource(card.id)) {
           docId = card.id;
           break;
         }

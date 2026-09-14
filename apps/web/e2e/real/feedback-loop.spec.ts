@@ -38,12 +38,13 @@ test('W4-E2E-1 feedback travels from an agent to a closed status linked to a pub
   await a.getByText(DOC_TITLE).first().click();
   await expect(a.getByRole('heading', { level: 1, name: DOC_TITLE })).toBeVisible();
   /*
-   * §5.4 puts the report button in the header *and per step*. `.first()` is the header's, so this
-   * asserts the per-step ones exist at all — the guard that used to hide them outside call mode
-   * left exactly one, and `.first()` would still have found it.
+   * §5.4 puts the report button in the header *and per step*. The agent lands here in call mode,
+   * where only the step they are standing on is expanded, so the honest assertion at this point
+   * is header + active step; the exact "one per step" count is asserted outside call mode in
+   * `wave4-mounts.test.tsx`, where the preference is controllable.
    */
   const reportButtons = a.getByRole('button', { name: 'דיווח על בעיה / משוב' });
-  await expect.poll(() => reportButtons.count()).toBeGreaterThan(2);
+  await expect.poll(() => reportButtons.count()).toBeGreaterThanOrEqual(2);
   await reportButtons.first().click();
   const dlg = a.getByRole('dialog', { name: 'דיווח על בעיה / משוב' });
   await dlg.getByRole('radio', { name: 'מצאתי טעות' }).check();

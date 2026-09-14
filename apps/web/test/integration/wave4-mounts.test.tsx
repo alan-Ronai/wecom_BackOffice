@@ -12,7 +12,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../msw/server.js';
 import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
-import { fx, D_BROWSING, T } from '../msw/fixtures.js';
+import { fx, D_BROWSING, REV_1, SRC_TECH, T } from '../msw/fixtures.js';
 
 const B = '/api/v1';
 const side = async () => within(await screen.findByRole('complementary', { name: 'ניווט ראשי' }));
@@ -168,11 +168,11 @@ describe('W6 article mounts', () => {
           updatedById: null,
           updatedByName: null,
           updatedAt: T,
-          latestRevisionId: 'r1',
+          latestRevisionId: REV_1,
         }),
       ),
       http.get(`${B}/documents/${D_BROWSING}`, () =>
-        HttpResponse.json({ ...fx.docBrowsing, sourceId: 's1' }),
+        HttpResponse.json({ ...fx.docBrowsing, sourceId: SRC_TECH }),
       ),
     );
     renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
@@ -183,7 +183,7 @@ describe('W6 article mounts', () => {
     // the component with a hand-passed prop — actually renders it.
     expect(screen.getByRole('link', { name: 'הורד קובץ מקור' })).toHaveAttribute(
       'href',
-      expect.stringContaining('/sources/s1/revisions/r1/raw'),
+      expect.stringContaining(`/sources/${SRC_TECH}/revisions/${REV_1}/raw`),
     );
     await userEvent.click(screen.getByRole('button', { name: 'תצוגת עבודה' }));
     expect(await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title })).toBeVisible();
@@ -206,7 +206,9 @@ describe('W6 article mounts', () => {
   });
 
   it('persists the pane choice through the preferences round trip', async () => {
-    let saved: Record<string, unknown> | null = null;
+    // Every PUT, not just the last: the shell writes preferences of its own (`lastSeen`,
+    // `sidebarExpanded`), and whichever lands last would otherwise decide the assertion.
+    const saved: Record<string, unknown>[] = [];
     server.use(
       http.get(`${B}/documents/${D_BROWSING}/source`, () =>
         HttpResponse.json({
@@ -218,18 +220,20 @@ describe('W6 article mounts', () => {
           updatedById: null,
           updatedByName: null,
           updatedAt: T,
+          latestRevisionId: null,
         }),
       ),
       http.put(`${B}/me/preferences`, async ({ request }) => {
-        saved = (await request.json()) as Record<string, unknown>;
-        return HttpResponse.json(saved);
+        const body = (await request.json()) as Record<string, unknown>;
+        saved.push(body);
+        return HttpResponse.json(body);
       }),
     );
     renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
     await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title });
     await userEvent.click(await screen.findByRole('button', { name: 'מפוצל' }));
     // The choice has to follow the agent to the next machine, so it is written back, not local.
-    await waitFor(() => expect(saved?.paneMode).toBe('split'));
+    await waitFor(() => expect(saved.some((b) => b.paneMode === 'split')).toBe(true));
   });
 
   it('offers prev/next inside the topic', async () => {

@@ -638,7 +638,17 @@ export function EditorPage() {
               </button>
             ) : null}
             {can('docs.publish', doc) ? (
-              <button className="btn primary sm" onClick={() => void doPublish()}>
+              <button
+                className="btn primary sm"
+                onClick={() =>
+                  void doPublish().catch((err) =>
+                    /* The save path can now be refused by rules the editor cannot see from here —
+                       `TOPIC_OUT_OF_WORLD` on a topic left over from a world change, a 403 on a
+                       scope. Unhandled, those were a silent no-op on the publish button. */
+                    toast(err instanceof ApiError ? err.message : 'הפרסום נכשל', 'warn'),
+                  )
+                }
+              >
                 פרסם v{nextV}
               </button>
             ) : null}
