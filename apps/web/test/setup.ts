@@ -15,8 +15,19 @@ import { __resetUiPrefsCache } from '../src/api/hooks/uiPrefs.js';
  * once several lanes' screens shared one article page those queries started finding two nodes and
  * throwing. Aligning the text queries with the accessibility tree keeps every assertion pointed at
  * what is actually on screen.
+ *
+ * `asyncUtilTimeout` is Testing Library's own budget for `waitFor` / `findBy*`, and it is
+ * independent of vitest's `testTimeout` (`vite.config.ts`). Its 1000 ms default is what a
+ * first-render `waitFor` races under the fully parallel 49-file run: a route that does four to six
+ * msw round trips before its first real node appears will intermittently still be showing
+ * `route-loading` when the budget expires, so the failing set differs between runs on the same
+ * commit. Raising it to 5 s changes nothing about what the assertions mean — a genuinely broken
+ * query still fails, it just fails deterministically instead of racing the scheduler.
  */
-configure({ defaultIgnore: 'script, style, [aria-hidden="true"], [aria-hidden="true"] *' });
+configure({
+  asyncUtilTimeout: 5000,
+  defaultIgnore: 'script, style, [aria-hidden="true"], [aria-hidden="true"] *',
+});
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
