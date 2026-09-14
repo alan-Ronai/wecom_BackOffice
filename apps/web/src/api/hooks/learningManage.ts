@@ -183,15 +183,8 @@ export const useLearningDashboard = (world?: string, enabled = true) =>
   });
 
 /**
- * Items that reference one document (`GET /documents/:id/learning`, V2).
- *
- * V4a exports a `useDocumentLearning` of its own from `hooks/learning.ts` for the article badge;
- * V6 keeps one and re-points the other's callers. Both parse `DocumentLearningSchema`, which V0
- * extended with `refreshAssignmentId` — additive, so neither has to care.
+ * `useDocumentLearning` lived here too. V6 keeps exactly one — V4a's in `hooks/learning.ts`, keyed
+ * `keys.learning.doc(id)` — so the article badge, the article panel and the manager list all read
+ * the same cache entry and one invalidation moves all three.
  */
-export const useDocumentLearning = (documentId: string | undefined, enabled = true) =>
-  useQuery({
-    queryKey: keys.learning.forDocument(documentId ?? ''),
-    enabled: enabled && !!documentId,
-    queryFn: () => w5(DocumentLearningSchema, 'GET', `/documents/${documentId}/learning`),
-  });
+export { useDocumentLearning } from './learning.js';

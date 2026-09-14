@@ -16,7 +16,7 @@ export function invalidateLearning(qc: QueryClient, itemId?: string): void {
       ['learning', 'item', itemId],
       ['learning', 'versions', itemId],
       ['learning', 'completion', itemId],
-      ['learning', 'forDocument'],
+      ['learning', 'doc'],
     ] as const)
       void qc.invalidateQueries({ queryKey });
 }

@@ -56,14 +56,21 @@ export const keys = {
   feedbackAnalytics: (q: unknown = '*') => ['feedback', 'analytics', q] as const,
   docFeedback: (id: string) => ['docFeedback', id] as const,
   /* wave 5 — learning (V4a reads `my`; V4b owns the rest) */
+  /**
+   * wave 5 — learning (V4a's learner keys and V4b's manager keys in one block). Every key starts
+   * with `'learning'`, which is what lets one prefix invalidation drop the whole surface when a
+   * `learning.*` event arrives over SSE.
+   */
   learning: {
     my: ['learning', 'my'] as const,
+    player: (assignmentId: string) => ['learning', 'player', assignmentId] as const,
+    doc: (documentId: string) => ['learning', 'doc', documentId] as const,
     items: (q: unknown = '*') => ['learning', 'items', q] as const,
     item: (id: string) => ['learning', 'item', id] as const,
     versions: (id: string) => ['learning', 'versions', id] as const,
     completion: (id: string) => ['learning', 'completion', id] as const,
     dashboard: (world: string = '*') => ['learning', 'dashboard', world] as const,
-    forDocument: (documentId: string) => ['learning', 'forDocument', documentId] as const,
+    audienceOptions: ['learning', 'audienceOptions'] as const,
   },
   /* wave 5 — knowledge gaps (V4b) */
   gaps: (q: unknown = '*') => ['gaps', q] as const,
@@ -86,12 +93,6 @@ export const keys = {
   analytics: {
     usage: (q: unknown = '*') => ['analytics', 'usage', q] as const,
     searchLog: (q: unknown = '*') => ['analytics', 'searchLog', q] as const,
-  },
-  /* wave 5 — learning (V4a); every key starts with 'learning' so one prefix invalidates the lot */
-  learning: {
-    my: ['learning', 'my'] as const,
-    player: (assignmentId: string) => ['learning', 'player', assignmentId] as const,
-    doc: (documentId: string) => ['learning', 'doc', documentId] as const,
   },
   connectors: ['connectors'] as const,
   connector: (id: string) => ['connectors', id] as const,
