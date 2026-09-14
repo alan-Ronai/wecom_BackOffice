@@ -1,11 +1,21 @@
 /**
  * Wave 5 contracts — learning & training (briefings, quizzes, assignments, completion,
  * knowledge refresh), approver workflow setting, knowledge-gap detection.
- * Routes: docs/superpowers/specs/2026-09-14-kb-wave5-learning-design.md §4.
+ * Routes: docs/superpowers/specs/2026-09-15-kb-wave5-learning-design.md §4.
+ * Contract table: docs/api/CONTRACTS-wave5.md.
  */
 import { z } from 'zod';
 import { IdSchema, IsoDateSchema, PaginationQuerySchema, paginated } from './common.js';
 import { PhaseSchema } from './content.js';
+
+/** `app_settings.key` holding the wave 5 `WorkflowSettings` JSON. */
+export const WORKFLOW_SETTINGS_KEY = 'workflow' as const;
+/** A referenced document pinned at the version the learner saw (owner decision, spec §1.1). */
+export const SourceVersionSchema = z.object({
+  documentId: IdSchema,
+  version: z.number().int().nonnegative(),
+});
+export type SourceVersion = z.infer<typeof SourceVersionSchema>;
 
 /* ── learning items ─────────────────────────────────────────────────────── */
 export const LearningKindSchema = z.enum(['briefing', 'quiz']);
@@ -46,6 +56,8 @@ export const LearningItemSchema = z.object({
   estimatedMinutes: z.number().int().min(1).nullable(),
   entries: z.array(BriefingEntrySchema).default([]),
   questions: z.array(QuizQuestionSchema).default([]),
+  /** Document versions pinned by the last publish; empty while the item is still a draft. */
+  sourceVersions: z.array(SourceVersionSchema).default([]),
   needsUpdate: z.boolean().default(false), // a referenced document is invalid/archived or changed significantly
   createdBy: IdSchema.nullable(),
   updatedAt: IsoDateSchema,
@@ -103,6 +115,8 @@ export const LearningVersionSchema = z.object({
   label: z.string(),
   authorName: z.string(),
   createdAt: IsoDateSchema,
+  /** Snapshot of every referenced document's `current_version` at publish time (spec §3). */
+  sourceVersions: z.array(SourceVersionSchema).default([]),
 });
 
 /* ── audiences & assignments ────────────────────────────────────────────── */
@@ -285,7 +299,8 @@ export const WorkflowSettingsSchema = z.object({
   requireApprover: z.boolean().default(false),
   learning: z.object({
     defaultPassMark: z.number().int().min(1).max(100).default(80),
-    defaultMaxAttempts: z.number().int().min(1).max(10).default(3),
+    /** `null` = unlimited retakes, the owner's decision (spec §1.4); a cap needs no migration. */
+    defaultMaxAttempts: z.number().int().min(1).max(10).nullable().default(null),
     refreshDueDays: z.number().int().min(1).max(90).default(7),
     reminderDaysBefore: z.number().int().min(0).max(30).default(2),
   }),
@@ -339,12 +354,48 @@ export const GapDetectResultSchema = z.object({
   tookMs: z.number(),
 });
 
+/* ── type aliases (one per exported schema; lanes V1–V6 import these) ────── */
+export type LearningKind = z.infer<typeof LearningKindSchema>;
+export type LearningStatus = z.infer<typeof LearningStatusSchema>;
+export type BriefingEntry = z.infer<typeof BriefingEntrySchema>;
+export type QuestionKind = z.infer<typeof QuestionKindSchema>;
+export type QuestionOption = z.infer<typeof QuestionOptionSchema>;
+export type QuizQuestion = z.infer<typeof QuizQuestionSchema>;
 export type LearningItem = z.infer<typeof LearningItemSchema>;
 export type LearningItemCard = z.infer<typeof LearningItemCardSchema>;
-export type QuizQuestion = z.infer<typeof QuizQuestionSchema>;
+export type LearningItemsQuery = z.infer<typeof LearningItemsQuerySchema>;
+export type LearningItemsResponse = z.infer<typeof LearningItemsResponseSchema>;
+export type LearningItemCreate = z.infer<typeof LearningItemCreateSchema>;
+export type LearningItemPatch = z.infer<typeof LearningItemPatchSchema>;
+export type PutEntriesBody = z.infer<typeof PutEntriesBodySchema>;
+export type PutQuestionsBody = z.infer<typeof PutQuestionsBodySchema>;
+export type GenerateQuestionsBody = z.infer<typeof GenerateQuestionsBodySchema>;
+export type GenerateQuestionsResponse = z.infer<typeof GenerateQuestionsResponseSchema>;
+export type LearningPublishBody = z.infer<typeof LearningPublishBodySchema>;
+export type LearningVersion = z.infer<typeof LearningVersionSchema>;
+export type Audience = z.infer<typeof AudienceSchema>;
+export type AudienceCreate = z.infer<typeof AudienceCreateSchema>;
+export type AssignBody = z.infer<typeof AssignBodySchema>;
+export type AssignmentStatus = z.infer<typeof AssignmentStatusSchema>;
+export type AssignmentReason = z.infer<typeof AssignmentReasonSchema>;
 export type Assignment = z.infer<typeof AssignmentSchema>;
+export type MyLearningResponse = z.infer<typeof MyLearningResponseSchema>;
+export type PlayerQuestion = z.infer<typeof PlayerQuestionSchema>;
 export type PlayerItem = z.infer<typeof PlayerItemSchema>;
+export type AttemptAnswers = z.infer<typeof AttemptAnswersSchema>;
 export type AttemptResult = z.infer<typeof AttemptResultSchema>;
+export type CompletionRow = z.infer<typeof CompletionRowSchema>;
+export type CompletionResponse = z.infer<typeof CompletionResponseSchema>;
 export type LearningDashboard = z.infer<typeof LearningDashboardSchema>;
+export type DocumentLearning = z.infer<typeof DocumentLearningSchema>;
+export type ChangeFlag = z.infer<typeof ChangeFlagSchema>;
 export type WorkflowSettings = z.infer<typeof WorkflowSettingsSchema>;
+export type WorkflowSettingsPut = z.infer<typeof WorkflowSettingsPutSchema>;
+export type GapKind = z.infer<typeof GapKindSchema>;
+export type GapStatus = z.infer<typeof GapStatusSchema>;
 export type Gap = z.infer<typeof GapSchema>;
+export type GapsQuery = z.infer<typeof GapsQuerySchema>;
+export type GapsResponse = z.infer<typeof GapsResponseSchema>;
+export type GapDismissBody = z.infer<typeof GapDismissBodySchema>;
+export type GapResolveBody = z.infer<typeof GapResolveBodySchema>;
+export type GapDetectResult = z.infer<typeof GapDetectResultSchema>;
