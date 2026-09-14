@@ -60,18 +60,25 @@ const edgeKey = (e: GraphEdge) => `${e.from}|${e.to}|${e.type}|${e.fromStepKey ?
 /**
  * The whole connected-data graph, assembled from the derived tables L2 already maintains:
  * `document_links` (explicit + detected), `steps.block_id`/`steps.block_refs`,
- * `step_field_refs`, `documents.source_id` and `script_refs`. Everything is loaded once and
+ * `step_field_refs`, `documents.source_id` and the explicit links into type-T (script)
+ * documents. Everything is loaded once and
  * traversed in memory — this is a single-tenant LAN KB, so the whole graph is a few
  * thousand rows and a per-request round trip per BFS level would cost far more.
  */
 export async function loadGraph(q: Q, filter: GraphFilter = {}): Promise<GraphData> {
   const [documents, blocks, fields, sources, scripts, links, blockUse, fieldUse, docSources, scriptUse] =
     await Promise.all([
-      q.query('select id, title, category, status from documents where deleted_at is null'),
+      q.query(
+        `select id, title, category, status from documents
+          where deleted_at is null and not (doc_type = 'T' and kind = 'text')`,
+      ),
       q.query('select id, title from blocks where deleted_at is null'),
       q.query('select name, status from crm_fields where deleted_at is null'),
       q.query('select id, title, kind from sources where deleted_at is null'),
-      q.query('select id, title from scripts where deleted_at is null'),
+      // Scripts are type-T `text` documents since 0030; they stay their own node kind here.
+      q.query(
+        `select id, title from documents where deleted_at is null and doc_type = 'T' and kind = 'text'`,
+      ),
       q.query(
         `select l.from_document_id, l.from_step_key, l.to_document_id, l.to_block_id, l.to_field_name,
                 l.to_source_id, l.type, l.origin
@@ -92,9 +99,12 @@ export async function loadGraph(q: Q, filter: GraphFilter = {}): Promise<GraphDa
       ),
       q.query('select id, source_id from documents where deleted_at is null and source_id is not null'),
       q.query(
-        `select r.document_id, r.step_key, r.script_id
-           from script_refs r
-           join documents d on d.id = r.document_id and d.deleted_at is null`,
+        `select l.from_document_id document_id, l.from_step_key step_key, l.to_document_id script_id
+           from document_links l
+           join documents d on d.id = l.from_document_id and d.deleted_at is null
+           join documents s on s.id = l.to_document_id and s.deleted_at is null
+                           and s.doc_type = 'T' and s.kind = 'text'
+          where l.type = 'link' and l.origin = 'explicit'`,
       ),
     ]);
 
@@ -306,9 +316,9 @@ export async function inboundFor(q: Q, ref: NodeRef): Promise<InboundRow[]> {
     });
   if (ref.kind === 'script')
     parts.push({
-      sql: `select d.id, d.title, r.step_key, 'link' as type
-              from script_refs r join documents d on d.id = r.document_id and d.deleted_at is null
-             where r.script_id = $1`,
+      sql: `select d.id, d.title, l.from_step_key as step_key, 'link' as type
+              from document_links l join documents d on d.id = l.from_document_id and d.deleted_at is null
+             where l.to_document_id = $1 and l.type = 'link' and l.origin = 'explicit'`,
       params: [ref.key],
     });
 
