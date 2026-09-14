@@ -38,6 +38,12 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
   const go = useNavigate();
   const nav = useNav();
   const can = useCan();
+  // The library owns the keyboard while it is the route on screen, so list-mode keys are not
+  // ordered behind an article scope that happens to be registered.
+  const setActiveScope = nav.setActiveScope;
+  useEffect(() => {
+    setActiveScope('library');
+  }, [setActiveScope]);
   const modal = useModal();
   const toast = useToast();
   const [facets, setFacets] = useState<FacetValue>({ wave: 'all', flag: null });

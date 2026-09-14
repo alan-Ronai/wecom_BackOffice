@@ -217,8 +217,10 @@ run('admin routes', () => {
     });
     expect(put.statusCode).toBe(200);
     const get = await app.inject({ method: 'GET', url: '/api/v1/admin/groups-map', headers: admin });
+    // `lastSyncedAt` is null until the nightly `identity.sync` job reconciles the mapping — a
+    // mapping saved a second ago has not been applied to anyone yet, and the row says so.
     expect(get.json().entries).toEqual([
-      { idpGroupId: 'g1', idpGroupName: 'KB-Editors', roleId: editorRole },
+      { idpGroupId: 'g1', idpGroupName: 'KB-Editors', roleId: editorRole, lastSyncedAt: null },
     ]);
   });
   it('lists and revokes sessions, flagging the callers own row', async () => {

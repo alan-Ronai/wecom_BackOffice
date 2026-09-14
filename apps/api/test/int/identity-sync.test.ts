@@ -39,7 +39,7 @@ run('identity.sync', () => {
     };
     const identity = new IdentityService(db.pool, () => undefined);
     const res = await runIdentitySync({ db: db.pool, oidc, identity, log: { info: () => undefined } });
-    expect(res).toEqual({ checked: 2, deactivated: 1, roleChanges: 1 });
+    expect(res).toEqual({ checked: 2, deactivated: 1, roleChanges: 1, groups: 1 });
     expect((await db.pool.query('select active from users where id=$1', [gone])).rows[0].active).toBe(false);
     expect(
       (await db.pool.query('select revoked_at from sessions where user_id=$1', [gone])).rows[0].revoked_at,

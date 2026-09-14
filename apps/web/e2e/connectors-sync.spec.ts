@@ -61,9 +61,22 @@ test('the sync queue moves one link and hands a conflict to the merge screen', a
   await expect(page.getByRole('tab', { name: 'קונפליקט 0' })).toBeVisible();
 });
 
-test('the parity report groups links by connector', async ({ page }) => {
+test('the parity report shows both sides and what has no link at all', async ({ page }) => {
   await page.goto('/sync');
   await page.getByRole('button', { name: 'דו״ח התאמה' }).click();
   await expect(page.getByRole('heading', { name: /WordPress/ })).toBeVisible();
-  await expect(page.getByText(/מתוך 4 זהים/)).toBeVisible();
+  await expect(page.getByText(/מתוך 2 זהים/)).toBeVisible();
+  // Design 4d: a fingerprint per side, not just a state pill.
+  await expect(page.getByText('7d02be9')).toBeVisible();
+  await expect(page.getByText('a91c4f2')).toBeVisible();
+
+  // The two lists the queue structurally cannot show, and the pairing they exist for.
+  await expect(page.getByText('מסמך ללא קישור')).toBeVisible();
+  await expect(page.getByText('עמוד שאין לו מסמך')).toBeVisible();
+  // Exact, because the sidebar's "גרף קשרים" also matches a loose "קשר".
+  const linkBtn = page.getByRole('button', { name: 'קשר', exact: true });
+  await expect(linkBtn).toBeDisabled();
+  await page.getByLabel('בחר מסמך ללא קישור').check();
+  await linkBtn.click();
+  await expect(page.getByText(/הקישור נוצר/)).toBeVisible();
 });

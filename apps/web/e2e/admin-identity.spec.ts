@@ -70,3 +70,18 @@ test('identity settings never render a stored secret', async ({ page }) => {
     /returnTo=%2Fadmin%2Fidentity/,
   );
 });
+
+test('the group map is filled from an Entra search, and says what has not synced yet (3d)', async ({
+  page,
+}) => {
+  await page.goto('/admin/groups');
+  await expect(page.getByLabel('שם קבוצה 1')).toHaveValue('KB-Leads');
+  // A mapping saved since the last nightly run is not broken — it takes effect tonight.
+  await expect(page.getByText('טרם סונכרן')).toBeVisible();
+
+  await page.getByLabel('חפש קבוצה ב-Entra').fill('KB-Ed');
+  await page.getByRole('option', { name: /KB-Editors/ }).click();
+  // The object id is the field nobody can type from memory and a typo silently breaks.
+  await expect(page.getByLabel('מזהה קבוצה 3')).toHaveValue('g-editors');
+  await expect(page.getByLabel('שם קבוצה 3')).toHaveValue('KB-Editors');
+});

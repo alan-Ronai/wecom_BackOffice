@@ -25,6 +25,14 @@ export const BaseConfigSchema = z.object({
   OIDC_CLIENT_ID: z.string().optional(),
   OIDC_CLIENT_SECRET: z.string().optional(),
   OIDC_REDIRECT_URI: z.string().optional(),
+  /**
+   * Microsoft Graph base URL. `OidcConfig.graphUrl` has always existed and nothing could set it,
+   * so every Graph call — the nightly sync's `accountEnabled` batch, the group-claim overflow
+   * lookup, and now the admin group search — was pinned to the global cloud. A tenant in a
+   * national cloud (`graph.microsoft.us`, `microsoftgraph.chinacloudapi.cn`) has a different host,
+   * and a test has no host at all without this.
+   */
+  OIDC_GRAPH_URL: z.string().url().optional(),
   AUTH_FALLBACK: z.enum(['none', 'paloalto']).default('none'),
   PALOALTO_HOST: z.string().optional(),
   PALOALTO_API_KEY: z.string().optional(),

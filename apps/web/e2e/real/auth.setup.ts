@@ -16,14 +16,24 @@ setup('signs in with the break-glass local account', async ({ page }) => {
   // Unauthenticated, so RequireAuth bounces us to the login screen.
   await expect(page).toHaveURL(/\/login/);
 
-  // `GET /auth/providers` really returns `{ providers: ['local'], fallback: 'none' }` here:
-  // the local form must render, and the Entra button must not.
+  if (process.env.E2E_OIDC === '1') {
+    // With an issuer configured, `GET /auth/providers` answers `['entra','local']` and the screen
+    // leads with SSO, folding break-glass behind a disclosure. Both shapes are real deployments,
+    // so the setup follows whichever one the gate is running rather than assuming the simpler one.
+    await expect(page.getByRole('link', { name: /Microsoft/ })).toBeVisible();
+    await page.getByRole('button', { name: 'כניסה מקומית (מנהל מערכת בלבד)' }).click();
+  } else {
+    // `GET /auth/providers` really returns `{ providers: ['local'], fallback: 'none' }` here:
+    // the local form must render, and the Entra button must not.
+    await expect(page.getByRole('link', { name: /Microsoft/ })).toHaveCount(0);
+  }
   await expect(page.getByLabel('דוא״ל')).toBeVisible();
-  await expect(page.getByRole('link', { name: /Microsoft/ })).toHaveCount(0);
 
   await page.getByLabel('דוא״ל').fill(email);
   await page.getByLabel('סיסמה').fill(password);
-  await page.getByRole('button', { name: /^כניסה/ }).click();
+  // Exact: with an issuer configured the disclosure button ("כניסה מקומית…") also starts with
+  // "כניסה", and a prefix match would resolve to two buttons.
+  await page.getByRole('button', { name: 'כניסה', exact: true }).click();
 
   // Lands back on the deep link it was sent from, authenticated.
   await expect(page).toHaveURL(/\/library/);

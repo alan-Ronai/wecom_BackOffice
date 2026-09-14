@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useGroupsMap, useRoles, useSaveGroupsMap } from '../../api/hooks/admin.js';
 import { useRoleMatrix } from '../../api/hooks/stage5.js';
 import { useCan } from '../../api/hooks/me.js';
+import { ago } from '../../lib/format.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
+import { GroupSearch } from './GroupSearch.js';
 import type { GroupMap } from '../../api/types.js';
 
 const same = (a: GroupMap[], b: GroupMap[]) =>
@@ -40,6 +42,20 @@ export function GroupsMapPage() {
     setEntries((list) => list.map((e, j) => (j === i ? { ...e, ...p } : e)));
 
   const incomplete = entries.some((e) => !e.idpGroupId.trim() || !e.roleId);
+  const taken = useMemo(() => new Set(entries.map((e) => e.idpGroupId).filter(Boolean)), [entries]);
+
+  /**
+   * A group picked from the Entra search becomes a row with its real id and name already filled,
+   * and only the role left to choose. An unsaved row that is still empty is reused rather than
+   * appended: picking a group right after "✚ הוסף מיפוי" should fill that row, not leave a blank
+   * one above it that blocks saving.
+   */
+  const addFromSearch = (g: { id: string; displayName: string }) =>
+    setEntries((list) => {
+      const blank = list.findIndex((e) => !e.idpGroupId.trim() && !e.roleId);
+      const row = { idpGroupId: g.id, idpGroupName: g.displayName, roleId: '', lastSyncedAt: null };
+      return blank >= 0 ? list.map((e, j) => (j === blank ? row : e)) : [...list, row];
+    });
 
   return (
     <>
@@ -51,6 +67,7 @@ export function GroupsMapPage() {
           </h1>
           <p>קבוצת Entra ID → תפקיד. משתמש שהוסר מהקבוצה מאבד את התפקיד בכניסה הבאה, לא באמצע פעילות.</p>
         </div>
+        {mayEdit ? <GroupSearch onPick={addFromSearch} taken={taken} /> : null}
       </div>
 
       {!entries.length && !map.isPending ? (
@@ -68,6 +85,7 @@ export function GroupsMapPage() {
               <th>שם הקבוצה</th>
               <th>תפקיד</th>
               <th>משתמשים בתפקיד</th>
+              <th>סונכרן</th>
               {mayEdit ? <th /> : null}
             </tr>
           </thead>
@@ -108,6 +126,20 @@ export function GroupsMapPage() {
                   </select>
                 </td>
                 <td className="small muted">{userCounts[e.roleId] ?? '—'}</td>
+                {/*
+                  Three states, and the third is the one that matters: a mapping saved since the
+                  last nightly run has not been applied to anyone yet, and saying "מעולם לא" for it
+                  is the difference between "this is broken" and "this takes effect tonight".
+                */}
+                <td className="small muted">
+                  {e.lastSyncedAt ? (
+                    <span title={new Date(e.lastSyncedAt).toLocaleString('he-IL')}>
+                      {ago(e.lastSyncedAt)}
+                    </span>
+                  ) : (
+                    'טרם סונכרן'
+                  )}
+                </td>
                 {mayEdit ? (
                   <td>
                     <button
@@ -129,7 +161,9 @@ export function GroupsMapPage() {
         <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
           <button
             className="btn sm"
-            onClick={() => setEntries((l) => [...l, { idpGroupId: '', idpGroupName: '', roleId: '' }])}
+            onClick={() =>
+              setEntries((l) => [...l, { idpGroupId: '', idpGroupName: '', roleId: '', lastSyncedAt: null }])
+            }
           >
             ✚ הוסף מיפוי
           </button>

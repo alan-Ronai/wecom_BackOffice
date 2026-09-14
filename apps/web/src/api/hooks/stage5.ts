@@ -11,6 +11,7 @@ import {
   type IdentityProvider,
   type IdentitySettingsPut,
   type ResolveConflictBody,
+  type SyncLinkCreate,
   type SyncLinksQuery,
 } from '../stage5.js';
 
@@ -44,6 +45,24 @@ export const useSaveIdentity = () => {
 /** Deliberately not a query: "בדוק חיבור" is an action with a result, not cached state. */
 export const useTestIdentity = () =>
   useMutation({ mutationFn: (provider: IdentityProvider) => stage5.testIdentity(provider) });
+
+/**
+ * Entra group lookup behind the group-map screen's search box.
+ *
+ * `enabled` on a non-empty term is what keeps an empty box from asking the directory for
+ * everything, and the caller passes an already-debounced term — a query per keystroke would be a
+ * Graph call per keystroke, against a tenant that rate-limits. Results are held for five minutes:
+ * a directory does not change while somebody fills in one row, and re-typing a term that was just
+ * searched should not cost a round trip.
+ */
+export const useGroupSearch = (q: string) =>
+  useQuery({
+    queryKey: keys.admin.groupSearch(q),
+    queryFn: () => stage5.groupSearch(q),
+    enabled: q.trim().length > 0,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
 
 /* ── connectors ───────────────────────────────────────────────────────────── */
 
@@ -161,6 +180,35 @@ export const useSyncLink = () => {
   return useMutation({
     mutationFn: ({ id, direction }: { id: string; direction: 'import' | 'push' }) =>
       stage5.syncLink(id, direction),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['sync'] });
+      void qc.invalidateQueries({ queryKey: keys.connectors });
+    },
+  });
+};
+
+/**
+ * The parity report. Same permission as the queue (`sources.manage`), so `enabled` is the caller's
+ * to set; the page gates on `useCan` before rendering and does not fire this for a reader.
+ */
+export const useParity = (connectorId?: string, opts: { enabled?: boolean } = {}) =>
+  useQuery({
+    queryKey: keys.parity(connectorId ?? '*'),
+    queryFn: () => stage5.parity(connectorId),
+    enabled: opts.enabled ?? true,
+  });
+
+/**
+ * "קשר" — pair an unlinked document with an unlinked remote item.
+ *
+ * Invalidates the whole `sync` prefix rather than just the parity key: the new link belongs in the
+ * queue too, and a report that refreshed while the queue still showed the old count would be two
+ * screens disagreeing about a row the operator just created.
+ */
+export const useCreateSyncLink = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SyncLinkCreate) => stage5.createSyncLink(body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['sync'] });
       void qc.invalidateQueries({ queryKey: keys.connectors });
