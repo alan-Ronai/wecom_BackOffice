@@ -212,10 +212,18 @@ export interface Visibility {
   worldScopes: readonly string[] | null;
 }
 
-/** Every item in a topic, grouped by doc type in PRD order; empty groups are omitted. */
+/**
+ * Every item in a topic, grouped by doc type in PRD order; empty groups are omitted.
+ *
+ * A topic whose world is outside the caller's scope is `null`, i.e. a 404 — not an in-scope topic
+ * with an empty item list. The item query already hides the contents, but `topic` and `world` are
+ * metadata: without this a scoped caller can confirm that a topic exists in a world they cannot
+ * read and learn its name and description (A-M4).
+ */
 export async function topicView(q: Q, topicId: string, vis: Visibility): Promise<TopicView | null> {
   const topic = await getTopic(q, topicId);
   if (!topic) return null;
+  if (vis.worldScopes && !vis.worldScopes.includes(topic.worldSlug)) return null;
   const world = (await getWorld(q, topic.worldSlug))!;
   const r = await q.query(
     `select d.id, d.slug, d.title, d.doc_type, d.kind, d.status, d.description, d.tags, d.updated_at, d.category,
