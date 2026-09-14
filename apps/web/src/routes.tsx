@@ -10,6 +10,7 @@ import { ArticlePage } from './components/article/ArticlePage.js';
 import { EditorPage } from './components/editor/EditorPage.js';
 import { HistoryPage } from './components/history/HistoryPage.js';
 import { TrashPage } from './components/trash/TrashPage.js';
+import { ReviewsPage } from './components/review/ReviewsPage.js';
 import { SourcesPage } from './components/sources/SourcesPage.js';
 import { AdminLayout } from './components/admin/AdminLayout.js';
 import { UsersPage } from './components/admin/UsersPage.js';
@@ -45,6 +46,7 @@ export const routeObjects: RouteObject[] = [
       { path: 'history/:id', element: <HistoryPage /> },
       { path: 'history/:id/:v', element: <HistoryPage /> },
       { path: 'trash', element: <TrashPage /> },
+      { path: 'reviews', element: <ReviewsPage /> },
       { path: 'sources', element: <SourcesPage /> },
       { path: 'sources/:id', element: <SourcesPage /> },
       {

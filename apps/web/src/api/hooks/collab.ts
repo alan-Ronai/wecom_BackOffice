@@ -77,11 +77,14 @@ export const useComments = (documentId: string | undefined) =>
     queryFn: () => stageJson(items(CommentSchema), `/documents/${documentId!}/comments`).then((r) => r.items),
   });
 
-/** `@` autocomplete. Disabled until the user has typed something after the `@`. */
-export const useMentionable = (q: string) =>
+/**
+ * `@` autocomplete. Idle until the user has typed something after the `@`, unless `always` is
+ * set — the review-request dialog lists every candidate up front, with no `@` to trigger on.
+ */
+export const useMentionable = (q: string, always = false) =>
   useQuery({
     queryKey: keys.mentionable(q),
-    enabled: q.length > 0,
+    enabled: always || q.length > 0,
     staleTime: 30_000,
     queryFn: () =>
       stageJson(items(MentionCandidateSchema), '/users/mentionable', { query: { q } }).then((r) => r.items),

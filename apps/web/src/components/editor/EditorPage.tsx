@@ -43,6 +43,7 @@ import { BlockLibrary } from './BlockLibrary.js';
 import { StepEditor } from './StepEditor.js';
 import { DropZone } from './DropZone.js';
 import { SidePane } from './SidePane.js';
+import { useRequestReviewDialog } from '../review/RequestReview.js';
 
 const emptyDoc = (cat: Category): Document => ({
   id: 'new',
@@ -86,6 +87,7 @@ export function EditorPage() {
   const patch = usePatchDocument(id);
   const saveStructure = useSaveStructure(id);
   const create = useCreateDocument();
+  const requestReview = useRequestReviewDialog();
 
   const [doc, setDoc] = useState<Document | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -155,11 +157,17 @@ export function EditorPage() {
   const leave = useCallback(() => go(isNew ? '/library' : `/doc/${id}`), [go, id, isNew]);
   // `Shell` also binds Escape (palette → drawer → split). Without this guard both handlers fire
   // and closing the palette inside the editor also navigated away, discarding the draft.
-  useHotkeys({ Escape: () => modal.count === 0 && !palette.state.open && leave() }, [
-    leave,
-    modal.count,
-    palette.state.open,
-  ]);
+  useHotkeys(
+    {
+      Escape: () => modal.count === 0 && !palette.state.open && leave(),
+      // `R` rather than `r`: `useHotkeys` normalises bare keys to lower case, so only the
+      // un-normalised fallback matches — which is exactly the Shift R the keymap advertises.
+      R: () => {
+        if (!isNew && doc && can('docs.edit', doc)) requestReview({ id, title: doc.title });
+      },
+    },
+    [leave, modal.count, palette.state.open, isNew, doc, can, requestReview, id],
+  );
 
   const doPublish = async () => {
     if (!doc) return;
@@ -225,9 +233,10 @@ export function EditorPage() {
     go(`/doc/${targetId}`);
   };
 
-  // "בקש סקירה" used to PATCH an empty body and toast success. `PatchDocumentBodySchema` has no
-  // `status` field and the API publishes no review transition, so nothing was persisted and no
-  // reviewer was notified. The control is removed until such a route exists.
+  // "שלח לסקירה" is back, on the real route this time: `POST /documents/:id/request-review`
+  // (stage-5 contract). I6 removed the old control because it PATCHed an empty body and toasted
+  // success while persisting nothing. It is only offered for a document that exists — there is
+  // nothing to review about an unsaved `/edit/new`.
 
   // Without this the editor spins forever when the document query fails — which it now does for
   // any document outside the user's category scope (403), not just for a genuinely missing one.
@@ -293,6 +302,15 @@ export function EditorPage() {
             >
               ייצוא JSON
             </button>
+            {!isNew && can('docs.edit', doc) ? (
+              <button
+                className="btn sm"
+                title="Shift R"
+                onClick={() => requestReview({ id, title: doc.title })}
+              >
+                📤 שלח לסקירה
+              </button>
+            ) : null}
             {can('docs.publish', doc) ? (
               <button className="btn primary sm" onClick={() => void doPublish()}>
                 פרסם v{nextV}

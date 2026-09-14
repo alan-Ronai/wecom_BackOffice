@@ -4,7 +4,7 @@ import { useDocuments, usePinnedIds } from '../../api/hooks/documents.js';
 import { useFields, useScripts } from '../../api/hooks/content.js';
 import { useSources } from '../../api/hooks/pipeline.js';
 import { useTrash } from '../../api/hooks/trash.js';
-import { useMe } from '../../api/hooks/me.js';
+import { useCan, useMe } from '../../api/hooks/me.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
 import { CATS, CAT_KEYS, SOURCE_FILES } from '../../lib/constants.js';
 import { usePalette } from '../palette/paletteStore.js';
@@ -29,6 +29,7 @@ export function Sidebar({
   const palette = usePalette();
   const settings = useSettings();
   const me = useMe();
+  const can = useCan();
   const prefs = usePreferences();
   const savePrefs = useSavePreferences();
 
@@ -175,6 +176,7 @@ export function Sidebar({
           {item('נצפו לאחרונה', '/recent')}
           {item('טיוטות', '/drafts', drafts.data?.items.length || null, true)}
           {item('היסטוריית גרסאות', '/history')}
+          {can('docs.publish') ? item('סקירות', '/reviews') : null}
           {item('סל מיחזור', '/trash', trash.data?.items.length || null)}
           {item('מסמכי מקור', '/sources', pendingSrc || null, true)}
         </nav>

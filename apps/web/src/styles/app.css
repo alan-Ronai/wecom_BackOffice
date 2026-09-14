@@ -803,3 +803,19 @@ html[data-theme="dark"] .sug .ft .bt span.p { background: var(--red); border-col
 .script-form label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--muted); }
 .script-form .row { display: flex; gap: 8px; }
 .tcard .desc.script { white-space: pre-wrap; }
+
+/* filter tabs — reviews queue, notification centre (6d) */
+.tabs { display: flex; gap: 2px; flex-wrap: wrap; align-items: center; }
+.tabs .tab { padding: 6px 12px; border-radius: 20px; font-size: 12px; color: var(--muted); border: 1px solid transparent; background: none; white-space: nowrap; }
+.tabs .tab:hover { background: var(--surface-2); }
+.tabs .tab.on { background: var(--red-light); color: var(--red-dark); border-color: var(--red-mid); font-weight: 500; }
+.tabs .tab .cnt { font-variant-numeric: tabular-nums; opacity: .75; margin-inline-start: 4px; }
+
+.review-card { cursor: default; }
+.review-card .title { cursor: pointer; }
+.review-request { gap: 12px; }
+.review-request .reviewer-list { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow: auto; }
+.review-request .reviewer { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 2px; }
+.review-request .reviewer input { width: auto; }
+.review-request .row { display: flex; gap: 8px; }
+.avatar.sm { width: 22px; height: 22px; font-size: 10.5px; }

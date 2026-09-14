@@ -125,6 +125,7 @@ export function Palette() {
         run: () => go('/sources'),
       },
       { id: 'trash', title: 'סל מיחזור', icon: '🗑', run: () => go('/trash') },
+      { id: 'reviews', title: 'סקירות ממתינות להחלטה', icon: '📤', run: () => go('/reviews') },
       { id: 'pinned', title: 'מוצמדים', icon: '★', run: () => go('/pinned') },
       { id: 'recent', title: 'נצפו לאחרונה', icon: '🕘', run: () => go('/recent') },
       { id: 'fields', title: 'שדות CRM – מה השתנה השבוע', icon: 'CRM', run: () => go('/fields') },
