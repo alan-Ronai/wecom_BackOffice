@@ -643,18 +643,14 @@ export default async function routes(app: FastifyInstance) {
       // `config.scope` above gates the *subject* document; the inbound titles are other
       // documents, so they carry the caller's world scope — and, for a reader, the
       // published-only visibility rule (W2) — of their own.
-      const items = await inboundFor(app.db, { kind: 'document', key: id }, user.worldScopes);
-      if (canReadUnpublished(user)) return { items };
-      const ids = [...new Set(items.map((i) => i.documentId))];
-      const ok = new Set(
-        (
-          await app.db.query(
-            `select id from documents where id = any($1) and status in ('published','partial')`,
-            [ids],
-          )
-        ).rows.map((r) => r.id as string),
-      );
-      return { items: items.filter((i) => ok.has(i.documentId)) };
+      return {
+        items: await inboundFor(
+          app.db,
+          { kind: 'document', key: id },
+          user.worldScopes,
+          canReadUnpublished(user),
+        ),
+      };
     },
   );
 }

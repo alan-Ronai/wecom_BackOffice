@@ -6,6 +6,7 @@ import { audit } from '../../lib/audit.js';
 import { forbidden, notFound } from '../../lib/http.js';
 import { withTransaction, type Queryable } from '../../lib/sql.js';
 import { hasScope, requireUser, type ReqUser } from '../../lib/user.js';
+import { assertVisibleDocument } from '../../lib/visibility.js';
 import { parseMentions, type Mention } from './mentions.js';
 import { documentTitle, initialsOf, iso, notifyMany } from './repo.js';
 
@@ -88,6 +89,8 @@ export default async function commentRoutes(instance: FastifyInstance) {
     },
     async (req) => {
       const user = requireUser(req);
+      // §10: `scope: 'document'` covers the world; this covers the status.
+      await assertVisibleDocument(app.db, req.params.id, user);
       const r = await app.db.query(`${SELECT} where c.document_id = $1 order by c.created_at`, [
         req.params.id,
         user.id,

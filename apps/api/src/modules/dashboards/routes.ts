@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { z } from 'zod';
 import { DashboardSchema, TelemetryBatchSchema, type Dashboard } from '@wecom/shared';
 import { requireUser } from '../../lib/user.js';
+import { canReadUnpublished } from '../../lib/visibility.js';
 import * as repo from './repo.js';
 
 /** The aggregates run over every document, view and suggestion, so they are not per-request work. */
@@ -25,10 +26,13 @@ export default async function routes(app: FastifyInstance) {
     },
     async (req) => {
       const user = requireUser(req);
-      const key = keyOf(user.worldScopes);
+      // The cache key carries the visibility half too, or a reader would be served an editor's
+      // snapshot (and the other way round) for up to a minute.
+      const readUnpublished = canReadUnpublished(user);
+      const key = keyOf(user.worldScopes) + (readUnpublished ? '|all' : '|published');
       const hit = cache.get(key);
       if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
-      const value = await repo.computeDashboard(app.db, user.worldScopes);
+      const value = await repo.computeDashboard(app.db, user.worldScopes, readUnpublished);
       cache.set(key, { at: Date.now(), value });
       return value;
     },

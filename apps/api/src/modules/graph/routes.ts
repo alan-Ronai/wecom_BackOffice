@@ -9,6 +9,7 @@ import {
 } from '@wecom/shared';
 import { notFound } from '../../lib/http.js';
 import { requireUser } from '../../lib/user.js';
+import { canReadUnpublished } from '../../lib/visibility.js';
 import * as repo from './repo.js';
 
 const Params = z.object({ nodeId: z.string().min(3) });
@@ -39,6 +40,7 @@ export default async function routes(app: FastifyInstance) {
         // `category` is a user-chosen filter; `scopes` is the tenancy boundary. Both apply,
         // so asking for a category outside the caller's scope returns nothing rather than 403.
         scopes: user.worldScopes,
+        readUnpublished: canReadUnpublished(user),
       });
       const focus = q.focus ? decodeId(q.focus) : undefined;
       if (focus && !data.nodes.has(focus)) throw notFound('הצומת');
@@ -60,12 +62,13 @@ export default async function routes(app: FastifyInstance) {
       const scopes = user.worldScopes;
       // A node only reachable through documents outside the caller's scope is not "forbidden",
       // it is not there: 404 rather than 403, so the response never confirms that it exists.
-      const data = await repo.loadGraph(app.db, { scopes });
+      const readUnpublished = canReadUnpublished(user);
+      const data = await repo.loadGraph(app.db, { scopes, readUnpublished });
       const node = data.nodes.get(repo.nodeId(ref.kind, ref.key));
       if (!node) throw notFound('הצומת');
       const [inbound, brokenLinks] = await Promise.all([
-        repo.inboundFor(app.db, ref, scopes),
-        repo.brokenLinkCount(app.db, ref, scopes),
+        repo.inboundFor(app.db, ref, scopes, readUnpublished),
+        repo.brokenLinkCount(app.db, ref, scopes, readUnpublished),
       ]);
       return {
         node,

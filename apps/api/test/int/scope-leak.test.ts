@@ -317,4 +317,61 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     await target.reader.cancel();
     await bystander.reader.cancel();
   });
+
+  /**
+   * W2 §10, the *other* boundary the same read models have to respect: a reader without
+   * `docs.read_unpublished` sees published items only. Same shape as the scope test above — one
+   * unpublished document, one route table, and its id and title in no body — because the reason
+   * per-route assertions kept missing a route has not changed.
+   */
+  it('W2: an unpublished document leaks through no route to a read-only reader', async () => {
+    const DRAFT = 'טיוטה סודית לנציגים';
+    const reader = await makeUser(db.pool, {
+      name: 'נציג',
+      perms: ['docs.read', 'notes.write'],
+    });
+    const draft = await makeDoc(DRAFT, 'tech');
+    await putStructure(draft, 'צעד טיוטה', `בדוק את ${FIELD} וראה [[doc:${techDoc}]]`);
+    // `techDoc` has to be *visible* for the assertions below to be about the draft rather than
+    // about an empty graph: everything `makeDoc` creates starts as a draft.
+    await post(`/api/v1/documents/${techDoc}/publish`, { label: 'פרסום לבדיקה' });
+
+    const urls = [
+      `/api/v1/graph?limit=2000`,
+      `/api/v1/graph/impact/field:${encodeURIComponent(FIELD)}`,
+      `/api/v1/graph/impact/doc:${techDoc}`,
+      `/api/v1/documents/${techDoc}/backlinks`,
+      `/api/v1/documents?limit=200`,
+      `/api/v1/search?q=${encodeURIComponent('טיוטה')}`,
+      `/api/v1/dashboards`,
+      `/api/v1/data/files`,
+    ];
+    for (const url of urls) {
+      const r = await app.inject({ method: 'GET', url, headers: auth(reader) });
+      expect(r.statusCode, `${url} -> ${r.body}`).toBe(200);
+      expect(r.body, url).not.toContain(draft);
+      expect(r.body, url).not.toContain(DRAFT);
+    }
+
+    // The document itself, and everything keyed by its id, answers 404 NOT_PUBLISHED — not 403,
+    // which would confirm that the id names something.
+    for (const url of [
+      `/api/v1/documents/${draft}`,
+      `/api/v1/documents/${draft}/comments`,
+      `/api/v1/documents/${draft}/notes`,
+      `/api/v1/documents/${draft}/draft`,
+    ]) {
+      const r = await app.inject({ method: 'GET', url, headers: auth(reader) });
+      expect(r.statusCode, url).toBe(404);
+      expect(r.json().code, url).toBe('NOT_PUBLISHED');
+    }
+
+    // …and an editor still sees all of it, so this is a filter and not a break.
+    const asAdmin = await app.inject({
+      method: 'GET',
+      url: '/api/v1/documents?limit=200',
+      headers: auth(admin),
+    });
+    expect(asAdmin.body).toContain(draft);
+  });
 });

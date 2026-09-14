@@ -1,13 +1,11 @@
 /**
  * Wave-4 taxonomy queries and mutations (`docs/api/CONTRACTS-wave4.md`, W1 rows).
  *
- * The routes are not in `docs/api/openapi.json` yet — the API half of W1 is landing
- * concurrently — so `pnpm generate:client` cannot type them and `api.GET('/worlds')` would not
- * compile. They therefore go through `stageJson`/`stageVoid` (`src/api/stage45.ts`), the same
- * origin, credentials and `ApiError` as every other call, typed and validated against the **zod
- * contract** in `@wecom/shared` (`packages/shared/src/schemas/wave4.ts`) — which is exactly what
- * both sides are building against. When these paths appear in `openapi.json`, each function
- * becomes a one-line `api.GET(...)`; nothing else in the app changes.
+ * The routes are published now, so every call goes through the generated client (`api`, typed by
+ * `schema.d.ts` from `docs/api/openapi.json`) like the rest of the app, and every answer is
+ * parsed with `checked` against the zod contract in `@wecom/shared`. The two layers are not
+ * redundant: the generated types describe what the contract *says* and are erased at build time;
+ * `checked` is what notices a fixture or a server that disagrees with it.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -21,8 +19,10 @@ import {
   type TopicView,
   type World,
 } from '@wecom/shared';
+import { api } from '../client.js';
 import { keys } from '../keys.js';
-import { stageJson, stageVoid } from '../stage45.js';
+import { unwrap } from '../unwrap.js';
+import { checked } from '../stage45.js';
 
 export interface TagCount {
   tag: string;
@@ -33,10 +33,11 @@ export const useWorlds = (includeInactive = false) =>
   useQuery({
     queryKey: keys.worlds(includeInactive),
     queryFn: async (): Promise<World[]> =>
-      (
-        await stageJson(WorldsResponseSchema, '/worlds', {
-          query: { includeInactive: includeInactive ? 'true' : undefined },
-        })
+      checked(
+        WorldsResponseSchema,
+        await api.GET('/worlds', {
+          params: { query: includeInactive ? { includeInactive: true } : {} },
+        }),
       ).items,
     staleTime: 60_000,
   });
@@ -46,7 +47,10 @@ export const useTopics = (worldSlug: string | undefined) =>
     queryKey: keys.topics(worldSlug ?? ''),
     enabled: !!worldSlug,
     queryFn: async (): Promise<Topic[]> =>
-      (await stageJson(TopicsResponseSchema, `/worlds/${encodeURIComponent(worldSlug!)}/topics`)).items,
+      checked(
+        TopicsResponseSchema,
+        await api.GET('/worlds/{slug}/topics', { params: { path: { slug: worldSlug! } } }),
+      ).items,
     staleTime: 60_000,
   });
 
@@ -55,14 +59,17 @@ export const useTopicView = (id: string | undefined) =>
     queryKey: keys.topic(id ?? ''),
     enabled: !!id,
     queryFn: async (): Promise<TopicView> =>
-      stageJson(TopicViewSchema, `/topics/${encodeURIComponent(id!)}/items`),
+      checked(TopicViewSchema, await api.GET('/topics/{id}/items', { params: { path: { id: id! } } })),
   });
 
 export const useTags = (q = '') =>
   useQuery({
     queryKey: keys.tags(q),
     queryFn: async (): Promise<TagCount[]> =>
-      (await stageJson(TagsResponseSchema, '/tags', { query: { q: q || undefined, limit: 20 } })).items,
+      checked(
+        TagsResponseSchema,
+        await api.GET('/tags', { params: { query: { ...(q ? { q } : {}), limit: 20 } } }),
+      ).items,
     staleTime: 30_000,
   });
 
@@ -71,6 +78,7 @@ const invalidateTaxonomy = (qc: ReturnType<typeof useQueryClient>): void => {
   void qc.invalidateQueries({ queryKey: ['worlds'] });
   void qc.invalidateQueries({ queryKey: ['topics'] });
   void qc.invalidateQueries({ queryKey: ['topic'] });
+  void qc.invalidateQueries({ queryKey: ['tags'] });
 };
 
 export const useCreateWorld = () => {
@@ -81,7 +89,7 @@ export const useCreateWorld = () => {
       name: string;
       description: string;
       active: boolean;
-    }): Promise<World> => stageJson(WorldSchema, '/worlds', { method: 'POST', body }),
+    }): Promise<World> => checked(WorldSchema, await api.POST('/worlds', { body })),
     onSuccess: () => invalidateTaxonomy(qc),
   });
 };
@@ -98,7 +106,7 @@ export const usePatchWorld = () => {
       description?: string;
       active?: boolean;
     }): Promise<World> =>
-      stageJson(WorldSchema, `/worlds/${encodeURIComponent(slug)}`, { method: 'PATCH', body }),
+      checked(WorldSchema, await api.PATCH('/worlds/{slug}', { params: { path: { slug } }, body })),
     onSuccess: () => invalidateTaxonomy(qc),
   });
 };
@@ -107,11 +115,13 @@ export const usePatchWorld = () => {
 export const useDeactivateWorld = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ slug, force }: { slug: string; force?: boolean }): Promise<void> =>
-      stageVoid(`/worlds/${encodeURIComponent(slug)}`, {
-        method: 'DELETE',
-        query: { force: force ? 'true' : undefined },
-      }),
+    mutationFn: async ({ slug, force }: { slug: string; force?: boolean }): Promise<void> => {
+      unwrap(
+        await api.DELETE('/worlds/{slug}', {
+          params: { path: { slug }, query: force ? { force: true } : {} },
+        }),
+      );
+    },
     onSuccess: () => invalidateTaxonomy(qc),
   });
 };
@@ -120,7 +130,7 @@ export const useReorderWorlds = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (ids: string[]): Promise<World[]> =>
-      (await stageJson(WorldsResponseSchema, '/worlds/reorder', { method: 'PUT', body: { ids } })).items,
+      checked(WorldsResponseSchema, await api.PUT('/worlds/reorder', { body: { ids } })).items,
     onSuccess: () => invalidateTaxonomy(qc),
   });
 };
@@ -138,10 +148,10 @@ export const useCreateTopic = () => {
       description: string;
       active: boolean;
     }): Promise<Topic> =>
-      stageJson(TopicSchema, `/worlds/${encodeURIComponent(worldSlug)}/topics`, {
-        method: 'POST',
-        body,
-      }),
+      checked(
+        TopicSchema,
+        await api.POST('/worlds/{slug}/topics', { params: { path: { slug: worldSlug } }, body }),
+      ),
     onSuccess: () => invalidateTaxonomy(qc),
   });
 };
@@ -159,7 +169,7 @@ export const usePatchTopic = () => {
       active?: boolean;
       worldSlug?: string;
     }): Promise<Topic> =>
-      stageJson(TopicSchema, `/topics/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
+      checked(TopicSchema, await api.PATCH('/topics/{id}', { params: { path: { id } }, body })),
     onSuccess: () => invalidateTaxonomy(qc),
   });
 };
@@ -167,8 +177,9 @@ export const usePatchTopic = () => {
 export const useDeactivateTopic = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string): Promise<void> =>
-      stageVoid(`/topics/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    mutationFn: async (id: string): Promise<void> => {
+      unwrap(await api.DELETE('/topics/{id}', { params: { path: { id } } }));
+    },
     onSuccess: () => invalidateTaxonomy(qc),
   });
 };
@@ -177,11 +188,12 @@ export const useReorderTopics = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ worldSlug, ids }: { worldSlug: string; ids: string[] }): Promise<Topic[]> =>
-      (
-        await stageJson(TopicsResponseSchema, `/worlds/${encodeURIComponent(worldSlug)}/topics/reorder`, {
-          method: 'PUT',
+      checked(
+        TopicsResponseSchema,
+        await api.PUT('/worlds/{slug}/topics/reorder', {
+          params: { path: { slug: worldSlug } },
           body: { ids },
-        })
+        }),
       ).items,
     onSuccess: () => invalidateTaxonomy(qc),
   });

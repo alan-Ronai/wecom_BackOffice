@@ -111,7 +111,7 @@ run('feedback alerts', () => {
     resetColumnCache();
   });
 
-  it('PgNotifier writes wave 3 notifications rows with the mapped kind and dedupes recipients', async () => {
+  it('PgNotifier writes the wave 4 kind itself and dedupes recipients', async () => {
     const real = new PgNotifier(db.pool, app.events, app.log);
     await real.notify({
       userIds: [lead.id, lead.id, publisher.id],
@@ -127,8 +127,12 @@ run('feedback alerts', () => {
       ['בדיקה'],
     );
     expect(rows.rowCount).toBe(2);
+    // W6: `0026_notification_kinds` widened the check constraint, so the kind is no longer
+    // mapped onto wave 3's `review` — the bell can filter on it directly.
     expect(
-      rows.rows.every((r) => r.kind === 'review' && r.entity_type === 'feedback' && r.href === '/feedback/x'),
+      rows.rows.every(
+        (r) => r.kind === 'feedback' && r.entity_type === 'feedback' && r.href === '/feedback/x',
+      ),
     ).toBe(true);
   });
 

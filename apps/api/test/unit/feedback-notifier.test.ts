@@ -2,29 +2,48 @@ import { describe, it, expect } from 'vitest';
 import type pg from 'pg';
 import { PgNotifier } from '../../src/modules/feedback/notifier.js';
 
-const fakePool = (regclass: string | null) =>
+/**
+ * A pool whose `connect` fails, standing in for "the write cannot happen". An alert is a
+ * side effect of an action, never its point, so the notifier has to swallow that.
+ */
+const brokenPool = () =>
   ({
-    query: async (sql: string) => {
-      if (/to_regclass/.test(sql)) return { rows: [{ t: regclass }], rowCount: 1 };
-      throw new Error('unexpected query: ' + sql);
-    },
     connect: async () => {
-      throw new Error('connect must not be called without the table');
+      throw new Error('no database');
     },
   }) as unknown as pg.Pool;
 
+/** Captures the rows `notifyMany` would insert, through a fake transaction. */
+const capturingPool = (out: { kinds: string[]; users: string[] }) =>
+  ({
+    connect: async () => ({
+      query: async (sql: string, params?: unknown[]) => {
+        if (/insert into notifications/.test(sql)) {
+          out.users = (params?.[0] as string[]) ?? [];
+          out.kinds = (params?.[1] as string[]) ?? [];
+          return { rows: out.users.map((_, i) => ({ id: `n${i}` })), rowCount: out.users.length };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+      release: () => {},
+    }),
+  }) as unknown as pg.Pool;
+
 describe('PgNotifier', () => {
-  it('logs instead of writing when the notifications table is absent', async () => {
-    const lines: unknown[] = [];
-    const log = { info: (o: unknown) => lines.push(o), warn: () => {}, error: () => {} } as never;
-    const n = new PgNotifier(fakePool(null), { publish: async () => {} } as never, log);
-    await n.notify({ userIds: ['a', 'b'], kind: 'feedback', title: 'x' });
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatchObject({ notify: { userIds: ['a', 'b'] } });
+  it('writes the wave 4 kind itself now that 0026 widened the check constraint', async () => {
+    const out = { kinds: [] as string[], users: [] as string[] };
+    const n = new PgNotifier(capturingPool(out), { publish: async () => {} } as never);
+    await n.notify({ userIds: ['a', 'b', 'a'], kind: 'feedback', title: 'x' });
+    // Deduplicated, and no longer mapped onto wave 3's `review`.
+    expect(out.users).toEqual(['a', 'b']);
+    expect(out.kinds).toEqual(['feedback', 'feedback']);
   });
-  it('maps wave 4 kinds onto the constrained notifications.kind', () => {
-    expect(PgNotifier.mapKind('feedback')).toBe('review');
-    expect(PgNotifier.mapKind('source')).toBe('sync');
-    expect(PgNotifier.mapKind('system')).toBe('system');
+
+  it('never fails the action that raised the alert', async () => {
+    const warns: unknown[] = [];
+    const log = { info: () => {}, warn: (o: unknown) => warns.push(o), error: () => {} } as never;
+    const n = new PgNotifier(brokenPool(), { publish: async () => {} } as never, log);
+    await expect(n.notify({ userIds: ['a'], kind: 'source', title: 'x' })).resolves.toBeUndefined();
+    expect(warns).toHaveLength(1);
   });
 });

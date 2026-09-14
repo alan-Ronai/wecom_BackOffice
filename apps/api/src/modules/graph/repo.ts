@@ -56,6 +56,11 @@ export interface GraphFilter {
    * joins `documents` takes it, and a caller that forgets it is visible at the call site.
    */
   scopes?: string[] | null;
+  /**
+   * W2 §10: a reader sees published items only. Like `scopes` this is a repo argument rather
+   * than something the graph can infer, and every documents-joining query below takes it.
+   */
+  readUnpublished?: boolean;
 }
 
 /**
@@ -64,6 +69,10 @@ export interface GraphFilter {
  */
 const scopeClause = (alias: string, param: string) =>
   `(${param}::text[] is null or exists (select 1 from document_worlds dws where dws.document_id=${alias}.id and dws.world_slug = any(${param})))`;
+
+/** The status half of the same boundary. Empty for a caller who may read unpublished items. */
+const visibleClause = (readUnpublished: boolean, alias: string) =>
+  readUnpublished ? '' : ` and ${alias}.status in ('published','partial')`;
 
 export interface GraphData {
   nodes: Map<string, GraphNode>;
@@ -83,8 +92,9 @@ const edgeKey = (e: GraphEdge) => `${e.from}|${e.to}|${e.type}|${e.fromStepKey ?
  */
 export async function loadGraph(q: Q, filter: GraphFilter = {}): Promise<GraphData> {
   const scopes = filter.scopes ?? null;
+  const readUnpublished = filter.readUnpublished ?? true;
   const p = [scopes];
-  const inScope = scopeClause('d', '$1');
+  const inScope = scopeClause('d', '$1') + visibleClause(readUnpublished, 'd');
   const [documents, blocks, fields, sources, scripts, links, blockUse, fieldUse, docSources, scriptUse] =
     await Promise.all([
       q.query(
@@ -97,7 +107,9 @@ export async function loadGraph(q: Q, filter: GraphFilter = {}): Promise<GraphDa
       q.query('select id, title, kind from sources where deleted_at is null'),
       // Scripts are type-T `text` documents since 0030; they stay their own node kind here.
       q.query(
-        `select id, title from documents where deleted_at is null and doc_type = 'T' and kind = 'text'`,
+        `select d.id, d.title from documents d
+          where d.deleted_at is null and d.doc_type = 'T' and d.kind = 'text' and ${inScope}`,
+        p,
       ),
       q.query(
         `select l.from_document_id, l.from_step_key, l.to_document_id, l.to_block_id, l.to_field_name,
@@ -325,9 +337,14 @@ export interface InboundRow {
  * Every live document *the caller may see* that points at the node, however the reference is
  * recorded. `scopes` is `user.worldScopes`; `null` means every world.
  */
-export async function inboundFor(q: Q, ref: NodeRef, scopes: string[] | null = null): Promise<InboundRow[]> {
+export async function inboundFor(
+  q: Q,
+  ref: NodeRef,
+  scopes: string[] | null = null,
+  readUnpublished = true,
+): Promise<InboundRow[]> {
   const parts: { sql: string; params: unknown[] }[] = [];
-  const inScope = `and ${scopeClause('d', '$2')}`;
+  const inScope = `and ${scopeClause('d', '$2')}${visibleClause(readUnpublished, 'd')}`;
   const linkColumn = {
     document: 'to_document_id',
     block: 'to_block_id',
@@ -391,7 +408,12 @@ export async function inboundFor(q: Q, ref: NodeRef, scopes: string[] | null = n
  * References recorded against a step key that no longer exists in the referring document —
  * the links that are already dangling and would stay dangling if the node went away.
  */
-export async function brokenLinkCount(q: Q, ref: NodeRef, scopes: string[] | null = null): Promise<number> {
+export async function brokenLinkCount(
+  q: Q,
+  ref: NodeRef,
+  scopes: string[] | null = null,
+  readUnpublished = true,
+): Promise<number> {
   const column = {
     document: 'to_document_id',
     block: 'to_block_id',
@@ -405,7 +427,7 @@ export async function brokenLinkCount(q: Q, ref: NodeRef, scopes: string[] | nul
   const r = await q.query(
     `select count(*)::int n from document_links l
        join documents d on d.id = l.from_document_id and d.deleted_at is null
-      where l.${column} = $1 and l.from_step_key is not null and ${scopeClause('d', '$2')}
+      where l.${column} = $1 and l.from_step_key is not null and ${scopeClause('d', '$2')}${visibleClause(readUnpublished, 'd')}
         and not exists (select 1 from steps s where s.document_id = l.from_document_id and s.step_key = l.from_step_key)`,
     [ref.key, scopes],
   );

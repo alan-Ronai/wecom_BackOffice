@@ -84,6 +84,29 @@ function invalidate(qc: QueryClient, ev: Event): void {
   } else if (ev.name === 'system.status' || ev.name === 'job.failed') {
     void qc.invalidateQueries({ queryKey: keys.admin.system });
     void qc.invalidateQueries({ queryKey: keys.health });
+  } else if (ev.name.startsWith('feedback.')) {
+    // Every feedback key starts with `'feedback'`, so one prefix covers the queue, the drawer,
+    // the analytics tab and the per-document list.
+    void qc.invalidateQueries({ queryKey: ['feedback'] });
+    const id = (ev.payload as { documentId?: string }).documentId;
+    if (id) {
+      void qc.invalidateQueries({ queryKey: keys.docFeedback(id) });
+      void qc.invalidateQueries({ queryKey: keys.doc(id) });
+    }
+  } else if (ev.name === 'source_document.saved') {
+    const id = (ev.payload as { documentId?: string }).documentId;
+    if (id) {
+      void qc.invalidateQueries({ queryKey: keys.source(id) });
+      void qc.invalidateQueries({ queryKey: keys.sourceVersions(id) });
+      // The save may have raised the source-review flag, which lives on the document.
+      void qc.invalidateQueries({ queryKey: keys.doc(id) });
+    }
+  } else if (ev.name === 'taxonomy.changed') {
+    // The sidebar, the facets and the topic pages all read these three roots.
+    void qc.invalidateQueries({ queryKey: ['worlds'] });
+    void qc.invalidateQueries({ queryKey: ['topics'] });
+    void qc.invalidateQueries({ queryKey: ['topic'] });
+    void qc.invalidateQueries({ queryKey: ['tags'] });
   }
 }
 

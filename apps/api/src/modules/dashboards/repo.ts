@@ -16,10 +16,17 @@ const int = (v: unknown): number => Number(v ?? 0);
  * links, none of which are category-bearing, and a lead watching the sync queue needs the
  * whole queue.
  */
-export async function computeDashboard(q: Q, scopes: string[] | null = null): Promise<Dashboard> {
+export async function computeDashboard(
+  q: Q,
+  scopes: string[] | null = null,
+  readUnpublished = true,
+): Promise<Dashboard> {
   const p1 = [scopes];
+  // W2 §10: an agent's dashboard counts and lists only what an agent may open, so the status
+  // half of the boundary rides along with the world half in the same fragment.
   const inScope =
-    '($1::text[] is null or exists (select 1 from document_worlds dws where dws.document_id=d.id and dws.world_slug = any($1)))';
+    '($1::text[] is null or exists (select 1 from document_worlds dws where dws.document_id=d.id and dws.world_slug = any($1)))' +
+    (readUnpublished ? '' : " and d.status in ('published','partial')");
   const [
     coverage,
     coverageByCategory,

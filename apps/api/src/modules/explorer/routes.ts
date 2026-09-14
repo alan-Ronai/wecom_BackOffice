@@ -14,6 +14,7 @@ import { audit } from '../../lib/audit.js';
 import { badRequest, notFound } from '../../lib/http.js';
 import { withTransaction } from '../../lib/sql.js';
 import { requireUser } from '../../lib/user.js';
+import { canReadUnpublished } from '../../lib/visibility.js';
 import { parseDataFile } from '../sources/parsers.js';
 import { SourceRevisionService } from '../sources/revisions.js';
 import { MappingService } from '../sources/mapping.js';
@@ -56,8 +57,8 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['explorer'], response: { 200: DataFilesResponseSchema } },
     },
     async (req) => {
-      requireUser(req);
-      return { items: await repo.listDataFiles(app.db) };
+      const user = requireUser(req);
+      return { items: await repo.listDataFiles(app.db, canReadUnpublished(user)) };
     },
   );
 

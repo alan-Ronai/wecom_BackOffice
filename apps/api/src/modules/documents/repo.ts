@@ -708,7 +708,11 @@ export interface PublishOptions {
   suggestionId?: string | null;
   markPartial?: boolean;
   kind?: 'published' | 'restore' | 'system' | 'sync';
-  /** W4: the source-document version this working version was derived from. */
+  /**
+   * W4: the `source_documents.current_version` this working version was derived from. Left out,
+   * it is read here — every publish path (the editor, an accepted suggestion, a sync push, a
+   * review approval) then records the link without having to know about source documents.
+   */
   sourceVersion?: number | null;
 }
 
@@ -739,6 +743,15 @@ export async function publishDocument(
     [id, version, status, opts.actorId],
   );
   const published = (await getDocument(tx, id))!;
+  const sourceVersion =
+    opts.sourceVersion ??
+    ((
+      await tx.query(
+        `select current_version from source_documents where document_id=$1 and to_regclass('source_documents') is not null`,
+        [id],
+      )
+    ).rows[0]?.current_version as number | undefined) ??
+    null;
   const inserted = await tx.query(
     'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id, schema_version, source_version) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id',
     [
@@ -750,7 +763,7 @@ export async function publishDocument(
       opts.kind ?? 'published',
       opts.suggestionId ?? null,
       CURRENT_DOCUMENT_SCHEMA_VERSION,
-      opts.sourceVersion ?? null,
+      sourceVersion,
     ],
   );
   return { doc: published, version, versionId: inserted.rows[0].id as string };

@@ -1,13 +1,9 @@
 /**
  * Wave 4 (W3) feedback — agent reports on knowledge items, the editor queue and its analytics.
  *
- * The routes are typed from the **zod contract** in `@wecom/shared` (`schemas/wave4.ts`) through
- * `stageJson`, exactly like the stage 4–5 wrappers in `src/api/stage45.ts`: sub-lane W3-api is
- * adding `/feedback*` concurrently, so they are not in `docs/api/openapi.json` yet and
- * `pnpm generate:client` cannot type them. Every response is parsed against the contract, so a
- * drifting msw fixture or a backend answering a different shape fails at the call site instead of
- * rendering `undefined`. When the paths appear in `openapi.json`, each wrapper becomes a plain
- * `api.GET(...)` — the migration is per-route and mechanical.
+ * The routes are published now, so every call goes through the generated client and every answer
+ * is parsed with `checked` against the zod contract in `@wecom/shared` (`schemas/wave4.ts`) — the
+ * types say what the contract promises, the parse is what notices when an answer disagrees.
  */
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { z } from 'zod';
@@ -24,8 +20,9 @@ import {
   type FeedbackQuerySchema,
   type FeedbackResolveBodySchema,
 } from '@wecom/shared';
+import { api } from '../client.js';
 import { keys } from '../keys.js';
-import { stageJson } from '../stage45.js';
+import { checked } from '../stage45.js';
 
 export type FeedbackQuery = Partial<z.input<typeof FeedbackQuerySchema>>;
 export type FeedbackAnalyticsQuery = z.input<typeof FeedbackAnalyticsQuerySchema>;
@@ -45,8 +42,11 @@ const query = (q: Record<string, unknown>): Record<string, string | number | boo
 export const useCreateFeedback = (documentId: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: CreateBody) =>
-      stageJson(FeedbackSchema, `/documents/${documentId}/feedback`, { method: 'POST', body }),
+    mutationFn: async (body: CreateBody) =>
+      checked(
+        FeedbackSchema,
+        await api.POST('/documents/{id}/feedback', { params: { path: { id: documentId } }, body }),
+      ),
     onSuccess: () => {
       void qc.invalidateQueries(ALL);
       void qc.invalidateQueries({ queryKey: keys.docFeedback(documentId) });
@@ -57,7 +57,8 @@ export const useCreateFeedback = (documentId: string) => {
 export const useFeedbackList = (q: FeedbackQuery = {}) =>
   useQuery({
     queryKey: keys.feedback(q),
-    queryFn: () => stageJson(FeedbackListResponseSchema, '/feedback', { query: query(q) }),
+    queryFn: async () =>
+      checked(FeedbackListResponseSchema, await api.GET('/feedback', { params: { query: query(q) } })),
     placeholderData: keepPreviousData,
   });
 
@@ -65,7 +66,8 @@ export const useFeedbackDetail = (id: string | undefined) =>
   useQuery({
     queryKey: keys.feedbackItem(id ?? ''),
     enabled: !!id,
-    queryFn: () => stageJson(FeedbackDetailSchema, `/feedback/${id!}`),
+    queryFn: async () =>
+      checked(FeedbackDetailSchema, await api.GET('/feedback/{id}', { params: { path: { id: id! } } })),
   });
 
 const useFeedbackMutation = <V, R>(fn: (v: V) => Promise<R>) => {
@@ -80,19 +82,20 @@ const useFeedbackMutation = <V, R>(fn: (v: V) => Promise<R>) => {
 };
 
 export const usePatchFeedback = () =>
-  useFeedbackMutation(({ id, ...body }: { id: string } & PatchBody) =>
-    stageJson(FeedbackRowSchema, `/feedback/${id}`, { method: 'PATCH', body }),
+  useFeedbackMutation(async ({ id, ...body }: { id: string } & PatchBody) =>
+    checked(FeedbackRowSchema, await api.PATCH('/feedback/{id}', { params: { path: { id } }, body })),
   );
 
 export const useResolveFeedback = () =>
-  useFeedbackMutation(({ id, ...body }: { id: string } & ResolveBody) =>
-    stageJson(FeedbackRowSchema, `/feedback/${id}/resolve`, { method: 'POST', body }),
+  useFeedbackMutation(async ({ id, ...body }: { id: string } & ResolveBody) =>
+    checked(FeedbackRowSchema, await api.POST('/feedback/{id}/resolve', { params: { path: { id } }, body })),
   );
 
 export const useFeedbackAnalytics = (q: FeedbackAnalyticsQuery = {}) =>
   useQuery({
     queryKey: keys.feedbackAnalytics(q),
-    queryFn: () => stageJson(FeedbackAnalyticsSchema, '/feedback/analytics', { query: query(q) }),
+    queryFn: async () =>
+      checked(FeedbackAnalyticsSchema, await api.GET('/feedback/analytics', { params: { query: query(q) } })),
     staleTime: 60_000,
   });
 
@@ -101,6 +104,9 @@ export const useDocumentFeedback = (documentId: string | undefined, enabled = tr
   useQuery({
     queryKey: keys.docFeedback(documentId ?? ''),
     enabled: !!documentId && enabled,
-    queryFn: () =>
-      stageJson(DocumentFeedbackResponseSchema, `/documents/${documentId!}/feedback`).then((r) => r.items),
+    queryFn: async () =>
+      checked(
+        DocumentFeedbackResponseSchema,
+        await api.GET('/documents/{id}/feedback', { params: { path: { id: documentId! } } }),
+      ).items,
   });

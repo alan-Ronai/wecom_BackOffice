@@ -3,13 +3,22 @@ import type { Q } from '../documents/repo.js';
 import { iso } from '../documents/repo.js';
 import { toColumnMapping, type MappingRecord } from './mapping.js';
 
-/** `columns` is a legal but unquoted-unsafe identifier, so it is quoted everywhere. */
-const FILE_SELECT = `
+/**
+ * `columns` is a legal but unquoted-unsafe identifier, so it is quoted everywhere.
+ *
+ * `linkedDocuments` counts *documents*, so W2 §10 applies to it: for a reader it counts only
+ * published ones, or the number would say how many drafts hang off a source.
+ */
+const fileSelect = (readUnpublished: boolean): string => {
+  const vis = readUnpublished ? '' : " and d.status in ('published','partial')";
+  return `
   select s.id, s.title, s.kind, s."columns", s.mapping, s.sync_state, s.last_synced_at,
          (select count(*)::int from (
-            select l.from_document_id id from document_links l where l.to_source_id = s.id
+            select l.from_document_id id from document_links l
+              join documents d on d.id = l.from_document_id and d.deleted_at is null${vis}
+             where l.to_source_id = s.id
             union
-            select d.id from documents d where d.source_id = s.id and d.deleted_at is null) x) linked_documents,
+            select d.id from documents d where d.source_id = s.id and d.deleted_at is null${vis}) x) linked_documents,
          (select count(*)::int from suggestions g
             join source_revisions sr on sr.id = g.source_revision_id
            where sr.source_id = s.id and g.status = 'pending') pending_suggestions,
@@ -21,6 +30,7 @@ const FILE_SELECT = `
            order by r.imported_at desc limit 1) first_row
     from sources s
    where s.deleted_at is null and s.kind in ('json','csv')`;
+};
 
 const toDataFile = (r: Record<string, unknown>): DataFile => {
   const columns = (r.columns as string[] | null) ?? [];
@@ -42,13 +52,13 @@ const toDataFile = (r: Record<string, unknown>): DataFile => {
   };
 };
 
-export async function listDataFiles(q: Q): Promise<DataFile[]> {
-  const r = await q.query(`${FILE_SELECT} order by s.updated_at desc`);
+export async function listDataFiles(q: Q, readUnpublished = true): Promise<DataFile[]> {
+  const r = await q.query(`${fileSelect(readUnpublished)} order by s.updated_at desc`);
   return r.rows.map(toDataFile);
 }
 
-export async function getDataFile(q: Q, sourceId: string): Promise<DataFile | null> {
-  const r = await q.query(`${FILE_SELECT} and s.id = $1`, [sourceId]);
+export async function getDataFile(q: Q, sourceId: string, readUnpublished = true): Promise<DataFile | null> {
+  const r = await q.query(`${fileSelect(readUnpublished)} and s.id = $1`, [sourceId]);
   return r.rowCount ? toDataFile(r.rows[0]) : null;
 }
 

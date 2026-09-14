@@ -13,6 +13,9 @@ import { fmtDate } from '../../lib/format.js';
 export function TopicPage() {
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
+  // A topic view is recorded server-side by `GET /topics/:id/items` (W5's `topic_views`), not
+  // through `POST /telemetry`: `telemetry_events.document_id` is an FK to `documents`, so a
+  // topic id could never land there.
   const view = useTopicView(id);
 
   if (view.error instanceof ApiError && view.error.status === 404)

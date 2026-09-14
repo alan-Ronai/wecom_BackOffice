@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { DraftBodySchema, DraftListSchema, DraftResponseSchema, IdSchema } from '@wecom/shared';
 import { withTransaction } from '../../lib/sql.js';
 import { requireUser } from '../../lib/user.js';
+import { assertVisibleDocument } from '../../lib/visibility.js';
 import * as repo from './repo.js';
 
 const DocParams = z.object({ id: IdSchema });
@@ -33,7 +34,10 @@ export default async function routes(app: FastifyInstance) {
     // answers 204 rather than 404. That keeps the editor's draft query out of an error state.
     async (req, reply) => {
       const user = requireUser(req);
-      const draft = await repo.getDraft(app.db, (req.params as { id: string }).id, user.id);
+      const id = (req.params as { id: string }).id;
+      // §10: `scope: 'document'` covers the world; this covers the status.
+      await assertVisibleDocument(app.db, id, user);
+      const draft = await repo.getDraft(app.db, id, user.id);
       if (!draft) return reply.code(204).send(null);
       return draft;
     },

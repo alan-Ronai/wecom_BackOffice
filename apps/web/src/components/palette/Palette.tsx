@@ -225,6 +225,13 @@ export function Palette() {
       kind: 'palette',
       ...(row.kind === 'hit' && row.hit.documentId ? { documentId: row.hit.documentId } : {}),
     });
+    // W5 §13: a *search* result that was actually opened, distinct from the palette being used
+    // at all — the pair is what says whether the search answered the question.
+    if (row.kind === 'hit')
+      track({
+        kind: 'search_click',
+        ...((row.hit.documentId ?? row.hit.id) ? { documentId: row.hit.documentId ?? row.hit.id } : {}),
+      });
     if (row.kind === 'action') {
       row.action.run();
       return;

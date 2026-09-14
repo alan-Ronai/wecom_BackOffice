@@ -197,6 +197,8 @@ export const FeedbackRowSchema = FeedbackSchema.extend({
   assigneeName: z.string().nullable(),
 });
 export type FeedbackRow = z.infer<typeof FeedbackRowSchema>;
+/** W3 derived these locally; exported here so the api and the web share one name. */
+export type FeedbackQuery = z.infer<typeof FeedbackQuerySchema>;
 export const FeedbackQuerySchema = PaginationQuerySchema.extend({
   status: FeedbackStatusSchema.optional(),
   world: WorldSlugSchema.optional(),
@@ -208,6 +210,7 @@ export const FeedbackQuerySchema = PaginationQuerySchema.extend({
 export const FeedbackListResponseSchema = paginated(FeedbackRowSchema).extend({
   counts: z.record(FeedbackStatusSchema, z.number().int()), // tab badges
 });
+export type FeedbackPatchBody = z.infer<typeof FeedbackPatchBodySchema>;
 export const FeedbackPatchBodySchema = z.object({
   status: FeedbackStatusSchema.optional(),
   assigneeId: IdSchema.nullable().optional(),
@@ -224,12 +227,14 @@ export const FeedbackDetailSchema = FeedbackRowSchema.extend({
     z.object({ version: z.number().int(), label: z.string(), createdAt: IsoDateSchema }),
   ),
 });
+export type FeedbackDetail = z.infer<typeof FeedbackDetailSchema>;
 export const DocumentFeedbackResponseSchema = z.object({ items: z.array(FeedbackRowSchema) });
 export const FeedbackAnalyticsQuerySchema = z.object({
   from: IsoDateSchema.optional(),
   to: IsoDateSchema.optional(),
   world: WorldSlugSchema.optional(),
 });
+export type FeedbackAnalyticsQuery = z.infer<typeof FeedbackAnalyticsQuerySchema>;
 export const FeedbackAnalyticsSchema = z.object({
   from: IsoDateSchema,
   to: IsoDateSchema,
