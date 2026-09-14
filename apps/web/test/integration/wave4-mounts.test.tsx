@@ -105,6 +105,21 @@ describe('W6 article mounts', () => {
     expect(buttons.length).toBeGreaterThanOrEqual(2); // header + active step
   });
 
+  it('offers the feedback button on every step, not only the active one in call mode', async () => {
+    // §5.4 says "fixed … in the article header and per step": the point of the per-step entry is
+    // that the agent reports from where the problem is. Gated on `callMode && cur` it existed on
+    // one step at a time, and only inside call mode — and `>= 2` could not tell the difference.
+    server.use(
+      http.get(`${B}/me/preferences`, () => HttpResponse.json({ ...fx.me.preferences, callMode: false })),
+    );
+    renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
+    await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title });
+    const steps = document.querySelectorAll('[data-step]');
+    expect(steps.length).toBeGreaterThan(1);
+    const buttons = await screen.findAllByRole('button', { name: 'דיווח על בעיה / משוב' });
+    expect(buttons.length).toBe(steps.length + 1); // one per step, plus the header
+  });
+
   it('shows the unavailable page on NOT_PUBLISHED instead of "moved to the trash"', async () => {
     server.use(
       http.get(`${B}/documents/${D_BROWSING}`, () =>
@@ -155,13 +170,23 @@ describe('W6 article mounts', () => {
           updatedById: null,
           updatedByName: null,
           updatedAt: T,
+          latestRevisionId: 'r1',
         }),
+      ),
+      http.get(`${B}/documents/${D_BROWSING}`, () =>
+        HttpResponse.json({ ...fx.docBrowsing, sourceId: 's1' }),
       ),
     );
     renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
     await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title });
     await userEvent.click(await screen.findByRole('button', { name: 'מקור' }));
     expect(await screen.findByText('טקסט מקור')).toBeInTheDocument();
+    // D-I9: the raw download reads its revision off the source document, so the mount — not just
+    // the component with a hand-passed prop — actually renders it.
+    expect(screen.getByRole('link', { name: 'הורד קובץ מקור' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/sources/s1/revisions/r1/raw'),
+    );
     await userEvent.click(screen.getByRole('button', { name: 'תצוגת עבודה' }));
     expect(await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title })).toBeVisible();
   });
@@ -394,8 +419,16 @@ describe('W6 editor mounts', () => {
     );
     renderWithProviders(<App />, { route: `/edit/${D_BROWSING}` });
     await screen.findByPlaceholderText('שם פריט הידע…');
+    // §5.3: the same TipTap component in a compact mode, not a raw-HTML textarea. The rendered
+    // text is the assertion; the markup is the editor's business.
     const body = await screen.findByLabelText('תוכן הפריט');
-    expect(body).toHaveValue('<p>שלום, מדבר/ת נציג/ה</p>');
+    expect(body).toHaveTextContent('שלום, מדבר/ת נציג/ה');
+    expect(within(body).queryByRole('textbox')).toBeNull(); // it *is* the textbox
+    expect(screen.getByRole('button', { name: 'מודגש' })).toBeInTheDocument();
+    // Compact drops the table and image controls; the raw HTML stays behind an explicit toggle.
+    expect(screen.queryByRole('button', { name: 'טבלה' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'עריכת HTML' }));
+    expect(await screen.findByLabelText('תוכן הפריט (HTML)')).toHaveValue('<p>שלום, מדבר/ת נציג/ה</p>');
     expect(screen.queryByText('+ קבוצת שלבים')).toBeNull();
   });
 });

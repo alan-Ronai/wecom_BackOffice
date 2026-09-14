@@ -1,14 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import { Table } from '@tiptap/extension-table';
-import TableRow from '@tiptap/extension-table-row';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
-import Image from '@tiptap/extension-image';
-import Link from '@tiptap/extension-link';
-import Underline from '@tiptap/extension-underline';
-import TextAlign from '@tiptap/extension-text-align';
+import { RichTextToolbar, richTextExtensions } from './RichText.js';
 import {
   useSaveSource,
   useSaveSourceDraft,
@@ -43,24 +35,8 @@ export function SourceEditor({ documentId, onSaved }: { documentId: string; onSa
   const timer = useRef<number | null>(null);
 
   const editor = useEditor({
-    extensions: [
-      // StarterKit v3 already ships link and underline; they are disabled here and registered
-      // explicitly below so their options stay visible at the call site.
-      StarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, link: false, underline: false }),
-      Underline,
-      Link.configure({
-        openOnClick: false,
-        autolink: true,
-        protocols: ['http', 'https'],
-        HTMLAttributes: { rel: 'noopener' },
-      }),
-      Image.configure({ allowBase64: false }),
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'right' }),
-    ],
+    // Shared with the compact body editor (`RichText`), so the two surfaces cannot drift.
+    extensions: richTextExtensions(),
     editorProps: {
       attributes: {
         dir: 'rtl',
@@ -159,98 +135,9 @@ export function SourceEditor({ documentId, onSaved }: { documentId: string; onSa
   }
 
   if (!editor) return null;
-  const B = ({ on, label, run }: { on?: boolean; label: string; run: () => void }) => (
-    <button type="button" className={'tb' + (on ? ' on' : '')} aria-pressed={!!on} onClick={run}>
-      {label}
-    </button>
-  );
   return (
     <div className="source-editor" dir="rtl">
-      <div className="toolbar" role="toolbar" aria-label="עיצוב">
-        <B label="מודגש" on={editor.isActive('bold')} run={() => editor.chain().focus().toggleBold().run()} />
-        <B
-          label="נטוי"
-          on={editor.isActive('italic')}
-          run={() => editor.chain().focus().toggleItalic().run()}
-        />
-        <B
-          label="קו תחתון"
-          on={editor.isActive('underline')}
-          run={() => editor.chain().focus().toggleUnderline().run()}
-        />
-        <B
-          label="קו חוצה"
-          on={editor.isActive('strike')}
-          run={() => editor.chain().focus().toggleStrike().run()}
-        />
-        <span className="vsep" />
-        {([1, 2, 3, 4] as const).map((l) => (
-          <B
-            key={l}
-            label={`כותרת ${l}`}
-            on={editor.isActive('heading', { level: l })}
-            run={() => editor.chain().focus().toggleHeading({ level: l }).run()}
-          />
-        ))}
-        <span className="vsep" />
-        <B
-          label="תבליטים"
-          on={editor.isActive('bulletList')}
-          run={() => editor.chain().focus().toggleBulletList().run()}
-        />
-        <B
-          label="מספור"
-          on={editor.isActive('orderedList')}
-          run={() => editor.chain().focus().toggleOrderedList().run()}
-        />
-        <B
-          label="ציטוט"
-          on={editor.isActive('blockquote')}
-          run={() => editor.chain().focus().toggleBlockquote().run()}
-        />
-        <B
-          label="קוד"
-          on={editor.isActive('codeBlock')}
-          run={() => editor.chain().focus().toggleCodeBlock().run()}
-        />
-        <span className="vsep" />
-        <B
-          label="טבלה"
-          run={() => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run()}
-        />
-        <B label="הוסף שורה" run={() => editor.chain().focus().addRowAfter().run()} />
-        <B label="הוסף עמודה" run={() => editor.chain().focus().addColumnAfter().run()} />
-        <B label="מחק טבלה" run={() => editor.chain().focus().deleteTable().run()} />
-        <span className="vsep" />
-        <B
-          label="קישור"
-          on={editor.isActive('link')}
-          run={() => {
-            void (async () => {
-              const href = await modal.prompt(
-                'קישור',
-                'כתובת (http/https)',
-                (editor.getAttributes('link').href as string | undefined) ?? '',
-              );
-              if (href === null) return;
-              if (!href) editor.chain().focus().unsetLink().run();
-              else if (/^https?:\/\//i.test(href)) editor.chain().focus().setLink({ href }).run();
-              else toast('כתובת חייבת להתחיל ב-http:// או https://', 'warn');
-            })();
-          }}
-        />
-        <label className="tb">
-          תמונה
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
-            hidden
-            onChange={(e) => {
-              handleFiles(e.target.files);
-              e.target.value = '';
-            }}
-          />
-        </label>
+      <RichTextToolbar editor={editor} onPickImage={handleFiles}>
         <span className="grow" />
         <span className="muted">
           {dirty ? 'שינויים לא שמורים' : doc.data ? `גרסת מקור ${doc.data.version}` : 'מסמך חדש'}
@@ -258,7 +145,7 @@ export function SourceEditor({ documentId, onSaved }: { documentId: string; onSa
         <button type="button" className="btn primary" disabled={save.isPending} onClick={saveVersion}>
           שמור גרסה
         </button>
-      </div>
+      </RichTextToolbar>
       <EditorContent editor={editor} />
     </div>
   );

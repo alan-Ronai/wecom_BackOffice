@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Block, Category, Document, Step } from '@wecom/shared';
 import {
@@ -59,6 +59,7 @@ import { ApiError as ApiErrorClass } from '../../api/unwrap.js';
 import { MetadataPanel, type MetadataValue } from './MetadataPanel.js';
 import { OwnerFields } from '../governance/OwnerFields.js';
 import { ImportExportButtons } from '../source/ImportExportButtons.js';
+import { RichText } from '../source/RichText.js';
 import { PublishFeedbackPicker } from '../feedback/PublishFeedbackPicker.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 
@@ -88,6 +89,53 @@ const emptyDoc = (cat: Category): Document => ({
  * closes. `modal.open` takes a static node, so the state lives here and is reported upward
  * through the two callbacks rather than lifted into `doPublish`.
  */
+/**
+ * §5.3: text-kind (T/I) items edit `bodyHtml` with the same TipTap component in a compact mode.
+ *
+ * The raw-HTML textarea it replaces is still reachable behind "עריכת HTML", because there is a
+ * real use for it (pasting a body out of another system), but it is no longer what a content
+ * editor is handed by default — `PATCH /documents/:id` sanitizes `bodyHtml` against the §5.1
+ * allowlist and says nothing about what it stripped, so hand-written markup fails silently.
+ */
+function BodyEditor({
+  value,
+  onChange,
+  sourceLink,
+}: {
+  value: string;
+  onChange: (html: string) => void;
+  sourceLink?: ReactNode;
+}) {
+  const [rawHtml, setRawHtml] = useState(false);
+  return (
+    <div className="ed-body-html">
+      <div className="ed-body-head">
+        <span className="lbl">תוכן הפריט</span>
+        <span className="grow" />
+        <button
+          type="button"
+          className={'btn xs' + (rawHtml ? ' on' : '')}
+          aria-pressed={rawHtml}
+          onClick={() => setRawHtml((v) => !v)}
+        >
+          עריכת HTML
+        </button>
+      </div>
+      {rawHtml ? (
+        <textarea
+          aria-label="תוכן הפריט (HTML)"
+          rows={14}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      ) : (
+        <RichText value={value} onChange={onChange} compact />
+      )}
+      {sourceLink}
+    </div>
+  );
+}
+
 function PublishBody({
   documentId,
   defaultLabel,
@@ -669,21 +717,18 @@ export function EditorPage() {
               the `/scripts` adapters read back. Everything below — the phase editor, the drop
               zone and the permissions strip — is the steps editor and does not apply. */}
           {doc.kind === 'text' ? (
-            <label className="ed-body-html">
-              תוכן הפריט
-              <textarea
-                aria-label="תוכן הפריט"
-                rows={14}
-                value={doc.bodyHtml ?? ''}
-                onChange={(e) => update({ ...doc, bodyHtml: e.target.value }, 'תוכן')}
-              />
-              {!isNew ? (
-                <span className="muted">
-                  לעריכה עשירה יותר, עם גרסאות וייבוא מ-Word:{' '}
-                  <Link to={`/edit/${id}/source`}>מסמך המקור</Link>
-                </span>
-              ) : null}
-            </label>
+            <BodyEditor
+              value={doc.bodyHtml ?? ''}
+              onChange={(html) => update({ ...doc, bodyHtml: html }, 'תוכן')}
+              sourceLink={
+                !isNew ? (
+                  <span className="muted">
+                    לעריכה עשירה יותר, עם גרסאות וייבוא מ-Word:{' '}
+                    <Link to={`/edit/${id}/source`}>מסמך המקור</Link>
+                  </span>
+                ) : null
+              }
+            />
           ) : (
             <>
               {pane === 'steps' &&

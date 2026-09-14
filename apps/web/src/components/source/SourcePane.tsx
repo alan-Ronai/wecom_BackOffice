@@ -13,14 +13,16 @@ export function SourcePane({
   documentId,
   canEdit,
   sourceId,
-  latestRevisionId,
 }: {
   documentId: string;
   canEdit: boolean;
   sourceId?: string | null;
-  latestRevisionId?: string | null;
 }) {
   const q = useSourceDocument(documentId);
+  /* Read off the source document rather than taken as a prop. As a prop it was passed by nobody
+     and defined in no schema, so `sourceId && latestRevisionId` was permanently false and the
+     raw-docx download never rendered — a tested component on an unreachable path. */
+  const latestRevisionId = q.data?.latestRevisionId ?? null;
   if (q.isPending) return <div className="muted">טוען מקור…</div>;
   if (q.error) return <LoadError what="מסמך המקור" error={q.error} />;
   if (!q.data)

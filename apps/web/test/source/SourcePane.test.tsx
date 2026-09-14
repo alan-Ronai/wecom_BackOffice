@@ -22,10 +22,10 @@ describe('SourcePane', () => {
       version: 3,
       etag: 'e3',
       versions: [],
+      // The revision arrives on `GET /documents/:id/source`, not as a prop nobody passed.
+      latestRevisionId: 'r1',
     });
-    renderWithProviders(
-      <SourcePane documentId={fx.docBrowsing.id} canEdit={false} sourceId="s1" latestRevisionId="r1" />,
-    );
+    renderWithProviders(<SourcePane documentId={fx.docBrowsing.id} canEdit={false} sourceId="s1" />);
     await waitFor(() => expect(screen.getByRole('heading', { name: 'מקור' })).toBeInTheDocument());
     expect(screen.queryByRole('link', { name: 'ערוך מקור' })).toBeNull();
     expect(screen.getByRole('link', { name: 'הורד קובץ מקור' })).toHaveAttribute(

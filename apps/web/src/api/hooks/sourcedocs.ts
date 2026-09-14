@@ -17,7 +17,7 @@ import {
   type SourceDocument,
   type SourceDocumentVersion,
 } from '@wecom/shared';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { API_BASE, api, apiUpload } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap } from '../unwrap.js';
@@ -29,13 +29,27 @@ export type SourceDraft = z.infer<typeof SourceDraftSchema>;
 
 /* ── source document ────────────────────────────────────────────────────── */
 
+/**
+ * `latestRevisionId` is what makes the raw-docx download reachable (§5.1,
+ * `GET /sources/:id/revisions/:rev/raw`). The API half of this fix adds it to
+ * `SourceDocumentSchema`; until that lands the field has to be declared here, because
+ * `z.object` strips what it does not know and the pane would never see it.
+ *
+ * Declared `.optional()` so it parses against both the current and the arriving shared schema.
+ * Once `SourceDocumentSchema` carries the field, this extension can go.
+ */
+const SourceDocumentWithRevisionSchema = SourceDocumentSchema.extend({
+  latestRevisionId: z.string().nullable().optional(),
+});
+export type SourceDocumentWithRevision = z.infer<typeof SourceDocumentWithRevisionSchema>;
+
 export const useSourceDocument = (id: string | undefined) =>
   useQuery({
     queryKey: keys.source(id ?? ''),
     enabled: !!id,
-    queryFn: async (): Promise<SourceDocument | null> =>
+    queryFn: async (): Promise<SourceDocumentWithRevision | null> =>
       checkedMaybe(
-        SourceDocumentSchema,
+        SourceDocumentWithRevisionSchema,
         await api.GET('/documents/{id}/source', { params: { path: { id: id! } } }),
       ),
   });

@@ -56,6 +56,8 @@ interface State extends TaxonomyState {
       version: number;
       etag: string;
       versions: { version: number; label: string; html: string }[];
+      /** Set for an imported source; the raw-docx download hangs off it. */
+      latestRevisionId?: string | null;
     }
   >;
   assets: string[];
@@ -703,6 +705,9 @@ export const handlers: RequestHandler[] = [
         updatedById: fx.me.user.id,
         updatedByName: fx.me.user.displayName,
         updatedAt: '2026-09-14T10:00:00.000Z',
+        // W4: the revision behind the current version, which is what makes the raw docx
+        // download reachable. Null for a source authored in the editor rather than imported.
+        latestRevisionId: s.latestRevisionId ?? null,
       },
       { headers: { etag: s.etag } },
     );
