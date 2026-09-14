@@ -52,9 +52,7 @@ describe('detectSignificantChange', () => {
   it('a changed outcome or branch option is significant', () => {
     const a = doc([step('s1'), step('s2')]);
     const b = doc([step('s1', { outcomes: [{ kind: 'alert', text: 'עצור' }] }), step('s2')]);
-    expect(detectSignificantChange(a, b, blocks, []).reasons).toContainEqual(
-      expect.stringMatching(/תוצאה/),
-    );
+    expect(detectSignificantChange(a, b, blocks, []).reasons).toContainEqual(expect.stringMatching(/תוצאה/));
     const c = doc([
       step('s1', { branch: { q: 'יש קליטה?', options: [{ kind: 'if', label: 'כן', text: 'המשך' }] } }),
       step('s2'),

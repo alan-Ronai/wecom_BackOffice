@@ -21480,6 +21480,2129 @@
         }
       }
     },
+    "/api/v1/learning/items/{id}/audiences": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "roleNames": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": []
+                  },
+                  "worldSlugs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": []
+                  },
+                  "userIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "default": []
+                  },
+                  "dueDays": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365,
+                    "default": 14
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "itemId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "roleNames": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "default": []
+                    },
+                    "worldSlugs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "default": []
+                    },
+                    "userIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "default": []
+                    },
+                    "dueDays": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 365,
+                      "default": 14
+                    },
+                    "resolvedUsers": {
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "itemId",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/learning/audiences/{id}": {
+      "delete": {
+        "tags": [
+          "learning"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/learning/items/{id}/assign": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "minItems": 1,
+                    "maxItems": 500
+                  },
+                  "dueDays": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365
+                  }
+                },
+                "required": [
+                  "userIds"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "assigned": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "assigned",
+                    "skipped"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/learning/my": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "open": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "itemId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "itemVersion": {
+                            "type": "integer"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "briefing",
+                              "quiz"
+                            ]
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "worldSlug": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "estimatedMinutes": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "audience",
+                              "manual",
+                              "refresh"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "completed",
+                              "overdue",
+                              "invalidated"
+                            ]
+                          },
+                          "assignedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "dueAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "attemptsUsed": {
+                            "type": "integer",
+                            "default": 0
+                          },
+                          "maxAttempts": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "lastScore": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "passMark": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "refreshReason": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "itemId",
+                          "itemVersion",
+                          "kind",
+                          "title",
+                          "worldSlug",
+                          "estimatedMinutes",
+                          "reason",
+                          "status",
+                          "assignedAt",
+                          "dueAt",
+                          "completedAt",
+                          "maxAttempts",
+                          "lastScore",
+                          "passMark"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "overdue": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "itemId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "itemVersion": {
+                            "type": "integer"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "briefing",
+                              "quiz"
+                            ]
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "worldSlug": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "estimatedMinutes": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "audience",
+                              "manual",
+                              "refresh"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "completed",
+                              "overdue",
+                              "invalidated"
+                            ]
+                          },
+                          "assignedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "dueAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "attemptsUsed": {
+                            "type": "integer",
+                            "default": 0
+                          },
+                          "maxAttempts": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "lastScore": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "passMark": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "refreshReason": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "itemId",
+                          "itemVersion",
+                          "kind",
+                          "title",
+                          "worldSlug",
+                          "estimatedMinutes",
+                          "reason",
+                          "status",
+                          "assignedAt",
+                          "dueAt",
+                          "completedAt",
+                          "maxAttempts",
+                          "lastScore",
+                          "passMark"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "completed": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "itemId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "itemVersion": {
+                            "type": "integer"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "briefing",
+                              "quiz"
+                            ]
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "worldSlug": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "estimatedMinutes": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "audience",
+                              "manual",
+                              "refresh"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "completed",
+                              "overdue",
+                              "invalidated"
+                            ]
+                          },
+                          "assignedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "dueAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "attemptsUsed": {
+                            "type": "integer",
+                            "default": 0
+                          },
+                          "maxAttempts": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "lastScore": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "passMark": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "refreshReason": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "itemId",
+                          "itemVersion",
+                          "kind",
+                          "title",
+                          "worldSlug",
+                          "estimatedMinutes",
+                          "reason",
+                          "status",
+                          "assignedAt",
+                          "dueAt",
+                          "completedAt",
+                          "maxAttempts",
+                          "lastScore",
+                          "passMark"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "invalidated": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "itemId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "itemVersion": {
+                            "type": "integer"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "briefing",
+                              "quiz"
+                            ]
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "worldSlug": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "estimatedMinutes": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "audience",
+                              "manual",
+                              "refresh"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "completed",
+                              "overdue",
+                              "invalidated"
+                            ]
+                          },
+                          "assignedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "dueAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "attemptsUsed": {
+                            "type": "integer",
+                            "default": 0
+                          },
+                          "maxAttempts": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "lastScore": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "passMark": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "refreshReason": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "itemId",
+                          "itemVersion",
+                          "kind",
+                          "title",
+                          "worldSlug",
+                          "estimatedMinutes",
+                          "reason",
+                          "status",
+                          "assignedAt",
+                          "dueAt",
+                          "completedAt",
+                          "maxAttempts",
+                          "lastScore",
+                          "passMark"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "open",
+                    "overdue",
+                    "completed",
+                    "invalidated"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/learning/my/{assignmentId}": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "assignmentId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "assignment": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "itemId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "itemVersion": {
+                          "type": "integer"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "briefing",
+                            "quiz"
+                          ]
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "worldSlug": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "estimatedMinutes": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "audience",
+                            "manual",
+                            "refresh"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "completed",
+                            "overdue",
+                            "invalidated"
+                          ]
+                        },
+                        "assignedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "dueAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "completedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "attemptsUsed": {
+                          "type": "integer",
+                          "default": 0
+                        },
+                        "maxAttempts": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "lastScore": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "passMark": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "refreshReason": {
+                          "type": "string",
+                          "nullable": true,
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "itemId",
+                        "itemVersion",
+                        "kind",
+                        "title",
+                        "worldSlug",
+                        "estimatedMinutes",
+                        "reason",
+                        "status",
+                        "assignedAt",
+                        "dueAt",
+                        "completedAt",
+                        "maxAttempts",
+                        "lastScore",
+                        "passMark"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "item": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "briefing",
+                            "quiz"
+                          ]
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "description": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "worldSlug": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "currentVersion": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "passMark": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100,
+                          "nullable": true
+                        },
+                        "maxAttempts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10,
+                          "nullable": true
+                        },
+                        "estimatedMinutes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "kind",
+                        "title",
+                        "worldSlug",
+                        "currentVersion",
+                        "passMark",
+                        "maxAttempts",
+                        "estimatedMinutes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "stepKey": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "note": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "documentTitle": {
+                            "type": "string"
+                          },
+                          "phases": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "label": {
+                                  "type": "string",
+                                  "default": ""
+                                },
+                                "note": {
+                                  "type": "string"
+                                },
+                                "route": {
+                                  "type": "string"
+                                },
+                                "steps": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "key": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "num": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "title": {
+                                        "type": "string"
+                                      },
+                                      "description": {
+                                        "type": "string"
+                                      },
+                                      "hint": {
+                                        "type": "string"
+                                      },
+                                      "tone": {
+                                        "type": "string",
+                                        "enum": [
+                                          "alert"
+                                        ]
+                                      },
+                                      "blockId": {
+                                        "type": "string",
+                                        "format": "uuid"
+                                      },
+                                      "blockRefs": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "format": "uuid"
+                                        },
+                                        "default": []
+                                      },
+                                      "script": {
+                                        "type": "string"
+                                      },
+                                      "sourceRef": {
+                                        "type": "string"
+                                      },
+                                      "deps": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "default": []
+                                      },
+                                      "actions": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "text": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "text"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "default": []
+                                      },
+                                      "outcomes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "kind": {
+                                              "type": "string",
+                                              "enum": [
+                                                "ok",
+                                                "next",
+                                                "alert"
+                                              ]
+                                            },
+                                            "text": {
+                                              "type": "string"
+                                            },
+                                            "goto": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "text"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "default": []
+                                      },
+                                      "branch": {
+                                        "type": "object",
+                                        "properties": {
+                                          "q": {
+                                            "type": "string"
+                                          },
+                                          "options": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "kind": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "if",
+                                                    "then"
+                                                  ]
+                                                },
+                                                "label": {
+                                                  "type": "string"
+                                                },
+                                                "text": {
+                                                  "type": "string"
+                                                },
+                                                "goto": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "label",
+                                                "text"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "minItems": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "q",
+                                          "options"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "extras": {
+                                        "type": "object",
+                                        "properties": {
+                                          "signals": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "label": {
+                                                  "type": "string"
+                                                },
+                                                "tone": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "red",
+                                                    "blue"
+                                                  ]
+                                                },
+                                                "items": {
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "string"
+                                                  }
+                                                }
+                                              },
+                                              "required": [
+                                                "label",
+                                                "items"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "pillars": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "label": {
+                                                  "type": "string"
+                                                },
+                                                "text": {
+                                                  "type": "string"
+                                                },
+                                                "tone": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "ok",
+                                                    "warn",
+                                                    "red",
+                                                    "gray"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "label",
+                                                "text"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "stages": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "label": {
+                                                  "type": "string"
+                                                },
+                                                "script": {
+                                                  "type": "string"
+                                                },
+                                                "actions": {
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "string"
+                                                  }
+                                                }
+                                              },
+                                              "required": [
+                                                "label"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "objection": {
+                                            "type": "object",
+                                            "properties": {
+                                              "q": {
+                                                "type": "string"
+                                              },
+                                              "a": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "q",
+                                              "a"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "principles": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "icon": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "key",
+                                      "num",
+                                      "title"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "default": []
+                                }
+                              },
+                              "required": [
+                                "id"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "changedSinceAssigned": {
+                            "type": "boolean",
+                            "default": false
+                          }
+                        },
+                        "required": [
+                          "documentId",
+                          "documentTitle",
+                          "phases"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    },
+                    "questions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "stepKey": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "stem": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "single",
+                              "multi",
+                              "order",
+                              "free"
+                            ]
+                          },
+                          "explanation": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "options": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "text": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "documentId",
+                          "stem",
+                          "kind",
+                          "options"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    }
+                  },
+                  "required": [
+                    "assignment",
+                    "item"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/learning/my/{assignmentId}/acknowledge": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "assignmentId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "itemId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "itemVersion": {
+                      "type": "integer"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "briefing",
+                        "quiz"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "worldSlug": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "estimatedMinutes": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "audience",
+                        "manual",
+                        "refresh"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "open",
+                        "completed",
+                        "overdue",
+                        "invalidated"
+                      ]
+                    },
+                    "assignedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "dueAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "completedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "attemptsUsed": {
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "maxAttempts": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "lastScore": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "passMark": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "refreshReason": {
+                      "type": "string",
+                      "nullable": true,
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "itemId",
+                    "itemVersion",
+                    "kind",
+                    "title",
+                    "worldSlug",
+                    "estimatedMinutes",
+                    "reason",
+                    "status",
+                    "assignedAt",
+                    "dueAt",
+                    "completedAt",
+                    "maxAttempts",
+                    "lastScore",
+                    "passMark"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/learning/my/{assignmentId}/attempts": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "assignmentId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "attemptId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "attemptNo": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "attemptId",
+                    "attemptNo"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/learning/attempts/{id}": {
+      "put": {
+        "tags": [
+          "learning"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "answers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "questionId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "optionIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "default": []
+                        },
+                        "text": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "questionId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "answers"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "attemptId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "score": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "passed": {
+                      "type": "boolean"
+                    },
+                    "attemptsLeft": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "perQuestion": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "questionId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "correct": {
+                            "type": "boolean"
+                          },
+                          "correctOptionIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "explanation": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "questionId",
+                          "correct",
+                          "correctOptionIds",
+                          "explanation"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "attemptId",
+                    "score",
+                    "passed",
+                    "attemptsLeft",
+                    "perQuestion"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/learning/items/{id}/completion": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "item": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "briefing",
+                            "quiz"
+                          ]
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "description": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "worldSlug": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "draft",
+                            "published",
+                            "archived"
+                          ]
+                        },
+                        "currentVersion": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "estimatedMinutes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "nullable": true
+                        },
+                        "needsUpdate": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "publishedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "entryCount": {
+                          "type": "integer"
+                        },
+                        "questionCount": {
+                          "type": "integer"
+                        },
+                        "assignedUsers": {
+                          "type": "integer"
+                        },
+                        "completionRate": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "kind",
+                        "title",
+                        "worldSlug",
+                        "status",
+                        "currentVersion",
+                        "estimatedMinutes",
+                        "updatedAt",
+                        "publishedAt",
+                        "entryCount",
+                        "questionCount",
+                        "assignedUsers",
+                        "completionRate"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "worldSlugs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "completed",
+                              "overdue",
+                              "invalidated"
+                            ]
+                          },
+                          "dueAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "score": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "attempts": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "displayName",
+                          "worldSlugs",
+                          "status",
+                          "dueAt",
+                          "completedAt",
+                          "score",
+                          "attempts"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "byWorld": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "worldSlug": {
+                            "type": "string"
+                          },
+                          "assigned": {
+                            "type": "integer"
+                          },
+                          "completed": {
+                            "type": "integer"
+                          },
+                          "overdue": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "worldSlug",
+                          "assigned",
+                          "completed",
+                          "overdue"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "item",
+                    "rows",
+                    "byWorld"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/learning/dashboard": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "world",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "totals": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "integer"
+                        },
+                        "assigned": {
+                          "type": "integer"
+                        },
+                        "completed": {
+                          "type": "integer"
+                        },
+                        "overdue": {
+                          "type": "integer"
+                        },
+                        "refreshPending": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "assigned",
+                        "completed",
+                        "overdue",
+                        "refreshPending"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "byWorld": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "worldSlug": {
+                            "type": "string"
+                          },
+                          "assigned": {
+                            "type": "integer"
+                          },
+                          "completed": {
+                            "type": "integer"
+                          },
+                          "overdue": {
+                            "type": "integer"
+                          },
+                          "rate": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "worldSlug",
+                          "assigned",
+                          "completed",
+                          "overdue",
+                          "rate"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "failedQuestions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "questionId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "itemId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "itemTitle": {
+                            "type": "string"
+                          },
+                          "stem": {
+                            "type": "string"
+                          },
+                          "failRate": {
+                            "type": "number"
+                          },
+                          "attempts": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "questionId",
+                          "itemId",
+                          "itemTitle",
+                          "stem",
+                          "failRate",
+                          "attempts"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "recentCompletions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "itemTitle": {
+                            "type": "string"
+                          },
+                          "completedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "passed": {
+                            "type": "boolean",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "displayName",
+                          "itemTitle",
+                          "completedAt",
+                          "passed"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "generatedAt",
+                    "totals",
+                    "byWorld",
+                    "failedQuestions",
+                    "recentCompletions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{id}/learning": {
+      "get": {
+        "tags": [
+          "learning"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "briefing",
+                              "quiz"
+                            ]
+                          },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "description": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "worldSlug": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "draft",
+                              "published",
+                              "archived"
+                            ]
+                          },
+                          "currentVersion": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "estimatedMinutes": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "nullable": true
+                          },
+                          "needsUpdate": {
+                            "type": "boolean",
+                            "default": false
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "publishedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "entryCount": {
+                            "type": "integer"
+                          },
+                          "questionCount": {
+                            "type": "integer"
+                          },
+                          "assignedUsers": {
+                            "type": "integer"
+                          },
+                          "completionRate": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "title",
+                          "worldSlug",
+                          "status",
+                          "currentVersion",
+                          "estimatedMinutes",
+                          "updatedAt",
+                          "publishedAt",
+                          "entryCount",
+                          "questionCount",
+                          "assignedUsers",
+                          "completionRate"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "refreshRequired": {
+                      "type": "boolean"
+                    },
+                    "refreshAssignmentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "lastSignificantChange": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "integer"
+                        },
+                        "at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "reasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "at",
+                        "reasons"
+                      ],
+                      "additionalProperties": false,
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "refreshRequired",
+                    "refreshAssignmentId",
+                    "lastSignificantChange"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sources": {
       "get": {
         "tags": [

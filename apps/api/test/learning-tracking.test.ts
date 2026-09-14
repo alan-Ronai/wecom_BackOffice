@@ -184,7 +184,9 @@ run('learning tracking', () => {
     expect(r.statusCode).toBe(200);
     expect(r.json().resolvedUsers).toBe(1);
     audienceId = r.json().id as string;
-    const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })).json();
+    const mine = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })
+    ).json();
     expect(mine.open).toHaveLength(1);
     expect(mine.open[0]).toMatchObject({
       itemId: quizId,
@@ -194,7 +196,9 @@ run('learning tracking', () => {
       maxAttempts: null,
       passMark: 80,
     });
-    const other = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentB) })).json();
+    const other = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentB) })
+    ).json();
     expect(other.open).toHaveLength(0);
     const n = await db.pool.query(
       `select kind, href from notifications where user_id=$1 order by created_at desc limit 1`,
@@ -213,7 +217,9 @@ run('learning tracking', () => {
     });
     // `reason` is part of the unique key, so agent A's audience row does not block a manual one.
     expect(r.json()).toEqual({ assigned: 2, skipped: 0 });
-    const other = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentB) })).json();
+    const other = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentB) })
+    ).json();
     expect(other.open[0]).toMatchObject({ itemId: quizId, reason: 'manual' });
     const again = await app.inject({
       method: 'POST',
@@ -225,21 +231,28 @@ run('learning tracking', () => {
   });
 
   it('player payload hides correct flags and is visible to its owner only', async () => {
-    const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })).json();
+    const mine = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })
+    ).json();
     const aid = (mine.open as { itemId: string; reason: string; id: string }[]).find(
       (a) => a.itemId === quizId && a.reason === 'audience',
     )!.id;
-    const p = (await app.inject({ method: 'GET', url: `/api/v1/learning/my/${aid}`, headers: auth(agentA) })).json();
+    const p = (
+      await app.inject({ method: 'GET', url: `/api/v1/learning/my/${aid}`, headers: auth(agentA) })
+    ).json();
     expect(p.item.kind).toBe('quiz');
     expect(p.questions).toHaveLength(2);
     expect(p.questions[0].options[0]).not.toHaveProperty('correct');
     expect(
-      (await app.inject({ method: 'GET', url: `/api/v1/learning/my/${aid}`, headers: auth(agentB) })).statusCode,
+      (await app.inject({ method: 'GET', url: `/api/v1/learning/my/${aid}`, headers: auth(agentB) }))
+        .statusCode,
     ).toBe(404);
   });
 
   it('quiz attempts: wrong then right; unlimited retakes; completion on pass', async () => {
-    const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })).json();
+    const mine = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })
+    ).json();
     const aid = (mine.open as { itemId: string; reason: string; id: string }[]).find(
       (a) => a.itemId === quizId && a.reason === 'audience',
     )!.id;
@@ -280,7 +293,9 @@ run('learning tracking', () => {
       })
     ).json();
     expect(r2).toMatchObject({ score: 100, passed: true });
-    const after = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })).json();
+    const after = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })
+    ).json();
     expect((after.completed as { id: string }[]).find((a) => a.id === aid)).toMatchObject({
       id: aid,
       status: 'completed',
@@ -288,8 +303,13 @@ run('learning tracking', () => {
       lastScore: 100,
     });
     expect(
-      (await app.inject({ method: 'POST', url: `/api/v1/learning/my/${aid}/attempts`, headers: auth(agentA) }))
-        .statusCode,
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/v1/learning/my/${aid}/attempts`,
+          headers: auth(agentA),
+        })
+      ).statusCode,
     ).toBe(409);
   });
 
@@ -317,7 +337,9 @@ run('learning tracking', () => {
       headers: auth(manager),
       payload: { userIds: [agentB.id] },
     });
-    const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentB) })).json();
+    const mine = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentB) })
+    ).json();
     const aid = (mine.open as { itemId: string; id: string }[]).find((a) => a.itemId === capped)!.id;
     const qid = (await db.pool.query(`select id from quiz_questions where item_id=$1`, [capped])).rows[0]
       .id as string;
@@ -353,9 +375,13 @@ run('learning tracking', () => {
       headers: auth(manager),
       payload: { userIds: [agentA.id] },
     });
-    const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })).json();
+    const mine = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })
+    ).json();
     const b = (mine.open as { itemId: string; id: string }[]).find((a) => a.itemId === briefingId)!;
-    const p = (await app.inject({ method: 'GET', url: `/api/v1/learning/my/${b.id}`, headers: auth(agentA) })).json();
+    const p = (
+      await app.inject({ method: 'GET', url: `/api/v1/learning/my/${b.id}`, headers: auth(agentA) })
+    ).json();
     expect(p.entries[0]).toMatchObject({ documentId: docId, changedSinceAssigned: false });
     expect(p.entries[0].phases.length).toBeGreaterThan(0);
     const ack = await app.inject({
@@ -364,7 +390,9 @@ run('learning tracking', () => {
       headers: auth(agentA),
     });
     expect(ack.json().status).toBe('completed');
-    const quizAssignment = (mine.open as { itemId: string; id: string }[]).find((a) => a.itemId === quizId)!.id;
+    const quizAssignment = (mine.open as { itemId: string; id: string }[]).find(
+      (a) => a.itemId === quizId,
+    )!.id;
     expect(
       (
         await app.inject({
@@ -387,7 +415,9 @@ run('learning tracking', () => {
       log: app.log,
     });
     expect(r.assigned).toBeGreaterThanOrEqual(1);
-    const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentB) })).json();
+    const mine = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentB) })
+    ).json();
     expect(
       [...mine.open, ...mine.completed].some(
         (a: { itemId: string; reason: string }) => a.itemId === quizId && a.reason === 'audience',
@@ -409,9 +439,10 @@ run('learning tracking', () => {
       headers: auth(manager),
       payload: { userIds: [agentB.id], dueDays: 1 },
     });
-    await db.pool.query(`update learning_assignments set due_at = now() - interval '2 days' where item_id=$1`, [
-      late,
-    ]);
+    await db.pool.query(
+      `update learning_assignments set due_at = now() - interval '2 days' where item_id=$1`,
+      [late],
+    );
     const before = (
       await db.pool.query(`select count(*)::int n from notifications where user_id=$1 and kind='learning'`, [
         agentB.id,
@@ -429,15 +460,14 @@ run('learning tracking', () => {
       ])
     ).rows[0].n as number;
     expect(after - before).toBe(1);
-    const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentB) })).json();
+    const mine = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentB) })
+    ).json();
     expect(mine.overdue.some((a: { itemId: string }) => a.itemId === late)).toBe(true);
   });
 
   /** Re-publishes the document from the pristine structure plus one mutation. */
-  const republish = async (
-    mutate: (s: typeof structure) => unknown,
-    body: Record<string, unknown> = {},
-  ) => {
+  const republish = async (mutate: (s: typeof structure) => unknown, body: Record<string, unknown> = {}) => {
     const cur = (
       await app.inject({ method: 'GET', url: `/api/v1/documents/${docId}`, headers: auth(manager) })
     ).json();
@@ -478,10 +508,18 @@ run('learning tracking', () => {
     expect(r.changeFlag.significant).toBe(true);
     expect(r.changeFlag.reasons.join(' ')).toMatch(/תוצאה/);
     expect(r.changeFlag.affectedItems).toBeGreaterThanOrEqual(2);
-    const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })).json();
+    const mine = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })
+    ).json();
     expect(mine.invalidated.some((a: { itemId: string }) => a.itemId === quizId)).toBe(true);
     const refresh = (
-      mine.open as { id: string; itemId: string; reason: string; dueAt: string; refreshReason: string | null }[]
+      mine.open as {
+        id: string;
+        itemId: string;
+        reason: string;
+        dueAt: string;
+        refreshReason: string | null;
+      }[]
     ).find((a) => a.itemId === quizId && a.reason === 'refresh');
     expect(refresh).toBeTruthy();
     expect(refresh!.refreshReason).toMatch(/שינוי מהותי/);
@@ -524,7 +562,9 @@ run('learning tracking', () => {
       )
     ).rows[0].n as number;
     expect(openAfter).toBe(openBefore);
-    const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })).json();
+    const mine = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })
+    ).json();
     const refresh = (mine.open as { itemId: string; reason: string; refreshReason: string }[]).find(
       (a) => a.itemId === quizId && a.reason === 'refresh',
     )!;
@@ -565,7 +605,11 @@ run('learning tracking', () => {
     ).json();
     expect(d.totals.assigned).toBeGreaterThanOrEqual(1);
     const all = (
-      await app.inject({ method: 'GET', url: '/api/v1/learning/dashboard?world=tech', headers: auth(manager) })
+      await app.inject({
+        method: 'GET',
+        url: '/api/v1/learning/dashboard?world=tech',
+        headers: auth(manager),
+      })
     ).json();
     expect(all.totals.assigned).toBeGreaterThanOrEqual(1);
     const unscoped = (
@@ -576,7 +620,9 @@ run('learning tracking', () => {
 
   it('deleting an audience leaves the assignments it already made', async () => {
     const before = (
-      await db.pool.query(`select count(*)::int n from learning_assignments where audience_id=$1`, [audienceId])
+      await db.pool.query(`select count(*)::int n from learning_assignments where audience_id=$1`, [
+        audienceId,
+      ])
     ).rows[0].n as number;
     expect(before).toBeGreaterThan(0);
     const d = await app.inject({
@@ -612,7 +658,8 @@ run('learning tracking', () => {
       ).statusCode,
     ).toBe(403);
     expect(
-      (await app.inject({ method: 'GET', url: '/api/v1/learning/dashboard', headers: auth(agentA) })).statusCode,
+      (await app.inject({ method: 'GET', url: '/api/v1/learning/dashboard', headers: auth(agentA) }))
+        .statusCode,
     ).toBe(403);
     const noLearning = await makeUser(db.pool, { perms: ['docs.read'] });
     expect(

@@ -64,7 +64,15 @@ export async function createAssignments(
       `insert into learning_assignments(item_id, item_version, user_id, audience_id, reason, due_at, refresh_reason)
        values ($1,$2,$3,$4,$5, now() + ($6::int || ' days')::interval, $7)
        on conflict (item_id, user_id, item_version, reason) do nothing returning id`,
-      [i.item.id, i.item.currentVersion, userId, i.audienceId ?? null, i.reason, i.dueDays, i.refreshReason ?? null],
+      [
+        i.item.id,
+        i.item.currentVersion,
+        userId,
+        i.audienceId ?? null,
+        i.reason,
+        i.dueDays,
+        i.refreshReason ?? null,
+      ],
     );
     if (!r.rowCount) {
       skipped++;

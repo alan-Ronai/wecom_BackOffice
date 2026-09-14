@@ -245,10 +245,10 @@ export async function startAttempt(
       a.id,
     ])
   ).rows[0].n as number;
-  const r = await tx.query(`insert into learning_attempts(assignment_id, attempt_no) values ($1,$2) returning id`, [
-    a.id,
-    next,
-  ]);
+  const r = await tx.query(
+    `insert into learning_attempts(assignment_id, attempt_no) values ($1,$2) returning id`,
+    [a.id, next],
+  );
   return { attemptId: r.rows[0].id as string, attemptNo: next };
 }
 
@@ -541,6 +541,8 @@ export async function documentLearning(
 
 /** Idempotent: open assignments past due become overdue. Returns how many changed. */
 export async function markOverdue(q: Queryable): Promise<number> {
-  const r = await q.query(`update learning_assignments set status='overdue' where status='open' and due_at < now()`);
+  const r = await q.query(
+    `update learning_assignments set status='overdue' where status='open' and due_at < now()`,
+  );
   return r.rowCount ?? 0;
 }

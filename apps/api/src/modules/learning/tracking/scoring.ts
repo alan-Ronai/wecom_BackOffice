@@ -40,11 +40,7 @@ const isCorrect = (q: StoredQuestion, a: AnswerInput | undefined): boolean => {
 };
 
 /** Pure grading: one point per question, score in whole percent, pass when score >= passMark. */
-export function gradeAttempt(
-  questions: StoredQuestion[],
-  answers: AnswerInput[],
-  passMark: number,
-): Graded {
+export function gradeAttempt(questions: StoredQuestion[], answers: AnswerInput[], passMark: number): Graded {
   if (!questions.length) return { score: 0, passed: false, perQuestion: [] };
   const byId = new Map(answers.map((a) => [a.questionId, a]));
   const perQuestion = questions.map((q) => ({

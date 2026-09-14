@@ -37,7 +37,12 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
       '/learning/items/:id/audiences',
       {
         config: { requires: ['learning.manage'] },
-        schema: { tags: ['learning'], params: Id, body: AudienceCreateSchema, response: { 200: AudienceSchema } },
+        schema: {
+          tags: ['learning'],
+          params: Id,
+          body: AudienceCreateSchema,
+          response: { 200: AudienceSchema },
+        },
       },
       async (req) => {
         const user = requireUser(req);
@@ -88,7 +93,12 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
       '/learning/items/:id/assign',
       {
         config: { requires: ['learning.manage'] },
-        schema: { tags: ['learning'], params: Id, body: AssignBodySchema, response: { 200: AssignResultSchema } },
+        schema: {
+          tags: ['learning'],
+          params: Id,
+          body: AssignBodySchema,
+          response: { 200: AssignResultSchema },
+        },
       },
       async (req) => {
         const user = requireUser(req);
@@ -121,7 +131,10 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
 
     app.get(
       '/learning/my',
-      { config: { requires: ['learning.read'] }, schema: { tags: ['learning'], response: { 200: MyLearningResponseSchema } } },
+      {
+        config: { requires: ['learning.read'] },
+        schema: { tags: ['learning'], response: { 200: MyLearningResponseSchema } },
+      },
       async (req) => repo.myLearning(app.db, requireUser(req).id),
     );
 
@@ -182,7 +195,12 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
       '/learning/attempts/:id',
       {
         config: { requires: ['learning.read'] },
-        schema: { tags: ['learning'], params: Id, body: AttemptAnswersSchema, response: { 200: AttemptResultSchema } },
+        schema: {
+          tags: ['learning'],
+          params: Id,
+          body: AttemptAnswersSchema,
+          response: { 200: AttemptResultSchema },
+        },
       },
       async (req) => {
         const user = requireUser(req);

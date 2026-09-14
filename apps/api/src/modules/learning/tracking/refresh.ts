@@ -89,9 +89,7 @@ export async function applyChangeFlag(
         where item_id=$1 and item_version=$2 and reason='refresh' and status in ('open','overdue')`,
       [it.itemId, it.itemVersion],
     );
-    const userIds = [
-      ...new Set([...inv.rows, ...standing.rows].map((r) => r.user_id as string)),
-    ];
+    const userIds = [...new Set([...inv.rows, ...standing.rows].map((r) => r.user_id as string))];
     if (!userIds.length) continue;
     const pub = await getPublishedItem(tx, it.itemId);
     if (!pub) continue;

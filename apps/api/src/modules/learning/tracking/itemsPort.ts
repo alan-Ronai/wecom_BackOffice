@@ -76,10 +76,10 @@ export async function itemSourceVersions(
   itemId: string,
   version: number,
 ): Promise<SourceVersion[]> {
-  const r = await q.query(
-    `select snapshot from learning_item_versions where item_id=$1 and version=$2`,
-    [itemId, version],
-  );
+  const r = await q.query(`select snapshot from learning_item_versions where item_id=$1 and version=$2`, [
+    itemId,
+    version,
+  ]);
   const snap = (r.rows[0]?.snapshot as { sourceVersions?: SourceVersion[] } | undefined) ?? {};
   return snap.sourceVersions ?? [];
 }
@@ -112,7 +112,14 @@ export async function itemEntries(q: Queryable, itemId: string): Promise<StoredE
 export async function listItemsReferencing(
   q: Queryable,
   documentId: string,
-): Promise<{ itemId: string; kind: 'briefing' | 'quiz'; status: 'draft' | 'published' | 'archived'; currentVersion: number }[]> {
+): Promise<
+  {
+    itemId: string;
+    kind: 'briefing' | 'quiz';
+    status: 'draft' | 'published' | 'archived';
+    currentVersion: number;
+  }[]
+> {
   const r = await q.query(
     `select distinct i.id, i.kind, i.status, i.current_version
        from learning_items i
@@ -146,10 +153,7 @@ export async function needsUpdateFor(q: Queryable, itemIds: string[]): Promise<M
 }
 
 /** V2's half: a significant change flag newer than the pinned version of any referenced document. */
-export async function significantChangeSince(
-  q: Queryable,
-  itemIds: string[],
-): Promise<Map<string, boolean>> {
+export async function significantChangeSince(q: Queryable, itemIds: string[]): Promise<Map<string, boolean>> {
   const out = new Map(itemIds.map((id) => [id, false]));
   if (!itemIds.length) return out;
   const r = await q.query(
@@ -206,9 +210,7 @@ export async function assignmentStats(
   q: Queryable,
   itemIds: string[],
 ): Promise<Map<string, { assignedUsers: number; completionRate: number | null }>> {
-  const out = new Map(
-    itemIds.map((id) => [id, { assignedUsers: 0, completionRate: null as number | null }]),
-  );
+  const out = new Map(itemIds.map((id) => [id, { assignedUsers: 0, completionRate: null as number | null }]));
   if (!itemIds.length) return out;
   const r = await q.query(
     `select a.item_id, count(distinct a.user_id)::int assigned, count(*) filter (where a.status='completed')::int completed

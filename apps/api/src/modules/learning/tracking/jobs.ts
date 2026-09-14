@@ -45,10 +45,7 @@ export async function runReminders(
 }
 
 /** Same shape as the feedback jobs: no-op without pg-boss or under NODE_ENV=test. */
-export async function startTrackingJobs(
-  app: FastifyInstance,
-  deps: () => TrackingDeps,
-): Promise<void> {
+export async function startTrackingJobs(app: FastifyInstance, deps: () => TrackingDeps): Promise<void> {
   const boss = app.boss;
   if (!boss || app.config.NODE_ENV === 'test') return;
   await boss.work(QUEUES.learningResolveAudiences, async () => {

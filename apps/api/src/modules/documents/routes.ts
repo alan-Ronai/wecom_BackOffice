@@ -359,9 +359,17 @@ export default async function routes(app: FastifyInstance) {
           markPartial: body.markPartial,
         });
         // V2: knowledge refresh — record the change flag; a significant change fans out refresh assignments.
-        const changeFlag = await applyChangeFlag(tx, { notifier: app.notifier, events: app.events }, {
-          documentId: id, version, after: doc, override: body.significantChange, actorId: user.id,
-        });
+        const changeFlag = await applyChangeFlag(
+          tx,
+          { notifier: app.notifier, events: app.events },
+          {
+            documentId: id,
+            version,
+            after: doc,
+            override: body.significantChange,
+            actorId: user.id,
+          },
+        );
         if (body.resolveFeedbackIds?.length) {
           const closed = await resolveFeedback(tx, body.resolveFeedbackIds, id, version, user.id);
           for (const fid of closed)
