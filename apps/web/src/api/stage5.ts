@@ -36,6 +36,7 @@ import {
   AuditEntryDetailSchema,
   ConflictViewSchema,
   ConnectorRowSchema,
+  DocumentSyncStateSchema,
   ConnectorTypeInfoSchema,
   GroupSearchResponseSchema,
   IdentitySettingsPutSchema,
@@ -101,6 +102,7 @@ export type SyncLinksQuery = z.input<typeof SyncLinksQuerySchema>;
 export type SyncQueueResponse = z.infer<typeof SyncQueueResponseSchema>;
 export type SyncCounts = SyncQueueResponse['counts'];
 export type ConflictView = z.infer<typeof ConflictViewSchema>;
+export type DocumentSyncState = z.infer<typeof DocumentSyncStateSchema>;
 export type ResolveConflictBody = z.input<typeof ResolveConflictBodySchema>;
 export type SyncRunResult = z.infer<typeof SyncRunResultSchema>;
 export type GroupSearchItem = z.infer<typeof GroupSearchResponseSchema>['items'][number];
@@ -229,6 +231,16 @@ export const stage5 = {
 
   syncLinks: async (query: SyncLinksQuery): Promise<SyncQueueResponse> =>
     checked(SyncQueueResponseSchema, await api.GET('/sync/links', { params: { query } })),
+  /**
+   * One document's sync state, for the article header. Unlike `syncLinks` this needs only
+   * `docs.read`, which is the whole point: an editor reading an article has to be able to see
+   * that the item is waiting to be pushed or is in conflict.
+   */
+  documentSyncState: async (id: string): Promise<DocumentSyncState> =>
+    checked(
+      DocumentSyncStateSchema,
+      await api.GET('/documents/{id}/sync-state', { params: { path: { id } } }),
+    ),
   conflict: async (id: string): Promise<ConflictView> =>
     checked(ConflictViewSchema, await api.GET('/sync/links/{id}/conflict', { params: { path: { id } } })),
   resolveConflict: async (id: string, body: ResolveConflictBody): Promise<SyncLinkRow> =>

@@ -38,7 +38,9 @@ run('stage 5 — connectors & sync UI', () => {
       databaseUrl: db.url,
       testUser: {
         id: userId,
-        permissions: ['connectors.manage', 'sources.manage', 'suggestions.apply'],
+        // `docs.read` is what `GET /documents/:id/sync-state` asks for — the point of that route
+        // is that it does *not* need `sources.manage` like the queue does.
+        permissions: ['connectors.manage', 'sources.manage', 'suggestions.apply', 'docs.read'],
       },
       revisions: memoryRevisions(),
       documents: sqlDocumentsService(db.pool),
@@ -121,6 +123,35 @@ run('stage 5 — connectors & sync UI', () => {
     expect(filtered.json().counts.synced).toBe(1);
     const byText = await app.inject({ method: 'GET', url: '/api/v1/sync/links?q=איטיות' });
     expect(byText.json().total).toBe(1);
+  });
+
+  /**
+   * The article header's badge. The queue above answers the same question but needs
+   * `sources.manage`; an editor reading an article holds `docs.read`, which is why the article
+   * could not say "this is waiting to be pushed" at all.
+   */
+  it('one document reports its own sync state, most urgent link first', async () => {
+    const r = await app.inject({ method: 'GET', url: `/api/v1/documents/${docId}/sync-state` });
+    expect(r.statusCode, r.body).toBe(200);
+    expect(r.json()).toEqual({ state: 'synced', connectorName: 'אתר תמיכה', linkId });
+
+    // A conflict outranks everything else, whichever link carries it.
+    await db.pool.query("update sync_links set state='conflict' where id=$1", [linkId]);
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/v1/documents/${docId}/sync-state` })).json(),
+    ).toMatchObject({ state: 'conflict' });
+    await db.pool.query("update sync_links set state='synced' where id=$1", [linkId]);
+
+    // Not connected is `null`, which is not the same answer as "in sync".
+    const other = (
+      await db.pool.query<{ id: string }>(
+        `insert into documents(slug, title, category, wave, priority, kind, status)
+         values ('no-connector','ללא מחבר','tech',1,'m','steps','published') returning id`,
+      )
+    ).rows[0].id;
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/v1/documents/${other}/sync-state` })).json(),
+    ).toEqual({ state: null, connectorName: null, linkId: null });
   });
 
   it('no conflict yet → the conflict view is a 404, not an empty three-way', async () => {

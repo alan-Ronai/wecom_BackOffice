@@ -4,7 +4,21 @@ import { useCan } from '../../api/hooks/me.js';
 import { useToast } from '../ui/Toast.js';
 import { ago, copy } from '../../lib/format.js';
 import { MentionInput } from './MentionInput.js';
-import type { ScriptRow } from '../../api/types.js';
+
+/**
+ * What the "הסבר ללקוח" picker needs of a script.
+ *
+ * Scripts are `docType: 'T'`, `kind: 'text'` documents since the 0030 fold, and the `/scripts`
+ * adapter that used to serve them is gone — so this is a projection of a document card rather
+ * than a row shape from the contract. `usedIn` is a *count* now (`linksIn` on the card) where
+ * `/scripts` returned the list; the picker only ever showed its length.
+ */
+export interface ScriptPick {
+  id: string;
+  title: string;
+  text: string;
+  usedIn: number;
+}
 
 /**
  * Card 6b's per-step collaboration strip: the comment thread and the "הסבר ללקוח" script picker.
@@ -19,8 +33,8 @@ function ScriptPicker({
   onInsert,
   onClose,
 }: {
-  scripts: ScriptRow[];
-  onInsert: (s: ScriptRow) => void;
+  scripts: ScriptPick[];
+  onInsert: (s: ScriptPick) => void;
   onClose: () => void;
 }) {
   const toast = useToast();
@@ -29,7 +43,7 @@ function ScriptPicker({
       <div className="eyebrow">
         תסריטים לשלב זה ·{' '}
         <bdi className="lat" dir="ltr">
-          scripts.json
+          docType=T
         </bdi>
       </div>
       {!scripts.length ? <div className="muted small">אין תסריטים מתאימים</div> : null}
@@ -37,7 +51,7 @@ function ScriptPicker({
         <div className="pick" key={s.id}>
           <div className="q">{s.text}</div>
           <div className="row">
-            <span className="muted small">משמש ב-{s.usedIn.length} מסמכים</span>
+            <span className="muted small">משמש ב-{s.usedIn} מסמכים</span>
             <button
               className="btn xs"
               onClick={() => {
@@ -70,8 +84,8 @@ export function StepCollab({
   documentId: string;
   stepKey: string;
   comments: Comment[];
-  scripts: ScriptRow[];
-  onInsertScript: (s: ScriptRow) => void;
+  scripts: ScriptPick[];
+  onInsertScript: (s: ScriptPick) => void;
 }) {
   const can = useCan();
   const add = useAddComment(documentId);

@@ -378,6 +378,10 @@ export async function listCards(
         publishedAt: iso(r.published_at),
         sourceReviewNeeded: r.source_review_needed ?? false,
         sourceReviewReason: r.source_review_reason ?? null,
+        // Only for `kind: 'text'`, whose body is its content — a `steps` card has never carried
+        // its step text and still does not. This is what `GET /documents?docType=T` needs in
+        // order to replace `/scripts` for the step-level phrasing picker.
+        bodyHtml: r.kind === 'text' ? ((r.body_html as string | null) ?? undefined) : undefined,
       }),
     ),
   };
@@ -604,8 +608,11 @@ export async function recomputeDerived(tx: Tx, doc: Document): Promise<void> {
   );
   for (const l of detectLinks(doc, refs, blocks))
     await tx.query(
+      // A-M13: `detectLinks` dedupes within a step, but `doc.related` is a plain list and can
+      // name the same document twice; with 0037's edge index that second row is now a conflict
+      // rather than a duplicate edge, and skipping it is the same result the caller expects.
       `insert into document_links(from_document_id, from_step_key, to_document_id, to_block_id, to_field_name, to_source_id, type, origin)
-       values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+       values ($1,$2,$3,$4,$5,$6,$7,$8) on conflict do nothing`,
       [
         l.fromDocumentId,
         l.fromStepKey,

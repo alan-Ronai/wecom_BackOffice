@@ -7,7 +7,7 @@ import {
   useTogglePin,
   useCreateDocument,
 } from '../../api/hooks/documents.js';
-import { useBlocks, useFields, useScripts } from '../../api/hooks/content.js';
+import { useBlocks, useFields, useTextDocuments } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
 import { useBulkDocuments, useSaveView, useViews, type SavedView } from '../../api/hooks/collab.js';
 import { useUiPrefs } from '../../api/hooks/uiPrefs.js';
@@ -62,15 +62,23 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
    */
   const [params, setParams] = useSearchParams();
   const tax: TaxonomyFacetValue = {
+    world: params.get('world'),
+    topic: params.get('topic'),
     docType: (params.get('docType') as DocType | null) ?? null,
     tags: params.getAll('tag'),
   };
-  const world = params.get('world') ?? undefined;
-  const topic = params.get('topic') ?? undefined;
+  const world = tax.world ?? undefined;
+  const topic = tax.topic ?? undefined;
   const setTax = (next: TaxonomyFacetValue) => {
     const p = new URLSearchParams(params);
+    p.delete('world');
+    p.delete('topic');
     p.delete('docType');
     p.delete('tag');
+    // The facet row writes the same two parameters the sidebar and the topic page navigate with,
+    // so a link still reproduces exactly what the sender was looking at.
+    if (next.world) p.set('world', next.world);
+    if (next.topic) p.set('topic', next.topic);
     if (next.docType) p.set('docType', next.docType);
     for (const t of next.tags) p.append('tag', t);
     setParams(p, { replace: true });
@@ -102,7 +110,9 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
   const docs = useDocuments(query);
   const blocks = useBlocks();
   const fields = useFields();
-  const scripts = useScripts();
+  // The export bundle's `scripts` key: type-T documents, since `/scripts` is gone. The key name
+  // stays so a bundle exported before this change still imports.
+  const scripts = useTextDocuments('T');
   const worlds = useWorlds();
   const togglePin = useTogglePin();
   const remove = useDeleteDocument();
@@ -274,7 +284,7 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
       documents: docs.data?.items ?? [],
       blocks: blocks.data ?? [],
       crmFields: fields.data ?? [],
-      scripts: scripts.data ?? [],
+      scripts: scripts.data?.items ?? [],
     };
     download(
       `wecom-kb-export-${new Date().toISOString().slice(0, 10)}.json`,

@@ -13,6 +13,7 @@ import {
   useTopics,
   useWorlds,
 } from '../../api/hooks/taxonomy.js';
+import { useDragOrder } from '../../lib/useDragOrder.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
@@ -53,6 +54,22 @@ export function TaxonomyPage() {
   const [newTopic, setNewTopic] = useState({ name: '', slug: '' });
   const wl = worlds.data ?? [];
   const tl = topics.data ?? [];
+
+  /**
+   * D-M4: drag ordering *alongside* the ↑/↓ buttons, not instead of them. The buttons are the
+   * keyboard path and stay exactly as they were; this is the pointer path for the twenty-item
+   * case they make tedious. Both commit through the same `reorder*` mutation.
+   */
+  const worldDrag = useDragOrder(
+    wl.map((w) => w.id),
+    (ids) => reorderWorlds.mutate(ids),
+    mayEdit,
+  );
+  const topicDrag = useDragOrder(
+    tl.map((t) => t.id),
+    (ids) => reorderTopics.mutate({ worldSlug: world!, ids }),
+    mayEdit && !!world,
+  );
 
   return (
     <>
@@ -97,7 +114,12 @@ export function TaxonomyPage() {
       <div className="taxonomy-admin">
         <ul className="world-list" data-testid="worlds-list">
           {wl.map((w, i) => (
-            <li key={w.id} className={(w.slug === world ? 'on' : '') + (w.active ? '' : ' inactive')}>
+            <li
+              key={w.id}
+              className={(w.slug === world ? 'on' : '') + (w.active ? '' : ' inactive')}
+              title={mayEdit ? 'גרור לשינוי הסדר' : undefined}
+              {...worldDrag.rowProps(i)}
+            >
               <button type="button" className="link" onClick={() => setSelected(w.slug)}>
                 {w.name}
               </button>
@@ -198,7 +220,12 @@ export function TaxonomyPage() {
           {topics.isError ? <LoadError what="נושאים" error={topics.error} /> : null}
           <ul data-testid="topics-list">
             {tl.map((t, i) => (
-              <li key={t.id} className={t.active ? '' : 'inactive'}>
+              <li
+                key={t.id}
+                className={t.active ? '' : 'inactive'}
+                title={mayEdit ? 'גרור לשינוי הסדר' : undefined}
+                {...topicDrag.rowProps(i)}
+              >
                 <b>{t.name}</b>{' '}
                 <small>
                   {t.slug} · {t.itemCount} פריטים{t.active ? '' : ' · מושבת'}

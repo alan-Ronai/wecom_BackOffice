@@ -19,7 +19,6 @@ export const keys = {
   blockUsage: (id: string) => ['blockUsage', id] as const,
   fields: ['fields'] as const,
   fieldUsage: (n: string) => ['fieldUsage', n] as const,
-  scripts: ['scripts'] as const,
   search: (q: string, types?: string) => ['search', q, types ?? ''] as const,
   trash: ['trash'] as const,
   sources: ['sources'] as const,
@@ -81,4 +80,6 @@ export const keys = {
   conflict: (id: string) => ['sync', 'conflict', id] as const,
   /** Under `sync`, so creating a link or resolving a conflict invalidates the parity report too. */
   parity: (connectorId: string = '*') => ['sync', 'parity', connectorId] as const,
+  /** Under `sync` too: resolving a conflict has to clear the article header's badge. */
+  documentSyncState: (id: string) => ['sync', 'document', id] as const,
 };

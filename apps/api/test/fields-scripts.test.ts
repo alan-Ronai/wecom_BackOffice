@@ -89,43 +89,33 @@ run('fields and scripts', () => {
     ).toBe(403);
   });
 
-  it('scripts CRUD', async () => {
-    const s = (
-      await app.inject({
-        method: 'POST',
-        url: '/api/v1/scripts',
-        headers: auth(u),
-        payload: { title: 'סימון רשת', text: '"איזה סימון מופיע?"', tags: ['tech'] },
-      })
-    ).json();
-    expect(
-      (
-        await app.inject({
-          method: 'PUT',
-          url: `/api/v1/scripts/${s.id}`,
-          headers: auth(u),
-          payload: { title: 'סימון רשת', text: 'עודכן', tags: [] },
-        })
-      ).json().text,
-    ).toBe('עודכן');
-    expect(
-      (await app.inject({ method: 'DELETE', url: `/api/v1/scripts/${s.id}`, headers: auth(u) })).statusCode,
-    ).toBe(200);
-    expect(
-      (await app.inject({ method: 'GET', url: '/api/v1/scripts', headers: auth(u) })).json().items,
-    ).toHaveLength(0);
-  });
+  /**
+   * `/scripts*` is gone: the adapter routes over `doc_type='T'` were removed once the web's three
+   * readers moved to `GET /documents?docType=T`. What replaced them is asserted here — a type-T
+   * document is created, read and listed through the ordinary documents surface, and its card
+   * carries the body the step-level phrasing picker reads out.
+   */
+  it('a script is a type-T text document, created and listed through /documents', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      headers: auth(u),
+      payload: {
+        title: 'סימון רשת',
+        description: '',
+        category: 'ops',
+        wave: 3,
+        priority: 'm',
+        kind: 'text',
+        docType: 'T',
+        tags: ['a'],
+        bodyHtml: '<p>טקסט<br>שורה</p>',
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const id = created.json().id as string;
 
-  it('scripts are type-T documents underneath', async () => {
-    const s = (
-      await app.inject({
-        method: 'POST',
-        url: '/api/v1/scripts',
-        headers: auth(u),
-        payload: { title: 'שם', text: 'טקסט\nשורה', tags: ['a'] },
-      })
-    ).json();
-    const doc = await app.inject({ method: 'GET', url: `/api/v1/documents/${s.id}`, headers: auth(u) });
+    const doc = await app.inject({ method: 'GET', url: `/api/v1/documents/${id}`, headers: auth(u) });
     expect(doc.json()).toMatchObject({
       docType: 'T',
       kind: 'text',
@@ -133,7 +123,28 @@ run('fields and scripts', () => {
       tags: ['a'],
       worlds: ['ops'],
     });
-    const list = await app.inject({ method: 'GET', url: '/api/v1/scripts', headers: auth(u) });
-    expect(list.json().items.find((x: { id: string }) => x.id === s.id).text).toBe('טקסט\nשורה');
+
+    const list = await app.inject({
+      method: 'GET',
+      url: '/api/v1/documents?docType=T&pageSize=200',
+      headers: auth(u),
+    });
+    const card = list.json().items.find((x: { id: string }) => x.id === id);
+    // A `kind: 'text'` card carries `bodyHtml`: that body *is* the item's content, and the picker
+    // reads it out to a customer mid-call.
+    expect(card).toMatchObject({ docType: 'T', kind: 'text', bodyHtml: '<p>טקסט<br>שורה</p>' });
+
+    // A `steps` card still carries none of its own body — its content is its steps.
+    const steps = await app.inject({
+      method: 'GET',
+      url: '/api/v1/documents?docType=R&pageSize=200',
+      headers: auth(u),
+    });
+    expect(steps.json().items.every((x: { bodyHtml?: string }) => x.bodyHtml === undefined)).toBe(true);
+  });
+
+  it('the /scripts adapter routes are gone', async () => {
+    for (const url of ['/api/v1/scripts', '/api/v1/scripts/00000000-0000-4000-8000-000000000000'])
+      expect((await app.inject({ method: 'GET', url, headers: auth(u) })).statusCode, url).toBe(404);
   });
 });

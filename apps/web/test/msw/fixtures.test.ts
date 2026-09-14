@@ -25,8 +25,6 @@ import {
   PublishResponseSchema,
   RelatedResponseSchema,
   RoleSchema,
-  ScriptListSchema,
-  ScriptSchema,
   SearchResponseSchema,
   SessionSchema,
   SourceRevisionSchema,
@@ -44,6 +42,7 @@ import {
   AdminUserRowSchema,
   AuditEntryDetailSchema,
   ConflictViewSchema,
+  DocumentSyncStateSchema,
   ConnectorRowSchema,
   ConnectorTypeInfoSchema,
   GroupsMapResponseSchema,
@@ -94,11 +93,12 @@ describe('fixtures validate against shared schemas', () => {
     expect(fx.cards.some((c) => c.status === 'partial')).toBe(true);
     expect(fx.cards.some((c) => c.status === 'draft')).toBe(true);
   });
-  it('me / blocks / fields / scripts / notes / versions', () => {
+  it('me / blocks / fields / text documents / notes / versions', () => {
     MeSchema.parse(fx.me);
     fx.blocks.forEach((b) => BlockSchema.parse(b));
     fx.fields.forEach((f) => CrmFieldSchema.parse(f));
-    fx.scripts.forEach((s) => ScriptSchema.parse(s));
+    // Scripts are type-T cards now, so they are checked against the card contract like the rest.
+    fx.scriptCards.forEach((c) => DocumentCardSchema.parse(c));
     fx.notes.forEach((n) => NoteSchema.parse(n));
     fx.versions.forEach((v) => VersionSchema.parse(v));
   });
@@ -238,8 +238,6 @@ const cases: Case[] = [
   ['GET /fields/:name/usage', GET(`${B}/fields/${FIELD}/usage`), FieldUsageSchema],
   ['DELETE /fields/:name', DEL(`${B}/fields/${FIELD}`), z.object({ auditId: z.string() })],
 
-  ['GET /scripts', GET(`${B}/scripts`), ScriptListSchema],
-
   ['GET /search', GET(`${B}/search?q=sim`), SearchResponseSchema],
   ['GET /search (filtered)', GET(`${B}/search?q=sim&types=documents`), SearchResponseSchema],
 
@@ -331,6 +329,7 @@ const cases: Case[] = [
     z.object({ ok: z.boolean(), message: z.string() }),
   ],
   ['GET /sync/links', GET(`${B}/sync/links`), SyncQueueResponseSchema],
+  ['GET /documents/:id/sync-state', GET(`${B}/documents/${DOC}/sync-state`), DocumentSyncStateSchema],
   ['GET /sync/links/:id/conflict', GET(`${B}/sync/links/${LINK_CONFLICT}/conflict`), ConflictViewSchema],
   [
     'POST /sync/links/:id/sync',

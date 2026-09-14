@@ -647,6 +647,21 @@ export const stage5Handlers: RequestHandler[] = [
       counts: counts(stage5State.links),
     });
   }),
+  /**
+   * The article header's badge. Mirrors the server's ordering: the most urgent state of the
+   * document's links wins, and a document with no link at all is `state: null`.
+   */
+  http.get(`${B}/documents/:id/sync-state`, ({ params }) => {
+    const rank = { conflict: 0, pending_import: 1, pending_push: 2, synced: 3 } as const;
+    const link = stage5State.links
+      .filter((l) => l.documentId === params.id)
+      .sort((a, b) => rank[a.state] - rank[b.state])[0];
+    return HttpResponse.json(
+      link
+        ? { state: link.state, connectorName: link.connectorName, linkId: link.id }
+        : { state: null, connectorName: null, linkId: null },
+    );
+  }),
   http.get(`${B}/sync/links/:id/conflict`, ({ params }) => {
     const link = stage5State.links.find((l) => l.id === params.id);
     return link ? HttpResponse.json({ ...conflict, link }) : notFound();
