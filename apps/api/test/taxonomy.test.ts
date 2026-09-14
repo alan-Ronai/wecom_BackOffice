@@ -254,12 +254,16 @@ run('taxonomy', () => {
       tags: ['roaming'],
     });
     expect(JSON.stringify(asAgent.json())).not.toContain(draft);
+    // A-M4: a topic in a world the caller cannot read is a 404, not an in-scope topic with an
+    // empty list — otherwise `topic.name` and `world.name` leak across the scope boundary.
     const scoped = await makeUser(db.pool, { perms: ['docs.read'], scopes: ['sim'] });
-    expect(
-      (
-        await app.inject({ method: 'GET', url: `/api/v1/topics/${topic.id}/items`, headers: auth(scoped) })
-      ).json().groups,
-    ).toEqual([]);
+    const outOfScope = await app.inject({
+      method: 'GET',
+      url: `/api/v1/topics/${topic.id}/items`,
+      headers: auth(scoped),
+    });
+    expect(outOfScope.statusCode).toBe(404);
+    expect(outOfScope.body).not.toContain('נדידה');
     expect(
       (
         await app.inject({
@@ -270,6 +274,61 @@ run('taxonomy', () => {
       ).statusCode,
     ).toBe(404);
     void m;
+  });
+
+  // A-M4, second half: a view is only a browse when the caller actually saw something. An
+  // out-of-scope topic never reaches `recordTopicView` (it 404s above); an in-scope topic with
+  // nothing visible in it must not climb the "נושאים נצפים" card either.
+  it('records a topic view only for a non-empty result', async () => {
+    const empty = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/worlds/ops/topics',
+        headers: auth(admin),
+        payload: { slug: 'empty-topic', name: 'ריק' },
+      })
+    ).json();
+    const viewsOf = async (id: string) =>
+      (await db.pool.query('select count(*)::int n from topic_views where topic_id = $1', [id])).rows[0].n;
+
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/v1/topics/${empty.id}/items`, headers: auth(agent) }))
+        .statusCode,
+    ).toBe(200);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(await viewsOf(empty.id)).toBe(0);
+
+    const filled = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/worlds/ops/topics',
+        headers: auth(admin),
+        payload: { slug: 'filled-topic', name: 'מלא' },
+      })
+    ).json();
+    const d = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/documents',
+        headers: auth(admin),
+        payload: {
+          title: 'פריט גלוי',
+          category: 'ops',
+          wave: 1,
+          priority: 'h',
+          kind: 'steps',
+          docType: 'O',
+          topics: [filled.id],
+        },
+      })
+    ).json();
+    await db.pool.query(`update documents set status='published' where id=$1`, [d.id]);
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/v1/topics/${filled.id}/items`, headers: auth(agent) }))
+        .statusCode,
+    ).toBe(200);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(await viewsOf(filled.id)).toBe(1);
   });
 
   it('lists tags with counts and a prefix filter', async () => {

@@ -196,11 +196,21 @@ run('search', () => {
   });
 
   it('serves the scripts group from type-T documents', async () => {
+    // Created through `/documents` — `/scripts` was an adapter over exactly this and is gone.
     await app.inject({
       method: 'POST',
-      url: '/api/v1/scripts',
+      url: '/api/v1/documents',
       headers: auth(u),
-      payload: { title: 'סיווג תקלה', text: 'אתה לא גולש בכלל?', tags: [] },
+      payload: {
+        title: 'סיווג תקלה',
+        description: '',
+        category: 'ops',
+        wave: 3,
+        priority: 'm',
+        kind: 'text',
+        docType: 'T',
+        bodyHtml: '<p>אתה לא גולש בכלל?</p>',
+      },
     });
     const r = await app.inject({
       method: 'GET',

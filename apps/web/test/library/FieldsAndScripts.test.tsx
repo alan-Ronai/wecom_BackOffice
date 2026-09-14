@@ -36,48 +36,35 @@ describe('CRM fields — deletion', () => {
   });
 });
 
-describe('<ScriptsPage>', () => {
-  it('creates, edits and deletes a script', async () => {
+/**
+ * Scripts stopped being their own resource at the 0030 fold — a script is a `docType: 'T'`,
+ * `kind: 'text'` document — and the `/scripts*` adapter routes that kept the old shape alive for
+ * one release are gone. The library filtered to that type is the scripts page now: it lists them,
+ * `/edit/:id` edits the body, `POST /documents` creates them.
+ */
+describe('scripts are type-T documents', () => {
+  it('redirects /scripts to the library filtered to type T', async () => {
     renderWithProviders(<App />, { route: '/scripts' });
-    await screen.findByRole('heading', { name: /תסריטים/ });
-    expect(await screen.findByText(fx.scripts[0].title)).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: '✚ תסריט חדש' }));
-    await userEvent.type(screen.getByLabelText('שם התסריט'), 'פתיחת שיחה');
-    await userEvent.type(screen.getByLabelText('נוסח התסריט'), '"שלום, הגעת לתמיכה הטכנית"');
-    await userEvent.type(screen.getByLabelText('תגיות'), 'tech, opening');
-    await userEvent.click(screen.getByRole('button', { name: 'צור תסריט' }));
-
-    await screen.findByText('פתיחת שיחה');
-    await waitFor(() => expect(state.scripts.some((s) => s.title === 'פתיחת שיחה')).toBe(true));
-    expect(state.scripts.at(-1)?.tags).toEqual(['tech', 'opening']);
-
-    await userEvent.click(await screen.findByLabelText('ערוך את פתיחת שיחה'));
-    const title = screen.getByLabelText('שם התסריט');
-    await userEvent.clear(title);
-    await userEvent.type(title, 'פתיחת שיחה · גרסה 2');
-    await userEvent.click(screen.getByRole('button', { name: 'שמור שינויים' }));
-    await waitFor(() => expect(state.scripts.at(-1)?.title).toBe('פתיחת שיחה · גרסה 2'));
-
-    await userEvent.click(await screen.findByLabelText('מחק את פתיחת שיחה · גרסה 2'));
-    await userEvent.click(await screen.findByRole('button', { name: 'מחק' }));
-    await waitFor(() => expect(state.scripts.some((s) => s.title.startsWith('פתיחת שיחה'))).toBe(false));
-  });
-
-  it('offers only copy without scripts.edit', async () => {
-    server.use(withMe({ permissions: ['docs.read'] }));
-    renderWithProviders(<App />, { route: '/scripts' });
-    await screen.findByRole('heading', { name: /תסריטים/ });
-    await screen.findByText(fx.scripts[0].title);
+    expect(await screen.findByText(fx.scriptCards[0].title)).toBeInTheDocument();
+    // The old page and its own create form are gone, not hidden.
     expect(screen.queryByRole('button', { name: '✚ תסריט חדש' })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/^ערוך את /)).not.toBeInTheDocument();
-    expect(screen.getByLabelText(`העתק את ${fx.scripts[0].title}`)).toBeInTheDocument();
   });
 
-  it('is reachable from the sidebar scripts.json row', async () => {
+  it('is reachable from the sidebar scripts.json row, which counts the type-T documents', async () => {
     renderWithProviders(<App />, { route: '/library' });
     const sidebar = await screen.findByLabelText('ניווט ראשי');
+    const row = within(sidebar).getByText('scripts.json').closest('.src-row')!;
+    await waitFor(() => expect(row.textContent).toContain(String(fx.scriptCards.length)));
     await userEvent.click(within(sidebar).getByText('scripts.json'));
-    await screen.findByRole('heading', { name: /תסריטים/ });
+    expect(await screen.findByText(fx.scriptCards[0].title)).toBeInTheDocument();
+  });
+
+  it('offers the phrasing in the step-level picker, read from the type-T card body', async () => {
+    renderWithProviders(<App />, { route: `/doc/${fx.docBrowsing.id}` });
+    await userEvent.click(await screen.findByLabelText('הסבר ללקוח'));
+    const picker = await screen.findByRole('dialog', { name: 'תסריטים לשלב זה' });
+    // `bodyHtml` decoded back to the text an agent reads out — not the markup, not the title.
+    expect(within(picker).getByText(/אתה לא גולש בכלל/)).toBeInTheDocument();
+    expect(within(picker).getAllByText(/משמש ב-1 מסמכים/).length).toBeGreaterThan(0);
   });
 });

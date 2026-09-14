@@ -121,11 +121,28 @@ run('wave 4 seams', () => {
       })
     ).json().id as string;
 
+    // A-M4: only a non-empty result counts as a browse, so the seam needs something visible in
+    // the topic — an empty topic is opened but never recorded.
+    const docId = await makeDoc('פריט בנושא התפר');
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${docId}`,
+      headers: auth(lead),
+      payload: { topics: [topicId] },
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${docId}/publish`,
+      headers: auth(lead),
+      payload: { label: 'v1' },
+    });
+
     const view = await app.inject({
       method: 'GET',
       url: `/api/v1/topics/${topicId}/items`,
       headers: auth(lead),
     });
+    expect(view.json().groups.length, view.body).toBeGreaterThan(0);
     expect(view.statusCode, view.body).toBe(200);
     // `recordTopicView` is deliberately not awaited by the route, so give it a tick.
     await new Promise((r) => setTimeout(r, 100));

@@ -329,10 +329,15 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
         `insert into document_versions(document_id, version, snapshot, label, kind, created_at) values ($1,1,$2,'ייבוא מהספרייה הסטטית','system',$3) on conflict do nothing`,
         [s.id, JSON.stringify(snapshot), s.updatedAt],
       );
+      // A-M13: the guard the old `script_refs` insert had, back now that 0037 gives
+      // `document_links` an edge-identity index to conflict on. Without it a repeated `_usedIn`
+      // entry in the fixture produced two identical edges, and `/scripts`' `usedIn` — which,
+      // unlike the graph, does not dedupe by `edgeKey` — listed the same document twice.
       for (const documentId of s._usedIn)
         await tx.query(
           `insert into document_links(from_document_id, to_document_id, type, origin)
-           select $1, $2, 'link', 'explicit' where exists (select 1 from documents where id = $1)`,
+           select $1, $2, 'link', 'explicit' where exists (select 1 from documents where id = $1)
+           on conflict do nothing`,
           [documentId, s.id],
         );
     }

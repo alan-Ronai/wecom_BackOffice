@@ -699,6 +699,7 @@ export const SyncLinkCreateBodySchema = z.object({
   externalId: z.string().min(1).max(500),
 });
 
+
 export type GroupSearchItem = z.infer<typeof GroupSearchItemSchema>;
 export type GroupMapRow = z.infer<typeof GroupMapRowSchema>;
 export type ParityLinkRow = z.infer<typeof ParityLinkRowSchema>;
@@ -729,8 +730,10 @@ export const DocumentSyncLinkStateSchema = z.object({
   currentLocalVersion: z.number().int(),
   baseLocalVersion: z.number().int().nullable(),
   lastSyncedAt: IsoDateSchema.nullable(),
-  lastError: z.string().nullable(),
-  lastAttemptAt: IsoDateSchema.nullable(),
+  // From the connector row: the last run's status/time is the closest thing the queue keeps to
+  // "why is this still pending" — sync_links itself records no per-link error.
+  connectorLastStatus: z.string().nullable(),
+  connectorLastRunAt: IsoDateSchema.nullable(),
 });
 export const DocumentSyncStateSchema = z.object({
   documentId: IdSchema,

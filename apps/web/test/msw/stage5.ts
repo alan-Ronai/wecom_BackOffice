@@ -647,6 +647,43 @@ export const stage5Handlers: RequestHandler[] = [
       counts: counts(stage5State.links),
     });
   }),
+  /**
+   * The article header's badge. Mirrors the server's ordering: the most urgent state of the
+   * document's links wins, and a document with no link at all is `overall: 'unlinked'`.
+   */
+  http.get(`${B}/documents/:id/sync-state`, ({ params }) => {
+    const rank = { conflict: 0, pending_push: 1, pending_import: 2, synced: 3 } as const;
+    const links = stage5State.links
+      .filter((l) => l.documentId === params.id)
+      .sort((a, b) => rank[a.state] - rank[b.state])
+      .map((l) => {
+        const c = stage5State.connectors.find((x) => x.id === l.connectorId);
+        return {
+          linkId: l.id,
+          connectorId: l.connectorId,
+          connectorName: l.connectorName,
+          connectorType: c?.type ?? 'wordpress',
+          externalId: l.externalId,
+          remoteUrl: l.remoteUrl,
+          state: l.state,
+          localChanged: l.localChanged,
+          remoteChanged: l.remoteChanged,
+          currentLocalVersion: l.currentLocalVersion,
+          baseLocalVersion: l.baseLocalVersion,
+          lastSyncedAt: l.lastSyncedAt,
+          connectorLastStatus: c?.lastStatus ?? null,
+          connectorLastRunAt: c?.lastRunAt ?? null,
+        };
+      });
+    const overall = links[0]?.state ?? 'unlinked';
+    const flagReason =
+      overall === 'conflict'
+        ? 'קונפליקט בסנכרון – המקור המרוחק והפריט השתנו שניהם'
+        : overall === 'pending_push'
+          ? 'ממתין לדחיפה למקור המרוחק'
+          : null;
+    return HttpResponse.json({ documentId: params.id, overall, flagReason, links });
+  }),
   http.get(`${B}/sync/links/:id/conflict`, ({ params }) => {
     const link = stage5State.links.find((l) => l.id === params.id);
     return link ? HttpResponse.json({ ...conflict, link }) : notFound();

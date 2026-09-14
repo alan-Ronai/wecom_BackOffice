@@ -136,7 +136,18 @@ export const DocumentCardSchema = DocumentSchema.pick({
     pinned: z.boolean(),
     authorName: z.string().optional(),
   })
-  .merge(DocumentWave4FieldsSchema.omit({ bodyHtml: true }));
+  /**
+   * `bodyHtml` is no longer omitted, but it is still absent from almost every card: the API sends
+   * it only for `kind: 'text'` documents, whose body *is* their content — a card for a `steps`
+   * document describes itself with `stepCount` and carries none of its own step text, and that
+   * stays true.
+   *
+   * The reason it has to be here at all is the scripts fold. A script is a type-T `text`
+   * document since 0030, and the step-level "הסבר ללקוח" picker has to show the phrasing itself,
+   * not a title — it is read out to a customer mid-call. `/scripts` used to carry that text, and
+   * `GET /documents?docType=T` is what replaced it.
+   */
+  .merge(DocumentWave4FieldsSchema);
 export type DocumentCard = z.infer<typeof DocumentCardSchema>;
 
 export const BlockSchema = z.object({

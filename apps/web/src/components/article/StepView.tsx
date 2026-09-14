@@ -29,7 +29,13 @@ export interface StepCtx {
    * wired in — the editor preview must not start posting comments.
    */
   renderFooter?: (step: ResolvedStep) => ReactNode;
-  headBadges?: (step: ResolvedStep) => ReactNode;
+  /**
+   * Named `render*` like its three siblings. These are render props — called as functions, never
+   * mounted as `<Comp/>` — and the prefix is what tells a reader (and
+   * `react/no-unstable-nested-components`) that an arrow returning JSX here is not a component
+   * declared inside somebody's render.
+   */
+  renderHeadBadges?: (step: ResolvedStep) => ReactNode;
   /**
    * Wave 4 (§5.4): the per-step report entry point, next to "הערת נציג". A slot rather than a
    * flag for the same reason as the two above — the editor preview and the split panes render
@@ -130,7 +136,7 @@ export function StepView({ step, ctx }: { step: ResolvedStep; ctx: StepCtx }) {
               </span>
             ) : null;
           })}
-          {ctx.headBadges?.(step)}
+          {ctx.renderHeadBadges?.(step)}
           {cur && ctx.callMode ? (
             <span className="k">↵ · {OUT_KBD.slice(0, Math.max(1, optionCount)).join(' / ')}</span>
           ) : null}

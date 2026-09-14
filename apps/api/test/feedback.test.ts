@@ -194,6 +194,16 @@ run('feedback', () => {
     });
     expect(bad.statusCode).toBe(400);
     expect(bad.json().code).toBe('UNKNOWN_VERSION');
+    // B-M5: v1 exists but is the version the report was filed *against*, so it cannot be what
+    // fixed it. Existing and eligible are different answers and get different codes.
+    const tooEarly = await app.inject({
+      method: 'POST',
+      url: `/api/v1/feedback/${id}/resolve`,
+      headers: auth(lead),
+      payload: { version: 1 },
+    });
+    expect(tooEarly.statusCode).toBe(400);
+    expect(tooEarly.json().code).toBe('VERSION_NOT_ELIGIBLE');
     const ok = await app.inject({
       method: 'POST',
       url: `/api/v1/feedback/${id}/resolve`,
@@ -217,6 +227,44 @@ run('feedback', () => {
       'feedback.update',
       'feedback.resolve',
     ]);
+  });
+
+  /**
+   * B-M5, the other half: `document_versions` carries `restore`, `system` and suggestion rows
+   * alongside published ones. None of them is a publication, so none may close a report and
+   * none may appear in the picker — one predicate, so the drawer and the server agree.
+   */
+  it('a later version that was never published is offered nowhere and closes nothing', async () => {
+    const doc = await createDoc('מסמך עם גרסת מערכת');
+    const id = (
+      await app.inject({
+        method: 'POST',
+        url: `/api/v1/documents/${doc}/feedback`,
+        headers: auth(agent),
+        payload: { kind: 'error', text: 'לא מדויק' },
+      })
+    ).json().id as string;
+    await db.pool.query(
+      `insert into document_versions(document_id, version, snapshot, author_id, label, kind)
+       select $1, 2, snapshot, $2, 'הומר מתסריט', 'system' from document_versions
+        where document_id=$1 and version=1`,
+      [doc, lead.id],
+    );
+
+    const detail = await app.inject({ method: 'GET', url: `/api/v1/feedback/${id}`, headers: auth(lead) });
+    expect(detail.json().laterVersions).toEqual([]);
+
+    const r = await app.inject({
+      method: 'POST',
+      url: `/api/v1/feedback/${id}/resolve`,
+      headers: auth(lead),
+      payload: { version: 2 },
+    });
+    expect(r.statusCode, r.body).toBe(400);
+    expect(r.json().code).toBe('VERSION_NOT_ELIGIBLE');
+    expect(
+      (await db.pool.query('select status, resolved_version from feedback where id=$1', [id])).rows[0],
+    ).toMatchObject({ status: 'new', resolved_version: null });
   });
 
   it('open feedback for a document needs docs.edit and excludes closed rows', async () => {
@@ -261,19 +309,38 @@ run('feedback', () => {
         headers: auth(lead),
       })
     ).json();
-    // close one without a version (no_change) and one with a version
+    // close one without a version (no_change) and one with a version. B-M5: the version has to
+    // be one published *after* the reports, so publish a v2 first — v1 is what they were filed
+    // against and can no longer close them.
+    const cur = (
+      await app.inject({ method: 'GET', url: `/api/v1/documents/${other}`, headers: auth(lead) })
+    ).json();
+    await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${other}/structure`,
+      headers: { ...auth(lead), 'if-match': cur.etag },
+      payload: minimalStructure,
+    });
+    const v2 = await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${other}/publish`,
+      headers: auth(lead),
+      payload: { label: 'v2' },
+    });
+    expect(v2.statusCode, v2.body).toBe(200);
     await app.inject({
       method: 'PATCH',
       url: `/api/v1/feedback/${l.items[0].id}`,
       headers: auth(lead),
       payload: { status: 'no_change' },
     });
-    await app.inject({
+    const closed = await app.inject({
       method: 'POST',
       url: `/api/v1/feedback/${l.items[1].id}/resolve`,
       headers: auth(lead),
-      payload: { version: 1 },
+      payload: { version: 2 },
     });
+    expect(closed.statusCode, closed.body).toBe(200);
     const r = await app.inject({
       method: 'GET',
       url: '/api/v1/feedback/analytics',

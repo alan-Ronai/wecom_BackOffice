@@ -2,7 +2,6 @@ import type { FastifyInstance } from 'fastify';
 import documents from './documents/routes.js';
 import blocks from './blocks/routes.js';
 import fields from './fields/routes.js';
-import scripts from './scripts/routes.js';
 import notes from './notes/routes.js';
 import drafts from './drafts/routes.js';
 import search from './search/routes.js';
@@ -28,7 +27,6 @@ export async function registerModules(v1: FastifyInstance) {
     documents,
     blocks,
     fields,
-    scripts,
     notes,
     drafts,
     search,

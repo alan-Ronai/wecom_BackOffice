@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { PERMISSIONS } from '@wecom/shared';
@@ -81,6 +81,43 @@ describe('admin taxonomy', () => {
     await userEvent.click(screen.getByRole('button', { name: '✚ נושא' }));
     expect(await screen.findByText(/המזהה חייב להיות/)).toBeInTheDocument();
     expect(state.topics.some((t) => t.name === 'נתבים')).toBe(false);
+  });
+
+  /**
+   * D-M4: drag ordering was asked for by the spec and the lane shipped ↑/↓ instead, for reasons
+   * that hold (keyboard, aria-labels, disabled at the ends). So drag is *added*, and the point of
+   * this case is that both paths reach the same `PUT /worlds/reorder`.
+   */
+  it('reorders worlds by dragging, and keeps the ↑/↓ buttons as the keyboard path', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/admin/taxonomy' });
+    const worlds = await screen.findByTestId('worlds-list');
+    await within(worlds).findByText('תמיכה טכנית');
+    // The msw handler writes `position` rather than resequencing the array, like the server.
+    const order = () => [...state.worlds].sort((a, b) => a.position - b.position).map((w) => w.slug);
+    const before = order();
+    const rows = within(worlds).getAllByRole('listitem');
+
+    const transfer = {
+      effectAllowed: '',
+      dropEffect: '',
+      setData: () => undefined,
+      getData: () => '0',
+    };
+    fireEvent.dragStart(rows[0]!, { dataTransfer: transfer });
+    fireEvent.dragOver(rows[2]!, { dataTransfer: transfer });
+    fireEvent.drop(rows[2]!, { dataTransfer: transfer });
+
+    const moved = [...before];
+    moved.splice(2, 0, moved.splice(0, 1)[0]!);
+    await waitFor(() => expect(order()).toEqual(moved));
+
+    // The buttons still work, and still move by one.
+    const first = within(await screen.findByTestId('worlds-list')).getAllByRole('listitem')[0]!;
+    await userEvent.click(within(first).getByRole('button', { name: 'למטה' }));
+    const swapped = [...moved];
+    [swapped[0], swapped[1]] = [swapped[1]!, swapped[0]!];
+    await waitFor(() => expect(order()).toEqual(swapped));
   });
 
   it('hides mutations without taxonomy.manage', async () => {

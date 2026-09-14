@@ -1,12 +1,13 @@
-/** Blocks, CRM fields, scripts, notes and drafts — the rest of the content surface. */
+/** Blocks, CRM fields, text documents, notes and drafts — the rest of the content surface. */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Block, CrmField, Note, Script } from '@wecom/shared';
+import type { Block, CrmField, DocType, Note } from '@wecom/shared';
 import { api, API_BASE } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap, unwrapMaybe } from '../unwrap.js';
 import { keepaliveJson, useUnloadFlush } from '../../lib/unloadFlush.js';
-import type { DraftEnvelope, UpsertBlockBody, UpsertFieldBody, UpsertScriptBody } from '../types.js';
+import type { DraftEnvelope, UpsertBlockBody, UpsertFieldBody } from '../types.js';
+import { useDocuments } from './documents.js';
 
 /* ── blocks ─────────────────────────────────────────────────────────────── */
 export const useBlocks = () =>
@@ -100,36 +101,18 @@ export const useDeleteField = () => {
 };
 
 /* ── scripts ────────────────────────────────────────────────────────────── */
-export const useScripts = () =>
-  useQuery({
-    queryKey: keys.scripts,
-    queryFn: async () => unwrap(await api.GET('/scripts')).items,
-    staleTime: 30_000,
-  });
-
-export const useUpsertScript = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, ...body }: UpsertScriptBody & { id?: string }): Promise<Script> =>
-      unwrap(
-        id
-          ? await api.PUT('/scripts/{id}', { params: { path: { id } }, body })
-          : await api.POST('/scripts', { body }),
-      ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.scripts }),
-  });
-};
-
-export const useDeleteScript = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => unwrap(await api.DELETE('/scripts/{id}', { params: { path: { id } } })),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: keys.scripts });
-      void qc.invalidateQueries({ queryKey: keys.trash });
-    },
-  });
-};
+/**
+ * A script is a `docType: 'T'`, `kind: 'text'` document since the 0030 fold, so this is
+ * `GET /documents` with that filter — the `/scripts*` adapter routes are gone.
+ *
+ * `pageSize` is the contract's ceiling: the three readers (the sidebar's count, the library
+ * export bundle, the step-level phrasing picker) all want the whole set, and paging a list that
+ * a picker searches through client-side would be worse than the cap. The API's `total` is what
+ * the sidebar counts, so an over-cap corpus still shows the right number.
+ *
+ * `bodyHtml` is on the card for `kind: 'text'` rows, which is what the picker reads out.
+ */
+export const useTextDocuments = (docType: DocType) => useDocuments({ docType, pageSize: 200, sort: 'title' });
 
 /* ── notes ──────────────────────────────────────────────────────────────── */
 export const useNotes = (id: string | undefined) =>

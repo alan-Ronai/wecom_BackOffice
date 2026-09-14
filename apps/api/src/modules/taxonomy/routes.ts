@@ -302,11 +302,15 @@ export default async function routes(app: FastifyInstance) {
         unpublished: canReadUnpublished(user),
         worldScopes: user.worldScopes,
       });
+      // `topicView` is null both for an unknown topic and for one whose world is outside the
+      // caller's scope, so the same 404 covers both and the two are indistinguishable (A-M4).
       if (!view) throw notFound('הנושא');
       // W5 records topic views; W0's default is a no-op. Never let usage failures break the page.
       // `record=false` is for callers that want the ordered list without claiming a topic was
       // browsed — otherwise every article open inflates the "נושאים נצפים" analytics card.
-      if (record)
+      // A result with no visible groups is not a browse either: the caller saw nothing, so
+      // counting it would let an empty or invisible topic climb the "נושאים נצפים" card (A-M4).
+      if (record && view.groups.length)
         void app.usage
           .recordTopicView(user.id, id)
           .catch((e: unknown) => app.log.warn({ err: e }, 'recordTopicView failed'));

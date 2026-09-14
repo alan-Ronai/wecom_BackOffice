@@ -153,7 +153,13 @@ export function Palette() {
         icon: '▦',
         run: () => go('/dashboards'),
       },
-      { id: 'scripts', title: 'תסריטים – נוסח אחיד ללקוח', icon: '“', run: () => go('/scripts') },
+      {
+        id: 'scripts',
+        title: 'תסריטים – נוסח אחיד ללקוח',
+        icon: '“',
+        // A script is a type-T document; the library filtered to that type is where they live.
+        run: () => go('/library?docType=T'),
+      },
       {
         id: 'font',
         title:

@@ -1,8 +1,10 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import { getDocumentSyncState } from './document-sync-state.js';
 import { z } from 'zod';
 import {
   ConflictViewSchema,
   ConnectorTypeInfoSchema,
+  DocumentSyncStateSchema,
   ErrorEnvelopeSchema,
   IdSchema,
   ResolveConflictBodySchema,
@@ -20,6 +22,8 @@ import {
 import type { ConnectorRegistry } from '@wecom/connectors';
 import type { ConnectorsRepo } from './repo.js';
 import type { SyncService } from './sync.js';
+import { assertVisibleDocument } from '../../lib/visibility.js';
+import { requireUser } from '../../lib/user.js';
 import { describeConfigSchema } from './describe-config.js';
 import { auditOf, hasPermission, userOf } from './context.js';
 
@@ -176,6 +180,35 @@ const routes: FastifyPluginAsyncZod<SyncUiOptions> = async (app, opts) => {
           conflict: by.get('conflict') ?? 0,
         },
       };
+    },
+  );
+
+  /**
+   * One document's sync state, for the article header's badge.
+   *
+   * The queue above answers the same question, but it is the whole queue behind
+   * `sources.manage`; an editor reading an article holds `docs.read` and nothing else, so the
+   * article could not tell them that what they are looking at is waiting to be pushed or is in
+   * conflict with WordPress. The source-review flag answers a different question ("the source
+   * moved, decide what to do") and the two stay separate.
+   *
+   * A document with no sync link is `state: null` — not connected, which is not the same as
+   * `'synced'`. A document with more than one link (several connectors) reports the most urgent,
+   * in the same order the queue sorts by, because that is the one an editor needs to act on.
+   */
+  app.get(
+    '/documents/:id/sync-state',
+    {
+      config: { requires: ['docs.read'], scope: 'document' },
+      schema: {
+        tags: ['connectors'],
+        params,
+        response: { 200: DocumentSyncStateSchema, 403: E, 404: E },
+      },
+    },
+    async (req) => {
+      await assertVisibleDocument(app.db, req.params.id, requireUser(req));
+      return getDocumentSyncState(app.db, req.params.id);
     },
   );
 

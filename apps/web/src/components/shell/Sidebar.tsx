@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { Permission } from '@wecom/shared';
 import { useDocuments, usePinnedIds } from '../../api/hooks/documents.js';
-import { useFields, useScripts } from '../../api/hooks/content.js';
+import { useFields, useTextDocuments } from '../../api/hooks/content.js';
 import { useSources } from '../../api/hooks/pipeline.js';
 import { useDataFiles } from '../../api/hooks/stage4.js';
 import { useTrash } from '../../api/hooks/trash.js';
@@ -73,7 +73,9 @@ export function Sidebar({
   const sources = useSources();
   const dataFiles = useDataFiles();
   const fields = useFields();
-  const scripts = useScripts();
+  // `scripts.json` is `docType: 'T'` documents since the 0030 fold. `total` rather than
+  // `items.length` so the count stays right if the corpus ever outgrows one page.
+  const scripts = useTextDocuments('T');
 
   /**
    * Wave 4: the sidebar's world list is data, not the six `CATS` keys — an admin can add a world
@@ -276,7 +278,7 @@ export function Sidebar({
             } else if (src.kind === 'fields') {
               meta = crmChanges ? `${crmChanges} שינויים` : `${fields.data?.length ?? 0} · מסונכרן`;
               warn = crmChanges > 0;
-            } else meta = String(scripts.data?.length ?? 0);
+            } else meta = String(scripts.data?.total ?? 0);
             return (
               <div
                 key={src.id}
@@ -286,7 +288,7 @@ export function Sidebar({
                 onClick={() => {
                   onNavigate();
                   if (src.kind === 'fields') nav('/fields');
-                  else if (src.kind === 'scripts') nav('/scripts');
+                  else if (src.kind === 'scripts') nav('/library?docType=T');
                   else nav(src.id === 'intl' ? '/library/intl' : '/library');
                 }}
               >
