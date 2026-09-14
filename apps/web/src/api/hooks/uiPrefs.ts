@@ -14,7 +14,7 @@
  *
  * `test/lib/uiPrefs.test.ts` pins both halves of that behaviour.
  */
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { PreferencesSchema, type Preferences } from '@wecom/shared';
 import { z } from 'zod';
@@ -46,7 +46,7 @@ const LS_KEY = 'wecom.ui-prefs';
 /** Keeping every document ever opened would grow the preferences row without bound. */
 const LAST_SEEN_CAP = 200;
 
-export function readMirror(): Partial<UiPrefs> {
+function readMirror(): Partial<UiPrefs> {
   try {
     const raw = window.localStorage.getItem(LS_KEY);
     if (!raw) return {};
@@ -57,12 +57,36 @@ export function readMirror(): Partial<UiPrefs> {
   }
 }
 
+/**
+ * `localStorage` is not reactive, so the mirror is fronted by a tiny subscribable cache: writing
+ * a preference has to re-render every component reading one (the library toolbar, the list, the
+ * tour) in the same tick, or a toggle appears not to have worked.
+ *
+ * The snapshot identity is stable between writes, which is what `useSyncExternalStore` requires.
+ */
+let mirrorCache: Partial<UiPrefs> | null = null;
+const mirrorListeners = new Set<() => void>();
+
+const subscribeMirror = (l: () => void): (() => void) => {
+  mirrorListeners.add(l);
+  return () => mirrorListeners.delete(l);
+};
+const mirrorSnapshot = (): Partial<UiPrefs> => (mirrorCache ??= readMirror());
+
 function writeMirror(p: UiPrefs): void {
+  mirrorCache = p;
   try {
     window.localStorage.setItem(LS_KEY, JSON.stringify(p));
   } catch {
     /* private mode / quota — the server copy is still authoritative */
   }
+  for (const l of mirrorListeners) l();
+}
+
+/** Test seam: drops the cached mirror so each test starts from its own `localStorage`. */
+export function __resetUiPrefsCache(): void {
+  mirrorCache = null;
+  mirrorListeners.clear();
 }
 
 /** Drops `undefined` values so a server answer that omits a key does not erase the mirror's. */
@@ -88,11 +112,13 @@ export function useUiPrefs(): UiPrefsApi {
   const qc = useQueryClient();
   const server = usePreferences();
 
+  const mirror = useSyncExternalStore(subscribeMirror, mirrorSnapshot, mirrorSnapshot);
+
   const prefs = useMemo<UiPrefs>(() => {
-    const merged = { ...DEFAULT_UI_PREFS, ...readMirror(), ...defined(server.data) };
+    const merged = { ...DEFAULT_UI_PREFS, ...mirror, ...defined(server.data) };
     const parsed = UiPrefsSchema.safeParse(merged);
     return parsed.success ? parsed.data : DEFAULT_UI_PREFS;
-  }, [server.data]);
+  }, [mirror, server.data]);
 
   const save = useCallback(
     (patch: Partial<UiPrefs>) => {

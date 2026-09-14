@@ -12,6 +12,7 @@ import { useAddNote, useBlocks, useFields } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
 import { ApiError } from '../../api/unwrap.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
+import { useUiPrefs } from '../../api/hooks/uiPrefs.js';
 import { CATS } from '../../lib/constants.js';
 import { copy } from '../../lib/format.js';
 import { useHotkeys } from '../../lib/keyboard.js';
@@ -48,6 +49,7 @@ export function ArticlePage() {
   const recordView = useRecordView();
   const togglePin = useTogglePin();
   const isPinned = useIsPinned();
+  const ui = useUiPrefs();
   const addNote = useAddNote(id ?? '');
 
   const doc = docQ.data;
@@ -68,7 +70,10 @@ export function ArticlePage() {
     if (!doc || viewed.current === doc.id) return;
     viewed.current = doc.id;
     recordView.mutate(doc.id);
-  }, [doc, recordView]);
+    // Stamps the per-user last-seen map that drives the library's "השתנה מאז שצפיתי" indicator.
+    // `recordView` is a global counter; this one is personal, which is the whole point (6a).
+    ui.markSeen(doc.id);
+  }, [doc, recordView, ui]);
 
   useEffect(() => {
     if (doc) nav.setTitle(`/doc/${doc.id}`, doc.title);

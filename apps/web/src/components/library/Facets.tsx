@@ -1,6 +1,6 @@
 export interface FacetValue {
   wave: 'all' | 1 | 2 | 3;
-  flag: null | 'hh' | 'month' | 'partial';
+  flag: null | 'hh' | 'month' | 'partial' | 'changed';
 }
 
 /** Port of the legacy facet row: wave buttons plus the three flags. */
@@ -37,6 +37,12 @@ export function Facets({ value, onChange }: { value: FacetValue; onChange: (v: F
       {fac('מסמך חלקי', value.flag === 'partial', () => ({
         ...value,
         flag: value.flag === 'partial' ? null : 'partial',
+      }))}
+      {/* 6a: "changed" is per user — compared against the last-seen map in preferences, not
+          against a fixed window like "עודכן החודש" next to it. */}
+      {fac('השתנה מאז שצפיתי', value.flag === 'changed', () => ({
+        ...value,
+        flag: value.flag === 'changed' ? null : 'changed',
       }))}
     </div>
   );

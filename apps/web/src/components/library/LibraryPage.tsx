@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { Category, DocumentCard } from '@wecom/shared';
 import {
@@ -9,6 +9,9 @@ import {
 } from '../../api/hooks/documents.js';
 import { useBlocks, useFields, useScripts } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
+import { useBulkDocuments, useSaveView, useViews, type SavedView } from '../../api/hooks/collab.js';
+import { useUiPrefs } from '../../api/hooks/uiPrefs.js';
+import { useHotkeys } from '../../lib/keyboard.js';
 import { CATS, WAVES } from '../../lib/constants.js';
 import { download, fmtDate } from '../../lib/format.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
@@ -19,6 +22,9 @@ import { DocCard } from './DocCard.js';
 import { Facets, type FacetValue } from './Facets.js';
 import { AutoCrmCard } from './AutoCrmCard.js';
 import { CardMenu, type MenuItem } from './CardMenu.js';
+import { LibraryToolbar } from './LibraryToolbar.js';
+import { DocList } from './DocList.js';
+import { BulkBar } from './BulkBar.js';
 import type { ListDocumentsQuery } from '../../api/types.js';
 
 export type LibraryMode = 'library' | 'pinned' | 'recent' | 'drafts';
@@ -36,6 +42,16 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
   const [facets, setFacets] = useState<FacetValue>({ wave: 'all', flag: null });
   const [menu, setMenu] = useState<{ card: DocumentCard; anchor: HTMLElement } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  /* ── 6a: saved views, density, list mode, multi-select, change indicators ─ */
+  const { prefs, save: savePrefs, changedSinceSeen } = useUiPrefs();
+  const viewsQ = useViews();
+  const views = useSaveView();
+  const bulk = useBulkDocuments();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [cursor, setCursor] = useState(0);
+  const lastPicked = useRef<number>(-1);
+  const listMode = prefs.libraryView === 'list';
 
   const query: ListDocumentsQuery = {
     sort: 'wave',
@@ -58,8 +74,103 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
     if (facets.flag === 'hh') list = list.filter((c) => c.priority === 'hh');
     if (facets.flag === 'month') list = list.filter((c) => Date.parse(c.updatedAt) > Date.now() - MONTH_MS);
     if (facets.flag === 'partial') list = list.filter((c) => c.status === 'partial');
+    if (facets.flag === 'changed') list = list.filter((c) => changedSinceSeen(c.id, c.updatedAt));
     return list;
-  }, [docs.data, facets]);
+  }, [docs.data, facets, changedSinceSeen]);
+
+  // A selection that outlives the filter it was made under would silently act on invisible
+  // documents, so it is narrowed to what is on screen whenever the result set changes.
+  useEffect(() => {
+    setSelected((prev) => {
+      if (!prev.size) return prev;
+      const visible = new Set(items.map((c) => c.id));
+      const next = new Set([...prev].filter((id) => visible.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+    setCursor((i) => Math.min(i, Math.max(0, items.length - 1)));
+  }, [items]);
+
+  const toggleSelect = useCallback(
+    (id: string, range = false) => {
+      const index = items.findIndex((c) => c.id === id);
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (range && lastPicked.current >= 0 && index >= 0) {
+          const [a, b] = [lastPicked.current, index].sort((x, y) => x - y);
+          for (const c of items.slice(a, b + 1)) next.add(c.id);
+        } else if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      if (index >= 0) lastPicked.current = index;
+    },
+    [items],
+  );
+
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+
+  const runBulk = async (action: Parameters<typeof bulk.mutateAsync>[0]['action'], extra = {}) => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (action === 'delete') {
+      const ok = await modal.confirm(
+        'מחיקה מרובה',
+        `${ids.length} פריטים יועברו לסל המיחזור ל-30 יום.`,
+        'העבר לסל',
+        'danger',
+      );
+      if (!ok) return;
+    }
+    const res = await bulk.mutateAsync({ ids, action, ...extra });
+    clearSelection();
+    // The server enforces permissions per document, so "affected" is the honest number.
+    toast(
+      res.skipped.length
+        ? `בוצע על ${res.affected} מתוך ${ids.length} · ${res.skipped.length} דולגו`
+        : `בוצע על ${res.affected} פריטים`,
+      res.skipped.length ? 'warn' : 'ok',
+    );
+  };
+
+  const exportSelected = () => {
+    const chosen = items.filter((c) => selected.has(c.id));
+    download(
+      `wecom-kb-selection-${new Date().toISOString().slice(0, 10)}.json`,
+      JSON.stringify({ exportedAt: new Date().toISOString(), documents: chosen }, null, 2),
+    );
+    toast(`${chosen.length} פריטים יוצאו`, 'ok');
+  };
+
+  /* Saved views. The query is the local filter state, so applying one is a pure UI change. */
+  const applyView = (v: SavedView | null) => {
+    savePrefs({ savedViewId: v?.id ?? null });
+    const q = (v?.query ?? {}) as {
+      category?: Category;
+      wave?: FacetValue['wave'];
+      flag?: FacetValue['flag'];
+    };
+    setFacets({ wave: q.wave ?? 'all', flag: q.flag ?? null });
+    go(q.category ? `/library/${q.category}` : '/library');
+  };
+
+  const saveCurrentView = async () => {
+    const name = await modal.prompt('תצוגה שמורה', 'שם התצוגה (למשל: חו"ל · ממתין לעדכון)');
+    if (!name?.trim()) return;
+    const created = await views.create.mutateAsync({
+      name: name.trim().slice(0, 60),
+      query: { ...(cat ? { category: cat } : {}), wave: facets.wave, flag: facets.flag },
+      shared: false,
+    });
+    savePrefs({ savedViewId: created.id });
+    toast('התצוגה נשמרה', 'ok');
+  };
+
+  const deleteView = async (v: SavedView) => {
+    const ok = await modal.confirm('מחיקת תצוגה', `"${v.name}" תימחק.`, 'מחק', 'danger');
+    if (!ok) return;
+    await views.remove.mutateAsync(v.id);
+    if (prefs.savedViewId === v.id) savePrefs({ savedViewId: null });
+  };
 
   const title =
     mode === 'pinned'
@@ -180,6 +291,46 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
   const pinnedCards = mode === 'library' ? items.filter((c) => c.pinned) : [];
   const showAuto = mode === 'library' && (!cat || cat === 'tech' || cat === 'intl');
 
+  /**
+   * 6a's keyboard-first list. Bound only in list mode so the card grid keeps behaving the way it
+   * always has; `Escape` clears a selection before `Shell`'s handler gets a chance to close
+   * anything else, because a live selection is the most local thing on screen.
+   */
+  useHotkeys(
+    listMode
+      ? {
+          j: () => setCursor((i) => Math.min(items.length - 1, i + 1)),
+          k: () => setCursor((i) => Math.max(0, i - 1)),
+          ArrowDown: (e) => {
+            e.preventDefault();
+            setCursor((i) => Math.min(items.length - 1, i + 1));
+          },
+          ArrowUp: (e) => {
+            e.preventDefault();
+            setCursor((i) => Math.max(0, i - 1));
+          },
+          x: () => {
+            const c = items[cursor];
+            if (c) toggleSelect(c.id);
+          },
+          p: () => {
+            const c = items[cursor];
+            if (c) togglePin.mutate({ id: c.id, pinned: !c.pinned });
+          },
+          Enter: () => {
+            const c = items[cursor];
+            if (c) openCard(c);
+          },
+          Escape: (e) => {
+            if (!selected.size) return;
+            e.stopPropagation();
+            clearSelection();
+          },
+        }
+      : {},
+    [listMode, items, cursor, selected.size, toggleSelect, clearSelection, togglePin],
+  );
+
   return (
     <>
       <div className="topbar">
@@ -221,7 +372,7 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
       </div>
 
       <div className="scroll-area">
-        <div className="lib-body">
+        <div className="lib-body" data-density={prefs.density}>
           <div className="lib-head">
             <div>
               <h1>
@@ -243,7 +394,33 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
             <Facets value={facets} onChange={setFacets} />
           </div>
 
-          <div className="grid" data-testid="library-grid">
+          <LibraryToolbar
+            views={viewsQ.data ?? []}
+            activeViewId={prefs.savedViewId}
+            onApplyView={applyView}
+            onSaveView={() => void saveCurrentView()}
+            onDeleteView={(v) => void deleteView(v)}
+            density={prefs.density}
+            onDensity={(d) => savePrefs({ density: d })}
+            mode={prefs.libraryView}
+            onMode={(m) => savePrefs({ libraryView: m })}
+          />
+
+          {listMode ? (
+            <DocList
+              items={items}
+              cursor={cursor}
+              selected={selected}
+              changed={(c) => changedSinceSeen(c.id, c.updatedAt)}
+              onCursor={setCursor}
+              onToggleSelect={toggleSelect}
+              onSelectAll={(next) => setSelected(next ? new Set(items.map((c) => c.id)) : new Set())}
+              onOpen={openCard}
+              onPin={(c) => togglePin.mutate({ id: c.id, pinned: !c.pinned })}
+            />
+          ) : null}
+
+          <div className="grid" data-testid="library-grid" hidden={listMode}>
             {!items.length ? (
               <div className="empty" style={{ gridColumn: '1/-1' }}>
                 <b>
@@ -315,6 +492,15 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
           </div>
         </div>
       </div>
+
+      <BulkBar
+        count={selected.size}
+        busy={bulk.isPending}
+        can={can}
+        onAction={(a, extra) => void runBulk(a, extra)}
+        onExport={exportSelected}
+        onClear={clearSelection}
+      />
 
       {menu ? (
         <CardMenu items={menuItems(menu.card)} anchor={menu.anchor} onClose={() => setMenu(null)} />

@@ -59,8 +59,18 @@ async function fail(res: Response): Promise<never> {
   throw new ApiError(res.status, body.code ?? 'ERROR', body.message ?? 'שגיאה', body.details);
 }
 
-/** `GET`/`POST`/… returning a JSON body that must match `schema`. */
-export async function stageJson<T>(schema: z.ZodType<T>, path: string, init: StageInit = {}): Promise<T> {
+/**
+ * `GET`/`POST`/… returning a JSON body that must match `schema`.
+ *
+ * The schema is typed `ZodType<T, ZodTypeDef, unknown>` rather than `ZodType<T>`: with the input
+ * side left open, `T` binds to the schema's **output**, so a field carrying `.default()` reads
+ * back as present rather than optional at every call site.
+ */
+export async function stageJson<T>(
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+  path: string,
+  init: StageInit = {},
+): Promise<T> {
   const res = await request(path, init);
   if (!res.ok) await fail(res);
   const parsed = schema.safeParse(await res.json());
@@ -82,7 +92,7 @@ export async function stageVoid(path: string, init: StageInit = {}): Promise<voi
 
 /** Same as `stageJson`, but "not there yet" (404/501) is `null` rather than an error. */
 export async function stageMaybe<T>(
-  schema: z.ZodType<T>,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   path: string,
   init: StageInit = {},
 ): Promise<T | null> {

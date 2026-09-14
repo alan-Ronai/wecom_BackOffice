@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import { server } from './msw/server.js';
 import { resetState } from './msw/handlers.js';
+import { __resetUiPrefsCache } from '../src/api/hooks/uiPrefs.js';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
@@ -10,6 +11,8 @@ afterEach(() => {
   cleanup();
   server.resetHandlers();
   window.sessionStorage.clear();
+  window.localStorage.clear();
+  __resetUiPrefsCache();
   resetState();
 });
 afterAll(() => server.close());
