@@ -136,9 +136,23 @@ export async function getFeedback(q: Q, id: string): Promise<FeedbackRow | null>
   return r.rowCount ? toRow(r.rows[0]) : null;
 }
 
-export async function getFeedbackDetail(q: Q, id: string): Promise<FeedbackDetail | null> {
+/**
+ * B-I1: `feedback` rows carry the document title, the reporter's display name and the free
+ * text of the report, so the queue, the detail and the analytics are three read surfaces over
+ * other worlds' content. Every other read model in this wave grew a scope term; these did not.
+ * `f.world_slug` is captured on create, so the predicate is all that was missing.
+ */
+export const feedbackScope = (worldScopes: readonly string[] | null, param: string) =>
+  `(${param}::text[] is null or f.world_slug = any(${param}))`;
+
+export async function getFeedbackDetail(
+  q: Q,
+  id: string,
+  worldScopes: readonly string[] | null = null,
+): Promise<FeedbackDetail | null> {
   const row = await getFeedback(q, id);
   if (!row) return null;
+  if (worldScopes && !worldScopes.includes(row.worldSlug)) return null;
   const v = await q.query(
     `select version, label, created_at from document_versions where document_id=$1 and version >= $2 order by version`,
     [row.documentId, row.documentVersion],
@@ -163,6 +177,7 @@ const OPEN: FeedbackStatus[] = ['new', 'in_review', 'needs_update'];
 export async function listFeedback(
   q: Q,
   query: FeedbackQuery,
+  worldScopes: readonly string[] | null = null,
 ): Promise<{ items: FeedbackRow[]; total: number; counts: Record<FeedbackStatus, number> }> {
   const params: unknown[] = [];
   const p = (v: unknown) => {
@@ -171,6 +186,8 @@ export async function listFeedback(
   };
   // Filters other than status also shape the tab badges, so build them first.
   const base: string[] = [];
+  // The caller's scope, not a caller-supplied filter: it also narrows the tab badges.
+  if (worldScopes) base.push(feedbackScope(worldScopes, p([...worldScopes])));
   if (query.world) base.push(`f.world_slug = ${p(query.world)}`);
   if (query.kind) base.push(`f.kind = ${p(query.kind)}`);
   if (query.documentId) base.push(`f.document_id = ${p(query.documentId)}`);
@@ -209,15 +226,18 @@ export async function patchFeedback(
     `update feedback set
        status = coalesce($2, status),
        assignee_id = case when $3::boolean then $4::uuid else assignee_id end,
-       decision_note = coalesce($5, decision_note),
-       decided_by = case when $6::boolean then $7::uuid else decided_by end,
-       decided_at = case when $6::boolean then now() else decided_at end
+       -- B-M4: 'sent as null' and 'not sent' are different answers, so a note can be cleared;
+       -- same shape as assignee_id two lines above, which already got this right.
+       decision_note = case when $5::boolean then $6 else decision_note end,
+       decided_by = case when $7::boolean then $8::uuid else decided_by end,
+       decided_at = case when $7::boolean then now() else decided_at end
      where id=$1`,
     [
       id,
       body.status ?? null,
       body.assigneeId !== undefined,
       body.assigneeId ?? null,
+      body.decisionNote !== undefined,
       body.decisionNote ?? null,
       closing,
       actorId,
@@ -271,11 +291,19 @@ export async function resolveFeedback(
 }
 
 /* ── analytics ───────────────────────────────────────────────────────────── */
-export async function feedbackAnalytics(q: Q, query: FeedbackAnalyticsQuery): Promise<FeedbackAnalytics> {
+export async function feedbackAnalytics(
+  q: Q,
+  query: FeedbackAnalyticsQuery,
+  worldScopes: readonly string[] | null = null,
+): Promise<FeedbackAnalytics> {
   const to = query.to ? new Date(query.to) : new Date();
   const from = query.from ? new Date(query.from) : new Date(to.getTime() - 90 * 86400_000);
   const params: unknown[] = [from.toISOString(), to.toISOString()];
   let scope = 'f.created_at >= $1 and f.created_at <= $2';
+  if (worldScopes) {
+    params.push([...worldScopes]);
+    scope += ` and ${feedbackScope(worldScopes, '$' + params.length)}`;
+  }
   if (query.world) {
     params.push(query.world);
     scope += ` and f.world_slug = $${params.length}`;

@@ -77,10 +77,18 @@ export async function saveSourceDocument(
          where document_id=$1 returning id`,
         [documentId, html, text, hash, version, input.authorId],
       )
-    : await tx.query(
-        `insert into source_documents(document_id, html, text, hash, current_version, updated_by) values ($1,$2,$3,$4,$5,$6) returning id`,
+    : /**
+       * `select … for update` locks nothing when there is no row yet, so two first-saves race
+       * into this insert. `do nothing` + a re-read turns the loser into the 412 the client
+       * already knows how to handle, instead of a raw 500 on the unique constraint.
+       */
+      await tx.query(
+        `insert into source_documents(document_id, html, text, hash, current_version, updated_by) values ($1,$2,$3,$4,$5,$6)
+         on conflict (document_id) do nothing returning id`,
         [documentId, html, text, hash, version, input.authorId],
       );
+  if (!up.rowCount)
+    throw httpError(412, 'ETAG_MISMATCH', 'מסמך המקור נוצר בינתיים — טען מחדש ונסה שוב');
   await tx.query(
     `insert into source_document_versions(source_document_id, version, html, author_id, label, source_revision_id) values ($1,$2,$3,$4,$5,$6)`,
     [up.rows[0].id, version, html, input.authorId, input.label ?? '', input.sourceRevisionId ?? null],

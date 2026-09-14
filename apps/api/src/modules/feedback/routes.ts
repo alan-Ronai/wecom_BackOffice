@@ -18,7 +18,9 @@ import {
 import { audit } from '../../lib/audit.js';
 import { notFound } from '../../lib/http.js';
 import { withTransaction } from '../../lib/sql.js';
-import { requireUser } from '../../lib/user.js';
+import { hasScope, requireUser } from '../../lib/user.js';
+import { assertVisibleDocument } from '../../lib/visibility.js';
+import { TtlCache } from '../usage/cache.js';
 import * as repo from './repo.js';
 import { notifyOnCreate, type AlertDeps } from './alerts.js';
 
@@ -41,6 +43,10 @@ export default function feedbackRoutes(deps: () => AlertDeps) {
         const user = requireUser(req);
         const { id } = req.params as { id: string };
         const body = req.body as z.infer<typeof CreateFeedbackBodySchema>;
+        // `scope: 'document'` is the world half only, and `captureContext` loads any live
+        // document regardless of status: without this a reader can file feedback against a
+        // draft, and the 404-vs-201 difference tells them the draft exists.
+        await assertVisibleDocument(app.db, id, user);
         const ctx = await repo.captureContext(app.db, app.taxonomy, id);
         if (!ctx) throw notFound('המסמך');
         const created = await withTransaction(app.db, async (tx) => {
@@ -102,14 +108,16 @@ export default function feedbackRoutes(deps: () => AlertDeps) {
         },
       },
       async (req) => {
-        requireUser(req);
+        const user = requireUser(req);
         const q = req.query as z.infer<typeof FeedbackQuerySchema>;
-        const r = await repo.listFeedback(app.db, q);
+        const r = await repo.listFeedback(app.db, q, user.worldScopes);
         return { ...r, page: q.page, pageSize: q.pageSize };
       },
     );
 
-    const cache = new Map<string, { at: number; value: unknown }>();
+    // 60 s (spec §3), size-capped, and keyed on the caller's scope set as well as the query —
+    // otherwise scoping the data would cross-serve one editor's snapshot to another.
+    const cache = new TtlCache<unknown>(60_000);
     app.get(
       '/feedback/analytics',
       {
@@ -121,14 +129,13 @@ export default function feedbackRoutes(deps: () => AlertDeps) {
         },
       },
       async (req) => {
-        requireUser(req);
+        const user = requireUser(req);
         const q = req.query as z.infer<typeof FeedbackAnalyticsQuerySchema>;
-        const key = JSON.stringify(q);
+        const key = JSON.stringify([q, user.worldScopes ? [...user.worldScopes].sort() : null]);
         const hit = cache.get(key);
-        // 60 s cache (spec §3): the page polls, the SQL scans the whole table.
-        if (hit && Date.now() - hit.at < 60_000 && app.config.NODE_ENV !== 'test') return hit.value;
-        const value = await repo.feedbackAnalytics(app.db, q);
-        cache.set(key, { at: Date.now(), value });
+        if (hit !== undefined && app.config.NODE_ENV !== 'test') return hit;
+        const value = await repo.feedbackAnalytics(app.db, q, user.worldScopes);
+        cache.set(key, value);
         return value;
       },
     );
@@ -140,8 +147,12 @@ export default function feedbackRoutes(deps: () => AlertDeps) {
         schema: { tags: ['feedback'], params: Params, response: { 200: FeedbackDetailSchema } },
       },
       async (req) => {
-        requireUser(req);
-        const d = await repo.getFeedbackDetail(app.db, (req.params as { id: string }).id);
+        const user = requireUser(req);
+        const d = await repo.getFeedbackDetail(
+          app.db,
+          (req.params as { id: string }).id,
+          user.worldScopes,
+        );
         if (!d) throw notFound('המשוב');
         return d;
       },
@@ -164,7 +175,9 @@ export default function feedbackRoutes(deps: () => AlertDeps) {
         const body = req.body as z.infer<typeof FeedbackPatchBodySchema>;
         return withTransaction(app.db, async (tx) => {
           const before = await repo.getFeedback(tx, id);
-          if (!before) throw notFound('המשוב');
+          // Same boundary as the queue that surfaced this row (B-I1): 404, not 403, so the
+          // queue and the drawer cannot disagree about whether a report exists.
+          if (!before || !hasScope(user, before.worldSlug)) throw notFound('המשוב');
           const after = (await repo.patchFeedback(tx, id, body, user.id))!;
           await audit(tx, {
             actorId: user.id,
@@ -206,7 +219,9 @@ export default function feedbackRoutes(deps: () => AlertDeps) {
         const body = req.body as z.infer<typeof FeedbackResolveBodySchema>;
         return withTransaction(app.db, async (tx) => {
           const before = await repo.getFeedback(tx, id);
-          if (!before) throw notFound('המשוב');
+          // Same boundary as the queue that surfaced this row (B-I1): 404, not 403, so the
+          // queue and the drawer cannot disagree about whether a report exists.
+          if (!before || !hasScope(user, before.worldSlug)) throw notFound('המשוב');
           const after = (await repo.resolveOne(tx, id, body.version, body.decisionNote, user.id))!;
           await audit(tx, {
             actorId: user.id,

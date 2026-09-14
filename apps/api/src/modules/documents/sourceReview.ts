@@ -24,6 +24,8 @@ export async function markSourceReviewNeeded(
   notifier: Notifier,
   documentId: string,
   reason: string,
+  /** The person whose save raised the flag; they already know. `notifyOnCreate` does the same. */
+  actorId: string | null = null,
 ): Promise<void> {
   const r = await tx.query(
     `update documents set source_review_needed=true, source_review_reason=$2, source_review_at=now()
@@ -36,7 +38,9 @@ export async function markSourceReviewNeeded(
     owner_id: string | null;
     editor_id: string | null;
   };
-  const userIds = [...new Set([owner_id, editor_id].filter((x): x is string => !!x))];
+  const ids = new Set([owner_id, editor_id].filter((x): x is string => !!x));
+  if (actorId) ids.delete(actorId);
+  const userIds = [...ids];
   if (!userIds.length) return;
   await notifier.notify({
     userIds,

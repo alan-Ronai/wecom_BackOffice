@@ -29,9 +29,14 @@ export async function recipientsFor(db: pg.Pool, documentId: string): Promise<st
 }
 
 /** Everyone who may publish in the item's world; falls back to all leads before W1 lands. */
+/**
+ * B-M12: the `leadIds(db, null)` fallback was written as a pre-W1 stub and is a live path now.
+ * A world with no scoped publisher would make every `process_fails` report and window alert
+ * notify every `docs.publish` holder in the tenant, item title included. An empty answer is
+ * the correct answer: the alert still reaches the document's owner and editor.
+ */
 async function publishersFor(deps: AlertDeps, world: string): Promise<string[]> {
-  const scoped = await deps.taxonomy.usersWithPermissionInWorld('docs.publish', world);
-  return scoped.length ? scoped : leadIds(deps.db, null);
+  return deps.taxonomy.usersWithPermissionInWorld('docs.publish', world);
 }
 
 export async function notifyOnCreate(deps: AlertDeps, f: FeedbackRow, title: string): Promise<void> {

@@ -32,14 +32,23 @@ export default async function routes(app: FastifyInstance) {
       },
     },
     async (req) => {
-      requireUser(req);
+      const user = requireUser(req);
       const query = req.query as UsageQuery;
-      // Cache key = the raw query string so `?limit=5` and `?limit=6` are distinct entries.
-      const key = req.url.split('?')[1] ?? '';
+      /**
+       * Keyed on the *parsed* query, so `?limit=5&world=a` and `?world=a&limit=5` are one
+       * entry, and on the caller's scope set, so scoping the data cannot cross-serve one
+       * editor's snapshot to another (B-I8, B-M8).
+       */
+      const key = JSON.stringify([
+        Object.entries(query)
+          .filter(([, v]) => v !== undefined)
+          .sort(([a], [b]) => a.localeCompare(b)),
+        user.worldScopes ? [...user.worldScopes].sort() : null,
+      ]);
       const hit = cache.get(key);
       if (hit) return hit;
       const caps = await probeCapabilities(app.db);
-      const result = await usageAnalytics(app.db, query, caps);
+      const result = await usageAnalytics(app.db, query, caps, user.worldScopes);
       cache.set(key, result);
       return result;
     },
