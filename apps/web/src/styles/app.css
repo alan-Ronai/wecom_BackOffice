@@ -460,7 +460,12 @@ html[data-theme="dark"] .palette .ri .ic.round { background: var(--surface-3); c
 .palette .ri .tx { flex: 1; line-height: 1.35; min-width: 0; }
 .palette .ri .tx .t { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .palette .ri .tx .t.w { font-weight: 500; }
-.palette .ri .tx .m { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette .ri .tx .m { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+/* A-2: the meta row carries the library card's own chips, so a hit and a card name an item the
+   same way. The chips keep their size; only the text after them shrinks and truncates. */
+.palette .ri .tx .m .chip { font-size: 10.5px; padding: 1px 7px; flex-shrink: 0; }
+.palette .ri .tx .m .hit-item { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.palette .ri .tx .m .hit-rest { overflow: hidden; text-overflow: ellipsis; }
 .palette .foot { display: flex; gap: 16px; padding: 10px 20px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); flex-wrap: wrap; }
 .palette .foot .stat { margin-inline-start: auto; }
 

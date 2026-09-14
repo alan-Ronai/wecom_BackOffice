@@ -12211,6 +12211,24 @@
                                 },
                                 "kbd": {
                                   "type": "string"
+                                },
+                                "docType": {
+                                  "type": "string",
+                                  "enum": [
+                                    "M",
+                                    "R",
+                                    "O",
+                                    "E",
+                                    "S",
+                                    "T",
+                                    "I"
+                                  ]
+                                },
+                                "world": {
+                                  "type": "string"
+                                },
+                                "docTitle": {
+                                  "type": "string"
                                 }
                               },
                               "required": [
