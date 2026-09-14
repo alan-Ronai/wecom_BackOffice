@@ -3,9 +3,12 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { SuggestionPayloadSchema, SuggestionSchema, SuggestionTypeSchema } from '@wecom/shared';
 import type { ProposalContext, ProposedSuggestion } from './contract.js';
+import { groupSections, isNewSourcePath } from './sections.js';
 
-/** Bump together with a new `prompts/<version>.md` file; stored on every run for reproducibility. */
-export const PROMPT_VERSION = 'propose-v1';
+/** Bump together with a new `prompts/<version>.md` file; stored on every run for reproducibility.
+ * v2 (pipeline-fanout): a brand-new source is proposed as one card per SECTION, and a single
+ * remote item as one card with a phase per section, instead of one card per paragraph. */
+export const PROMPT_VERSION = 'propose-v2';
 const promptPath = fileURLToPath(new URL(`../prompts/${PROMPT_VERSION}.md`, import.meta.url));
 export const SYSTEM_PROMPT = readFileSync(promptPath, 'utf8');
 
@@ -55,8 +58,24 @@ export function buildMessages(ctx: ProposalContext): { role: 'system' | 'user'; 
     .map((b) => `- blockId=${b.id} "${b.title}" פעולות: ${JSON.stringify(b.actions)}`)
     .join('\n');
   const fields = ctx.fields.map((f) => `${f.name} (${f.status})`).join(', ');
+  /**
+   * On the new-source path the model is shown the *sections* it is expected to answer with,
+   * rather than being left to infer them from a list of "added" paragraphs — which is what
+   * produced a card per paragraph.
+   */
+  const sections = isNewSourcePath(ctx)
+    ? groupSections(ctx.paragraphs, ctx.source.title)
+        .map(
+          (s, i) =>
+            `- סעיף ${i + 1} §${s.ref} "${s.title}": ` +
+            s.items.map((it) => `§${it.ref} ${JSON.stringify(it.text)}`).join(' | '),
+        )
+        .join('\n')
+    : '';
   const user = [
     `מסמך מקור: ${ctx.source.title}`,
+    ...(ctx.source.singleDocument ? ['(פריט מרוחק יחיד — כרטיס אחד בלבד, phase לכל סעיף)'] : []),
+    ...(sections ? ['', 'סעיפי המקור (מקור חדש ללא שלבים ממופים):', sections] : []),
     '',
     'שינויים:',
     diffs || '- אין',

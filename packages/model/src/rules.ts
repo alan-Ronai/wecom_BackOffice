@@ -1,5 +1,6 @@
 import { similarity } from '@wecom/shared';
 import type { ModelClient, ProposalContext, ProposedSuggestion } from './contract.js';
+import { isNewSourcePath, sectionCards } from './sections.js';
 
 const sentences = (t: string) =>
   t
@@ -33,6 +34,12 @@ export class RuleBasedModel implements ModelClient {
     return true;
   }
   async proposeChanges(ctx: ProposalContext): Promise<ProposedSuggestion[]> {
+    /**
+     * Nothing in the library is anchored to this source yet, so every paragraph is "added
+     * with no linked step" and the loop below would emit a card per paragraph. Read the
+     * source as sections instead — see `sections.ts`.
+     */
+    if (isNewSourcePath(ctx)) return sectionCards(ctx);
     const out: ProposedSuggestion[] = [];
     for (const d of ctx.diffs) {
       if (d.kind === 'same') continue;
