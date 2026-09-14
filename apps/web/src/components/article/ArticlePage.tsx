@@ -361,6 +361,8 @@ export function ArticlePage() {
           <span
             className={'callpill' + (callMode ? '' : ' off')}
             title="מצב שיחה: ניווט במקלדת, מעקב תוצאות וסיכום לתיעוד"
+            aria-label={callMode ? 'מצב שיחה פעיל · כבה' : 'מצב קריאה · הפעל מצב שיחה'}
+            aria-pressed={callMode}
             role="button"
             tabIndex={0}
             onClick={() =>
@@ -382,6 +384,7 @@ export function ArticlePage() {
               <span
                 style={{ opacity: 0.7, cursor: 'pointer' }}
                 title="אפס מעקב"
+                aria-label="אפס מעקב שיחה"
                 role="button"
                 tabIndex={0}
                 onClick={(e) => {
@@ -456,6 +459,8 @@ export function ArticlePage() {
                     : '')
             }
             title={stripFmt(s.title)}
+            aria-label={`שלב ${s.num} מתוך ${steps.length} · ${stripFmt(s.title)}`}
+            aria-current={s.key === call.activeKey}
             role="button"
             tabIndex={0}
             onClick={() => call.setActive(s.key)}

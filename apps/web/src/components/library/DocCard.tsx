@@ -38,6 +38,8 @@ export function DocCard({
       <span
         className={'star' + (card.pinned ? ' on' : '')}
         title={card.pinned ? 'בטל הצמדה' : 'הצמד'}
+        aria-label={`${card.pinned ? 'בטל הצמדה של' : 'הצמד את'} ${card.title}`}
+        aria-pressed={card.pinned}
         role="button"
         tabIndex={0}
         onClick={(e) => {
@@ -50,6 +52,7 @@ export function DocCard({
       <span
         className="kebab"
         title="פעולות"
+        aria-label={`פעולות · ${card.title}`}
         role="button"
         tabIndex={0}
         onClick={(e) => {

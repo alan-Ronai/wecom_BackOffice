@@ -12,6 +12,7 @@ import { NavProvider, useNav } from './navStore.js';
 import { Sidebar } from './Sidebar.js';
 import { TabStrip } from './TabStrip.js';
 import { DrawerProvider, useDrawer } from './MobileDrawer.js';
+import { Tour } from './Tour.js';
 
 const RAIL_ROUTES = /^\/(doc|edit|history|sources)\b/;
 
@@ -115,6 +116,10 @@ function ShellInner() {
 
   return (
     <div id="app" className={railMode ? 'rail' : undefined}>
+      {/* 6f: the first stop for a keyboard user, before the sidebar's ~30 links. */}
+      <a className="skip-link" href="#content">
+        דלג לתוכן
+      </a>
       <Sidebar
         railMode={railMode}
         drawerOpen={drawer.open}
@@ -130,6 +135,7 @@ function ShellInner() {
       </main>
       <Palette />
       <Peek />
+      <Tour />
     </div>
   );
 }

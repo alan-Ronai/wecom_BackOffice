@@ -9,6 +9,7 @@ import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.
 import { CATS, CAT_KEYS, SOURCE_FILES } from '../../lib/constants.js';
 import { usePalette } from '../palette/paletteStore.js';
 import { useSettings } from '../settings/SettingsDialog.js';
+import { NotificationBell } from '../notifications/NotificationBell.js';
 
 /** Port of legacy renderSidebar: brand, search trigger, nav counts, source files, categories, user. */
 export function Sidebar({
@@ -141,6 +142,7 @@ export function Sidebar({
           wecom.
         </span>
         <span className="tag">מאגר ידע פנימי</span>
+        <NotificationBell onOpenFull={() => go('/notifications')} />
         {!railMode && /^\/(doc|edit|history|sources)\b/.test(loc.pathname) ? (
           <span
             className="rail-btn"
@@ -176,6 +178,7 @@ export function Sidebar({
           {item('נצפו לאחרונה', '/recent')}
           {item('טיוטות', '/drafts', drafts.data?.items.length || null, true)}
           {item('היסטוריית גרסאות', '/history')}
+          {item('התראות', '/notifications')}
           {can('docs.publish') ? item('סקירות', '/reviews') : null}
           {item('סל מיחזור', '/trash', trash.data?.items.length || null)}
           {item('מסמכי מקור', '/sources', pendingSrc || null, true)}

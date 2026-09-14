@@ -23,7 +23,12 @@ export const useDrawer = (): Drawer => useContext(Ctx);
 export function Hamburger() {
   const { setOpen } = useDrawer();
   return (
-    <button className="btn ghost hamburger" title="תפריט" onClick={() => setOpen(true)}>
+    <button
+      className="btn ghost hamburger"
+      title="תפריט"
+      aria-label="פתח תפריט ניווט"
+      onClick={() => setOpen(true)}
+    >
       ☰
     </button>
   );

@@ -33,6 +33,42 @@ const publish = (next: StreamState) => {
   for (const l of listeners) l(state);
 };
 
+/**
+ * Stage-5 event names (`docs/api/CONTRACTS-stage4-5.md`).
+ *
+ * They are an **additive** change to `packages/shared/src/events.ts` that backend lane B owns, so
+ * `EVENTS` and `EventSchema` do not know them yet. Subscribing to them here means the notification
+ * bell, the comment threads and the review queue go live the moment the backend starts emitting —
+ * and, because the payload is read defensively rather than parsed by a schema this app does not
+ * have, an unknown shape invalidates a query instead of throwing.
+ *
+ * When the shared union gains them, delete this list: the generic `EVENTS` loop will cover them.
+ */
+const STAGE5_EVENTS = [
+  'notification.created',
+  'comment.created',
+  'review.requested',
+  'review.decided',
+  'presence.changed',
+] as const;
+
+function invalidateStage5(qc: QueryClient, name: string, payload: Record<string, unknown>): void {
+  const documentId = typeof payload.documentId === 'string' ? payload.documentId : undefined;
+  if (name === 'notification.created') {
+    void qc.invalidateQueries({ queryKey: ['notifications'] });
+  } else if (name === 'comment.created') {
+    if (documentId) void qc.invalidateQueries({ queryKey: keys.comments(documentId) });
+    void qc.invalidateQueries({ queryKey: ['notifications'] });
+  } else if (name.startsWith('review.')) {
+    void qc.invalidateQueries({ queryKey: ['reviews'] });
+    void qc.invalidateQueries({ queryKey: ['notifications'] });
+    if (documentId) void qc.invalidateQueries({ queryKey: keys.doc(documentId) });
+    void qc.invalidateQueries({ queryKey: ['documents'] });
+  } else if (name === 'presence.changed') {
+    if (documentId) void qc.invalidateQueries({ queryKey: keys.presence(documentId) });
+  }
+}
+
 function invalidate(qc: QueryClient, ev: Event): void {
   if (ev.name.startsWith('document.')) {
     const id = (ev.payload as { documentId: string }).documentId;
@@ -104,6 +140,19 @@ function open(qc: QueryClient): void {
   };
 
   for (const name of EVENTS) es.addEventListener(name, handle as EventListener);
+
+  const handleStage5 = (name: string) => (raw: MessageEvent) => {
+    let payload: Record<string, unknown> = {};
+    try {
+      const json = JSON.parse(raw.data as string) as { payload?: unknown };
+      if (json && typeof json === 'object' && json.payload && typeof json.payload === 'object')
+        payload = json.payload as Record<string, unknown>;
+    } catch {
+      /* an unparseable frame still means "something changed"; fall through to invalidation */
+    }
+    invalidateStage5(qc, name, payload);
+  };
+  for (const name of STAGE5_EVENTS) es.addEventListener(name, handleStage5(name) as EventListener);
 }
 
 function close(): void {
