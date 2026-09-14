@@ -12895,7 +12895,9 @@
                             "outcome",
                             "call_completed",
                             "palette",
-                            "jump"
+                            "jump",
+                            "view_topic",
+                            "search_click"
                           ]
                         },
                         "documentId": {
@@ -13006,7 +13008,9 @@
                               "mention",
                               "review",
                               "publish",
-                              "system"
+                              "system",
+                              "feedback",
+                              "source"
                             ]
                           },
                           "title": {
@@ -24829,7 +24833,8 @@
                       "type": "boolean"
                     },
                     "schedule": {
-                      "type": "string"
+                      "type": "string",
+                      "nullable": true
                     },
                     "lastRunAt": {
                       "type": "string",
@@ -24838,39 +24843,29 @@
                     },
                     "lastStatus": {
                       "type": "string",
-                      "nullable": true
+                      "enum": [
+                        "ok",
+                        "error",
+                        "never"
+                      ],
+                      "default": "never"
                     },
                     "health": {
                       "type": "object",
-                      "additionalProperties": {}
+                      "additionalProperties": {},
+                      "nullable": true
                     },
-                    "configMasked": {
+                    "config": {
                       "type": "object",
                       "additionalProperties": {}
                     },
-                    "capabilities": {
-                      "type": "object",
-                      "properties": {
-                        "read": {
-                          "type": "boolean"
-                        },
-                        "write": {
-                          "type": "boolean"
-                        },
-                        "webhooks": {
-                          "type": "boolean"
-                        },
-                        "identity": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "read",
-                        "write",
-                        "webhooks",
-                        "identity"
-                      ],
-                      "additionalProperties": false
+                    "links": {
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "conflicts": {
+                      "type": "integer",
+                      "default": 0
                     }
                   },
                   "required": [
@@ -24880,10 +24875,8 @@
                     "enabled",
                     "schedule",
                     "lastRunAt",
-                    "lastStatus",
                     "health",
-                    "configMasked",
-                    "capabilities"
+                    "config"
                   ],
                   "additionalProperties": false
                 }
@@ -24985,7 +24978,8 @@
                       "type": "boolean"
                     },
                     "schedule": {
-                      "type": "string"
+                      "type": "string",
+                      "nullable": true
                     },
                     "lastRunAt": {
                       "type": "string",
@@ -24994,39 +24988,29 @@
                     },
                     "lastStatus": {
                       "type": "string",
-                      "nullable": true
+                      "enum": [
+                        "ok",
+                        "error",
+                        "never"
+                      ],
+                      "default": "never"
                     },
                     "health": {
                       "type": "object",
-                      "additionalProperties": {}
+                      "additionalProperties": {},
+                      "nullable": true
                     },
-                    "configMasked": {
+                    "config": {
                       "type": "object",
                       "additionalProperties": {}
                     },
-                    "capabilities": {
-                      "type": "object",
-                      "properties": {
-                        "read": {
-                          "type": "boolean"
-                        },
-                        "write": {
-                          "type": "boolean"
-                        },
-                        "webhooks": {
-                          "type": "boolean"
-                        },
-                        "identity": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "read",
-                        "write",
-                        "webhooks",
-                        "identity"
-                      ],
-                      "additionalProperties": false
+                    "links": {
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "conflicts": {
+                      "type": "integer",
+                      "default": 0
                     }
                   },
                   "required": [
@@ -25036,10 +25020,8 @@
                     "enabled",
                     "schedule",
                     "lastRunAt",
-                    "lastStatus",
                     "health",
-                    "configMasked",
-                    "capabilities"
+                    "config"
                   ],
                   "additionalProperties": false
                 }
@@ -25172,7 +25154,8 @@
                       "type": "boolean"
                     },
                     "schedule": {
-                      "type": "string"
+                      "type": "string",
+                      "nullable": true
                     },
                     "lastRunAt": {
                       "type": "string",
@@ -25181,39 +25164,29 @@
                     },
                     "lastStatus": {
                       "type": "string",
-                      "nullable": true
+                      "enum": [
+                        "ok",
+                        "error",
+                        "never"
+                      ],
+                      "default": "never"
                     },
                     "health": {
                       "type": "object",
-                      "additionalProperties": {}
+                      "additionalProperties": {},
+                      "nullable": true
                     },
-                    "configMasked": {
+                    "config": {
                       "type": "object",
                       "additionalProperties": {}
                     },
-                    "capabilities": {
-                      "type": "object",
-                      "properties": {
-                        "read": {
-                          "type": "boolean"
-                        },
-                        "write": {
-                          "type": "boolean"
-                        },
-                        "webhooks": {
-                          "type": "boolean"
-                        },
-                        "identity": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "read",
-                        "write",
-                        "webhooks",
-                        "identity"
-                      ],
-                      "additionalProperties": false
+                    "links": {
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "conflicts": {
+                      "type": "integer",
+                      "default": 0
                     }
                   },
                   "required": [
@@ -25223,10 +25196,8 @@
                     "enabled",
                     "schedule",
                     "lastRunAt",
-                    "lastStatus",
                     "health",
-                    "configMasked",
-                    "capabilities"
+                    "config"
                   ],
                   "additionalProperties": false
                 }
@@ -26541,6 +26512,7 @@
             "required": true
           }
         ],
+        "deprecated": true,
         "responses": {
           "200": {
             "description": "Default Response",

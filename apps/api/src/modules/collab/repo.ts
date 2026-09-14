@@ -59,6 +59,51 @@ export async function notify(
   return id;
 }
 
+/**
+ * The same, for a set of recipients: one multi-row `INSERT` instead of one per person.
+ *
+ * A comment naming ten people used to be ten sequential inserts inside the request
+ * transaction, and a 200-document bulk `request-review` was 200 x |leads| of them. The
+ * `notification.created` events stay one per recipient — the payload is addressed to a single
+ * `userId` and `events/routes.ts` delivers it only to that user's stream, so an aggregated
+ * event would have no one to be addressed to.
+ */
+export async function notifyMany(
+  tx: Tx,
+  events: EventBus,
+  notifications: NotifyInput[],
+  actorId: string | null = null,
+): Promise<string[]> {
+  const wanted = notifications.filter((n) => !(actorId && actorId === n.userId));
+  if (!wanted.length) return [];
+  const r = await tx.query<{ id: string }>(
+    `insert into notifications(user_id, kind, title, body, href, entity_type, entity_id)
+     select * from unnest($1::uuid[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[])
+     returning id`,
+    [
+      wanted.map((n) => n.userId),
+      wanted.map((n) => n.kind),
+      wanted.map((n) => n.title),
+      wanted.map((n) => n.body ?? ''),
+      wanted.map((n) => n.href ?? null),
+      wanted.map((n) => n.entityType ?? null),
+      wanted.map((n) => n.entityId ?? null),
+    ],
+  );
+  const ids = r.rows.map((x) => x.id);
+  for (const [i, n] of wanted.entries())
+    await events.publish(
+      tx,
+      makeEvent('notification.created', {
+        notificationId: ids[i],
+        userId: n.userId,
+        kind: n.kind,
+        title: n.title,
+      }),
+    );
+  return ids;
+}
+
 /** Everyone who may publish — the people a review request is actually for. */
 export async function leadIds(q: Q, exclude: string | null): Promise<string[]> {
   const r = await q.query<{ id: string }>(

@@ -12,11 +12,11 @@ import {
   type Category,
 } from '@wecom/shared';
 import { audit } from '../../lib/audit.js';
-import { badRequest, notFound } from '../../lib/http.js';
+import { badRequest, httpError, notFound } from '../../lib/http.js';
 import { withTransaction, type Queryable, type Tx } from '../../lib/sql.js';
 import { requireUser } from '../../lib/user.js';
 import { publishDocument } from '../documents/publish.js';
-import { documentTitle, iso, leadIds, notify } from './repo.js';
+import { documentTitle, iso, leadIds, notify, notifyMany } from './repo.js';
 
 type ReviewRequest = z.infer<typeof ReviewRequestSchema>;
 
@@ -86,36 +86,41 @@ export default async function reviewRoutes(instance: FastifyInstance) {
         const reviewerIds = req.body.reviewerIds ?? [];
         // One open request per document (partial unique index): asking twice updates
         // the standing request rather than filling the queue with duplicates.
-        const ins = await tx.query<{ id: string }>(
-          `insert into review_requests(document_id, requested_by, reviewer_ids, note)
-           values ($1,$2,$3::uuid[],$4)
-           on conflict (document_id) where status = 'open'
-           do update set requested_by = excluded.requested_by, reviewer_ids = excluded.reviewer_ids,
-                         note = excluded.note, created_at = now()
-           returning id`,
-          [documentId, user.id, reviewerIds, req.body.note ?? null],
-        );
-        const id = ins.rows[0].id;
-        await tx.query(
-          "update documents set status='review', updated_by=$2, updated_at=now(), etag=gen_random_uuid()::text where id=$1",
+        // Move the document to `review` first, so the baseline stored below is the etag the
+        // reviewer will actually open — this statement mints a new one.
+        const moved = await tx.query<{ etag: string; current_version: number }>(
+          `update documents set status='review', updated_by=$2, updated_at=now(),
+                  etag=gen_random_uuid()::text
+             where id=$1 returning etag, current_version`,
           [documentId, user.id],
         );
+        const baseline = moved.rows[0];
+        const ins = await tx.query<{ id: string }>(
+          `insert into review_requests(document_id, requested_by, reviewer_ids, note, base_version, base_etag)
+           values ($1,$2,$3::uuid[],$4,$5,$6)
+           on conflict (document_id) where status = 'open'
+           do update set requested_by = excluded.requested_by, reviewer_ids = excluded.reviewer_ids,
+                         note = excluded.note, created_at = now(),
+                         base_version = excluded.base_version, base_etag = excluded.base_etag
+           returning id`,
+          [documentId, user.id, reviewerIds, req.body.note ?? null, baseline.current_version, baseline.etag],
+        );
+        const id = ins.rows[0].id;
         const title = cur.rows[0].title;
-        for (const userId of await recipients(tx, reviewerIds, user.id))
-          await notify(
-            tx,
-            app.events,
-            {
-              userId,
-              kind: 'review',
-              title: `${user.displayName} ביקש בדיקה: "${title}"`,
-              body: req.body.note ?? '',
-              href: `/doc/${documentId}`,
-              entityType: 'review_request',
-              entityId: id,
-            },
-            user.id,
-          );
+        await notifyMany(
+          tx,
+          app.events,
+          (await recipients(tx, reviewerIds, user.id)).map((userId) => ({
+            userId,
+            kind: 'review' as const,
+            title: `${user.displayName} ביקש בדיקה: "${title}"`,
+            body: req.body.note ?? '',
+            href: `/doc/${documentId}`,
+            entityType: 'review_request',
+            entityId: id,
+          })),
+          user.id,
+        );
         await audit(tx, {
           actorId: user.id,
           action: 'reviews.request',
@@ -152,16 +157,42 @@ export default async function reviewRoutes(instance: FastifyInstance) {
       const user = requireUser(req);
       const documentId = req.params.id;
       return withTransaction(app.db, async (tx) => {
-        const open = await tx.query<{ id: string; requested_by: string }>(
-          `select id, requested_by from review_requests
+        const open = await tx.query<{
+          id: string;
+          requested_by: string;
+          base_version: number | null;
+          base_etag: string | null;
+        }>(
+          `select id, requested_by, base_version, base_etag from review_requests
             where document_id=$1 and status='open' order by created_at desc limit 1 for update`,
           [documentId],
         );
         if (!open.rowCount) throw badRequest('אין בקשת בדיקה פתוחה למסמך זה');
-        const { id, requested_by: requesterId } = open.rows[0];
+        const {
+          id,
+          requested_by: requesterId,
+          base_version: baseVersion,
+          base_etag: baseEtag,
+        } = open.rows[0];
         const approve = req.body.decision === 'approve';
         const title = await documentTitle(tx, documentId);
         if (approve) {
+          // Approve what the reviewer was asked to review, not what the document happens to be
+          // now. An author who pushes edits after "send to review" would otherwise have them
+          // published under the reviewer's name and label. 409 is the honest default for a
+          // workflow whose whole point is that somebody looked; "changes" needs no such check,
+          // since sending a document back cannot publish anything.
+          const nowRow = await tx.query<{ etag: string; current_version: number }>(
+            'select etag, current_version from documents where id=$1',
+            [documentId],
+          );
+          const cur = nowRow.rows[0];
+          // `null` baseline = a request that predates the column; those stay decidable.
+          if (baseEtag !== null && cur && (cur.etag !== baseEtag || cur.current_version !== baseVersion))
+            throw httpError(409, 'REVIEW_STALE', 'המסמך השתנה מאז שהתבקשה הבדיקה — יש לבדוק שוב לפני אישור', {
+              baseVersion,
+              currentVersion: cur.current_version,
+            });
           // The approval is what makes the version: the label is the reviewer's, so the
           // history reads "אושר בבדיקה" rather than an anonymous bump.
           await publishDocument(tx, documentId, {

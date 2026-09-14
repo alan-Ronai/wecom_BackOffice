@@ -8,7 +8,14 @@ import * as repo from './repo.js';
 const CACHE_TTL_MS = 60_000;
 
 export default async function routes(app: FastifyInstance) {
-  let cached: { at: number; value: Dashboard } | null = null;
+  /**
+   * Keyed by the caller's scope, because the document-derived aggregates are now scoped: one
+   * shared entry would have served a `tech`-only reader whatever the previous caller saw.
+   * Still per *process*, so a multi-worker deployment serves up to N snapshots up to 60 s old —
+   * which is what the contract's "cached 60 s" already allows.
+   */
+  const cache = new Map<string, { at: number; value: Dashboard }>();
+  const keyOf = (scopes: string[] | null) => (scopes ? [...scopes].sort().join(',') : '*');
 
   app.get(
     '/dashboards',
@@ -17,23 +24,32 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['dashboards'], response: { 200: DashboardSchema } },
     },
     async (req) => {
-      requireUser(req);
-      if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value;
-      const value = await repo.computeDashboard(app.db);
-      cached = { at: Date.now(), value };
+      const user = requireUser(req);
+      const key = keyOf(user.categoryScopes);
+      const hit = cache.get(key);
+      if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
+      const value = await repo.computeDashboard(app.db, user.categoryScopes);
+      cache.set(key, { at: Date.now(), value });
       return value;
     },
   );
 
   app.post(
     '/telemetry',
-    { config: { requires: ['docs.read'] }, schema: { tags: ['dashboards'], body: TelemetryBatchSchema } },
+    {
+      // `TelemetryBatchSchema` caps a batch at 200 events; nothing capped the *batches*, and
+      // this is the one write route every agent holds the permission for. 120/minute is far
+      // more than any real client sends (the web batches on an interval) and bounds the table's
+      // growth to something the 90-day retention can hold.
+      config: { requires: ['docs.read'], rateLimit: { max: 120, timeWindow: '1 minute' } },
+      schema: { tags: ['dashboards'], body: TelemetryBatchSchema },
+    },
     async (req, reply) => {
       const user = requireUser(req);
       const body = req.body as z.infer<typeof TelemetryBatchSchema>;
       const written = await repo.recordTelemetry(app.db, user.id, body.events);
       // Usage on the dashboard has to reflect what just happened, not the last minute.
-      if (written) cached = null;
+      if (written) cache.clear();
       reply.code(204);
       return null;
     },

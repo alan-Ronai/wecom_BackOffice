@@ -179,7 +179,11 @@ export async function listCards(
   if (query.drafts) where.push(`d.status = 'draft'`);
   if (query.q) {
     const i = p(query.q);
-    where.push(`(d.search_vector @@ plainto_tsquery('simple', ${i}) or d.title ilike '%' || ${i} || '%')`);
+    // `kb_tsquery` (migration 0027) is `plainto_tsquery` with the same stopwords the
+    // `search_vector` trigger strips at index time. With a plain `plainto_tsquery` the `@@`
+    // arm could never be satisfied for a query containing one of them — a phrase like
+    // "חוב של לקוח" silently lost every full-text match.
+    where.push(`(d.search_vector @@ kb_tsquery(${i}) or d.title ilike '%' || ${i} || '%')`);
   }
   if (query.pinned) where.push('p.user_id is not null');
   if (query.recent) where.push('rv.user_id is not null');

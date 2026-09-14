@@ -22,21 +22,6 @@ const ALL_TYPES = new Set(GROUP_ORDER);
 
 const words = (q: string) => q.trim().split(/\s+/).filter(Boolean);
 
-/**
- * Builds a `to_tsquery('simple', …)`-ready string that AND-joins every word except the
- * last, which gets a `:*` prefix match — so the command palette (which calls this same
- * `search()` on every keystroke) ranks "רענ" as a hit for "ריענון" instead of only
- * matching once the whole word has been typed. Falls back to `''` (caller then falls
- * back to `plainto_tsquery`) when every word is made of only tsquery-syntax characters.
- */
-const TSQUERY_UNSAFE = /[&|!():*'"\\]/g;
-const toPrefixTsQuery = (ws: string[]): string =>
-  ws
-    .map((w) => w.replace(TSQUERY_UNSAFE, ''))
-    .filter(Boolean)
-    .map((w, i, arr) => (i === arr.length - 1 ? `${w}:*` : w))
-    .join(' & ');
-
 const wordClause = (cols: string[], w: string, params: unknown[]): string => {
   params.push(w);
   const i = '$' + params.length;
@@ -137,15 +122,12 @@ export async function search(
     const params: unknown[] = [text];
     const cond = allWords(['d.title', "coalesce(d.description,'')", "coalesce(d.code,'')"], ws, params);
     const docScope = scopeTerm(params);
-    // Prefix-match the last word (palette-friendly incremental search); fall back to a
-    // whole-word plainto_tsquery when the query is made of only tsquery-syntax characters.
-    const prefixQuery = toPrefixTsQuery(ws);
-    const rankExpr = prefixQuery
-      ? (() => {
-          params.push(prefixQuery);
-          return `ts_rank(d.search_vector, to_tsquery('simple', $${params.length}))`;
-        })()
-      : `ts_rank(d.search_vector, plainto_tsquery('simple', $1))`;
+    // Prefix-match the last word (palette-friendly incremental search), so the palette ranks
+    // "רענ" as a hit for "ריענון" before the whole word is typed. `kb_tsquery_prefix`
+    // (migration 0027) tokenises and strips stopwords through exactly the pipeline the
+    // `search_vector` trigger uses, and quotes each lexeme, so a query made of tsquery syntax
+    // characters is data rather than operators and needs no separate escape pass here.
+    const rankExpr = `ts_rank(d.search_vector, kb_tsquery_prefix($1))`;
     params.push(limit);
     const r = await q.query(
       `select d.id, d.title, d.description, d.category, d.current_version,
@@ -335,20 +317,35 @@ export async function updateEmbedding(
 /**
  * `search.reindex` worker body: recompute derived text for every live document, and —
  * when a model with `embed` is available — its embedding too.
+ *
+ * The embedding call is deliberately **outside** the transaction. `updateEmbedding` is an HTTP
+ * round trip to the model, and the target architecture is a CPU-local model where that is
+ * seconds rather than milliseconds; doing it inside `withTransaction` pinned a pool connection
+ * and held an open transaction for the whole call, so a 5,000-document reindex — which
+ * `docs/operations.md` tells operators to run after any `EMBED_MODEL` change — held one for
+ * hours. The publish path already gets this right and says why
+ * (`documents/routes.ts`: a model outage must never fail a publish); the worker now matches it.
+ *
+ * The derived-text recompute keeps its transaction, because that is several dependent writes.
+ * The embedding is a single `update`, so a re-run converges and a crash halfway leaves stale
+ * vectors rather than corrupt ones.
  */
 export async function reindexAll(pool: pg.Pool, model?: ModelClient | null): Promise<number> {
   const ids = (await pool.query('select id from documents where deleted_at is null')).rows.map(
     (r) => r.id as string,
   );
   let n = 0;
-  for (const id of ids)
-    await withTransaction(pool, async (tx) => {
+  for (const id of ids) {
+    const recomputed = await withTransaction(pool, async (tx) => {
       const doc = await getDocument(tx, id);
-      if (doc) {
-        await recomputeDerived(tx, doc);
-        await updateEmbedding(tx, id, model);
-        n++;
-      }
+      if (!doc) return false;
+      await recomputeDerived(tx, doc);
+      return true;
     });
+    if (!recomputed) continue;
+    n++;
+    // On the pool, after the commit: the text it embeds is the text that was just written.
+    await updateEmbedding(pool, id, model);
+  }
   return n;
 }

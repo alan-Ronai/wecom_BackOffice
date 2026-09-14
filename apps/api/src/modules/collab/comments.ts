@@ -5,9 +5,18 @@ import { CommentBodySchema, CommentSchema, IdSchema, makeEvent } from '@wecom/sh
 import { audit } from '../../lib/audit.js';
 import { forbidden, notFound } from '../../lib/http.js';
 import { withTransaction, type Queryable } from '../../lib/sql.js';
-import { requireUser } from '../../lib/user.js';
+import { hasScope, requireUser, type ReqUser } from '../../lib/user.js';
 import { parseMentions, type Mention } from './mentions.js';
-import { documentTitle, initialsOf, iso, notify } from './repo.js';
+import { documentTitle, initialsOf, iso, notifyMany } from './repo.js';
+
+/**
+ * The most people one comment may notify. `RequestReviewBodySchema` already caps `reviewerIds`
+ * at 10 for the same reason: a 4,000-character comment could otherwise name every active user
+ * in the tenant, and each name was an independent `INSERT` plus an SSE broadcast inside the
+ * request transaction. The composer's autocomplete inserts whole names, so a comment that
+ * resolves more than ten is not a comment anyone wrote by hand.
+ */
+const MAX_MENTIONS = 10;
 
 type Comment = z.infer<typeof CommentSchema>;
 
@@ -39,6 +48,28 @@ const toApi = (r: Record<string, unknown>): Comment => ({
 const loadComment = async (q: Queryable, id: string, viewerId: string): Promise<Comment | null> => {
   const r = await q.query(`${SELECT} where c.id = $1`, [id, viewerId]);
   return r.rowCount ? toApi(r.rows[0]) : null;
+};
+
+/**
+ * The comment, but only if the caller may open the document it hangs off.
+ *
+ * The three by-comment-id routes cannot use `config.scope: 'document'`: the auth plugin reads
+ * `req.params.id` and looks it up in `documents`, which for a comment id simply 404s. So the
+ * check lives here, resolving `comments -> documents` first. It answers `null` (→ 404) rather
+ * than 403 for an out-of-scope comment, so the response never confirms that the id exists —
+ * `resolve` returns the full comment body on success, which made a guessed id a read primitive
+ * as well as an unauthorised state change.
+ */
+const loadCommentInScope = async (q: Queryable, id: string, user: ReqUser): Promise<Comment | null> => {
+  const c = await loadComment(q, id, user.id);
+  if (!c) return null;
+  const d = await q.query<{ category: string }>(
+    'select category from documents where id = $1 and deleted_at is null',
+    [c.documentId],
+  );
+  const category = d.rows[0]?.category;
+  if (!category || !hasScope(user, category)) return null;
+  return c;
 };
 
 export default async function commentRoutes(instance: FastifyInstance) {
@@ -85,7 +116,7 @@ export default async function commentRoutes(instance: FastifyInstance) {
       const mentions = parseMentions(
         req.body.text,
         candidates.rows.map((u) => ({ id: u.id, displayName: u.display_name })),
-      );
+      ).slice(0, MAX_MENTIONS);
       const created = await withTransaction(app.db, async (tx) => {
         const ins = await tx.query<{ id: string }>(
           `insert into comments(document_id, step_key, author_id, text, mentions)
@@ -95,21 +126,20 @@ export default async function commentRoutes(instance: FastifyInstance) {
         const id = ins.rows[0].id;
         const title = await documentTitle(tx, documentId);
         const href = `/doc/${documentId}${req.body.stepKey ? '#' + req.body.stepKey : ''}`;
-        for (const m of mentions)
-          await notify(
-            tx,
-            app.events,
-            {
-              userId: m.userId,
-              kind: 'mention',
-              title: `${user.displayName} הזכיר אותך ב"${title}"`,
-              body: req.body.text.slice(0, 280),
-              href,
-              entityType: 'comment',
-              entityId: id,
-            },
-            user.id,
-          );
+        await notifyMany(
+          tx,
+          app.events,
+          mentions.map((m) => ({
+            userId: m.userId,
+            kind: 'mention' as const,
+            title: `${user.displayName} הזכיר אותך ב"${title}"`,
+            body: req.body.text.slice(0, 280),
+            href,
+            entityType: 'comment',
+            entityId: id,
+          })),
+          user.id,
+        );
         await audit(tx, {
           actorId: user.id,
           action: 'comments.create',
@@ -144,7 +174,7 @@ export default async function commentRoutes(instance: FastifyInstance) {
     },
     async (req) => {
       const user = requireUser(req);
-      const before = await loadComment(app.db, req.params.id, user.id);
+      const before = await loadCommentInScope(app.db, req.params.id, user);
       if (!before) throw notFound('ההערה');
       return withTransaction(app.db, async (tx) => {
         // Toggling back to open is the same permission: a thread reopened by mistake
@@ -179,7 +209,7 @@ export default async function commentRoutes(instance: FastifyInstance) {
     },
     async (req) => {
       const user = requireUser(req);
-      const before = await loadComment(app.db, req.params.id, user.id);
+      const before = await loadCommentInScope(app.db, req.params.id, user);
       if (!before) throw notFound('ההערה');
       return withTransaction(app.db, async (tx) => {
         if (before.likedByMe)
@@ -205,7 +235,7 @@ export default async function commentRoutes(instance: FastifyInstance) {
     },
     async (req, reply) => {
       const user = requireUser(req);
-      const before = await loadComment(app.db, req.params.id, user.id);
+      const before = await loadCommentInScope(app.db, req.params.id, user);
       if (!before) throw notFound('ההערה');
       if (before.authorId !== user.id && !user.permissions.has('notes.moderate')) throw forbidden();
       await withTransaction(app.db, async (tx) => {
