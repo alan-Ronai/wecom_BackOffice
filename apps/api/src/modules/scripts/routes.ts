@@ -5,6 +5,7 @@ import { audit } from '../../lib/audit.js';
 import { notFound } from '../../lib/http.js';
 import { withTransaction } from '../../lib/sql.js';
 import { requireUser } from '../../lib/user.js';
+import { canReadUnpublished } from '../../lib/visibility.js';
 import * as repo from './repo.js';
 
 const Params = z.object({ id: IdSchema });
@@ -19,8 +20,13 @@ export default async function routes(app: FastifyInstance) {
       schema: { deprecated: true, tags: ['scripts'], response: { 200: ScriptListSchema } },
     },
     async (req) => {
-      requireUser(req);
-      return { items: await repo.listScripts(app.db) };
+      const user = requireUser(req);
+      return {
+        items: await repo.listScripts(app.db, {
+          worldScopes: user.worldScopes,
+          readUnpublished: canReadUnpublished(user),
+        }),
+      };
     },
   );
 
@@ -58,7 +64,8 @@ export default async function routes(app: FastifyInstance) {
   app.put(
     '/scripts/:id',
     {
-      config: { requires: ['scripts.edit'] },
+      // These rows are documents (0030); the world half of the boundary is the plugin's job.
+      config: { requires: ['scripts.edit'], scope: 'document' },
       schema: {
         deprecated: true,
         tags: ['scripts'],
@@ -93,7 +100,7 @@ export default async function routes(app: FastifyInstance) {
   app.delete(
     '/scripts/:id',
     {
-      config: { requires: ['scripts.edit'] },
+      config: { requires: ['scripts.edit'], scope: 'document' },
       schema: {
         deprecated: true,
         tags: ['scripts'],
