@@ -52,6 +52,31 @@ export function SessionsPage() {
   const names = Object.fromEntries((users.data?.items ?? []).map((u) => [u.id, u.displayName]));
   const list = (sessions.data ?? []).filter((s) => !s.revokedAt);
   const expired = (iso: string) => new Date(iso).getTime() < Date.now();
+  /**
+   * `isCurrent` is the server telling us which row is the browser asking the question — it is the
+   * one session an operator must not revoke by accident, and the only one they can be sure about.
+   * It is optional in the contract, so an API that does not send it degrades to "no row is
+   * marked", which is exactly the behaviour this screen had before.
+   */
+  const others = list.filter((s) => !s.isCurrent);
+
+  const revokeOthers = async () => {
+    const ok = await modal.confirm(
+      'ניתוק כל שאר החיבורים',
+      `${others.length} חיבורים ינותקו. החיבור הנוכחי יישאר פעיל, וכל ניתוק נרשם ביומן הביקורת.`,
+      'נתק את כולם',
+      'danger',
+    );
+    if (!ok) return;
+    // One DELETE per session: the contract publishes `DELETE /admin/sessions/{id}` and no bulk
+    // route. `allSettled` so one failure does not strand the rest half-revoked.
+    const results = await Promise.allSettled(others.map((s) => revoke.mutateAsync(s.id)));
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    toast(
+      failed ? `${others.length - failed} מתוך ${others.length} חיבורים נותקו` : 'כל שאר החיבורים נותקו',
+      failed ? 'warn' : 'ok',
+    );
+  };
 
   return (
     <>
@@ -63,6 +88,13 @@ export function SessionsPage() {
           </h1>
           <p>הפגה מתגלגלת לפי ההגדרה במסך הזהות · ניתוק מבטל את העוגייה מיד ונרשם ביומן הביקורת.</p>
         </div>
+        {mayRevoke && others.length ? (
+          <div className="facets">
+            <button className="btn sm danger" disabled={revoke.isPending} onClick={() => void revokeOthers()}>
+              נתק את כל האחרים
+            </button>
+          </div>
+        ) : null}
       </div>
       {!list.length && !sessions.isPending ? (
         <div className="empty">
@@ -96,6 +128,7 @@ export function SessionsPage() {
                   <td>
                     <span aria-hidden="true">{d.icon} </span>
                     {d.label}
+                    {s.isCurrent ? <Chip tone="chip-green">מכשיר זה</Chip> : null}
                     <div className="small muted" title={s.userAgent ?? undefined}>
                       נכנס {fmtDate(s.createdAt)} {fmtTime(s.createdAt)}
                     </div>
@@ -117,11 +150,13 @@ export function SessionsPage() {
                     {mayRevoke ? (
                       <button
                         className="btn xs danger"
-                        aria-label={`נתק ${name ?? s.id}`}
+                        aria-label={`נתק ${name ?? s.id}${s.isCurrent ? ' (מכשיר זה)' : ''}`}
                         onClick={async () => {
                           const ok = await modal.confirm(
                             'ניתוק חיבור',
-                            `${name ?? 'המשתמש'} יידרש להיכנס מחדש במכשיר הזה.`,
+                            s.isCurrent
+                              ? 'זהו החיבור הנוכחי — ניתוק יוציא אתכם מהמערכת מיד.'
+                              : `${name ?? 'המשתמש'} יידרש להיכנס מחדש במכשיר הזה.`,
                             'נתק',
                             'danger',
                           );

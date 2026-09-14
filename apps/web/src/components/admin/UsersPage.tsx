@@ -168,6 +168,62 @@ export function UsersPage() {
   const roleOptions = (roles.data ?? []).map((r) => ({ id: r.id, name: r.name }));
   const items = users.data?.items ?? [];
 
+  /**
+   * Selection is keyed by id and cleared whenever the filter changes.
+   *
+   * Keeping a selection across a filter change would let "assign lead to the 4 selected" act on
+   * rows the operator can no longer see, which is the one way a bulk toolbar becomes dangerous.
+   */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const visibleSelected = items.filter((u) => selected.has(u.id));
+  const allSelected = !!items.length && visibleSelected.length === items.length;
+  const toggleOne = (id: string, on: boolean) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+  /**
+   * Bulk assign: one PATCH per user, because `PATCH /admin/users/{id}` is what the contract
+   * publishes and there is no bulk route. `allSettled` so one 403 does not leave the rest
+   * unattempted, and the toast reports the real count rather than claiming success for all.
+   */
+  const bulkAssign = (roleId: string, categoryScope: Category[] | null) => {
+    const targets = visibleSelected;
+    modal.close();
+    void (async () => {
+      const results = await Promise.allSettled(
+        targets.map((u) => patch.mutateAsync({ id: u.id, roles: [{ roleId, categoryScope }] })),
+      );
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      setSelected(new Set());
+      toast(
+        failed
+          ? `${targets.length - failed} מתוך ${targets.length} משתמשים עודכנו`
+          : `התפקיד הוקצה ל-${targets.length} משתמשים`,
+        failed ? 'warn' : 'ok',
+      );
+    })();
+  };
+
+  /**
+   * Deactivating is one click away from locking somebody out mid-shift, and the row's checkbox
+   * gives no pause before it happens. The undo is the pause: the toast holds the reverse patch
+   * for six seconds, which is long enough to notice the wrong row and short enough that it is
+   * not a second, competing source of truth.
+   */
+  const setActive = async (u: AdminUserRow, active: boolean) => {
+    await patch.mutateAsync({ id: u.id, active });
+    toast(active ? 'החשבון הופעל' : 'החשבון הושבת', 'ok', () => {
+      void (async () => {
+        await patch.mutateAsync({ id: u.id, active: !active });
+        toast(active ? 'ההפעלה בוטלה' : 'ההשבתה בוטלה', 'ok');
+      })();
+    });
+  };
+
   const editRoles = (u: AdminUserRow) =>
     modal.open({
       title: `תפקיד · ${u.displayName}`,
@@ -180,6 +236,20 @@ export function UsersPage() {
             await patch.mutateAsync({ id: u.id, roles: [{ roleId, categoryScope }] });
             toast('התפקיד עודכן', 'ok');
           }}
+        />
+      ),
+      buttons: [{ label: 'ביטול' }],
+    });
+
+  const bulkRoleDialog = () =>
+    modal.open({
+      title: `הקצאת תפקיד ל-${visibleSelected.length} משתמשים`,
+      body: (
+        <RoleEditor
+          // Seeded from the first selected user so the dialog opens on something, not on blank.
+          user={visibleSelected[0]}
+          roles={roleOptions}
+          onSave={bulkAssign}
         />
       ),
       buttons: [{ label: 'ביטול' }],
@@ -224,9 +294,19 @@ export function UsersPage() {
             aria-label="חיפוש משתמש"
             placeholder="חפש לפי שם או דוא״ל"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSelected(new Set());
+            }}
           />
-          <select aria-label="סינון לפי תפקיד" value={role} onChange={(e) => setRole(e.target.value)}>
+          <select
+            aria-label="סינון לפי תפקיד"
+            value={role}
+            onChange={(e) => {
+              setRole(e.target.value);
+              setSelected(new Set());
+            }}
+          >
             <option value="">כל התפקידים</option>
             {roleOptions.map((r) => (
               <option key={r.id} value={r.id}>
@@ -250,12 +330,29 @@ export function UsersPage() {
             tabIndex={0}
             aria-selected={i === tab}
             className={i === tab ? 'on' : ''}
-            onClick={() => setTab(i)}
+            onClick={() => {
+              setTab(i);
+              setSelected(new Set());
+            }}
           >
             {label}
           </span>
         ))}
       </div>
+
+      {mayEdit && visibleSelected.length ? (
+        /* The same floating pill the library's list mode uses — a second bulk-action treatment
+           would be a second thing to learn for the same idea. */
+        <div className="bulkbar" role="region" aria-label="פעולות על המשתמשים שנבחרו">
+          <b>{visibleSelected.length} נבחרו</b>
+          <button className="btn sm primary" onClick={bulkRoleDialog}>
+            הקצה תפקיד
+          </button>
+          <button className="btn sm" onClick={() => setSelected(new Set())}>
+            נקה בחירה
+          </button>
+        </div>
+      ) : null}
 
       {users.isError ? <LoadError what="משתמשים" error={users.error} /> : null}
       {!users.isPending && !users.isError && !items.length ? (
@@ -269,6 +366,16 @@ export function UsersPage() {
         <table className="table">
           <thead>
             <tr>
+              {mayEdit ? (
+                <th>
+                  <input
+                    type="checkbox"
+                    aria-label="בחר את כל המשתמשים המוצגים"
+                    checked={allSelected}
+                    onChange={(e) => setSelected(new Set(e.target.checked ? items.map((u) => u.id) : []))}
+                  />
+                </th>
+              ) : null}
               <th>משתמש</th>
               <th>מקור</th>
               <th>תפקידים</th>
@@ -281,7 +388,17 @@ export function UsersPage() {
           </thead>
           <tbody>
             {items.map((u) => (
-              <tr key={u.id}>
+              <tr key={u.id} className={selected.has(u.id) ? 'sel' : ''}>
+                {mayEdit ? (
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`בחר את ${u.displayName}`}
+                      checked={selected.has(u.id)}
+                      onChange={(e) => toggleOne(u.id, e.target.checked)}
+                    />
+                  </td>
+                ) : null}
                 <td>
                   <b>{u.displayName}</b>
                   <div className="small muted">
@@ -328,11 +445,7 @@ export function UsersPage() {
                     aria-label={`פעיל: ${u.displayName}`}
                     checked={u.active}
                     disabled={!mayEdit}
-                    onChange={async (e) => {
-                      const active = e.target.checked;
-                      await patch.mutateAsync({ id: u.id, active });
-                      toast(active ? 'החשבון הופעל' : 'החשבון הושבת', 'ok');
-                    }}
+                    onChange={(e) => void setActive(u, e.target.checked)}
                   />
                 </td>
               </tr>
