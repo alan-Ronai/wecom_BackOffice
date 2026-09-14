@@ -16,6 +16,7 @@ import collab from './collab/routes.js'; // stage 5: collaboration
 import sourcedocs from './sourcedocs/index.js'; // wave 4: source documents
 import taxonomy from './taxonomy/index.js'; // wave 4 W1: worlds, topics, tags
 import feedback from './feedback/index.js'; // wave 4 W3: agent feedback
+import usage from './usage/index.js'; // wave 4 (W5): usage analytics + PgUsage
 import { startJobs } from '../jobs/index.js';
 
 /**
@@ -41,6 +42,7 @@ export async function registerModules(v1: FastifyInstance) {
     sourcedocs,
     taxonomy,
     feedback,
+    usage,
   ])
     await v1.register(m);
   // L2 background workers (trash.purge, search.reindex) bind to L1's `app.boss` once it is up.
