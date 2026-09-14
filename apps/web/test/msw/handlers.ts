@@ -24,11 +24,12 @@ import { fx } from './fixtures.js';
 import { resetStage4State, stage4Handlers } from './stage4.js';
 import { resetStage5, stage5Handlers } from './stage5.js';
 import { resetStage45, stage45Handlers } from './stage45.js';
+import { initialTaxonomy, taxonomyHandlers, type TaxonomyState } from './taxonomy.js';
 import type { TrashItem } from '../../src/api/types.js';
 
 const B = '/api/v1';
 
-interface State {
+interface State extends TaxonomyState {
   pins: Set<string>;
   notes: Note[];
   suggestions: Suggestion[];
@@ -61,6 +62,7 @@ const initial = (): State => ({
   processed: [],
   publishedSources: [],
   preferences: { ...fx.me.preferences },
+  ...initialTaxonomy(),
 });
 
 export const state: State = initial();
@@ -614,6 +616,8 @@ export const handlers: RequestHandler[] = [
   ...stage5Handlers,
   /* Stage 4–5 routes, typed from the zod contract — see `test/msw/stage45.ts`. */
   ...stage45Handlers,
+  /* Wave 4 — taxonomy (W1), typed from the zod contract — see `test/msw/taxonomy.ts`. */
+  ...taxonomyHandlers(state),
 ];
 
 /** Override `/auth/me` for permission tests. */

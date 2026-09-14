@@ -19,8 +19,11 @@ import type {
   SourceRevision,
   Step,
   Suggestion,
+  Topic,
+  TopicView,
   User,
   Version,
+  World,
 } from '@wecom/shared';
 import { PERMISSIONS } from '@wecom/shared';
 import type { GroupMap, Session, TrashItem } from '../../src/api/types.js';
@@ -74,6 +77,10 @@ export const me: Me = {
 };
 
 export const docBrowsing: Document = {
+  worlds: [],
+  tags: [],
+  topics: [],
+  sourceReviewNeeded: false,
   id: D_BROWSING,
   slug: 'browsing',
   code: 'T-01',
@@ -456,6 +463,10 @@ export const fields: CrmField[] = [
 
 export const cards: DocumentCard[] = [
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: D_BROWSING,
     slug: 'browsing',
     title: docBrowsing.title,
@@ -481,6 +492,10 @@ export const cards: DocumentCard[] = [
     authorName: 'ענבר ל.',
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: D_INTL,
     slug: 'no-data-abroad',
     title: docIntl.title,
@@ -506,6 +521,10 @@ export const cards: DocumentCard[] = [
     authorName: 'אלון ר.',
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: D_CHURN,
     slug: 'churn-debug',
     title: 'דיבאג נטישה',
@@ -531,6 +550,10 @@ export const cards: DocumentCard[] = [
     authorName: 'דנה ר.',
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: 'aaaaaaaa-1111-4111-8111-000000000004',
     slug: 'esim-activation',
     title: 'הפעלת eSIM – קוד QR',
@@ -555,6 +578,10 @@ export const cards: DocumentCard[] = [
     pinned: false,
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: 'aaaaaaaa-1111-4111-8111-000000000005',
     slug: 'high-bill',
     title: 'בירור חיוב גבוה / לא מזוהה',
@@ -579,6 +606,10 @@ export const cards: DocumentCard[] = [
     pinned: false,
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: 'aaaaaaaa-1111-4111-8111-000000000006',
     slug: 'freeze-line',
     title: 'הקפאת קו זמנית',
@@ -603,6 +634,10 @@ export const cards: DocumentCard[] = [
     pinned: false,
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: 'aaaaaaaa-1111-4111-8111-000000000007',
     slug: 'roaming-package',
     title: 'רכישת חבילת חו"ל לפני טיסה',
@@ -627,6 +662,10 @@ export const cards: DocumentCard[] = [
     pinned: false,
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: 'aaaaaaaa-1111-4111-8111-000000000008',
     slug: 'customer-identification',
     title: 'זיהוי ואימות לקוח',
@@ -920,11 +959,111 @@ export const health = {
   lastBackupOk: true,
 };
 
+/* ── Wave 4 — taxonomy (W1) ────────────────────────────────────────────────
+ * Content worlds replace the hard-coded six categories; the six seeded slugs keep the same
+ * labels so every stage-1 fixture (`category: 'tech'`) still resolves to a world.
+ */
+const TAXO_NOW = '2026-09-14T10:00:00.000Z';
+const W = (slug: string, name: string, position: number): World => ({
+  id: `aaaaaaaa-aaaa-4aaa-8aaa-00000000000${position}`,
+  slug,
+  name,
+  description: '',
+  position,
+  active: true,
+  topicCount: slug === 'tech' ? 2 : 0,
+  itemCount: 3,
+  createdAt: TAXO_NOW,
+  updatedAt: TAXO_NOW,
+});
+
+export const worlds: World[] = [
+  W('sim', 'SIM / eSIM', 0),
+  W('tech', 'תמיכה טכנית', 1),
+  W('billing', 'חיובים', 2),
+  W('plans', 'מסלולים', 3),
+  W('intl', 'חו"ל ונדידה', 4),
+  W('ops', 'טיפול בשיחה', 5),
+];
+
+export const topics: Topic[] = [
+  {
+    id: 'bbbbbbbb-bbbb-4bbb-8bbb-000000000001',
+    worldSlug: 'tech',
+    slug: 'browsing',
+    name: 'תקלות גלישה',
+    description: 'אבחון וטיפול',
+    position: 0,
+    active: true,
+    itemCount: 2,
+  },
+  {
+    id: 'bbbbbbbb-bbbb-4bbb-8bbb-000000000002',
+    worldSlug: 'tech',
+    slug: 'apn',
+    name: 'הגדרות APN',
+    description: '',
+    position: 1,
+    active: true,
+    itemCount: 1,
+  },
+];
+
+export const topicView: TopicView = {
+  topic: topics[0]!,
+  world: worlds[1]!,
+  groups: [
+    {
+      docType: 'M',
+      items: [
+        {
+          id: docBrowsing.id,
+          slug: docBrowsing.slug,
+          title: 'אבחון גלישה',
+          docType: 'M',
+          kind: 'steps',
+          status: 'published',
+          worlds: ['tech'],
+          description: 'נקודת כניסה',
+          tags: ['browsing'],
+          updatedAt: TAXO_NOW,
+        },
+      ],
+    },
+    {
+      docType: 'O',
+      items: [
+        {
+          id: docIntl.id,
+          slug: docIntl.slug,
+          title: 'איפוס APN',
+          docType: 'O',
+          kind: 'steps',
+          status: 'published',
+          worlds: ['tech', 'sim'],
+          description: '',
+          tags: ['apn'],
+          updatedAt: TAXO_NOW,
+        },
+      ],
+    },
+  ],
+};
+
+export const tags = [
+  { tag: 'apn', count: 3 },
+  { tag: 'browsing', count: 2 },
+];
+
 export const fx = {
   me,
   docBrowsing,
   docIntl,
   cards,
+  worlds,
+  topics,
+  topicView,
+  tags,
   blocks,
   fields,
   scripts,
