@@ -1,0 +1,253 @@
+/**
+ * F-5 / acceptance review §7 item 12: prove the §11 NFR "search p95 < 500 ms at 5,000 documents"
+ * **under concurrent load**.
+ *
+ * `perf-check.ts` is the quick gate: it issues one request at a time, so it measures latency with
+ * no queueing and a fully warm cache, and it only ever asks two query shapes. This script is the
+ * opt-in load profile — 20 concurrent clients for 60 s over a mix of 200 Hebrew queries spanning
+ * the five shapes that cost different things (single word, two words, prefix, stopword-heavy,
+ * world-filtered) — and it reports p50/p95/p99 per class so a regression can be attributed to a
+ * shape rather than to "search".
+ *
+ * Requests go through `app.inject`, which is the real route: auth, the zod querystring parse,
+ * `search()`, `labelHits()`, the usage write and the response serialization. There is no network
+ * hop, which is the one thing it does not measure; everything a search request does to the
+ * database it does here.
+ *
+ * Usage:
+ *   pnpm --filter @wecom/api perf:load [--docs 5000] [--seconds 60] [--clients 20]
+ *                                      [--pool 20] [--seed 42] [--explain] [--out report.json]
+ *                                      [--no-gate]
+ * `docs/perf.md` documents the flags and how to read the output.
+ */
+import pg from 'pg';
+import { buildApp } from '../src/app.js';
+import { search } from '../src/modules/search/repo.js';
+import { startTestDb } from '../test/helpers/db.js';
+import fakeAuth from '../test/helpers/fakeAuth.js';
+import { makeUser, auth } from '../test/helpers/fixtures.js';
+import { seedPerfCorpus } from './perf-seed.js';
+import { buildQueryMix, LatencyRecorder, QUERY_CLASSES, type PerfQuery } from './perf-mix.js';
+
+const args = process.argv.slice(2);
+const argNum = (name: string, def: number): number => {
+  const i = args.indexOf(name);
+  return i >= 0 ? Number(args[i + 1]) : def;
+};
+const argStr = (name: string, def: string | null = null): string | null => {
+  const i = args.indexOf(name);
+  return i >= 0 ? String(args[i + 1]) : def;
+};
+const flag = (name: string) => args.includes(name);
+
+const DOCS = argNum('--docs', 5000);
+const SECONDS = argNum('--seconds', 60);
+const CLIENTS = argNum('--clients', 20);
+const POOL_MAX = argNum('--pool', 20);
+const SEED = argNum('--seed', 42);
+const PER_CLASS = argNum('--per-class', 40);
+const OUT = argStr('--out');
+const EXPLAIN = flag('--explain');
+const GATE_MS = flag('--no-gate') ? Infinity : argNum('--gate', 500);
+
+/** The three query classes whose statements get an EXPLAIN (ANALYZE, BUFFERS) in the report. */
+const EXPLAIN_TOP_N = 3;
+
+interface RecordedStatement {
+  sql: string;
+  params: unknown[];
+  ms: number;
+  cls: string;
+}
+
+async function main() {
+  console.log(`perf-load: starting Postgres and migrating...`);
+  const db = await startTestDb();
+  // The app under load gets its own pool sized to the client count: a pool smaller than the
+  // concurrency turns the measurement into a queueing experiment on the pool rather than on the
+  // query, and a production API would be sized for its own concurrency.
+  const pool = new pg.Pool({ connectionString: db.url, max: POOL_MAX });
+  try {
+    console.log(`perf-load: seeding ${DOCS} documents...`);
+    const seeded = await seedPerfCorpus(db.pool, {
+      docs: DOCS,
+      seed: SEED,
+      log: (m) => console.log('  ' + m),
+    });
+    console.log(
+      `perf-load: seeded ${seeded.documents} documents (${seeded.stepDocuments} with steps, ` +
+        `${seeded.textDocuments} text/type-T, ${seeded.steps} steps, ${seeded.links} links) in ${(seeded.ms / 1000).toFixed(1)}s`,
+    );
+
+    const app = await buildApp({
+      pool,
+      boss: false,
+      plugins: [fakeAuth],
+      config: { DATABASE_URL: db.url, NODE_ENV: 'test' },
+    });
+    await app.ready();
+
+    // Two callers: an unscoped one, and one scoped to two worlds so the `document_worlds`
+    // intersection in `search()` is on the measured path for the world-filtered class.
+    const wide = await makeUser(db.pool, { name: 'עומס רחב' });
+    const scoped = await makeUser(db.pool, { name: 'עומס מצומצם', scopes: ['tech', 'billing'] });
+    const headersFor = (q: PerfQuery) => auth(q.cls === 'world-filtered' ? scoped : wide);
+
+    const urlFor = (q: PerfQuery) => {
+      const p = new URLSearchParams({ q: q.q });
+      if (q.world) p.set('world', q.world);
+      return `/api/v1/search?${p.toString()}`;
+    };
+
+    const mix = buildQueryMix(PER_CLASS, SEED);
+    console.log(`perf-load: query mix = ${mix.length} queries over ${QUERY_CLASSES.length} classes`);
+
+    // Warm up: every query once, sequentially, so the run measures steady state rather than
+    // first-touch page reads and plan caching.
+    console.log('perf-load: warming up...');
+    for (const q of mix) await app.inject({ method: 'GET', url: urlFor(q), headers: headersFor(q) });
+
+    console.log(`perf-load: ${CLIENTS} concurrent clients for ${SECONDS}s (pool max ${POOL_MAX})...`);
+    const rec = new LatencyRecorder();
+    const deadline = Date.now() + SECONDS * 1000;
+    let cursor = 0;
+    let errors = 0;
+    const started = Date.now();
+    const client = async () => {
+      while (Date.now() < deadline) {
+        const q = mix[cursor++ % mix.length];
+        const t0 = performance.now();
+        const res = await app.inject({ method: 'GET', url: urlFor(q), headers: headersFor(q) });
+        const ms = performance.now() - t0;
+        if (res.statusCode !== 200) errors++;
+        else rec.record(q.cls, ms);
+      }
+    };
+    await Promise.all(Array.from({ length: CLIENTS }, client));
+    const elapsed = (Date.now() - started) / 1000;
+
+    const total = rec.all().count;
+    console.log('');
+    console.log(
+      `perf-load: ${total} requests in ${elapsed.toFixed(1)}s = ${(total / elapsed).toFixed(0)} req/s` +
+        (errors ? `  (${errors} non-200 responses)` : ''),
+    );
+    console.log('');
+    console.log(rec.table());
+    console.log('');
+
+    const explains: { cls: string; ms: number; sql: string; params: unknown[]; plan: string }[] = [];
+    if (EXPLAIN) {
+      console.log('perf-load: EXPLAIN (ANALYZE, BUFFERS) for the slowest statement shapes...');
+      for (const e of await explainSlowest(pool, mix)) {
+        explains.push(e);
+        console.log('');
+        console.log(`── ${e.cls} · ${e.ms.toFixed(1)} ms ─────────────────────────────`);
+        console.log(e.sql);
+        console.log(e.plan);
+      }
+      console.log('');
+    }
+
+    await app.close();
+
+    const report = {
+      generatedAt: new Date().toISOString(),
+      documents: seeded.documents,
+      steps: seeded.steps,
+      clients: CLIENTS,
+      poolMax: POOL_MAX,
+      seconds: SECONDS,
+      requests: total,
+      errors,
+      throughputPerSec: total / elapsed,
+      overall: rec.all(),
+      byClass: Object.fromEntries(rec.classes().map((c) => [c, rec.stats(c)])),
+      explains: explains.map((e) => ({ cls: e.cls, ms: e.ms, sql: e.sql, plan: e.plan })),
+    };
+    if (OUT) {
+      const { writeFileSync } = await import('node:fs');
+      writeFileSync(OUT, JSON.stringify(report, null, 2));
+      console.log(`perf-load: wrote ${OUT}`);
+    }
+
+    const over = rec.classes().filter((c) => rec.stats(c).p95 > GATE_MS);
+    if (errors) {
+      console.error(`perf-load FAILED: ${errors} requests did not answer 200`);
+      process.exitCode = 1;
+    } else if (over.length) {
+      console.error(
+        `perf-load FAILED: p95 over ${GATE_MS} ms for ${over.map((c) => `${c} (${rec.stats(c).p95.toFixed(0)} ms)`).join(', ')}`,
+      );
+      process.exitCode = 1;
+    } else if (Number.isFinite(GATE_MS)) {
+      console.log(`perf-load PASSED: every query class is inside the ${GATE_MS} ms p95 budget`);
+    }
+  } finally {
+    await pool.end().catch(() => undefined);
+    await db.stop();
+  }
+}
+
+/**
+ * Where the time actually goes. `search()` issues one statement per group, so a per-request
+ * number cannot say which group is slow. This runs the real `search()` against a recording
+ * `Q` — no SQL is copied out of `repo.ts`, so the plans cannot drift from the code — times each
+ * statement, and EXPLAINs the slowest distinct shapes.
+ */
+async function explainSlowest(
+  pool: pg.Pool,
+  mix: readonly PerfQuery[],
+): Promise<{ cls: string; ms: number; sql: string; params: unknown[]; plan: string }[]> {
+  const recorded: RecordedStatement[] = [];
+  let cls = '';
+  const recordingQ = {
+    query: async (text: string, params?: unknown[]) => {
+      const t0 = performance.now();
+      const r = await pool.query(text, params as never);
+      recorded.push({ sql: text, params: params ?? [], ms: performance.now() - t0, cls });
+      return r;
+    },
+  };
+  // A handful of queries per class: enough to rank the shapes, cheap enough to run serially.
+  for (const c of QUERY_CLASSES) {
+    const sample = mix.filter((m) => m.cls === c).slice(0, 4);
+    for (const s of sample) {
+      cls = c;
+      await search(
+        recordingQ as never,
+        { q: s.q, limit: 40, ...(s.world ? { world: s.world } : {}) } as never,
+        null,
+        s.world ? ['tech', 'billing'] : null,
+        true,
+      );
+    }
+  }
+
+  // Rank by the worst observation of each distinct statement shape (the SQL text, which already
+  // differs per group and per word count).
+  const worst = new Map<string, RecordedStatement>();
+  for (const r of recorded) {
+    const prev = worst.get(r.sql);
+    if (!prev || r.ms > prev.ms) worst.set(r.sql, r);
+  }
+  const top = [...worst.values()].sort((a, b) => b.ms - a.ms).slice(0, EXPLAIN_TOP_N);
+
+  const out: { cls: string; ms: number; sql: string; params: unknown[]; plan: string }[] = [];
+  for (const t of top) {
+    const r = await pool.query(`explain (analyze, buffers) ${t.sql}`, t.params as never);
+    out.push({
+      cls: t.cls,
+      ms: t.ms,
+      sql: t.sql,
+      params: t.params,
+      plan: r.rows.map((x) => (x as Record<string, string>)['QUERY PLAN']).join('\n'),
+    });
+  }
+  return out;
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
