@@ -177,6 +177,35 @@ run('migrations', () => {
     expect(u.rowCount).toBe(1);
   });
 
+  it('creates the feedback tables with their check constraints', async () => {
+    const cols = await pool.query(
+      `select column_name from information_schema.columns where table_name='feedback' order by ordinal_position`,
+    );
+    expect(cols.rows.map((r) => r.column_name)).toEqual([
+      'id',
+      'document_id',
+      'document_version',
+      'doc_type',
+      'world_slug',
+      'step_key',
+      'kind',
+      'text',
+      'status',
+      'user_id',
+      'created_at',
+      'assignee_id',
+      'decision_note',
+      'decided_by',
+      'decided_at',
+      'resolved_version',
+    ]);
+    const alerts = await pool.query(`select to_regclass('feedback_alerts') as t`);
+    expect(alerts.rows[0].t).toBe('feedback_alerts');
+    await expect(
+      pool.query(`insert into feedback(document_id, document_version, world_slug, kind, user_id)
+                  values (gen_random_uuid(), 1, 'sim', 'bogus', gen_random_uuid())`),
+    ).rejects.toThrow(/feedback_kind_check|violates check constraint/);
+  });
   it('rolls back cleanly', async () => {
     await runner({
       databaseUrl: c.getConnectionUri(),

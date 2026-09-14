@@ -396,6 +396,14 @@
                         },
                         "tourDone": {
                           "type": "boolean"
+                        },
+                        "paneMode": {
+                          "type": "string",
+                          "enum": [
+                            "work",
+                            "source",
+                            "split"
+                          ]
                         }
                       },
                       "additionalProperties": false
@@ -12714,6 +12722,14 @@
                     },
                     "tourDone": {
                       "type": "boolean"
+                    },
+                    "paneMode": {
+                      "type": "string",
+                      "enum": [
+                        "work",
+                        "source",
+                        "split"
+                      ]
                     }
                   },
                   "additionalProperties": false
@@ -12789,6 +12805,14 @@
                   },
                   "tourDone": {
                     "type": "boolean"
+                  },
+                  "paneMode": {
+                    "type": "string",
+                    "enum": [
+                      "work",
+                      "source",
+                      "split"
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -12859,6 +12883,14 @@
                     },
                     "tourDone": {
                       "type": "boolean"
+                    },
+                    "paneMode": {
+                      "type": "string",
+                      "enum": [
+                        "work",
+                        "source",
+                        "split"
+                      ]
                     }
                   },
                   "additionalProperties": false
@@ -19591,6 +19623,1406 @@
                   },
                   "required": [
                     "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{id}/feedback": {
+      "post": {
+        "tags": [
+          "feedback"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "outdated",
+                      "error",
+                      "unclear",
+                      "missing",
+                      "process_fails",
+                      "no_answer",
+                      "other"
+                    ]
+                  },
+                  "text": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "default": ""
+                  },
+                  "stepKey": {
+                    "type": "string",
+                    "maxLength": 40
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "documentId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "documentVersion": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "docType": {
+                      "type": "string",
+                      "enum": [
+                        "M",
+                        "R",
+                        "O",
+                        "E",
+                        "S",
+                        "T",
+                        "I"
+                      ],
+                      "nullable": true
+                    },
+                    "worldSlug": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                    },
+                    "stepKey": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "outdated",
+                        "error",
+                        "unclear",
+                        "missing",
+                        "process_fails",
+                        "no_answer",
+                        "other"
+                      ]
+                    },
+                    "text": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "new",
+                        "in_review",
+                        "needs_update",
+                        "no_change",
+                        "done"
+                      ]
+                    },
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "userName": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "assigneeId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "decisionNote": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "decidedBy": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "decidedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "resolvedVersion": {
+                      "type": "integer",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "documentId",
+                    "documentVersion",
+                    "docType",
+                    "worldSlug",
+                    "stepKey",
+                    "kind",
+                    "status",
+                    "userId",
+                    "userName",
+                    "createdAt",
+                    "assigneeId",
+                    "decisionNote",
+                    "decidedBy",
+                    "decidedAt",
+                    "resolvedVersion"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "feedback"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "documentVersion": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "docType": {
+                            "type": "string",
+                            "enum": [
+                              "M",
+                              "R",
+                              "O",
+                              "E",
+                              "S",
+                              "T",
+                              "I"
+                            ],
+                            "nullable": true
+                          },
+                          "worldSlug": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "stepKey": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "outdated",
+                              "error",
+                              "unclear",
+                              "missing",
+                              "process_fails",
+                              "no_answer",
+                              "other"
+                            ]
+                          },
+                          "text": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "new",
+                              "in_review",
+                              "needs_update",
+                              "no_change",
+                              "done"
+                            ]
+                          },
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "userName": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "assigneeId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "decisionNote": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "decidedBy": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "decidedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "resolvedVersion": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "documentTitle": {
+                            "type": "string"
+                          },
+                          "assigneeName": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "documentId",
+                          "documentVersion",
+                          "docType",
+                          "worldSlug",
+                          "stepKey",
+                          "kind",
+                          "status",
+                          "userId",
+                          "userName",
+                          "createdAt",
+                          "assigneeId",
+                          "decisionNote",
+                          "decidedBy",
+                          "decidedAt",
+                          "resolvedVersion",
+                          "documentTitle",
+                          "assigneeName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/feedback": {
+      "get": {
+        "tags": [
+          "feedback"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "in": "query",
+            "name": "pageSize",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "new",
+                "in_review",
+                "needs_update",
+                "no_change",
+                "done"
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+            },
+            "in": "query",
+            "name": "world",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "outdated",
+                "error",
+                "unclear",
+                "missing",
+                "process_fails",
+                "no_answer",
+                "other"
+              ]
+            },
+            "in": "query",
+            "name": "kind",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "query",
+            "name": "documentId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "query",
+            "name": "assigneeId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "M",
+                "R",
+                "O",
+                "E",
+                "S",
+                "T",
+                "I"
+              ]
+            },
+            "in": "query",
+            "name": "docType",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "documentVersion": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "docType": {
+                            "type": "string",
+                            "enum": [
+                              "M",
+                              "R",
+                              "O",
+                              "E",
+                              "S",
+                              "T",
+                              "I"
+                            ],
+                            "nullable": true
+                          },
+                          "worldSlug": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "stepKey": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "outdated",
+                              "error",
+                              "unclear",
+                              "missing",
+                              "process_fails",
+                              "no_answer",
+                              "other"
+                            ]
+                          },
+                          "text": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "new",
+                              "in_review",
+                              "needs_update",
+                              "no_change",
+                              "done"
+                            ]
+                          },
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "userName": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "assigneeId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "decisionNote": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "decidedBy": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "decidedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "resolvedVersion": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "documentTitle": {
+                            "type": "string"
+                          },
+                          "assigneeName": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "documentId",
+                          "documentVersion",
+                          "docType",
+                          "worldSlug",
+                          "stepKey",
+                          "kind",
+                          "status",
+                          "userId",
+                          "userName",
+                          "createdAt",
+                          "assigneeId",
+                          "decisionNote",
+                          "decidedBy",
+                          "decidedAt",
+                          "resolvedVersion",
+                          "documentTitle",
+                          "assigneeName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "pageSize": {
+                      "type": "integer"
+                    },
+                    "counts": {
+                      "type": "object",
+                      "required": [
+                        "new",
+                        "in_review",
+                        "needs_update",
+                        "no_change",
+                        "done"
+                      ],
+                      "properties": {
+                        "new": {
+                          "type": "integer"
+                        },
+                        "in_review": {
+                          "type": "integer"
+                        },
+                        "needs_update": {
+                          "type": "integer"
+                        },
+                        "no_change": {
+                          "type": "integer"
+                        },
+                        "done": {
+                          "type": "integer"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "page",
+                    "pageSize",
+                    "counts"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/feedback/analytics": {
+      "get": {
+        "tags": [
+          "feedback"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "from",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "to",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+            },
+            "in": "query",
+            "name": "world",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "to": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "perItem": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "docType": {
+                            "type": "string",
+                            "enum": [
+                              "M",
+                              "R",
+                              "O",
+                              "E",
+                              "S",
+                              "T",
+                              "I"
+                            ],
+                            "nullable": true
+                          },
+                          "count": {
+                            "type": "integer"
+                          },
+                          "open": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "documentId",
+                          "title",
+                          "docType",
+                          "count",
+                          "open"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "byKind": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "outdated",
+                              "error",
+                              "unclear",
+                              "missing",
+                              "process_fails",
+                              "no_answer",
+                              "other"
+                            ]
+                          },
+                          "count": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "count"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "topItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "documentId",
+                          "title",
+                          "count"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "meanHoursToClose": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "changeRate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "recurringByTopic": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "topicId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "topicName": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "outdated",
+                              "error",
+                              "unclear",
+                              "missing",
+                              "process_fails",
+                              "no_answer",
+                              "other"
+                            ]
+                          },
+                          "count": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "topicId",
+                          "topicName",
+                          "kind",
+                          "count"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to",
+                    "total",
+                    "perItem",
+                    "byKind",
+                    "topItems",
+                    "meanHoursToClose",
+                    "changeRate",
+                    "recurringByTopic"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/feedback/{id}": {
+      "get": {
+        "tags": [
+          "feedback"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "documentId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "documentVersion": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "docType": {
+                      "type": "string",
+                      "enum": [
+                        "M",
+                        "R",
+                        "O",
+                        "E",
+                        "S",
+                        "T",
+                        "I"
+                      ],
+                      "nullable": true
+                    },
+                    "worldSlug": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                    },
+                    "stepKey": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "outdated",
+                        "error",
+                        "unclear",
+                        "missing",
+                        "process_fails",
+                        "no_answer",
+                        "other"
+                      ]
+                    },
+                    "text": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "new",
+                        "in_review",
+                        "needs_update",
+                        "no_change",
+                        "done"
+                      ]
+                    },
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "userName": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "assigneeId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "decisionNote": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "decidedBy": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "decidedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "resolvedVersion": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "documentTitle": {
+                      "type": "string"
+                    },
+                    "assigneeName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "versionLabel": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "href": {
+                      "type": "string"
+                    },
+                    "laterVersions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "integer"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "label",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "documentId",
+                    "documentVersion",
+                    "docType",
+                    "worldSlug",
+                    "stepKey",
+                    "kind",
+                    "status",
+                    "userId",
+                    "userName",
+                    "createdAt",
+                    "assigneeId",
+                    "decisionNote",
+                    "decidedBy",
+                    "decidedAt",
+                    "resolvedVersion",
+                    "documentTitle",
+                    "assigneeName",
+                    "versionLabel",
+                    "href",
+                    "laterVersions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "feedback"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "new",
+                      "in_review",
+                      "needs_update",
+                      "no_change",
+                      "done"
+                    ]
+                  },
+                  "assigneeId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "decisionNote": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "documentId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "documentVersion": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "docType": {
+                      "type": "string",
+                      "enum": [
+                        "M",
+                        "R",
+                        "O",
+                        "E",
+                        "S",
+                        "T",
+                        "I"
+                      ],
+                      "nullable": true
+                    },
+                    "worldSlug": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                    },
+                    "stepKey": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "outdated",
+                        "error",
+                        "unclear",
+                        "missing",
+                        "process_fails",
+                        "no_answer",
+                        "other"
+                      ]
+                    },
+                    "text": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "new",
+                        "in_review",
+                        "needs_update",
+                        "no_change",
+                        "done"
+                      ]
+                    },
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "userName": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "assigneeId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "decisionNote": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "decidedBy": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "decidedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "resolvedVersion": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "documentTitle": {
+                      "type": "string"
+                    },
+                    "assigneeName": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "documentId",
+                    "documentVersion",
+                    "docType",
+                    "worldSlug",
+                    "stepKey",
+                    "kind",
+                    "status",
+                    "userId",
+                    "userName",
+                    "createdAt",
+                    "assigneeId",
+                    "decisionNote",
+                    "decidedBy",
+                    "decidedAt",
+                    "resolvedVersion",
+                    "documentTitle",
+                    "assigneeName"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/feedback/{id}/resolve": {
+      "post": {
+        "tags": [
+          "feedback"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "minimum": 0
+                  },
+                  "decisionNote": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "documentId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "documentVersion": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "docType": {
+                      "type": "string",
+                      "enum": [
+                        "M",
+                        "R",
+                        "O",
+                        "E",
+                        "S",
+                        "T",
+                        "I"
+                      ],
+                      "nullable": true
+                    },
+                    "worldSlug": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                    },
+                    "stepKey": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "outdated",
+                        "error",
+                        "unclear",
+                        "missing",
+                        "process_fails",
+                        "no_answer",
+                        "other"
+                      ]
+                    },
+                    "text": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "new",
+                        "in_review",
+                        "needs_update",
+                        "no_change",
+                        "done"
+                      ]
+                    },
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "userName": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "assigneeId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "decisionNote": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "decidedBy": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "decidedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "resolvedVersion": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "documentTitle": {
+                      "type": "string"
+                    },
+                    "assigneeName": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "documentId",
+                    "documentVersion",
+                    "docType",
+                    "worldSlug",
+                    "stepKey",
+                    "kind",
+                    "status",
+                    "userId",
+                    "userName",
+                    "createdAt",
+                    "assigneeId",
+                    "decisionNote",
+                    "decidedBy",
+                    "decidedAt",
+                    "resolvedVersion",
+                    "documentTitle",
+                    "assigneeName"
                   ],
                   "additionalProperties": false
                 }
