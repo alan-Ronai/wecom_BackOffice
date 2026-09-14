@@ -339,6 +339,63 @@ run('learning tracking', () => {
     ).toBe(409);
   });
 
+  it('nightly re-resolution assigns a user who joined the audience later', async () => {
+    const { resolveAllAudiences } = await import('../src/modules/learning/tracking/audiences.js');
+    // Widened, not replaced: agent B stays a billing agent and becomes a tech one too.
+    await grantRole(agentB.id, 'agent', ['billing', 'tech']);
+    const r = await resolveAllAudiences({
+      db: db.pool,
+      notifier: app.notifier,
+      events: app.events,
+      log: app.log,
+    });
+    expect(r.assigned).toBeGreaterThanOrEqual(1);
+    const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentB) })).json();
+    expect(
+      [...mine.open, ...mine.completed].some(
+        (a: { itemId: string; reason: string }) => a.itemId === quizId && a.reason === 'audience',
+      ),
+    ).toBe(true);
+  });
+
+  it('reminders mark overdue and notify once', async () => {
+    const { runReminders } = await import('../src/modules/learning/tracking/jobs.js');
+    const { getWorkflowSettings } = await import('../src/lib/workflowSettings.js');
+    const late = await seedBriefing(db.pool, {
+      documentIds: [docId],
+      title: 'תדריך באיחור',
+      worldSlug: null,
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/learning/items/${late}/assign`,
+      headers: auth(manager),
+      payload: { userIds: [agentB.id], dueDays: 1 },
+    });
+    await db.pool.query(`update learning_assignments set due_at = now() - interval '2 days' where item_id=$1`, [
+      late,
+    ]);
+    const before = (
+      await db.pool.query(`select count(*)::int n from notifications where user_id=$1 and kind='learning'`, [
+        agentB.id,
+      ])
+    ).rows[0].n as number;
+    const settings = await getWorkflowSettings(db.pool);
+    const deps = { db: db.pool, notifier: app.notifier, events: app.events, log: app.log };
+    const r1 = await runReminders(deps, settings);
+    expect(r1.overdue).toBeGreaterThanOrEqual(1);
+    const r2 = await runReminders(deps, settings);
+    expect(r2.reminded).toBe(0);
+    const after = (
+      await db.pool.query(`select count(*)::int n from notifications where user_id=$1 and kind='learning'`, [
+        agentB.id,
+      ])
+    ).rows[0].n as number;
+    expect(after - before).toBe(1);
+    const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentB) })).json();
+    expect(mine.overdue.some((a: { itemId: string }) => a.itemId === late)).toBe(true);
+  });
+
   it('deleting an audience leaves the assignments it already made', async () => {
     const before = (
       await db.pool.query(`select count(*)::int n from learning_assignments where audience_id=$1`, [audienceId])
