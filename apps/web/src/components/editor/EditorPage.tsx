@@ -71,6 +71,10 @@ const emptyDoc = (cat: Category): Document => ({
   related: [],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
+  tags: [],
+  worlds: [],
+  topics: [],
+  sourceReviewNeeded: false,
 });
 
 export function EditorPage() {

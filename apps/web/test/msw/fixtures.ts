@@ -73,6 +73,18 @@ export const me: Me = {
   preferences: { theme: null, font: 'plex', panel: true, callMode: true, sidebarExpanded: false },
 };
 
+/**
+ * Wave 4 made `tags`, `worlds`, `topics` and `sourceReviewNeeded` required on the *output* type of
+ * `DocumentSchema` / `DocumentCardSchema` (they carry zod `.default()`s). Fixtures state the
+ * defaults explicitly so the literals still satisfy the type.
+ */
+const W4 = {
+  tags: [] as string[],
+  worlds: [] as string[],
+  topics: [] as string[],
+  sourceReviewNeeded: false,
+};
+
 export const docBrowsing: Document = {
   id: D_BROWSING,
   slug: 'browsing',
@@ -84,6 +96,7 @@ export const docBrowsing: Document = {
   priority: 'hh',
   kind: 'steps',
   status: 'published',
+  ...W4,
   currentVersion: 7,
   sourceId: SRC_TECH,
   sourceRef: 'פרק 4',
@@ -461,6 +474,7 @@ export const cards: DocumentCard[] = [
     priority: 'hh',
     kind: 'steps',
     status: 'published',
+    ...W4,
     currentVersion: 7,
     updatedAt: T,
     stepCount: 15,
@@ -482,6 +496,7 @@ export const cards: DocumentCard[] = [
     priority: 'h',
     kind: 'steps',
     status: 'published',
+    ...W4,
     currentVersion: 4,
     updatedAt: T,
     stepCount: 8,
@@ -503,6 +518,7 @@ export const cards: DocumentCard[] = [
     priority: 'hh',
     kind: 'retention',
     status: 'published',
+    ...W4,
     currentVersion: 4,
     updatedAt: T,
     stepCount: 6,
@@ -524,6 +540,7 @@ export const cards: DocumentCard[] = [
     priority: 'hh',
     kind: 'steps',
     status: 'published',
+    ...W4,
     currentVersion: 3,
     updatedAt: T,
     stepCount: 7,
@@ -544,6 +561,7 @@ export const cards: DocumentCard[] = [
     priority: 'h',
     kind: 'steps',
     status: 'partial',
+    ...W4,
     currentVersion: 2,
     updatedAt: T,
     stepCount: 4,
@@ -564,6 +582,7 @@ export const cards: DocumentCard[] = [
     priority: 'l',
     kind: 'steps',
     status: 'draft',
+    ...W4,
     currentVersion: 0,
     updatedAt: T,
     stepCount: 2,
@@ -584,6 +603,7 @@ export const cards: DocumentCard[] = [
     priority: 'm',
     kind: 'steps',
     status: 'published',
+    ...W4,
     currentVersion: 1,
     updatedAt: T,
     stepCount: 5,
@@ -604,6 +624,7 @@ export const cards: DocumentCard[] = [
     priority: 'h',
     kind: 'steps',
     status: 'published',
+    ...W4,
     currentVersion: 6,
     updatedAt: T,
     stepCount: 3,
