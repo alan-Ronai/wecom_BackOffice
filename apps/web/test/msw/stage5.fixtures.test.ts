@@ -7,9 +7,11 @@
  * got `undefined`, and PATCHed the blank back — and thirteen unit tests plus four e2e specs stayed
  * green the entire time, because they were all asking the same mock the same wrong question.
  *
- * What makes this file worth having is the pair of assertions on the connector routes: the list
- * really answers the row and the detail routes really answer the detail, checked against two
- * different schemas. A fixture cannot satisfy both by accident.
+ * What makes this file worth having is the pair of assertions on the connector routes. The two
+ * shapes have since been converged — all four routes answer `ConnectorRowSchema` — so what is
+ * checked now is that they *stay* converged: the detail routes are parsed with the list's schema,
+ * and the fields whose absence caused the bug (`config`, and the counts) are asserted present
+ * rather than merely optional.
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -24,7 +26,6 @@ import {
   SyncRunResultSchema,
   paginated,
 } from '@wecom/shared';
-import { ConnectorDetailSchema } from '../../src/api/stage5.js';
 import { C_FOLDER, C_WP, LINK_CONFLICT, LINK_IMPORT, AUDIT_1 } from './stage5.js';
 
 const B = 'http://kb.test/api/v1';
@@ -72,35 +73,31 @@ describe('stage-5 handlers answer the published envelopes', () => {
     expect(body.items.length).toBeGreaterThan(1);
   });
 
-  it('GET /connectors answers the ROW shape — config, links, conflicts', async () => {
+  it('GET /connectors carries config and the counts the table renders', async () => {
     const body = (await get('/connectors')) as { items: unknown[] };
     body.items.forEach((c) => ConnectorRowSchema.parse(c));
-    // And it is genuinely the row, not the detail: the detail schema must reject it.
-    expect(ConnectorDetailSchema.safeParse(body.items[0]).success).toBe(false);
+    expect(body.items.length).toBeGreaterThan(1);
   });
 
-  it('GET /connectors/{id} answers the DETAIL shape — configMasked, capabilities', async () => {
-    const body = ConnectorDetailSchema.parse(await get(`/connectors/${C_WP}`));
-    expect(body.capabilities.webhooks).toBe(true);
-    expect(body.configMasked.baseUrl).toBe('https://help.wecom.co.il');
-    // Secrets are masked on the way out, which is the whole reason the field is named this way.
-    expect(body.configMasked.appPassword).toBe('••••');
-    // And it is genuinely the detail, not the row.
-    expect(ConnectorRowSchema.safeParse(body).success).toBe(false);
+  it('GET /connectors/{id} answers the SAME shape as the list', async () => {
+    const body = ConnectorRowSchema.parse(await get(`/connectors/${C_WP}`));
+    // The field whose absence loaded the edit form blank and PATCHed the blank back.
+    expect(body.config.baseUrl).toBe('https://help.wecom.co.il');
+    // Secrets are masked on the way out, which is what lets the wizard omit them on save.
+    expect(body.config.appPassword).toBe('••••');
   });
 
-  it('POST /connectors and PATCH /connectors/{id} answer the detail shape too', async () => {
-    const created = ConnectorDetailSchema.parse(
+  it('POST /connectors and PATCH /connectors/{id} answer that shape too', async () => {
+    ConnectorRowSchema.parse(
       await send('POST', '/connectors', { type: 'folder', name: 'תיקייה נוספת', config: { path: '\\\\x' } }),
     );
-    expect(created.capabilities.write).toBe(false);
-    const patched = ConnectorDetailSchema.parse(
+    const patched = ConnectorRowSchema.parse(
       await send('PATCH', `/connectors/${C_FOLDER}`, { config: { recursive: false } }),
     );
     // A partial config PATCH merges rather than replaces — the key the client did not send
     // survives, which is what lets it omit the masked secrets it was never given.
-    expect(patched.configMasked.path).toBe('\\\\fs01\\kb\\procedures');
-    expect(patched.configMasked.recursive).toBe(false);
+    expect(patched.config.path).toBe('\\\\fs01\\kb\\procedures');
+    expect(patched.config.recursive).toBe(false);
   });
 
   it('POST /connectors/test and POST /connectors/{id}/test answer {ok, message}', async () => {

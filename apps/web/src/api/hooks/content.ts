@@ -260,7 +260,9 @@ export function useSaveDraft(id: string, delay = 600, isNew = false) {
     pending.current = null;
     keepaliveJson(
       'PUT',
-      isNew ? `${API_BASE}/drafts/new/${encodeURIComponent(id)}` : `${API_BASE}/documents/${encodeURIComponent(id)}/draft`,
+      isNew
+        ? `${API_BASE}/drafts/new/${encodeURIComponent(id)}`
+        : `${API_BASE}/documents/${encodeURIComponent(id)}/draft`,
       { payload },
     );
   });

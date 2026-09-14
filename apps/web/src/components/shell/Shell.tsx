@@ -61,61 +61,58 @@ function ShellInner() {
     });
   }, [prefs.data, savePrefs]);
 
-  useHotkeys(
-    'global',
-    {
-      'ctrl+k': (e) => {
-        e.preventDefault();
-        palette.open();
-      },
-      'ctrl+d': (e) => {
-        e.preventDefault();
-        toggleTheme();
-      },
-      'ctrl+\\': (e) => {
-        e.preventDefault();
-        nav.toggleSplit();
-      },
-      'alt+t': (e) => {
-        e.preventDefault();
-        palette.open({ mode: 'newtab' });
-      },
-      'alt+ArrowLeft': (e) => {
-        e.preventDefault();
-        if (document.dir === 'rtl') nav.forward();
-        else nav.back();
-      },
-      'alt+ArrowRight': (e) => {
-        e.preventDefault();
-        if (document.dir === 'rtl') nav.back();
-        else nav.forward();
-      },
-      '?': (e) => {
-        e.preventDefault();
-        modal.open({
-          title: '⌨️ כל הקיצורים',
-          body: (
-            <div className="keymap">
-              {KEYMAP.map(([k, d]) => (
-                <div key={k}>
-                  <span>{d}</span>
-                  <kbd>{k}</kbd>
-                </div>
-              ))}
-            </div>
-          ),
-        });
-      },
-      w: () => {
-        if (onDocRoute && nav.tabs.length) nav.closeTab(nav.activeTab);
-      },
-      Escape: () => {
-        if (palette.state.open) palette.close();
-        else if (drawer.open) drawer.setOpen(false);
-        else if (nav.split) nav.toggleSplit();
-      },
+  useHotkeys('global', {
+    'ctrl+k': (e) => {
+      e.preventDefault();
+      palette.open();
     },
-  );
+    'ctrl+d': (e) => {
+      e.preventDefault();
+      toggleTheme();
+    },
+    'ctrl+\\': (e) => {
+      e.preventDefault();
+      nav.toggleSplit();
+    },
+    'alt+t': (e) => {
+      e.preventDefault();
+      palette.open({ mode: 'newtab' });
+    },
+    'alt+ArrowLeft': (e) => {
+      e.preventDefault();
+      if (document.dir === 'rtl') nav.forward();
+      else nav.back();
+    },
+    'alt+ArrowRight': (e) => {
+      e.preventDefault();
+      if (document.dir === 'rtl') nav.back();
+      else nav.forward();
+    },
+    '?': (e) => {
+      e.preventDefault();
+      modal.open({
+        title: '⌨️ כל הקיצורים',
+        body: (
+          <div className="keymap">
+            {KEYMAP.map(([k, d]) => (
+              <div key={k}>
+                <span>{d}</span>
+                <kbd>{k}</kbd>
+              </div>
+            ))}
+          </div>
+        ),
+      });
+    },
+    w: () => {
+      if (onDocRoute && nav.tabs.length) nav.closeTab(nav.activeTab);
+    },
+    Escape: () => {
+      if (palette.state.open) palette.close();
+      else if (drawer.open) drawer.setOpen(false);
+      else if (nav.split) nav.toggleSplit();
+    },
+  });
 
   return (
     <div id="app" className={railMode ? 'rail' : undefined}>

@@ -228,35 +228,6 @@ export const connectorTypes: ConnectorTypeInfo[] = [
   },
 ];
 
-/**
- * One stored connector, two published projections — exactly as `openapi.json` declares them.
- *
- * `GET /connectors` answers the **row**: `config` (secrets already masked) plus the
- * `links`/`conflicts` counts the table column needs. `GET|POST|PATCH /connectors/{id}` answer the
- * **detail**: the same masked config under the name that says so, plus `capabilities`, and no
- * counts. Serving the row from the detail routes — which this mock used to do — is what made a
- * live data-loss bug (the edit form loading blank and PATCHing the blank back) invisible to
- * thirteen unit tests and four e2e specs. The fixture now disagrees with the client exactly where
- * the real backend would.
- */
-export const connectorDetail = (c: ConnectorRow) => ({
-  id: c.id,
-  type: c.type,
-  name: c.name,
-  enabled: c.enabled,
-  schedule: c.schedule,
-  lastRunAt: c.lastRunAt,
-  lastStatus: c.lastStatus,
-  health: c.health,
-  configMasked: c.config,
-  capabilities: connectorTypes.find((t) => t.id === c.type)?.capabilities ?? {
-    read: true,
-    write: false,
-    webhooks: false,
-    identity: false,
-  },
-});
-
 const initialConnectors = (): ConnectorRow[] => [
   {
     id: C_WP,
@@ -543,11 +514,11 @@ export const stage5Handlers: RequestHandler[] = [
       conflicts: 0,
     };
     stage5State.connectors.push(row);
-    return HttpResponse.json(connectorDetail(row), { status: 201 });
+    return HttpResponse.json(row, { status: 201 });
   }),
   http.get(`${B}/connectors/:id`, ({ params }) => {
     const c = stage5State.connectors.find((x) => x.id === params.id);
-    return c ? HttpResponse.json(connectorDetail(c)) : notFound();
+    return c ? HttpResponse.json(c) : notFound();
   }),
   http.patch(`${B}/connectors/:id`, async ({ params, request }) => {
     const c = stage5State.connectors.find((x) => x.id === params.id);
@@ -559,7 +530,7 @@ export const stage5Handlers: RequestHandler[] = [
     // Merge, not replace — the client sends only the keys that changed, precisely so the secrets
     // it was never given survive a save.
     if (b.config) c.config = { ...c.config, ...b.config };
-    return HttpResponse.json(connectorDetail(c));
+    return HttpResponse.json(c);
   }),
   http.delete(`${B}/connectors/:id`, ({ params }) => {
     stage5State.deleted.push(String(params.id));

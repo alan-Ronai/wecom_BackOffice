@@ -93,7 +93,10 @@ export function useFocusTrap<T extends HTMLElement>(enabled: boolean): RefObject
       document.removeEventListener('keydown', onDocKey, true);
       // Only take focus back if it is still ours to give — if something else has claimed it
       // (a route change, a toast) stealing it back would be the bug this is meant to prevent.
-      if (returnTo?.isConnected && (document.activeElement === document.body || root.contains(document.activeElement)))
+      if (
+        returnTo?.isConnected &&
+        (document.activeElement === document.body || root.contains(document.activeElement))
+      )
         returnTo.focus();
     };
   }, [enabled]);

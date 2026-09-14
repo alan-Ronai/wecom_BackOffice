@@ -87,11 +87,7 @@ const defaultChoice = (r: MergeRow): Side => {
  * and a KB author have both touched the same step) previously had no resolution on this screen at
  * all — you had to pick the less-wrong side, leave, and edit the document afterwards.
  */
-function mergedPhases(
-  c: ConflictView,
-  rows: MergeRow[],
-  resultOf: (r: MergeRow) => string | null,
-): Phase[] {
+function mergedPhases(c: ConflictView, rows: MergeRow[], resultOf: (r: MergeRow) => string | null): Phase[] {
   const byRef = new Map(rows.map((r) => [r.ref, r]));
   const phases: Phase[] = c.ours.phases.map((p) => ({
     ...p,

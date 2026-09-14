@@ -7,7 +7,7 @@ import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
 import { withMe } from '../msw/handlers.js';
 import { server } from '../msw/server.js';
-import { C_WP, connectorDetail, stage5State } from '../msw/stage5.js';
+import { C_WP, stage5State } from '../msw/stage5.js';
 import { describeCron } from '../../src/components/admin/ConnectorsPage.js';
 
 const asAdmin = () => server.use(withMe({ roles: ['admin'], permissions: [...PERMISSIONS] }));
@@ -73,7 +73,7 @@ describe('admin · connector registry', () => {
     server.use(
       http.patch('/api/v1/connectors/:id', async ({ request }) => {
         body = await request.json();
-        return HttpResponse.json({ ...connectorDetail(stage5State.connectors[0]), enabled: false });
+        return HttpResponse.json({ ...stage5State.connectors[0], enabled: false });
       }),
     );
     renderWithProviders(<App />, { route: '/admin/connectors' });
@@ -151,7 +151,7 @@ describe('admin · connector wizard', () => {
     server.use(
       http.post('/api/v1/connectors', async ({ request }) => {
         body = (await request.json()) as Record<string, unknown>;
-        return HttpResponse.json({ ...connectorDetail(stage5State.connectors[0]), id: C_WP }, { status: 201 });
+        return HttpResponse.json({ ...stage5State.connectors[0], id: C_WP }, { status: 201 });
       }),
     );
     renderWithProviders(<App />, { route: '/admin/connectors/new' });
@@ -176,7 +176,7 @@ describe('admin · connector wizard', () => {
     server.use(
       http.patch('/api/v1/connectors/:id', async ({ request }) => {
         body = (await request.json()) as Record<string, unknown>;
-        return HttpResponse.json(connectorDetail(stage5State.connectors[0]));
+        return HttpResponse.json(stage5State.connectors[0]);
       }),
     );
     renderWithProviders(<App />, { route: `/admin/connectors/${C_WP}` });
@@ -200,13 +200,13 @@ describe('admin · connector wizard', () => {
     server.use(
       http.patch('/api/v1/connectors/:id', async ({ request }) => {
         body = (await request.json()) as Record<string, unknown>;
-        return HttpResponse.json(connectorDetail(stage5State.connectors[0]));
+        return HttpResponse.json(stage5State.connectors[0]);
       }),
     );
     renderWithProviders(<App />, { route: `/admin/connectors/${C_WP}` });
 
-    // The form is seeded from `configMasked`, which is what the detail route actually answers —
-    // reading `.config` here loaded it blank and then PATCHed the blank back.
+    // The form is seeded from the connector's own `config` — the field that was absent from the
+    // detail route's published shape, which loaded this form blank and PATCHed the blank back.
     const username = await screen.findByLabelText('משתמש WordPress');
     expect(username).toHaveValue('kb-bot');
     await userEvent.clear(username);

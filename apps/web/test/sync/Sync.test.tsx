@@ -187,9 +187,7 @@ describe('sync · three-way merge', () => {
     await userEvent.click(screen.getByLabelText('קח מ-WordPress · §8'));
 
     expect(screen.queryByLabelText('בטל עריכה · §8')).not.toBeInTheDocument();
-    expect((screen.getByLabelText('תוצאה · §8') as HTMLTextAreaElement).value).toMatch(
-      /כשהוא מנותק מ-Wi-Fi/,
-    );
+    expect((screen.getByLabelText('תוצאה · §8') as HTMLTextAreaElement).value).toMatch(/כשהוא מנותק מ-Wi-Fi/);
   });
 
   it('refuses to resolve without suggestions.apply', async () => {

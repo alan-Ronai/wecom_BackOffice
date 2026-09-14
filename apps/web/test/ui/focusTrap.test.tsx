@@ -18,7 +18,9 @@ function Harness() {
   const [answer, setAnswer] = useState<string>('—');
   return (
     <>
-      <button onClick={() => void modal.confirm('למחוק?', 'הפעולה בלתי הפיכה').then((v) => setAnswer(String(v)))}>
+      <button
+        onClick={() => void modal.confirm('למחוק?', 'הפעולה בלתי הפיכה').then((v) => setAnswer(String(v)))}
+      >
         פתח דיאלוג
       </button>
       <button>כפתור ברקע</button>

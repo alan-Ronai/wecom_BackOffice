@@ -16,10 +16,17 @@
  *
  * Every route below also goes through `checked()` (`src/api/stage45.ts`): the generated types are
  * erased at build time and describe what the contract *says*, while `checked` is what notices when
- * an answer disagrees with it. There is no longer a hand-typed bridge on this surface — the two
- * routes it still carried (`POST /connectors/test`, `POST /sync/links/{id}/sync`) are published and
- * correctly shaped, and the three it carried for the connector-detail mismatch now use the detail
- * shape the contract actually publishes. See `ConnectorDetailSchema`.
+ * an answer disagrees with it.
+ *
+ * There is no longer a hand-typed bridge on this surface. It carried five routes and each has been
+ * retired for its own reason: `POST /connectors/test` and `POST /sync/links/{id}/sync` were
+ * published and correctly shaped all along (and going through the generated client is what lets
+ * the latter's declared 409 reach the UI as a status instead of a generic error), while the three
+ * single-connector routes were bridged because the contract answered them with a different shape
+ * from the list — a divergence that, because it was hand-typed, neither the compiler nor the tests
+ * could see, and which loaded the edit form blank and PATCHed the blank back. The backend has
+ * since converged all four routes onto the row, and `_ConnectorShapeIsOne` below is what keeps
+ * them converged.
  */
 import { z } from 'zod';
 import {
@@ -62,50 +69,29 @@ export type ConnectorTypeInfo = z.infer<typeof ConnectorTypeInfoSchema>;
 export type ConnectorRow = z.infer<typeof ConnectorRowSchema>;
 
 /**
- * One connector as `GET|POST|PATCH /connectors/{id}` answer it — **not** the row shape
- * `GET /connectors` answers.
+ * One shape for all four connector routes, and a compile-time proof of it.
  *
- * The two differ deliberately and the difference matters. A list row carries `config` (with
- * secrets already masked) plus the `links`/`conflicts` counts a table column needs. A single
- * connector carries `configMasked` — the same masking, under a name that says so — plus the
- * `capabilities` block the wizard needs, and no counts. `openapi.json` has published exactly this
- * split since stage 5; what this client used to do was read `.config` off the detail answer, get
- * `undefined`, load the edit form blank, and then PATCH the blank back.
+ * This used to be two shapes. `openapi.json` published `config` + `links` + `conflicts` on the
+ * list and `configMasked` + `capabilities` on `GET|POST|PATCH /connectors/{id}`, while the client
+ * read `.config` off all four — so against a backend implementing the published contract, the edit
+ * form loaded blank and then PATCHed the blank back over a saved configuration. The backend wave
+ * has since converged the detail routes onto the row, which is the shape `ConnectorRowSchema` in
+ * `@wecom/shared` declares and the shape these screens were always written to.
  *
- * `@wecom/shared` only declares the row (`ConnectorRowSchema`), so the detail shape is declared
- * here, mirroring the contract field for field. It is what `checked()` parses the three detail
- * routes with, so a backend that answers the row shape on a detail route now fails loudly at the
- * call site instead of silently blanking the form.
+ * The assertion below is what keeps that settled. It is not decoration: it failed on the very
+ * merge that brought the contract change in, which is how this file came to be corrected rather
+ * than left describing a split that no longer exists.
  */
-export const ConnectorDetailSchema = z.object({
-  id: z.string(),
-  type: z.string(),
-  name: z.string(),
-  enabled: z.boolean(),
-  schedule: z.string().nullable(),
-  lastRunAt: z.string().nullable(),
-  lastStatus: z.string().nullable(),
-  health: z.record(z.unknown()).nullable(),
-  configMasked: z.record(z.unknown()),
-  capabilities: z.object({
-    read: z.boolean(),
-    write: z.boolean(),
-    webhooks: z.boolean(),
-    identity: z.boolean(),
-  }),
-});
-export type ConnectorDetail = z.infer<typeof ConnectorDetailSchema>;
-
-/**
- * The schema is deliberately one notch more permissive than the contract on `schedule`,
- * `lastStatus` and `health`, all three of which a connector that has never run legitimately has no
- * value for and which the *row* shape already declares nullable. Accepting `null` there is not
- * looking the other way — this line is the compile-time proof that whatever the published contract
- * answers still parses, so the permissiveness can never drift into disagreement.
- */
-type _DetailMatchesContract = Res<'/connectors/{id}', 'get'> extends ConnectorDetail ? true : never;
-const _detailMatchesContract: _DetailMatchesContract = true;
-void _detailMatchesContract;
+type _ConnectorShapeIsOne =
+  Res<'/connectors/{id}', 'get'> extends ConnectorRow
+    ? Res<'/connectors', 'post'> extends ConnectorRow
+      ? Res<'/connectors/{id}', 'patch'> extends ConnectorRow
+        ? true
+        : never
+      : never
+    : never;
+const _connectorShapeIsOne: _ConnectorShapeIsOne = true;
+void _connectorShapeIsOne;
 export type SyncLinkRow = z.infer<typeof SyncLinkRowSchema>;
 export type SyncLinkState = SyncLinkRow['state'];
 export type SyncLinksQuery = z.input<typeof SyncLinksQuerySchema>;
@@ -183,7 +169,8 @@ const AdminUsersResponseSchema = paginated(AdminUserRowSchema);
 export const stage5 = {
   adminUsers: async (query: AdminUsersQuery): Promise<Paginated<AdminUserRow>> =>
     checked(AdminUsersResponseSchema, await api.GET('/admin/users', { params: { query } })),
-  roleMatrix: async (): Promise<RoleMatrix> => checked(RoleMatrixSchema, await api.GET('/admin/roles/matrix')),
+  roleMatrix: async (): Promise<RoleMatrix> =>
+    checked(RoleMatrixSchema, await api.GET('/admin/roles/matrix')),
   auditEntry: async (id: string): Promise<AuditEntryDetail> =>
     checked(AuditEntryDetailSchema, await api.GET('/admin/audit/{id}', { params: { path: { id } } })),
   identity: async (): Promise<IdentitySettings> =>
@@ -198,17 +185,13 @@ export const stage5 = {
   connectors: async (): Promise<{ items: ConnectorRow[] }> =>
     checked(ConnectorsResponseSchema, await api.GET('/connectors')),
 
-  /**
-   * The three single-connector routes answer the **detail** shape (`configMasked`,
-   * `capabilities`), not the list's row shape. See `ConnectorDetailSchema`.
-   */
-  connector: async (id: string): Promise<ConnectorDetail> =>
-    checked(ConnectorDetailSchema, await api.GET('/connectors/{id}', { params: { path: { id } } })),
-  createConnector: async (body: ConnectorUpsert): Promise<ConnectorDetail> =>
-    checked(ConnectorDetailSchema, await api.POST('/connectors', { body: writeBody(body) })),
-  updateConnector: async (id: string, body: Partial<ConnectorUpsert>): Promise<ConnectorDetail> =>
+  connector: async (id: string): Promise<ConnectorRow> =>
+    checked(ConnectorRowSchema, await api.GET('/connectors/{id}', { params: { path: { id } } })),
+  createConnector: async (body: ConnectorUpsert): Promise<ConnectorRow> =>
+    checked(ConnectorRowSchema, await api.POST('/connectors', { body: writeBody(body) })),
+  updateConnector: async (id: string, body: Partial<ConnectorUpsert>): Promise<ConnectorRow> =>
     checked(
-      ConnectorDetailSchema,
+      ConnectorRowSchema,
       await api.PATCH('/connectors/{id}', { params: { path: { id } }, body: writeBody(body) }),
     ),
   deleteConnector: async (id: string): Promise<void> => {

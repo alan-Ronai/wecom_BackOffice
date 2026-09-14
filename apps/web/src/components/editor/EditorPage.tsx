@@ -218,36 +218,33 @@ export function EditorPage() {
     [doc, selected],
   );
 
-  useHotkeys(
-    'editor',
-    {
-      // `useHotkeys` lower-cases bare keys, so Ctrl Shift Z arrives here as `ctrl+z` with the
-      // shift flag set — one binding covers both directions. Ctrl Y is the Windows habit.
-      'ctrl+z': (e) => {
-        e.preventDefault();
-        restore(e.shiftKey ? history.redo() : history.undo());
-      },
-      'ctrl+y': (e) => {
-        e.preventDefault();
-        restore(history.redo());
-      },
-      Escape: () => {
-        if (multi.size) {
-          setMulti(new Set());
-          return;
-        }
-        // A modal or the palette is in front of the editor and is not the editor's to close, so
-        // decline and let the global scope handle it.
-        if (modal.count !== 0 || palette.state.open) return false;
-        leave();
-      },
-      // `R` rather than `r`: `useHotkeys` normalises bare keys to lower case, so only the
-      // un-normalised fallback matches — which is exactly the Shift R the keymap advertises.
-      R: () => {
-        if (!isNew && doc && can('docs.edit', doc)) requestReview({ id, title: doc.title });
-      },
+  useHotkeys('editor', {
+    // `useHotkeys` lower-cases bare keys, so Ctrl Shift Z arrives here as `ctrl+z` with the
+    // shift flag set — one binding covers both directions. Ctrl Y is the Windows habit.
+    'ctrl+z': (e) => {
+      e.preventDefault();
+      restore(e.shiftKey ? history.redo() : history.undo());
     },
-  );
+    'ctrl+y': (e) => {
+      e.preventDefault();
+      restore(history.redo());
+    },
+    Escape: () => {
+      if (multi.size) {
+        setMulti(new Set());
+        return;
+      }
+      // A modal or the palette is in front of the editor and is not the editor's to close, so
+      // decline and let the global scope handle it.
+      if (modal.count !== 0 || palette.state.open) return false;
+      leave();
+    },
+    // `R` rather than `r`: `useHotkeys` normalises bare keys to lower case, so only the
+    // un-normalised fallback matches — which is exactly the Shift R the keymap advertises.
+    R: () => {
+      if (!isNew && doc && can('docs.edit', doc)) requestReview({ id, title: doc.title });
+    },
+  });
 
   /**
    * 412 means someone else published while this editor was open. Neither outcome is safe to pick
@@ -514,7 +511,9 @@ export function EditorPage() {
               <select
                 aria-label="שכיחות"
                 value={doc.priority}
-                onChange={(e) => update({ ...doc, priority: e.target.value as Document['priority'] }, 'עדיפות')}
+                onChange={(e) =>
+                  update({ ...doc, priority: e.target.value as Document['priority'] }, 'עדיפות')
+                }
               >
                 {Object.entries(PRI).map(([k, v]) => (
                   <option key={k} value={k}>

@@ -178,10 +178,10 @@ export function ConnectorWizard() {
     if (!existing.data) return;
     setTypeId(existing.data.type);
     setName(existing.data.name);
-    // `GET /connectors/{id}` answers the detail shape: `configMasked`, not `config`. Reading
-    // `.config` here is what used to load this form blank and then PATCH the blank back.
-    setConfig({ ...existing.data.configMasked });
-    setLoaded({ ...existing.data.configMasked });
+    // All four connector routes answer the same row shape, with secrets already masked in
+    // `config` — see the assertion in `api/stage5.ts` that holds the contract to that.
+    setConfig({ ...existing.data.config });
+    setLoaded({ ...existing.data.config });
     setSchedule(existing.data.schedule);
   }, [existing.data]);
 

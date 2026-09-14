@@ -65,7 +65,6 @@ import {
   identity,
   roleMatrix,
 } from './stage5.js';
-import { ConnectorDetailSchema } from '../../src/api/stage5.js';
 import { state } from './handlers.js';
 
 const B = 'http://kb.test/api/v1';
@@ -307,10 +306,8 @@ const cases: Case[] = [
     z.object({ items: z.array(ConnectorTypeInfoSchema) }),
   ],
   ['GET /connectors', GET(`${B}/connectors`), z.object({ items: z.array(ConnectorRowSchema) })],
-  // `GET|POST|PATCH /connectors/{id}` answer the *detail* shape, not the row this table's other
-  // connector entries use — see `stage5.fixtures.test.ts`, which checks both against each other.
-  ['GET /connectors/:id', GET(`${B}/connectors/${C_WP}`), ConnectorDetailSchema],
-  ['PATCH /connectors/:id', PATCH(`${B}/connectors/${C_WP}`, { enabled: false }), ConnectorDetailSchema],
+  ['GET /connectors/:id', GET(`${B}/connectors/${C_WP}`), ConnectorRowSchema],
+  ['PATCH /connectors/:id', PATCH(`${B}/connectors/${C_WP}`, { enabled: false }), ConnectorRowSchema],
   ['POST /connectors/:id/run', POST(`${B}/connectors/${C_WP}/run`), SyncRunResultSchema],
   [
     'POST /connectors/:id/test',

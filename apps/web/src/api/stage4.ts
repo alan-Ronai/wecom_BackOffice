@@ -88,23 +88,36 @@ export const getFieldPage = async (name: string): Promise<FieldPage> =>
   checked(FieldPageSchema, await api.GET('/fields/{name}/page', { params: { path: { name } } }));
 
 export const renameField = async (name: string, body: FieldRenameBody): Promise<FieldRenameResult> =>
-  checked(FieldRenameResultSchema, await api.POST('/fields/{name}/rename', { params: { path: { name } }, body }));
+  checked(
+    FieldRenameResultSchema,
+    await api.POST('/fields/{name}/rename', { params: { path: { name } }, body }),
+  );
 
 export const getBlockPage = async (id: string): Promise<BlockPage> =>
   checked(BlockPageSchema, await api.GET('/blocks/{id}/page', { params: { path: { id } } }));
 
 /* ── data explorer ────────────────────────────────────────────────────────── */
 
-export const getDataFiles = async (): Promise<DataFilesResponse> => checked(DataFilesResponseSchema, await api.GET('/data/files'));
+export const getDataFiles = async (): Promise<DataFilesResponse> =>
+  checked(DataFilesResponseSchema, await api.GET('/data/files'));
 
 export const getDataPreview = async (sourceId: string, query: DataPreviewQuery = {}): Promise<DataPreview> =>
-  checked(DataPreviewSchema, await api.GET('/data/files/{sourceId}/preview', { params: { path: { sourceId }, query } }));
+  checked(
+    DataPreviewSchema,
+    await api.GET('/data/files/{sourceId}/preview', { params: { path: { sourceId }, query } }),
+  );
 
 export const putMapping = async (sourceId: string, body: PutMappingBody): Promise<DataFile> =>
-  checked(DataFileSchema, await api.PUT('/data/files/{sourceId}/mapping', { params: { path: { sourceId } }, body }));
+  checked(
+    DataFileSchema,
+    await api.PUT('/data/files/{sourceId}/mapping', { params: { path: { sourceId } }, body }),
+  );
 
 export const reimportDataFile = async (sourceId: string): Promise<ReimportResult> =>
-  checked(ReimportResultSchema, await api.POST('/data/files/{sourceId}/reimport', { params: { path: { sourceId } } }));
+  checked(
+    ReimportResultSchema,
+    await api.POST('/data/files/{sourceId}/reimport', { params: { path: { sourceId } } }),
+  );
 
 /**
  * OpenAPI describes this route with a multipart body, which `openapi-fetch` cannot type or
@@ -119,7 +132,8 @@ export const uploadDataFile = (file: File): Promise<DataFile> => {
 
 /* ── dashboards & telemetry ───────────────────────────────────────────────── */
 
-export const getDashboards = async (): Promise<Dashboard> => checked(DashboardSchema, await api.GET('/dashboards'));
+export const getDashboards = async (): Promise<Dashboard> =>
+  checked(DashboardSchema, await api.GET('/dashboards'));
 
 /** 204, so nothing is unwrapped — usage tiles are only real if the web actually reports. */
 export const postTelemetry = async (body: TelemetryBatch): Promise<void> => {

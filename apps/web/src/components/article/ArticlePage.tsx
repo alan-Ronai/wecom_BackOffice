@@ -188,58 +188,55 @@ export function ArticlePage() {
       });
   };
 
-  useHotkeys(
-    'article',
-    {
-      ArrowDown: (e) => {
-        e.preventDefault();
-        call.move(1);
-      },
-      ArrowUp: (e) => {
-        e.preventDefault();
-        call.move(-1);
-      },
-      Enter: () => {
-        if (jumpBuf != null) commitJump(jumpBuf);
-        else if (call.activeKey)
-          document
-            .getElementById(`step-${call.activeKey}`)
-            ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      },
-      g: () => armJump(),
-      // 1-3 only, matching legacy and the keymap card below. `digit` doubles as the G-jump
-      // buffer, so every digit still feeds a jump while one is armed.
-      '0': () => digit('0'),
-      '1': () => digit('1'),
-      '2': () => digit('2'),
-      '3': () => digit('3'),
-      '4': () => digit('4'),
-      '5': () => digit('5'),
-      '6': () => digit('6'),
-      '7': () => digit('7'),
-      '8': () => digit('8'),
-      '9': () => digit('9'),
-      n: () => {
-        if (call.activeKey) void addNoteFor(call.activeKey);
-      },
-      p: () => {
-        if (doc) {
-          togglePin.mutate({ id: doc.id, pinned: !pinned });
-          toast(pinned ? 'הוסרה הצמדה' : '★ הוצמד');
-        }
-      },
-      c: () => {
-        void copy(summary);
-        toast('הועתק ללוח', 'ok');
-      },
-      e: () => {
-        if (doc && can('docs.edit', doc)) go(`/edit/${doc.id}`);
-      },
-      h: () => {
-        if (doc) go(`/history/${doc.id}`);
-      },
+  useHotkeys('article', {
+    ArrowDown: (e) => {
+      e.preventDefault();
+      call.move(1);
     },
-  );
+    ArrowUp: (e) => {
+      e.preventDefault();
+      call.move(-1);
+    },
+    Enter: () => {
+      if (jumpBuf != null) commitJump(jumpBuf);
+      else if (call.activeKey)
+        document
+          .getElementById(`step-${call.activeKey}`)
+          ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    },
+    g: () => armJump(),
+    // 1-3 only, matching legacy and the keymap card below. `digit` doubles as the G-jump
+    // buffer, so every digit still feeds a jump while one is armed.
+    '0': () => digit('0'),
+    '1': () => digit('1'),
+    '2': () => digit('2'),
+    '3': () => digit('3'),
+    '4': () => digit('4'),
+    '5': () => digit('5'),
+    '6': () => digit('6'),
+    '7': () => digit('7'),
+    '8': () => digit('8'),
+    '9': () => digit('9'),
+    n: () => {
+      if (call.activeKey) void addNoteFor(call.activeKey);
+    },
+    p: () => {
+      if (doc) {
+        togglePin.mutate({ id: doc.id, pinned: !pinned });
+        toast(pinned ? 'הוסרה הצמדה' : '★ הוצמד');
+      }
+    },
+    c: () => {
+      void copy(summary);
+      toast('הועתק ללוח', 'ok');
+    },
+    e: () => {
+      if (doc && can('docs.edit', doc)) go(`/edit/${doc.id}`);
+    },
+    h: () => {
+      if (doc) go(`/history/${doc.id}`);
+    },
+  });
 
   if (docQ.isPending) return <div className="route-loading">טוען…</div>;
   // Category scope is enforced per document, so "you may not see this" is a distinct outcome

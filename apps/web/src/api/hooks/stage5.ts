@@ -79,8 +79,7 @@ const invalidateConnectors = (qc: ReturnType<typeof useQueryClient>) => {
  * `config` when nothing in it changed, and this signature is what lets it.
  */
 export type SaveConnectorArg =
-  | { id: string; patch: Partial<ConnectorUpsert> }
-  | { id?: undefined; create: ConnectorUpsert };
+  { id: string; patch: Partial<ConnectorUpsert> } | { id?: undefined; create: ConnectorUpsert };
 
 export const useSaveConnector = () => {
   const qc = useQueryClient();

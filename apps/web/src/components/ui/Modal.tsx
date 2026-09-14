@@ -40,15 +40,7 @@ const Ctx = createContext<ModalApi | null>(null);
  * `role="dialog"` was already here; `aria-modal="true"` is what tells a screen reader that the
  * page behind is not available, and `useFocusTrap` is what makes that true for the keyboard.
  */
-function Dialog({
-  entry: m,
-  topmost,
-  onDismiss,
-}: {
-  entry: Entry;
-  topmost: boolean;
-  onDismiss: () => void;
-}) {
+function Dialog({ entry: m, topmost, onDismiss }: { entry: Entry; topmost: boolean; onDismiss: () => void }) {
   const trap = useFocusTrap<HTMLDivElement>(topmost);
   const dismissWithDefault = () => {
     m.buttons?.[0]?.onClick?.();
@@ -213,19 +205,16 @@ export function ModalProvider({ children }: { children: ReactNode }) {
    *
    * Declining when the stack is empty lets the keystroke fall through to whatever is underneath.
    */
-  useHotkeys(
-    'overlay',
-    {
-      Escape: () => {
-        if (!stack.length) return false;
-        setStack((s) => {
-          const top = s[s.length - 1];
-          top?.buttons?.[0]?.onClick?.();
-          return s.slice(0, -1);
-        });
-      },
+  useHotkeys('overlay', {
+    Escape: () => {
+      if (!stack.length) return false;
+      setStack((s) => {
+        const top = s[s.length - 1];
+        top?.buttons?.[0]?.onClick?.();
+        return s.slice(0, -1);
+      });
     },
-  );
+  });
 
   return (
     <Ctx.Provider value={value}>
