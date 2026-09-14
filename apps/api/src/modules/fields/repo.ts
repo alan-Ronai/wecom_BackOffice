@@ -183,39 +183,77 @@ export async function fieldPage(
 
 /* ── Stage 4: field rename ──────────────────────────────────────────────── */
 
-/** Columns whose free text can carry a CRM field name, scoped to one document set. */
+/**
+ * Columns whose free text can carry a CRM field name, narrowed to the *steps* that actually
+ * reference it (`$1` is a step-id array from `step_field_refs`) and rewritten with a
+ * word-boundary regex rather than a blind substring `replace()`.
+ *
+ * Both narrowings matter. `replace()` across every step of every affected document rewrote any
+ * occurrence of the string anywhere — so renaming a field whose name is a substring of another
+ * field, or of ordinary prose ("חוב" inside "חובה"), silently corrupted unrelated text and was
+ * not idempotent under overlapping names. `step_field_refs` is the derived table
+ * `recomputeDerived` maintains from exactly the same text, so a step in it is a step that
+ * really mentions the field.
+ *
+ * `$2` is a `\y…\y` pattern built by `boundedPattern` and `$3` the replacement.
+ */
 const REWRITES = [
-  `update steps set title = replace(title, $2, $3), description = replace(description, $2, $3),
-          hint = replace(hint, $2, $3), script = replace(script, $2, $3)
-     where document_id = any($1)`,
-  `update step_actions a set text = replace(a.text, $2, $3)
-     from steps s where s.id = a.step_id and s.document_id = any($1)`,
-  `update step_outcomes o set text = replace(o.text, $2, $3)
-     from steps s where s.id = o.step_id and s.document_id = any($1)`,
-  `update step_branches b set question = replace(b.question, $2, $3)
-     from steps s where s.id = b.step_id and s.document_id = any($1)`,
-  `update step_branch_options o set label = replace(o.label, $2, $3), text = replace(o.text, $2, $3)
-     from step_branches b join steps s on s.id = b.step_id
-    where b.id = o.branch_id and s.document_id = any($1)`,
+  `update steps set title = regexp_replace(title, $2, $3, 'g'),
+          description = regexp_replace(description, $2, $3, 'g'),
+          hint = regexp_replace(hint, $2, $3, 'g'),
+          script = regexp_replace(script, $2, $3, 'g')
+     where id = any($1)`,
+  `update step_actions a set text = regexp_replace(a.text, $2, $3, 'g') where a.step_id = any($1)`,
+  `update step_outcomes o set text = regexp_replace(o.text, $2, $3, 'g') where o.step_id = any($1)`,
+  `update step_branches b set question = regexp_replace(b.question, $2, $3, 'g')
+     where b.step_id = any($1)`,
+  `update step_branch_options o set label = regexp_replace(o.label, $2, $3, 'g'),
+          text = regexp_replace(o.text, $2, $3, 'g')
+     from step_branches b where b.id = o.branch_id and b.step_id = any($1)`,
 ];
+
+/** Every regex metacharacter, so a field name is matched literally. */
+const escapeRe = (s: string) => s.replace(/[\\^$.|?*+()[\]{}]/g, '\\$&');
+
+/**
+ * `\y` is PostgreSQL's word boundary: it fires between a word character and a non-word one, and
+ * Hebrew letters are word characters under a UTF-8 collation, so `\yחוב\y` matches the field
+ * "חוב" and leaves "חובה" alone.
+ */
+const boundedPattern = (name: string) => `\\y${escapeRe(name)}\\y`;
+
+/** In a `regexp_replace` replacement only a backslash is special; `&` and `$` are literal. */
+const escapeReplacement = (s: string) => s.replace(/\\/g, '\\\\');
 
 /**
  * Renames a CRM field: the new name becomes the live field, the old one stays behind as
- * `renamed -> newName` so nothing dangles, and (when `updateReferences`) every step text in
- * the documents that used it is rewritten and republished — one version per document.
+ * `renamed -> newName` so nothing dangles, and (when `updateReferences`) the step text that
+ * references it is rewritten.
+ *
+ * `scopes` is the caller's `user.categoryScopes`. A rename is a *write* counterpart to the
+ * read leak C1 fixed: `fields.edit` alone used to let a narrowly scoped editor rewrite step
+ * text in every category. The rewrite now covers only documents the caller can open; the
+ * catalogue rename itself is global, because a field is one object and leaving it renamed for
+ * some readers and not others would be worse than either answer.
+ *
+ * A document that was not published stays unpublished. The old code ran `publishDocument` over
+ * every affected document regardless of status, so a rename silently published drafts and
+ * documents sitting in `review` — bypassing the workflow stage 5 exists to enforce.
+ * `versionsCreated` counts the versions that were actually cut.
  */
 export async function renameField(
   tx: Tx,
   name: string,
   body: FieldRenameBody,
   userId: string | null,
+  scopes: string[] | null = null,
 ): Promise<{ result: FieldRenameResult; affected: string[] }> {
   const old = await getField(tx, name);
   if (!old) throw httpError(404, 'NOT_FOUND', 'השדה לא נמצא');
   const newName = body.newName.trim();
   if (!newName) throw httpError(400, 'BAD_REQUEST', 'שם חדש הוא שדה חובה');
   if (newName === name) throw httpError(400, 'BAD_REQUEST', 'השם החדש זהה לשם הנוכחי');
-  const affected = [...new Set((await fieldUsageRows(tx, name)).map((u) => u.documentId))];
+  const affected = [...new Set((await fieldUsageRows(tx, name, scopes)).map((u) => u.documentId))];
 
   await tx.query(
     `insert into crm_fields(name, status, path, note, created_by, updated_by)
@@ -231,13 +269,27 @@ export async function renameField(
 
   let versionsCreated = 0;
   if (body.updateReferences && affected.length) {
-    for (const sql of REWRITES) await tx.query(sql, [affected, name, newName]);
+    // The steps that carry the reference, not every step of every affected document.
+    const steps = (
+      await tx.query<{ id: string }>(
+        `select distinct s.id from step_field_refs r
+           join steps s on s.id = r.step_id
+          where r.field_name = $1 and s.document_id = any($2)`,
+        [name, affected],
+      )
+    ).rows.map((r) => r.id);
+    const params = [steps, boundedPattern(name), escapeReplacement(newName)];
+    if (steps.length) for (const sql of REWRITES) await tx.query(sql, params);
     for (const id of affected) {
       const doc = await getDocument(tx, id);
       if (!doc) continue;
       await recomputeDerived(tx, doc);
-      await publishDocument(tx, id, { actorId: userId, label: body.label });
-      versionsCreated++;
+      // Only a document that was already published gets a new published version; a draft or a
+      // document in review keeps its status and simply carries the new text.
+      if (doc.status === 'published') {
+        await publishDocument(tx, id, { actorId: userId, label: body.label });
+        versionsCreated++;
+      }
     }
   }
   const field = (await getField(tx, newName))!;

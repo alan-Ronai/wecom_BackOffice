@@ -82,7 +82,7 @@ export default async function routes(app: FastifyInstance) {
       const body = req.body as z.infer<typeof FieldRenameBodySchema>;
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getField(tx, name);
-        const { result, affected } = await repo.renameField(tx, name, body, user.id);
+        const { result, affected } = await repo.renameField(tx, name, body, user.id, user.categoryScopes);
         await audit(tx, {
           actorId: user.id,
           action: 'fields.rename',

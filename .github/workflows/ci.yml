@@ -3,12 +3,9 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
-    services:
-      db:
-        image: pgvector/pgvector:pg16
-        env: { POSTGRES_USER: kb, POSTGRES_PASSWORD: kb, POSTGRES_DB: kb }
-        ports: ['5432:5432']
-        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    # No `services:` block on purpose. `test:int` brings up its own Postgres through
+    # testcontainers (`apps/api/test/helpers/db.ts` -> `startTestDb`), so a service container
+    # here was started and health-checked on every run without a single test connecting to it.
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

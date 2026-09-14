@@ -145,6 +145,9 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     `/api/v1/blocks/${blockId}/page`,
     `/api/v1/documents/${techDoc}/backlinks`,
     `/api/v1/documents?limit=200`,
+    // M1: `coverage.byCategory`/`freshness.byCategory` enumerated categories the caller cannot
+    // read and `usage.topDocuments` returned titles from them.
+    `/api/v1/dashboards`,
   ];
 
   // One `it` rather than `it.each`: the urls are built from ids `beforeAll` assigns, and
@@ -234,6 +237,42 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     });
     expect(mine.statusCode).toBe(200);
     expect(mine.json().resolvedAt).not.toBeNull();
+  });
+
+  /**
+   * I4(a): the read leak has a write counterpart. `POST /fields/:name/rename` required only
+   * `fields.edit` and never consulted `categoryScopes`, so a narrowly scoped editor rewrote step
+   * text in every category. Left last in the file because it mutates the catalogue.
+   */
+  it('I4: a scoped rename rewrites only the documents the caller can open', async () => {
+    const field = 'קוד תעריף';
+    await app.inject({
+      method: 'PUT',
+      url: `/api/v1/fields/${encodeURIComponent(field)}`,
+      headers: auth(admin),
+      payload: { name: field, status: 'ok', path: 'CRM > תעריף' },
+    });
+    const tech = await makeDoc('תעריף טכני', 'tech');
+    const billing = await makeDoc('תעריף חיוב', 'billing');
+    await putStructure(tech, 'צעד', `בדוק את ${field} בכרטיס`);
+    await putStructure(billing, 'צעד', `בדוק את ${field} בכרטיס`);
+
+    const r = await app.inject({
+      method: 'POST',
+      url: `/api/v1/fields/${encodeURIComponent(field)}/rename`,
+      headers: auth(scoped),
+      payload: { newName: 'קוד מסלול', updateReferences: true, label: 'שינוי שם' },
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().updatedDocuments).toBe(1);
+
+    const textOf = async (id: string) =>
+      (await app.inject({ method: 'GET', url: `/api/v1/documents/${id}`, headers: auth(admin) })).json()
+        .phases[0].steps[1].actions[0].text as string;
+    expect(await textOf(tech)).toContain('קוד מסלול');
+    // Untouched: the scoped editor may not read this document, so they may not rewrite it either.
+    // The old name survives as a `renamed` tombstone, which is what tells its owners to update.
+    expect(await textOf(billing)).toContain(field);
   });
 
   it('C3: notification.created reaches the target user only', async () => {

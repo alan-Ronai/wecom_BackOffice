@@ -317,20 +317,35 @@ export async function updateEmbedding(
 /**
  * `search.reindex` worker body: recompute derived text for every live document, and —
  * when a model with `embed` is available — its embedding too.
+ *
+ * The embedding call is deliberately **outside** the transaction. `updateEmbedding` is an HTTP
+ * round trip to the model, and the target architecture is a CPU-local model where that is
+ * seconds rather than milliseconds; doing it inside `withTransaction` pinned a pool connection
+ * and held an open transaction for the whole call, so a 5,000-document reindex — which
+ * `docs/operations.md` tells operators to run after any `EMBED_MODEL` change — held one for
+ * hours. The publish path already gets this right and says why
+ * (`documents/routes.ts`: a model outage must never fail a publish); the worker now matches it.
+ *
+ * The derived-text recompute keeps its transaction, because that is several dependent writes.
+ * The embedding is a single `update`, so a re-run converges and a crash halfway leaves stale
+ * vectors rather than corrupt ones.
  */
 export async function reindexAll(pool: pg.Pool, model?: ModelClient | null): Promise<number> {
   const ids = (await pool.query('select id from documents where deleted_at is null')).rows.map(
     (r) => r.id as string,
   );
   let n = 0;
-  for (const id of ids)
-    await withTransaction(pool, async (tx) => {
+  for (const id of ids) {
+    const recomputed = await withTransaction(pool, async (tx) => {
       const doc = await getDocument(tx, id);
-      if (doc) {
-        await recomputeDerived(tx, doc);
-        await updateEmbedding(tx, id, model);
-        n++;
-      }
+      if (!doc) return false;
+      await recomputeDerived(tx, doc);
+      return true;
     });
+    if (!recomputed) continue;
+    n++;
+    // On the pool, after the commit: the text it embeds is the text that was just written.
+    await updateEmbedding(pool, id, model);
+  }
   return n;
 }
