@@ -21,6 +21,16 @@ const run = integration ? describe : describe.skip;
  * Driven through the real `buildApp` — the only stand-in is WordPress itself.
  */
 
+/** Events reach the subscriber over LISTEN/NOTIFY, so delivery is a round trip, not a return. */
+const waitForEvent = async (events: Event[], name: string, ms = 10_000): Promise<Event | undefined> => {
+  const until = Date.now() + ms;
+  for (;;) {
+    const hit = events.find((e) => e.name === name);
+    if (hit || Date.now() > until) return hit;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+};
+
 const WP_TITLE = 'נוהל WordPress לבדיקה';
 const WP_BODY = '<h2>מבוא</h2><p>סף מהירות: 5 מגה.</p><ul><li>בדיקת APN</li><li>ניתוק מ-Wi-Fi</li></ul>';
 const WP_BODY_EDITED =
@@ -179,7 +189,7 @@ run('pipeline fan-out: one remote item is one document', () => {
     ).rows;
     expect(links).toHaveLength(1);
     expect(links[0].document_id, 'the existing link was kept, not re-pointed').toBe(documentId);
-    const skipped = events.find((e) => e.name === 'sync.link_skipped');
+    const skipped = await waitForEvent(events, 'sync.link_skipped');
     expect(skipped, 'the skip is reported rather than silent').toBeTruthy();
     expect(skipped!.payload).toMatchObject({
       connectorId,
