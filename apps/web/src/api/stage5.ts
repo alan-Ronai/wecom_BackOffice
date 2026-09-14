@@ -2,16 +2,21 @@
  * The stage-5 surface: identity settings, the admin polish routes, the connector registry and the
  * sync queue.
  *
- * Everything else in this app is typed from the **generated** contract (`schema.d.ts`). These
- * routes are not in it yet — backend lane B is landing them against
- * `docs/api/CONTRACTS-stage4-5.md` while this lane builds the screens — so the types here come
- * from the other half of the same contract: the zod schemas in `@wecom/shared`
- * (`packages/shared/src/schemas/stage45.ts`), which those routes validate with.
+ * Transport is the **generated** client (`api`, typed by `schema.d.ts` from
+ * `docs/api/openapi.json`), like every other call in this app. Lane B has since published these
+ * routes, so the hand-rolled `fetch` bridge this module was built on — written because the routes
+ * did not exist yet — is gone, and there is once again exactly one contract.
  *
- * That keeps the rule the README states (never hand-write a contract) intact: these are still
- * derived types, from the schema the server enforces. When the routes appear in
- * `docs/api/openapi.json`, the `Res`/`Body` aliases in `types.ts` can replace the `z.infer`s below
- * one at a time without touching a single call site.
+ * The exported *types* stay `z.infer` off the shared zod schemas in
+ * `packages/shared/src/schemas/stage45.ts`, which are what the routes validate with and what the
+ * OpenAPI file is generated from. Annotating each function with the zod type while the body
+ * returns the generated one makes the two sides check against each other: if the published
+ * contract ever drifts from the schema that is supposed to produce it, this file stops compiling.
+ * `src/api/stage4.ts` is built the same way.
+ *
+ * Five routes the screens need are not usable from the generated client yet — two are missing
+ * from the contract and three are published with the wrong shape — and go through the small
+ * `pending` bridge below, which names each one. They are the whole of the remaining backend ask.
  */
 import type { z } from 'zod';
 import type {
@@ -32,8 +37,8 @@ import type {
   SyncQueueResponseSchema,
   SyncRunResultSchema,
 } from '@wecom/shared';
-import { API_BASE } from './client.js';
-import { ApiError } from './unwrap.js';
+import { api, API_BASE } from './client.js';
+import { ApiError, unwrap } from './unwrap.js';
 import type { Paginated } from './types.js';
 
 /* ── types, all inferred from the schemas the routes validate with ────────── */
@@ -87,34 +92,37 @@ export interface ConnectorTestResult {
   details?: Record<string, unknown>;
 }
 
-/* ── transport ────────────────────────────────────────────────────────────── */
-
-type QueryValue = string | number | boolean | undefined | null;
-
-const qs = (query?: Record<string, QueryValue>): string => {
-  if (!query) return '';
-  const sp = new URLSearchParams();
-  for (const [k, v] of Object.entries(query))
-    if (v !== undefined && v !== null && v !== '') sp.set(k, String(v));
-  const s = sp.toString();
-  return s ? `?${s}` : '';
-};
+/* ── routes not in the published contract yet ─────────────────────────────── */
 
 /**
- * Same credentials, same error envelope and the same typed `ApiError` as `unwrap`, so a 403 from
- * one of these routes surfaces through `LoadError` exactly like a 403 from a generated one.
+ * The five routes below are the only ones these screens call that the generated client cannot
+ * type today. Everything else goes through `api`.
+ *
+ * Two are simply not in `docs/api/openapi.json`:
+ *   - `POST /connectors/test` — the wizard's step-2 dry run, before the connector exists and has
+ *     an id to test against;
+ *   - `POST /sync/links/{id}/sync` — a queue row's "ייבא עכשיו" / "דחוף עכשיו".
+ *
+ * Three are published, but with the **wrong shape**, and that is worth naming because the
+ * compiler is what found it: `GET /connectors` answers `ConnectorRowSchema` (with `config`,
+ * `links` and `conflicts`, and `schedule` nullable) while `GET`/`POST`/`PATCH` on the single
+ * connector still answer the older `ConnectorSchema` (`configMasked`, `capabilities`, no counts,
+ * `schedule` non-null). One resource with two shapes depending on whether you list it or fetch
+ * it. The screens are written to the row shape the list returns, which is also the shape the
+ * stage-5 contract specifies, so routing these three through `api` would only have been possible
+ * by casting the mismatch away — which is the thing this codebase does not do.
+ *
+ * The bridge raises the same typed `ApiError` as `unwrap`, so a 403 from one of these still
+ * surfaces through `LoadError` like a 403 from a generated call. Each line disappears the moment
+ * its route is published or corrected; nothing else changes.
  */
-async function request<T>(
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
-  path: string,
-  opts: { query?: Record<string, QueryValue>; body?: unknown } = {},
-): Promise<T> {
-  const res = await globalThis.fetch(`${API_BASE}${path}${qs(opts.query)}`, {
+async function pending<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown): Promise<T> {
+  const res = await globalThis.fetch(`${API_BASE}${path}`, {
     method,
     credentials: 'include',
-    ...(opts.body === undefined
+    ...(body === undefined
       ? {}
-      : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(opts.body) }),
+      : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
   });
   const payload: unknown = res.status === 204 ? undefined : await res.json().catch(() => undefined);
   if (!res.ok) {
@@ -127,39 +135,46 @@ async function request<T>(
 /* ── the routes ───────────────────────────────────────────────────────────── */
 
 export const stage5 = {
-  adminUsers: (query: AdminUsersQuery) =>
-    request<Paginated<AdminUserRow>>('GET', '/admin/users', {
-      query: query as Record<string, QueryValue>,
-    }),
-  roleMatrix: () => request<RoleMatrix>('GET', '/admin/roles/matrix'),
-  auditEntry: (id: string) => request<AuditEntryDetail>('GET', `/admin/audit/${encodeURIComponent(id)}`),
-  identity: () => request<IdentitySettings>('GET', '/admin/identity'),
-  saveIdentity: (body: IdentitySettingsPut) => request<IdentitySettings>('PUT', '/admin/identity', { body }),
-  testIdentity: (provider: IdentityProvider) =>
-    request<IdentityTestResult>('POST', '/admin/identity/test', { body: { provider } }),
+  adminUsers: async (query: AdminUsersQuery): Promise<Paginated<AdminUserRow>> =>
+    unwrap(await api.GET('/admin/users', { params: { query } })),
+  roleMatrix: async (): Promise<RoleMatrix> => unwrap(await api.GET('/admin/roles/matrix')),
+  auditEntry: async (id: string): Promise<AuditEntryDetail> =>
+    unwrap(await api.GET('/admin/audit/{id}', { params: { path: { id } } })),
+  identity: async (): Promise<IdentitySettings> => unwrap(await api.GET('/admin/identity')),
+  saveIdentity: async (body: IdentitySettingsPut): Promise<IdentitySettings> =>
+    unwrap(await api.PUT('/admin/identity', { body })),
+  testIdentity: async (provider: IdentityProvider): Promise<IdentityTestResult> =>
+    unwrap(await api.POST('/admin/identity/test', { body: { provider } })),
 
-  connectorTypes: () => request<{ items: ConnectorTypeInfo[] }>('GET', '/connectors/types'),
-  connectors: () => request<{ items: ConnectorRow[] }>('GET', '/connectors'),
-  connector: (id: string) => request<ConnectorRow>('GET', `/connectors/${encodeURIComponent(id)}`),
-  createConnector: (body: ConnectorUpsert) => request<ConnectorRow>('POST', '/connectors', { body }),
+  connectorTypes: async (): Promise<{ items: ConnectorTypeInfo[] }> =>
+    unwrap(await api.GET('/connectors/types')),
+  connectors: async (): Promise<{ items: ConnectorRow[] }> => unwrap(await api.GET('/connectors')),
+  // The three single-connector routes still answer the pre-stage-5 `ConnectorSchema` — see the
+  // `pending` comment above.
+  connector: (id: string) => pending<ConnectorRow>('GET', `/connectors/${encodeURIComponent(id)}`),
+  createConnector: (body: ConnectorUpsert) => pending<ConnectorRow>('POST', '/connectors', body),
   updateConnector: (id: string, body: Partial<ConnectorUpsert>) =>
-    request<ConnectorRow>('PATCH', `/connectors/${encodeURIComponent(id)}`, { body }),
-  deleteConnector: (id: string) => request<void>('DELETE', `/connectors/${encodeURIComponent(id)}`),
-  runConnector: (id: string) => request<SyncRunResult>('POST', `/connectors/${encodeURIComponent(id)}/run`),
-  testConnector: (id: string) =>
-    request<ConnectorTestResult>('POST', `/connectors/${encodeURIComponent(id)}/test`),
+    pending<ConnectorRow>('PATCH', `/connectors/${encodeURIComponent(id)}`, body),
+  deleteConnector: async (id: string): Promise<void> => {
+    unwrap(await api.DELETE('/connectors/{id}', { params: { path: { id } } }));
+  },
+  runConnector: async (id: string): Promise<SyncRunResult> =>
+    unwrap(await api.POST('/connectors/{id}/run', { params: { path: { id } } })),
+  testConnector: async (id: string): Promise<ConnectorTestResult> =>
+    unwrap(await api.POST('/connectors/{id}/test', { params: { path: { id } } })),
   /** The wizard's step-2 check, before the connector exists and has an id to test against. */
   testConnectorConfig: (body: { type: string; config: Record<string, unknown> }) =>
-    request<ConnectorTestResult>('POST', '/connectors/test', { body }),
+    pending<ConnectorTestResult>('POST', '/connectors/test', body),
 
-  syncLinks: (query: SyncLinksQuery) =>
-    request<SyncQueueResponse>('GET', '/sync/links', { query: query as Record<string, QueryValue> }),
-  conflict: (id: string) => request<ConflictView>('GET', `/sync/links/${encodeURIComponent(id)}/conflict`),
-  resolveConflict: (id: string, body: ResolveConflictBody) =>
-    request<SyncLinkRow>('POST', `/sync/links/${encodeURIComponent(id)}/resolve`, { body }),
+  syncLinks: async (query: SyncLinksQuery): Promise<SyncQueueResponse> =>
+    unwrap(await api.GET('/sync/links', { params: { query } })),
+  conflict: async (id: string): Promise<ConflictView> =>
+    unwrap(await api.GET('/sync/links/{id}/conflict', { params: { path: { id } } })),
+  resolveConflict: async (id: string, body: ResolveConflictBody): Promise<SyncLinkRow> =>
+    unwrap(await api.POST('/sync/links/{id}/resolve', { params: { path: { id } }, body })),
   /** Per-row "ייבא עכשיו" / "דחוף עכשיו" — one link, one direction. */
   syncLink: (id: string, direction: 'import' | 'push') =>
-    request<SyncRunResult>('POST', `/sync/links/${encodeURIComponent(id)}/sync`, { body: { direction } }),
+    pending<SyncRunResult>('POST', `/sync/links/${encodeURIComponent(id)}/sync`, { direction }),
 };
 
 /* ── JSON-Schema → form fields ────────────────────────────────────────────── */

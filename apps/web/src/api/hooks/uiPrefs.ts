@@ -19,7 +19,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { PreferencesSchema, type Preferences } from '@wecom/shared';
 import { z } from 'zod';
 import { keys } from '../keys.js';
-import { stageJson } from '../stage45.js';
+import { api } from '../client.js';
+import { checked } from '../stage45.js';
 import { applyPrefs, DEFAULT_PREFERENCES } from '../../lib/prefs.js';
 import { usePreferences } from './preferences.js';
 
@@ -128,14 +129,13 @@ export function useUiPrefs(): UiPrefsApi {
       writeMirror(next);
       // Seed the core query so the rest of the app (Sidebar, Shell, Article) sees it instantly.
       qc.setQueryData<Preferences>(keys.prefs, PreferencesSchema.parse(next));
-      void stageJson(PreferencesSchema.passthrough(), '/me/preferences', {
-        method: 'PUT',
-        body: next,
-      })
-        .then(() => qc.invalidateQueries({ queryKey: keys.me }))
-        .catch(() => {
-          /* the mirror already holds it; a failed sync must not lose the toggle */
-        });
+      const sync = async () => {
+        checked(PreferencesSchema, await api.PUT('/me/preferences', { body: next }));
+        await qc.invalidateQueries({ queryKey: keys.me });
+      };
+      void sync().catch(() => {
+        /* the mirror already holds it; a failed sync must not lose the toggle */
+      });
     },
     [prefs, qc],
   );

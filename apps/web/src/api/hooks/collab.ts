@@ -2,8 +2,10 @@
  * Stage 5 collaboration surface: notifications, comments + mentions, the review workflow,
  * saved views, templates, presence, bulk document actions and telemetry.
  *
- * Every call goes through `src/api/stage45.ts`, which validates the response against the
- * `@wecom/shared` zod contract these routes are being built to (`docs/api/CONTRACTS-stage4-5.md`).
+ * Transport and types are the generated client (`api`, from `docs/api/openapi.json`), like the
+ * rest of the app. Each response is then parsed by `checked` against the `@wecom/shared` zod
+ * schema the route validates with (`docs/api/CONTRACTS-stage4-5.md`), so the contract is enforced
+ * at compile time *and* at runtime — see `src/api/stage45.ts`.
  */
 import { useEffect, useMemo, useRef } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -27,7 +29,9 @@ import {
   type TemplateBodySchema,
 } from '@wecom/shared';
 import { keys } from '../keys.js';
-import { stageJson, stageVoid } from '../stage45.js';
+import { api } from '../client.js';
+import { unwrap } from '../unwrap.js';
+import { checked } from '../stage45.js';
 
 export type Notification = z.infer<typeof NotificationsResponseSchema>['items'][number];
 export type MentionCandidate = z.infer<typeof MentionCandidateSchema>;
@@ -53,17 +57,15 @@ export const useNotifications = (q: { unread?: boolean; page?: number; pageSize?
   useQuery({
     queryKey: keys.notifications(q),
     placeholderData: keepPreviousData,
-    queryFn: () => stageJson(NotificationsResponseSchema, '/notifications', { query: q }),
+    queryFn: async () =>
+      checked(NotificationsResponseSchema, await api.GET('/notifications', { params: { query: q } })),
   });
 
 export function useMarkNotificationsRead() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { ids?: string[]; all?: boolean }) =>
-      stageJson(z.object({ unread: z.number().int() }), '/notifications/read', {
-        method: 'POST',
-        body,
-      }),
+    mutationFn: async (body: { ids?: string[]; all?: boolean }) =>
+      checked(z.object({ unread: z.number().int() }), await api.POST('/notifications/read', { body })),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
 }
@@ -74,7 +76,11 @@ export const useComments = (documentId: string | undefined) =>
   useQuery({
     queryKey: keys.comments(documentId ?? ''),
     enabled: !!documentId,
-    queryFn: () => stageJson(items(CommentSchema), `/documents/${documentId!}/comments`).then((r) => r.items),
+    queryFn: async () =>
+      checked(
+        items(CommentSchema),
+        await api.GET('/documents/{id}/comments', { params: { path: { id: documentId! } } }),
+      ).items,
   });
 
 /**
@@ -86,15 +92,21 @@ export const useMentionable = (q: string, always = false) =>
     queryKey: keys.mentionable(q),
     enabled: always || q.length > 0,
     staleTime: 30_000,
-    queryFn: () =>
-      stageJson(items(MentionCandidateSchema), '/users/mentionable', { query: { q } }).then((r) => r.items),
+    queryFn: async () =>
+      checked(
+        items(MentionCandidateSchema),
+        await api.GET('/users/mentionable', { params: { query: { q } } }),
+      ).items,
   });
 
 export function useAddComment(documentId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: CommentBody) =>
-      stageJson(CommentSchema, `/documents/${documentId}/comments`, { method: 'POST', body }),
+    mutationFn: async (body: CommentBody) =>
+      checked(
+        CommentSchema,
+        await api.POST('/documents/{id}/comments', { params: { path: { id: documentId } }, body }),
+      ),
     onSuccess: () => void qc.invalidateQueries({ queryKey: keys.comments(documentId) }),
   });
 }
@@ -104,15 +116,19 @@ export function useCommentAction(documentId: string) {
   const invalidate = () => void qc.invalidateQueries({ queryKey: keys.comments(documentId) });
   return {
     resolve: useMutation({
-      mutationFn: (id: string) => stageJson(CommentSchema, `/comments/${id}/resolve`, { method: 'POST' }),
+      mutationFn: async (id: string) =>
+        checked(CommentSchema, await api.POST('/comments/{id}/resolve', { params: { path: { id } } })),
       onSuccess: invalidate,
     }),
     like: useMutation({
-      mutationFn: (id: string) => stageJson(CommentSchema, `/comments/${id}/like`, { method: 'POST' }),
+      mutationFn: async (id: string) =>
+        checked(CommentSchema, await api.POST('/comments/{id}/like', { params: { path: { id } } })),
       onSuccess: invalidate,
     }),
     remove: useMutation({
-      mutationFn: (id: string) => stageVoid(`/comments/${id}`, { method: 'DELETE' }),
+      mutationFn: async (id: string) => {
+        unwrap(await api.DELETE('/comments/{id}', { params: { path: { id } } }));
+      },
       onSuccess: invalidate,
     }),
   };
@@ -123,8 +139,11 @@ export function useCommentAction(documentId: string) {
 export function useRequestReview(documentId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: RequestReviewBody) =>
-      stageJson(ReviewRequestSchema, `/documents/${documentId}/request-review`, { method: 'POST', body }),
+    mutationFn: async (body: RequestReviewBody) =>
+      checked(
+        ReviewRequestSchema,
+        await api.POST('/documents/{id}/request-review', { params: { path: { id: documentId } }, body }),
+      ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.doc(documentId) });
       void qc.invalidateQueries({ queryKey: ['documents'] });
@@ -136,8 +155,11 @@ export function useRequestReview(documentId: string) {
 export function useReviewDecision() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ documentId, ...body }: ReviewDecisionBody & { documentId: string }) =>
-      stageJson(ReviewRequestSchema, `/documents/${documentId}/review-decision`, { method: 'POST', body }),
+    mutationFn: async ({ documentId, ...body }: ReviewDecisionBody & { documentId: string }) =>
+      checked(
+        ReviewRequestSchema,
+        await api.POST('/documents/{id}/review-decision', { params: { path: { id: documentId } }, body }),
+      ),
     onSuccess: (_r, { documentId }) => {
       void qc.invalidateQueries({ queryKey: keys.doc(documentId) });
       void qc.invalidateQueries({ queryKey: keys.versions(documentId) });
@@ -152,7 +174,8 @@ export const useReviews = (q: { status?: 'open' | 'approved' | 'changes'; page?:
   useQuery({
     queryKey: keys.reviews(q),
     placeholderData: keepPreviousData,
-    queryFn: () => stageJson(ReviewQueueResponseSchema, '/reviews', { query: q }),
+    queryFn: async () =>
+      checked(ReviewQueueResponseSchema, await api.GET('/reviews', { params: { query: q } })),
   });
 
 /* ── saved views ────────────────────────────────────────────────────────── */
@@ -161,7 +184,7 @@ export const useViews = () =>
   useQuery({
     queryKey: keys.views,
     staleTime: 30_000,
-    queryFn: () => stageJson(items(SavedViewSchema), '/views').then((r) => r.items),
+    queryFn: async () => checked(items(SavedViewSchema), await api.GET('/views')).items,
   });
 
 export function useSaveView() {
@@ -169,16 +192,18 @@ export function useSaveView() {
   const invalidate = () => void qc.invalidateQueries({ queryKey: keys.views });
   return {
     create: useMutation({
-      mutationFn: (body: SavedViewBody) => stageJson(SavedViewSchema, '/views', { method: 'POST', body }),
+      mutationFn: async (body: SavedViewBody) => checked(SavedViewSchema, await api.POST('/views', { body })),
       onSuccess: invalidate,
     }),
     update: useMutation({
-      mutationFn: ({ id, ...body }: Partial<SavedViewBody> & { id: string }) =>
-        stageJson(SavedViewSchema, `/views/${id}`, { method: 'PATCH', body }),
+      mutationFn: async ({ id, ...body }: Partial<SavedViewBody> & { id: string }) =>
+        checked(SavedViewSchema, await api.PATCH('/views/{id}', { params: { path: { id } }, body })),
       onSuccess: invalidate,
     }),
     remove: useMutation({
-      mutationFn: (id: string) => stageVoid(`/views/${id}`, { method: 'DELETE' }),
+      mutationFn: async (id: string) => {
+        unwrap(await api.DELETE('/views/{id}', { params: { path: { id } } }));
+      },
       onSuccess: invalidate,
     }),
   };
@@ -190,13 +215,13 @@ export const useTemplates = () =>
   useQuery({
     queryKey: keys.templates,
     staleTime: 60_000,
-    queryFn: () => stageJson(items(TemplateSchema), '/templates').then((r) => r.items),
+    queryFn: async () => checked(items(TemplateSchema), await api.GET('/templates')).items,
   });
 
 export function useSaveTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: TemplateBody) => stageJson(TemplateSchema, '/templates', { method: 'POST', body }),
+    mutationFn: async (body: TemplateBody) => checked(TemplateSchema, await api.POST('/templates', { body })),
     onSuccess: () => void qc.invalidateQueries({ queryKey: keys.templates }),
   });
 }
@@ -216,13 +241,17 @@ export function usePresence(documentId: string | undefined, enabled = true): Pre
     queryKey: keys.presence(documentId ?? ''),
     enabled: on,
     refetchInterval: on ? HEARTBEAT_MS : false,
-    queryFn: () => stageJson(PresenceSchema, `/documents/${documentId!}/presence`),
+    queryFn: async () =>
+      checked(
+        PresenceSchema,
+        await api.GET('/documents/{id}/presence', { params: { path: { id: documentId! } } }),
+      ),
   });
 
   const beat = useRef<() => void>(() => {});
   beat.current = () => {
     if (!documentId) return;
-    void stageVoid(`/documents/${documentId}/presence`, { method: 'POST' }).catch(() => {});
+    void api.POST('/documents/{id}/presence', { params: { path: { id: documentId } } }).catch(() => {});
   };
 
   useEffect(() => {
@@ -243,7 +272,8 @@ export function usePresence(documentId: string | undefined, enabled = true): Pre
 export function useBulkDocuments() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: BulkBody) => stageJson(BulkResultSchema, '/documents/bulk', { method: 'POST', body }),
+    mutationFn: async (body: BulkBody) =>
+      checked(BulkResultSchema, await api.POST('/documents/bulk', { body })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['documents'] });
       void qc.invalidateQueries({ queryKey: keys.trash });
@@ -275,7 +305,7 @@ export function useTelemetry(): (e: TelemetryEvent) => void {
       clearTimeout(timer.current);
       timer.current = null;
     }
-    void stageVoid('/telemetry', { method: 'POST', body: { events } }).catch(() => {});
+    void api.POST('/telemetry', { body: { events } }).catch(() => {});
   };
 
   useEffect(() => {
