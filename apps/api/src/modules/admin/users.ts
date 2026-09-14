@@ -4,7 +4,8 @@ import { z } from 'zod';
 import {
   AdminUserCreateSchema,
   AdminUserPatchSchema,
-  PaginationQuerySchema,
+  AdminUserRowSchema,
+  AdminUsersQuerySchema,
   UserRoleSchema,
   UserSchema,
   paginated,
@@ -20,30 +21,59 @@ const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 export default async function userRoutes(instance: FastifyInstance) {
   const app = instance.withTypeProvider<ZodTypeProvider>();
 
+  /**
+   * Stage-5 §admin. The people page: roles with their category scopes, the IdP groups
+   * that grant them, how many sessions are live right now, and filters on free text,
+   * identity source, role name and active state. `groups` is derived from `groups_map`
+   * rather than stored per user — a group only matters here because it maps to a role.
+   */
   app.get(
     '/users',
     {
       config: { requires: ['users.manage'] },
       schema: {
         tags: ['admin'],
-        querystring: PaginationQuerySchema.extend({ q: z.string().optional() }),
-        response: { 200: paginated(UserWithRoles) },
+        querystring: AdminUsersQuerySchema,
+        response: { 200: paginated(AdminUserRowSchema) },
       },
     },
     async (req) => {
-      const { q, page, pageSize } = req.query;
-      const where = q ? `where (u.display_name ilike $1 or u.email ilike $1)` : '';
-      const params: unknown[] = q ? [`%${q}%`] : [];
+      const { q, page, pageSize, source, role, active } = req.query;
+      const cond: string[] = [];
+      const params: unknown[] = [];
+      const add = (sql: string, v: unknown) => {
+        params.push(v);
+        cond.push(sql.replace(/\?/g, '$' + params.length));
+      };
+      if (q) add('(u.display_name ilike ? or u.email ilike ? or u.subject ilike ?)', `%${q}%`);
+      if (source) add('u.source = ?', source);
+      if (active !== undefined) add('u.active = ?', active);
+      if (role)
+        add(
+          'exists (select 1 from user_roles ur join roles r on r.id=ur.role_id where ur.user_id=u.id and r.name = ?)',
+          role,
+        );
+      const where = cond.length ? 'where ' + cond.join(' and ') : '';
       const total = (await app.db.query<{ n: string }>(`select count(*) as n from users u ${where}`, params))
         .rows[0].n;
       const rows = await app.db.query(
-        `select u.* from users u ${where} order by u.display_name limit $${params.length + 1} offset $${params.length + 2}`,
+        `select u.*,
+                (select count(*)::int from sessions s
+                  where s.user_id = u.id and s.revoked_at is null and s.expires_at > now()) as sessions
+           from users u ${where} order by u.display_name
+           limit $${params.length + 1} offset $${params.length + 2}`,
         [...params, pageSize, (page - 1) * pageSize],
       );
       const ids = rows.rows.map((u) => u.id);
       const roles = await app.db.query(
-        `select ur.user_id, ur.role_id, r.name, ur.category_scope, ur.granted_by, ur.granted_at
+        `select ur.user_id, ur.role_id, r.name, ur.category_scope
            from user_roles ur join roles r on r.id=ur.role_id where ur.user_id = any($1::uuid[]) order by r.name`,
+        [ids],
+      );
+      const groups = await app.db.query(
+        `select distinct ur.user_id, gm.idp_group_name
+           from user_roles ur join groups_map gm on gm.role_id = ur.role_id
+          where ur.user_id = any($1::uuid[]) order by gm.idp_group_name`,
         [ids],
       );
       const items = rows.rows.map((u) => ({
@@ -55,16 +85,12 @@ export default async function userRoutes(instance: FastifyInstance) {
         initials: u.initials,
         active: u.active,
         lastLoginAt: iso(u.last_login_at),
+        createdAt: new Date(u.created_at).toISOString(),
+        sessions: u.sessions as number,
         roles: roles.rows
           .filter((r) => r.user_id === u.id)
-          .map((r) => ({
-            userId: r.user_id,
-            roleId: r.role_id,
-            roleName: r.name,
-            categoryScope: r.category_scope,
-            grantedBy: r.granted_by,
-            grantedAt: new Date(r.granted_at).toISOString(),
-          })),
+          .map((r) => ({ roleId: r.role_id, roleName: r.name, categoryScope: r.category_scope })),
+        groups: groups.rows.filter((g) => g.user_id === u.id).map((g) => g.idp_group_name as string),
       }));
       return { items, total: Number(total), page, pageSize };
     },
