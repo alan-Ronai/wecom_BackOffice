@@ -73,6 +73,12 @@ export const keys = {
     usage: (q: unknown = '*') => ['analytics', 'usage', q] as const,
     searchLog: (q: unknown = '*') => ['analytics', 'searchLog', q] as const,
   },
+  /* wave 5 — learning (V4a); every key starts with 'learning' so one prefix invalidates the lot */
+  learning: {
+    my: ['learning', 'my'] as const,
+    player: (assignmentId: string) => ['learning', 'player', assignmentId] as const,
+    doc: (documentId: string) => ['learning', 'doc', documentId] as const,
+  },
   connectors: ['connectors'] as const,
   connector: (id: string) => ['connectors', id] as const,
   connectorTypes: ['connectors', 'types'] as const,
