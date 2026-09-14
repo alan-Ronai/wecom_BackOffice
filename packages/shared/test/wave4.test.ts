@@ -183,3 +183,125 @@ describe('wave4 governance extensions', () => {
     );
   });
 });
+
+import {
+  FEEDBACK_KINDS,
+  FEEDBACK_KIND_LABELS,
+  FEEDBACK_STATUSES,
+  CreateFeedbackBodySchema,
+  FeedbackSchema,
+  FeedbackAnalyticsSchema,
+  PutSourceDocumentBodySchema,
+  AssetSchema,
+  ASSET_MIMES,
+  ASSET_MAX_BYTES,
+  UsageAnalyticsSchema,
+  SearchLogRowSchema,
+} from '../src/index.js';
+
+describe('wave4 feedback / source / usage schemas', () => {
+  it('has the seven PRD feedback kinds and five statuses', () => {
+    expect([...FEEDBACK_KINDS]).toEqual([
+      'outdated',
+      'error',
+      'unclear',
+      'missing',
+      'process_fails',
+      'no_answer',
+      'other',
+    ]);
+    expect(FEEDBACK_KIND_LABELS.process_fails).toBe('התהליך לא עובד בפועל');
+    expect([...FEEDBACK_STATUSES]).toEqual(['new', 'in_review', 'needs_update', 'no_change', 'done']);
+  });
+  it('agent body needs only a kind', () => {
+    expect(CreateFeedbackBodySchema.parse({ kind: 'other' })).toEqual({ kind: 'other', text: '' });
+    expect(CreateFeedbackBodySchema.safeParse({ kind: 'other', text: 'x'.repeat(1001) }).success).toBe(
+      false,
+    );
+  });
+  it('parses a stored feedback row with auto-captured context', () => {
+    const f = FeedbackSchema.parse({
+      id: U,
+      documentId: U,
+      documentVersion: 3,
+      docType: 'R',
+      worldSlug: 'sim',
+      stepKey: 's11',
+      kind: 'error',
+      text: '',
+      status: 'new',
+      userId: U,
+      userName: 'דנה',
+      createdAt: T,
+      assigneeId: null,
+      decisionNote: null,
+      decidedBy: null,
+      decidedAt: null,
+      resolvedVersion: null,
+    });
+    expect(f.documentVersion).toBe(3);
+  });
+  it('analytics shape', () => {
+    const a = FeedbackAnalyticsSchema.parse({
+      from: T,
+      to: T,
+      total: 1,
+      perItem: [{ documentId: U, title: 't', docType: 'R', count: 1, open: 1 }],
+      byKind: [{ kind: 'error', count: 1 }],
+      topItems: [{ documentId: U, title: 't', count: 1 }],
+      meanHoursToClose: null,
+      changeRate: 0,
+      recurringByTopic: [{ topicId: U, topicName: 'x', kind: 'error', count: 1 }],
+    });
+    expect(a.total).toBe(1);
+  });
+  it('source document body and assets', () => {
+    expect(PutSourceDocumentBodySchema.parse({ html: '<p>x</p>' }).label).toBeUndefined();
+    expect(ASSET_MAX_BYTES).toBe(10 * 1024 * 1024);
+    expect(ASSET_MIMES).toContain('image/png');
+    expect(
+      AssetSchema.parse({
+        id: U,
+        url: '/api/v1/assets/' + U,
+        mime: 'image/png',
+        size: 10,
+        width: null,
+        height: null,
+      }).size,
+    ).toBe(10);
+  });
+  it('usage analytics and search log rows', () => {
+    expect(
+      SearchLogRowSchema.parse({
+        id: U,
+        userId: U,
+        userName: 'x',
+        q: 'apn',
+        filters: {},
+        results: 0,
+        tookMs: 4,
+        at: T,
+      }).results,
+    ).toBe(0);
+    const u = UsageAnalyticsSchema.parse({
+      from: T,
+      to: T,
+      itemViews: [{ documentId: U, title: 't', docType: 'R', views: 3, viewers: 2, lastViewedAt: T }],
+      topItems: [{ documentId: U, title: 't', views: 3 }],
+      topTopics: [{ topicId: U, name: 'x', worldSlug: 'sim', views: 3 }],
+      viewers: [{ userId: U, displayName: 'x', views: 3 }],
+      zeroResultTerms: [{ q: 'zzz', count: 2, lastAt: T }],
+      staleness: [
+        {
+          documentId: U,
+          title: 't',
+          ownerName: null,
+          updatedAt: T,
+          publishedAt: null,
+          daysSinceUpdate: 12,
+        },
+      ],
+    });
+    expect(u.zeroResultTerms[0].q).toBe('zzz');
+  });
+});
