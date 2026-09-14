@@ -413,7 +413,7 @@ export function ArticlePage() {
         <h1>{doc.title}</h1>
         <p>{doc.description}</p>
         {topicNeighbours.prev || topicNeighbours.next ? (
-          <div className="topic-nav" style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <div className="topic-nav">
             {topicNeighbours.prev ? (
               <button className="btn xs" onClick={() => go(`/doc/${topicNeighbours.prev!.id}`)}>
                 → הקודם בנושא: {topicNeighbours.prev.title} ({DOC_TYPE_LABELS[topicNeighbours.prev.docType]})
@@ -435,7 +435,7 @@ export function ArticlePage() {
     effectivePane === 'source' ? (
       <SourcePane documentId={doc.id} canEdit={can('docs.edit', doc)} sourceId={doc.sourceId} />
     ) : effectivePane === 'split' ? (
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, minWidth: 0 }}>
+      <div className="split-panes">
         {workView}
         <SourcePane documentId={doc.id} canEdit={can('docs.edit', doc)} sourceId={doc.sourceId} />
       </div>

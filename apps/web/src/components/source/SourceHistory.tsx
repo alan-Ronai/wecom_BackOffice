@@ -13,6 +13,9 @@ export function SourceHistory({ documentId, canEdit }: { documentId: string; can
   const modal = useModal();
   const toast = useToast();
   const items = versions.data;
+  // "Loading" and "there are none" are different answers; rendering the second for the first told
+  // the editor their history was gone every time the query was in flight.
+  if (versions.isPending) return <div className="muted">טוען היסטוריית מקור…</div>;
   if (!items?.length) return <div className="muted">אין גרסאות מקור</div>;
   const latest = items[0].version;
   return (
@@ -46,7 +49,11 @@ export function SourceHistory({ documentId, canEdit }: { documentId: string; can
           </li>
         ))}
       </ul>
-      {preview.data ? (
+      {/* Not the *previous* version's body while the next one loads: the highlighted row and the
+          text below it would disagree, which reads as the wrong version having been restored. */}
+      {preview.isFetching ? (
+        <div className="muted">טוען גרסה…</div>
+      ) : preview.data ? (
         <article className="prose source-html" dangerouslySetInnerHTML={{ __html: preview.data.html }} />
       ) : null}
     </div>
