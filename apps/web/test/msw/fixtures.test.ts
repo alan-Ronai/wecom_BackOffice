@@ -52,6 +52,10 @@ import {
   SyncLinkRowSchema,
   SyncQueueResponseSchema,
   SyncRunResultSchema,
+  TagsResponseSchema,
+  TopicViewSchema,
+  TopicsResponseSchema,
+  WorldsResponseSchema,
 } from '@wecom/shared';
 import { fx, D_BROWSING, SUG_1, U1 } from './fixtures.js';
 import {
@@ -121,6 +125,12 @@ describe('fixtures validate against shared schemas', () => {
     // The merge screen is only interesting when both sides moved off the base.
     expect(conflict.link.state).toBe('conflict');
     expect(conflict.theirs.paragraphs.length).toBeGreaterThan(1);
+  });
+  it('wave 4 — taxonomy', () => {
+    WorldsResponseSchema.parse({ items: fx.worlds });
+    TopicsResponseSchema.parse({ items: fx.topics });
+    TopicViewSchema.parse(fx.topicView);
+    TagsResponseSchema.parse({ items: fx.tags });
   });
 });
 

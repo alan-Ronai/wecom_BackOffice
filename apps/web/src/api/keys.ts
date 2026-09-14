@@ -41,6 +41,11 @@ export const keys = {
   views: ['views'] as const,
   templates: ['templates'] as const,
   presence: (id: string) => ['presence', id] as const,
+  /* wave 4 — taxonomy (W1) */
+  worlds: (inactive = false) => ['worlds', inactive] as const,
+  topics: (world: string) => ['topics', world] as const,
+  topic: (id: string) => ['topic', id] as const,
+  tags: (q = '') => ['tags', q] as const,
   admin: {
     users: (q: unknown = '*') => ['admin', 'users', q] as const,
     roles: ['admin', 'roles'] as const,
