@@ -3,7 +3,7 @@ import type { SearchHit, SearchQuery, SearchResponse } from '@wecom/shared';
 import type pg from 'pg';
 import { getDocument, recomputeDerived, type Q } from '../documents/repo.js';
 import { htmlToText } from '../scripts/html.js';
-import { withTransaction } from '../../lib/sql.js';
+import { LIKE_ESCAPE, likeEscape, withTransaction } from '../../lib/sql.js';
 import { visibleWhere } from '../../lib/visibility.js';
 
 /** Hebrew category labels, mirroring the legacy `KB.CATS`. */
@@ -26,8 +26,8 @@ const words = (q: string) => q.trim().split(/\s+/).filter(Boolean);
 
 const wordClause = (cols: string[], w: string, params: unknown[]): string => {
   params.push(w);
-  const i = '$' + params.length;
-  return '(' + cols.map((c) => `${c} ilike '%' || ${i} || '%'`).join(' or ') + ')';
+  const i = likeEscape('$' + params.length);
+  return '(' + cols.map((c) => `${c} ilike '%' || ${i} || '%'${LIKE_ESCAPE}`).join(' or ') + ')';
 };
 /** Documents and steps must contain every word: "ריענון sim" is one step, not two results. */
 const allWords = (cols: string[], ws: string[], params: unknown[]): string =>

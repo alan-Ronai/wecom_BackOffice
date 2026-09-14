@@ -15,7 +15,7 @@ import {
   type WorldPatchSchema,
 } from '@wecom/shared';
 import { httpError } from '../../lib/http.js';
-import type { Tx } from '../../lib/sql.js';
+import { LIKE_ESCAPE, likeEscape, type Tx } from '../../lib/sql.js';
 import { iso, orderWorlds, type Q } from '../documents/repo.js';
 import { visibleStatusSql } from '../../lib/visibility.js';
 
@@ -246,15 +246,25 @@ export async function topicView(q: Q, topicId: string, vis: Visibility): Promise
   return TopicViewSchema.parse({ topic, world, groups });
 }
 
+/**
+ * The tag vocabulary is a read model over `documents`, so it takes the same two boundaries as
+ * `topicView` two functions above. Without them a scoped caller reads every world's tag names
+ * — which routinely name customers, campaigns and unreleased products — and exact counts, and a
+ * reader sees tags that exist only on drafts.
+ */
 export async function listTags(
   q: Q,
   o: { q?: string; limit: number },
+  vis: Visibility,
 ): Promise<{ tag: string; count: number }[]> {
   const r = await q.query(
     `select tag, count(*)::int count from documents d, unnest(d.tags) tag
-      where d.deleted_at is null and ($1::text is null or tag ilike '%' || $1 || '%')
+      where d.deleted_at is null
+        and ($1::text is null or tag ilike '%' || ${likeEscape('$1')} || '%'${LIKE_ESCAPE})
+        and ($3::boolean or ${visibleStatusSql()})
+        and ($4::text[] is null or exists (select 1 from document_worlds sw where sw.document_id = d.id and sw.world_slug = any($4)))
       group by tag order by count desc, tag limit $2`,
-    [o.q ?? null, o.limit],
+    [o.q ?? null, o.limit, vis.unpublished, vis.worldScopes ? [...vis.worldScopes] : null],
   );
   return r.rows.map((x) => ({ tag: x.tag as string, count: x.count as number }));
 }
