@@ -52,7 +52,9 @@ export interface RunResult {
 
 /** Result of `syncLink`: either the requested direction ran, or both sides had moved. */
 export type SyncLinkOutcome =
-  { conflict: false; result: RunResult; link: SyncLinkRow } | { conflict: true; link: SyncLinkRow };
+  /** `errors` explains a zero result the caller would otherwise have to guess at. */
+  | { conflict: false; result: RunResult; link: SyncLinkRow; errors?: string[] }
+  | { conflict: true; link: SyncLinkRow };
 
 export interface ResolveBody {
   resolution: 'ours' | 'theirs' | 'merged';
@@ -202,6 +204,7 @@ export class SyncService {
     const remoteChanged = content.hash !== link.base_remote_hash;
     const localChanged = doc.currentVersion !== link.base_local_version;
     const result: RunResult = { imported: 0, pushed: 0, conflicts: 0, linked: 0 };
+    const errors: string[] = [];
 
     if (remoteChanged && localChanged) {
       const base = await this.d.documents.getVersionSnapshot(doc.id, link.base_local_version);
@@ -239,6 +242,11 @@ export class SyncService {
         result.pushed = 1;
       } else if (!remoteChanged && link.state !== 'synced') {
         await this.d.repo.setLinkState(link.id, 'synced');
+      } else if (remoteChanged) {
+        // Asked to push, but the local side has nothing new and the *remote* moved. Pushing
+        // would overwrite that change with an identical local version, so this does nothing —
+        // and used to say nothing either, returning `{pushed: 0}` with no explanation.
+        errors.push('הצד המרוחק השתנה ואין שינוי מקומי לדחוף — ייבא אותו או פתור את הקונפליקט');
       }
     }
 
@@ -251,7 +259,7 @@ export class SyncService {
       }),
     );
     const fresh = (await this.d.repo.linkById(link.id)) ?? link;
-    return { conflict: false, result, link: fresh };
+    return { conflict: false, result, link: fresh, errors };
   }
 
   private async pushLink(

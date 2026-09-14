@@ -163,8 +163,9 @@ run('category scope: an out-of-scope document leaks through no route', () => {
       const r = await app.inject({ method: 'GET', url, headers: auth(admin) });
       expect(r.statusCode, url).toBe(200);
     }
-    const g = (await app.inject({ method: 'GET', url: '/api/v1/graph?limit=2000', headers: auth(admin) }))
-      .json();
+    const g = (
+      await app.inject({ method: 'GET', url: '/api/v1/graph?limit=2000', headers: auth(admin) })
+    ).json();
     expect(g.nodes.map((n: { id: string }) => n.id)).toContain(`doc:${billingDoc}`);
     const impact = (
       await app.inject({

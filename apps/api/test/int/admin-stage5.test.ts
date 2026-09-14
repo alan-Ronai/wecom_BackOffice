@@ -222,6 +222,9 @@ run('stage 5 — admin, roles and identity settings', () => {
     expect(firewall.calls.at(-1)).toContain('type=op');
     expect(pa.json().details.status).toBe('success');
     expect(JSON.stringify(pa.json())).not.toContain('key=k');
+    // The key travels in the body: it must not reach the firewall's access log through the URL.
+    expect(firewall.querySearches.at(-1)).toBe('');
+    expect(firewall.calls.at(-1)).toContain('key=k');
 
     // A wrong key is a reported failure, not a 500.
     await app.inject({
@@ -254,5 +257,82 @@ run('stage 5 — admin, roles and identity settings', () => {
     });
     expect(unreachable.statusCode).toBe(200);
     expect(unreachable.json().ok).toBe(false);
+  });
+
+  /**
+   * I3: `sessionHours` was stored, echoed back, and never applied — `create`, `touch` and the
+   * cookie all used the module constant, so an operator who tightened sessions for a compliance
+   * reason got eight hours and a UI that told them otherwise.
+   */
+  it('applies the stored sessionHours to the next session and its cookie', async () => {
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/admin/identity',
+      headers: admin,
+      payload: { sessionHours: 1 },
+    });
+    const before = Date.now();
+    const s = await app.sessions.create(adminId, '10.0.0.1', 'vitest');
+    const row = await db.pool.query<{ expires_at: Date }>('select expires_at from sessions where id=$1', [
+      s.id,
+    ]);
+    const hours = (row.rows[0].expires_at.getTime() - before) / 3_600_000;
+    expect(hours).toBeGreaterThan(0.9);
+    expect(hours).toBeLessThan(1.1);
+    // …and the cookie agrees, so the browser does not hold a credential the server has expired.
+    const { cookieOptions } = await import('../../src/lib/session.js');
+    expect(cookieOptions('production', await app.sessions.ttlMs()).maxAge).toBe(3600);
+
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/admin/identity',
+      headers: admin,
+      payload: { sessionHours: 8 },
+    });
+    expect(await app.sessions.ttlMs()).toBe(8 * 3_600_000);
+  });
+
+  /**
+   * I1/I2: the identity probes reach the network from operator-supplied, *persisted* values and
+   * report the outcome, so they are an SSRF primitive unless they are guarded. The connector
+   * paths already refuse link-local and anything outside `CONNECTOR_HOST_ALLOWLIST`; these now
+   * use the same guard.
+   */
+  it('refuses a probe target the connector guard would refuse, and a host that is not a host', async () => {
+    const put = (payload: unknown) =>
+      app.inject({ method: 'PUT', url: '/api/v1/admin/identity', headers: admin, payload });
+    const probe = (provider: 'oidc' | 'paloalto') =>
+      app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/identity/test',
+        headers: admin,
+        payload: { provider },
+      });
+
+    // Cloud/link-local metadata is refused whatever the allowlist says.
+    expect((await put({ oidc: { issuer: 'http://169.254.169.254/latest' } })).statusCode).toBe(400);
+    // …and a scheme `z.string().url()` accepts but nothing should fetch.
+    expect((await put({ oidc: { issuer: 'file:///etc/passwd' } })).statusCode).toBe(400);
+
+    // A Palo Alto "host" that is really a path and a query: this is the shape that would have
+    // sent the stored API key to `evil.example` with an attacker-chosen path.
+    expect((await put({ paloalto: { host: 'evil.example/x?' } })).statusCode).toBe(400);
+    expect((await put({ paloalto: { host: 'user@evil.example' } })).statusCode).toBe(400);
+    // A refused PUT persists nothing: the stored host is still the stub's.
+    const stored = (
+      await app.inject({ method: 'GET', url: '/api/v1/admin/identity', headers: admin })
+    ).json();
+    expect(stored.paloalto.host).toBe('127.0.0.1:8096');
+
+    // A value already in the database from before the guard existed is refused at probe time
+    // too, rather than only at write time.
+    await db.pool.query(
+      `update app_settings set value = jsonb_set(value, '{paloalto,host}', '"169.254.169.254"')
+        where key = 'identity'`,
+    );
+    const blocked = await probe('paloalto');
+    expect(blocked.statusCode).toBe(200);
+    expect(blocked.json().ok).toBe(false);
+    expect(blocked.json().message).toContain('מארח');
   });
 });

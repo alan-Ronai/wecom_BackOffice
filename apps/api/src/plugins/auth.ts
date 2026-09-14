@@ -116,7 +116,7 @@ export default fp(async (app) => {
         }
         if (shouldSlide(s.lastSeenAt, new Date())) {
           await sessions.touch(s.id);
-          reply.setCookie(SESSION_COOKIE, token, cookieOptions(app.config.NODE_ENV));
+          reply.setCookie(SESSION_COOKIE, token, cookieOptions(app.config.NODE_ENV, await sessions.ttlMs()));
         }
       }
     }
