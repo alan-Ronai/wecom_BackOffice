@@ -491,9 +491,17 @@ export const handlers: RequestHandler[] = [
   http.put(`${B}/admin/groups-map`, () => HttpResponse.json({ ok: true, auditId: AUDIT })),
   http.get(`${B}/admin/sessions`, () => HttpResponse.json({ items: fx.sessions })),
   http.delete(`${B}/admin/sessions/:id`, () => HttpResponse.json({ ok: true, auditId: AUDIT })),
-  http.get(`${B}/admin/audit`, () =>
-    HttpResponse.json({ items: fx.audit, total: fx.audit.length, page: 1, pageSize: 50 }),
-  ),
+  http.get(`${B}/admin/audit`, ({ request }) => {
+    const u = new URL(request.url);
+    const actorId = u.searchParams.get('actorId');
+    const entityType = u.searchParams.get('entityType');
+    const from = u.searchParams.get('from');
+    let items = fx.audit;
+    if (actorId) items = items.filter((e) => e.actorId === actorId);
+    if (entityType) items = items.filter((e) => e.entityType === entityType);
+    if (from) items = items.filter((e) => e.at >= from);
+    return HttpResponse.json({ items, total: items.length, page: 1, pageSize: 50 });
+  }),
   http.get(`${B}/admin/system`, () => HttpResponse.json(fx.system)),
   http.post(`${B}/admin/users`, async ({ request }) => {
     const b = (await request.json()) as { email: string; displayName: string };

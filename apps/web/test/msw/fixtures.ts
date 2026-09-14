@@ -816,6 +816,13 @@ export const sessions: Session[] = [
   },
 ];
 
+/**
+ * The audit explorer defaults to the last seven days, which is right for a log and wrong for a
+ * frozen fixture date — so these two entries are always "a couple of hours ago" and "yesterday".
+ */
+export const AUDIT_RECENT = new Date(Date.now() - 2 * 3_600_000).toISOString();
+export const AUDIT_YESTERDAY = new Date(Date.now() - 26 * 3_600_000).toISOString();
+
 export const audit: AuditEntry[] = [
   {
     id: 'dddddddd-dddd-4ddd-8ddd-ddddddddddd1',
@@ -826,9 +833,23 @@ export const audit: AuditEntry[] = [
     entityId: D_BROWSING,
     before: { currentVersion: 6 },
     after: { currentVersion: 7 },
-    ip: '10.0.0.7',
+    ip: '10.20.4.17',
     requestId: 'req-1',
-    at: T,
+    at: AUDIT_RECENT,
+  },
+  // A second actor and a second entity type, so the explorer's filters have something to narrow.
+  {
+    id: 'dddddddd-dddd-4ddd-8ddd-ddddddddddd2',
+    actorId: U2,
+    actorName: 'דנה ר.',
+    action: 'roles.update',
+    entityType: 'role',
+    entityId: ROLE_LEAD,
+    before: { permissions: ['docs.read'] },
+    after: { permissions: ['docs.read', 'docs.edit'] },
+    ip: '10.20.4.61',
+    requestId: 'req-2',
+    at: AUDIT_YESTERDAY,
   },
 ];
 

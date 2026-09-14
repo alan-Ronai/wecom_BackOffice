@@ -1,59 +1,159 @@
 import { useState } from 'react';
-import { wordDiff } from '@wecom/shared';
 import { useAudit } from '../../api/hooks/admin.js';
+import { useAdminUsers, useAuditEntry } from '../../api/hooks/stage5.js';
+import type { AuditDiffRow } from '../../api/stage5.js';
+import type { AuditQuery } from '../../api/types.js';
 import { fmtDate, fmtTime } from '../../lib/format.js';
-import { useModal } from '../ui/Modal.js';
-import { Html } from '../Fmt.js';
+import { Chip, LoadError } from '../ui/index.js';
 
+const ENTITY_LABEL: Record<string, string> = {
+  document: 'מסמך',
+  block: 'בלוק',
+  field: 'שדה CRM',
+  user: 'משתמש',
+  role: 'תפקיד',
+  connector: 'מחבר',
+  source: 'מקור',
+};
+
+const RANGES: [string, number | null][] = [
+  ['7 ימים', 7],
+  ['30 יום', 30],
+  ['90 יום', 90],
+  ['הכל', null],
+];
+
+/**
+ * Rounded down to the hour on purpose. A raw `Date.now()` would produce a different `from` on
+ * every render, which means a different query key, which means the list refetches forever and
+ * never settles.
+ */
+const HOUR = 3_600_000;
+const daysAgo = (n: number) => new Date(Math.floor((Date.now() - n * 24 * HOUR) / HOUR) * HOUR).toISOString();
+
+/** `null` and `undefined` are different things in a diff; neither is the string "null". */
+const renderValue = (v: unknown): string => {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'string') return v;
+  return JSON.stringify(v);
+};
+
+function DiffRows({ rows }: { rows: AuditDiffRow[] }) {
+  if (!rows.length) return <div className="small muted">אין שינוי בשדות — הפעולה לא שינתה נתונים.</div>;
+  return (
+    <table className="table diff-rows">
+      <thead>
+        <tr>
+          <th>שדה</th>
+          <th>לפני</th>
+          <th>אחרי</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.path}>
+            <td>
+              <bdi className="lat" dir="ltr">
+                {r.path}
+              </bdi>
+            </td>
+            <td className="was">{renderValue(r.before)}</td>
+            <td className="now">{renderValue(r.after)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/**
+ * The explorer: filters narrow the query on the server, and a row opens a drawer that fetches
+ * `GET /admin/audit/:id` for the **computed** before/after rows. The page used to word-diff two
+ * pretty-printed JSON blobs in the browser, which turned "status: draft → published" into a wall
+ * of punctuation and could not tell a reordered key from an edited value.
+ */
 export function AuditPage() {
   const [entityType, setEntityType] = useState('');
-  const audit = useAudit(entityType ? { entityType } : {});
-  const modal = useModal();
-  const items = audit.data?.items ?? [];
+  const [actorId, setActorId] = useState('');
+  const [days, setDays] = useState<number | null>(7);
+  const [openId, setOpenId] = useState<string | null>(null);
 
-  const showDiff = (before: unknown, after: unknown) => {
-    const d = wordDiff(JSON.stringify(before ?? {}, null, 2), JSON.stringify(after ?? {}, null, 2));
-    modal.open({
-      title: 'לפני / אחרי',
-      wide: true,
-      body: (
-        <div className="diff-cols">
-          <div className="diff-col">
-            <div className="eyebrow">לפני</div>
-            <Html as="pre" html={d.a} />
-          </div>
-          <div className="diff-col">
-            <div className="eyebrow cur">אחרי</div>
-            <Html as="pre" html={d.b} />
-          </div>
-        </div>
-      ),
-      buttons: [{ label: 'סגור' }],
-    });
+  const query: AuditQuery = {
+    ...(entityType ? { entityType } : {}),
+    ...(actorId ? { actorId } : {}),
+    ...(days ? { from: daysAgo(days) } : {}),
   };
+  const audit = useAudit(query);
+  const users = useAdminUsers({ pageSize: 200 });
+  const detail = useAuditEntry(openId);
+
+  const items = audit.data?.items ?? [];
+  const actors = users.data?.items ?? [];
+  const actorName = (id: string) => actors.find((u) => u.id === id)?.displayName ?? id;
 
   return (
     <>
+      {audit.isError ? <LoadError what="יומן הפעולות" error={audit.error} /> : null}
       <div className="lib-head">
         <div>
           <h1>
             יומן פעולות<span>{audit.data?.total ?? 0} רשומות</span>
           </h1>
-          <p>כל פעולה משנה נרשמת בתוך אותה טרנזקציה, עם המצב לפני ואחרי.</p>
+          <p>כל פעולה משנה נרשמת בתוך אותה טרנזקציה, עם המצב לפני ואחרי. שמירה: 400 יום.</p>
         </div>
         <div className="facets">
           <select aria-label="סוג ישות" value={entityType} onChange={(e) => setEntityType(e.target.value)}>
-            <option value="">הכל</option>
-            <option value="document">מסמכים</option>
-            <option value="block">בלוקים</option>
-            <option value="user">משתמשים</option>
-            <option value="role">תפקידים</option>
+            <option value="">כל הישויות</option>
+            {Object.entries(ENTITY_LABEL).map(([k, label]) => (
+              <option key={k} value={k}>
+                {label}
+              </option>
+            ))}
           </select>
+          <select aria-label="מבצע הפעולה" value={actorId} onChange={(e) => setActorId(e.target.value)}>
+            <option value="">כל המשתמשים</option>
+            {actors.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.displayName}
+              </option>
+            ))}
+          </select>
+          <div className="pill-toggle" style={{ marginBottom: 0 }}>
+            {RANGES.map(([label, n]) => (
+              <span
+                key={label}
+                role="button"
+                tabIndex={0}
+                className={days === n ? 'on' : ''}
+                onClick={() => setDays(n)}
+              >
+                {label}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
-      {!items.length ? (
+
+      {/* Active filters, each removable where it stands — otherwise "no records" reads as a bug. */}
+      {entityType || actorId ? (
+        <div className="facets" style={{ justifyContent: 'flex-start', marginBottom: 10 }}>
+          {entityType ? (
+            <button className="facet on" onClick={() => setEntityType('')}>
+              ישות: {ENTITY_LABEL[entityType] ?? entityType} ✕
+            </button>
+          ) : null}
+          {actorId ? (
+            <button className="facet on" onClick={() => setActorId('')}>
+              משתמש: {actorName(actorId)} ✕
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!items.length && !audit.isPending ? (
         <div className="empty">
-          <b>אין רשומות</b>
+          <b>אין רשומות בטווח הזה</b>
+          הרחיבו את הטווח או נקו את המסננים
         </div>
       ) : (
         <table className="table">
@@ -63,6 +163,7 @@ export function AuditPage() {
               <th>מי</th>
               <th>פעולה</th>
               <th>ישות</th>
+              <th>בקשה</th>
               <th />
             </tr>
           </thead>
@@ -79,15 +180,20 @@ export function AuditPage() {
                   </bdi>
                 </td>
                 <td>
-                  {e.entityType}
+                  <Chip>{ENTITY_LABEL[e.entityType] ?? e.entityType}</Chip>
                   <div className="small muted">
                     <bdi className="lat" dir="ltr">
                       {e.entityId ?? ''}
                     </bdi>
                   </div>
                 </td>
+                <td className="small muted">
+                  <bdi className="lat" dir="ltr">
+                    {e.requestId ?? '—'}
+                  </bdi>
+                </td>
                 <td>
-                  <button className="btn xs" onClick={() => showDiff(e.before, e.after)}>
+                  <button className="btn xs" onClick={() => setOpenId(e.id)}>
                     לפני / אחרי
                   </button>
                 </td>
@@ -96,6 +202,60 @@ export function AuditPage() {
           </tbody>
         </table>
       )}
+
+      {openId ? (
+        <aside className="drawer" role="dialog" aria-label="פרטי רשומת ביקורת">
+          <div className="drawer-head">
+            <b>פרטי הפעולה</b>
+            <button className="btn ghost xs" onClick={() => setOpenId(null)}>
+              סגור
+            </button>
+          </div>
+          {detail.isPending ? <div className="route-loading">טוען…</div> : null}
+          {detail.isError ? <LoadError what="פרטי הרשומה" error={detail.error} /> : null}
+          {detail.data ? (
+            <div className="drawer-body">
+              <dl className="kv">
+                <dt>פעולה</dt>
+                <dd>
+                  <bdi className="lat" dir="ltr">
+                    {detail.data.action}
+                  </bdi>
+                </dd>
+                <dt>מי</dt>
+                <dd>{detail.data.actorName ?? 'מערכת'}</dd>
+                <dt>מתי</dt>
+                <dd>
+                  {fmtDate(detail.data.at)} {fmtTime(detail.data.at)}
+                </dd>
+                <dt>ישות</dt>
+                <dd>
+                  {ENTITY_LABEL[detail.data.entityType] ?? detail.data.entityType} ·{' '}
+                  <bdi className="lat" dir="ltr">
+                    {detail.data.entityId ?? '—'}
+                  </bdi>
+                </dd>
+                <dt>כתובת IP</dt>
+                <dd>
+                  <bdi className="lat" dir="ltr">
+                    {detail.data.ip ?? '—'}
+                  </bdi>
+                </dd>
+                <dt>מזהה בקשה</dt>
+                <dd>
+                  <bdi className="lat" dir="ltr">
+                    {detail.data.requestId ?? '—'}
+                  </bdi>
+                </dd>
+              </dl>
+              <div className="eyebrow" style={{ marginTop: 14 }}>
+                שדות שהשתנו
+              </div>
+              <DiffRows rows={detail.data.diff} />
+            </div>
+          ) : null}
+        </aside>
+      ) : null}
     </>
   );
 }

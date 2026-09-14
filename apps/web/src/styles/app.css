@@ -813,3 +813,14 @@ html[data-theme="dark"] .sug .ft .bt span.p { background: var(--red); border-col
 .perm-matrix th.dirty { color: var(--red-dark); }
 .perm-matrix .grouprow th { background: var(--surface-2); text-align: start; font-size: 11px; letter-spacing: .4px; }
 .perm-matrix td:first-child { min-width: 210px; }
+
+/* ── stage 5: detail drawer & diff rows ────────────────────────────────── */
+.drawer { position: fixed; inset-block: 0; inset-inline-end: 0; width: min(520px, 100%); background: var(--surface); border-inline-start: 1px solid var(--border); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; z-index: 900; }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.drawer-body { padding: 16px 18px; overflow-y: auto; scrollbar-width: thin; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 12.5px; margin: 0; }
+.kv dt { color: var(--muted); font-size: 11.5px; }
+.kv dd { margin: 0; }
+.diff-rows td.was { color: var(--red-dark); text-decoration: line-through; }
+.diff-rows td.now { color: var(--ok); }
+.diff-rows td { word-break: break-word; }
