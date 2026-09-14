@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Block, Category, Document, Step } from '@wecom/shared';
 import {
@@ -59,7 +68,19 @@ import { ApiError as ApiErrorClass } from '../../api/unwrap.js';
 import { MetadataPanel, type MetadataValue } from './MetadataPanel.js';
 import { OwnerFields } from '../governance/OwnerFields.js';
 import { ImportExportButtons } from '../source/ImportExportButtons.js';
-import { RichText } from '../source/RichText.js';
+/**
+ * Lazy because `RichText` is the tiptap/ProseMirror stack — ~1.1 MB of source, the single largest
+ * thing the app can import. `/edit/:id` stays an eager route (an agent who spots a wrong step mid
+ * call should not wait on a chunk to reach the editor shell), but the rich-text *widget* inside it
+ * is one round trip, taken while the metadata panel and step list are already on screen.
+ *
+ * It also keeps tiptap out of the entry chunk entirely: the only other importer is `SourceEditor`,
+ * itself behind the lazy `/edit/:id/source` route, so Rollup emits tiptap as a chunk shared by the
+ * two editing surfaces instead of hoisting it into the first paint of `/library`.
+ */
+const RichText = lazy(() =>
+  import('../source/RichText.js').then((m) => ({ default: m.RichText })),
+);
 import { PublishFeedbackPicker } from '../feedback/PublishFeedbackPicker.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 
@@ -129,7 +150,9 @@ function BodyEditor({
           onChange={(e) => onChange(e.target.value)}
         />
       ) : (
-        <RichText value={value} onChange={onChange} compact />
+        <Suspense fallback={<div className="route-loading">טוען עורך…</div>}>
+          <RichText value={value} onChange={onChange} compact />
+        </Suspense>
       )}
       {sourceLink}
     </div>
