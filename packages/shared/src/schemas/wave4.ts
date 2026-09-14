@@ -344,12 +344,8 @@ export const UsageAnalyticsSchema = z.object({
       views: z.number().int(),
     }),
   ),
-  viewers: z.array(
-    z.object({ userId: IdSchema, displayName: z.string(), views: z.number().int() }),
-  ),
-  zeroResultTerms: z.array(
-    z.object({ q: z.string(), count: z.number().int(), lastAt: IsoDateSchema }),
-  ),
+  viewers: z.array(z.object({ userId: IdSchema, displayName: z.string(), views: z.number().int() })),
+  zeroResultTerms: z.array(z.object({ q: z.string(), count: z.number().int(), lastAt: IsoDateSchema })),
   staleness: z.array(
     z.object({
       documentId: IdSchema,

@@ -174,9 +174,7 @@ describe('wave4 governance extensions', () => {
     expect(SearchQuerySchema.parse({ q: 'x', docType: 'O' }).docType).toBe('O');
   });
   it('lets publish close feedback and validates status changes', () => {
-    expect(PublishBodySchema.parse({ label: 'v', resolveFeedbackIds: [U] }).resolveFeedbackIds).toEqual([
-      U,
-    ]);
+    expect(PublishBodySchema.parse({ label: 'v', resolveFeedbackIds: [U] }).resolveFeedbackIds).toEqual([U]);
     expect(SetStatusBodySchema.safeParse({ status: 'published', reason: 'x' }).success).toBe(false);
     expect(SetStatusBodySchema.parse({ status: 'invalid', reason: 'הוחלף בנוהל חדש' }).status).toBe(
       'invalid',
@@ -215,9 +213,7 @@ describe('wave4 feedback / source / usage schemas', () => {
   });
   it('agent body needs only a kind', () => {
     expect(CreateFeedbackBodySchema.parse({ kind: 'other' })).toEqual({ kind: 'other', text: '' });
-    expect(CreateFeedbackBodySchema.safeParse({ kind: 'other', text: 'x'.repeat(1001) }).success).toBe(
-      false,
-    );
+    expect(CreateFeedbackBodySchema.safeParse({ kind: 'other', text: 'x'.repeat(1001) }).success).toBe(false);
   });
   it('parses a stored feedback row with auto-captured context', () => {
     const f = FeedbackSchema.parse({

@@ -303,7 +303,11 @@
                           "users.manage",
                           "roles.manage",
                           "audit.read",
-                          "system.admin"
+                          "system.admin",
+                          "taxonomy.manage",
+                          "docs.read_unpublished",
+                          "feedback.manage",
+                          "analytics.read"
                         ]
                       }
                     },
@@ -919,7 +923,11 @@
                                 "users.manage",
                                 "roles.manage",
                                 "audit.read",
-                                "system.admin"
+                                "system.admin",
+                                "taxonomy.manage",
+                                "docs.read_unpublished",
+                                "feedback.manage",
+                                "analytics.read"
                               ]
                             }
                           }
@@ -987,7 +995,11 @@
                         "users.manage",
                         "roles.manage",
                         "audit.read",
-                        "system.admin"
+                        "system.admin",
+                        "taxonomy.manage",
+                        "docs.read_unpublished",
+                        "feedback.manage",
+                        "analytics.read"
                       ]
                     }
                   }
@@ -1047,7 +1059,11 @@
                           "users.manage",
                           "roles.manage",
                           "audit.read",
-                          "system.admin"
+                          "system.admin",
+                          "taxonomy.manage",
+                          "docs.read_unpublished",
+                          "feedback.manage",
+                          "analytics.read"
                         ]
                       }
                     },
@@ -1109,7 +1125,11 @@
                               "users.manage",
                               "roles.manage",
                               "audit.read",
-                              "system.admin"
+                              "system.admin",
+                              "taxonomy.manage",
+                              "docs.read_unpublished",
+                              "feedback.manage",
+                              "analytics.read"
                             ]
                           },
                           "resource": {
@@ -1165,7 +1185,11 @@
                                 "users.manage",
                                 "roles.manage",
                                 "audit.read",
-                                "system.admin"
+                                "system.admin",
+                                "taxonomy.manage",
+                                "docs.read_unpublished",
+                                "feedback.manage",
+                                "analytics.read"
                               ]
                             }
                           },
@@ -1240,7 +1264,11 @@
                         "users.manage",
                         "roles.manage",
                         "audit.read",
-                        "system.admin"
+                        "system.admin",
+                        "taxonomy.manage",
+                        "docs.read_unpublished",
+                        "feedback.manage",
+                        "analytics.read"
                       ]
                     }
                   }
@@ -1307,7 +1335,11 @@
                           "users.manage",
                           "roles.manage",
                           "audit.read",
-                          "system.admin"
+                          "system.admin",
+                          "taxonomy.manage",
+                          "docs.read_unpublished",
+                          "feedback.manage",
+                          "analytics.read"
                         ]
                       }
                     },
@@ -2505,6 +2537,7 @@
                 "review",
                 "published",
                 "partial",
+                "invalid",
                 "archived"
               ]
             },
@@ -2592,6 +2625,59 @@
             "in": "query",
             "name": "sort",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+            },
+            "in": "query",
+            "name": "world",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "query",
+            "name": "topic",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "M",
+                "R",
+                "O",
+                "E",
+                "S",
+                "T",
+                "I"
+              ]
+            },
+            "in": "query",
+            "name": "docType",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "in": "query",
+            "name": "tag",
+            "required": false
           }
         ],
         "responses": {
@@ -2669,7 +2755,8 @@
                             "type": "string",
                             "enum": [
                               "steps",
-                              "retention"
+                              "retention",
+                              "text"
                             ]
                           },
                           "status": {
@@ -2679,6 +2766,7 @@
                               "review",
                               "published",
                               "partial",
+                              "invalid",
                               "archived"
                             ]
                           },
@@ -2716,6 +2804,83 @@
                           },
                           "authorName": {
                             "type": "string"
+                          },
+                          "docType": {
+                            "type": "string",
+                            "enum": [
+                              "M",
+                              "R",
+                              "O",
+                              "E",
+                              "S",
+                              "T",
+                              "I"
+                            ]
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            },
+                            "default": []
+                          },
+                          "worlds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                            },
+                            "default": []
+                          },
+                          "topics": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "default": []
+                          },
+                          "ownerId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "ownerName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "editorId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "editorName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "approverId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "approverName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "publishedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "sourceReviewNeeded": {
+                            "type": "boolean",
+                            "default": false
+                          },
+                          "sourceReviewReason": {
+                            "type": "string",
+                            "nullable": true
                           }
                         },
                         "required": [
@@ -2829,7 +2994,8 @@
                     "type": "string",
                     "enum": [
                       "steps",
-                      "retention"
+                      "retention",
+                      "text"
                     ]
                   },
                   "slug": {
@@ -3218,7 +3384,8 @@
                       "type": "string",
                       "enum": [
                         "steps",
-                        "retention"
+                        "retention",
+                        "text"
                       ]
                     },
                     "status": {
@@ -3228,6 +3395,7 @@
                         "review",
                         "published",
                         "partial",
+                        "invalid",
                         "archived"
                       ]
                     },
@@ -3575,6 +3743,86 @@
                       "format": "uuid"
                     },
                     "etag": {
+                      "type": "string"
+                    },
+                    "docType": {
+                      "type": "string",
+                      "enum": [
+                        "M",
+                        "R",
+                        "O",
+                        "E",
+                        "S",
+                        "T",
+                        "I"
+                      ]
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      "default": []
+                    },
+                    "worlds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                      },
+                      "default": []
+                    },
+                    "topics": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "default": []
+                    },
+                    "ownerId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "ownerName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "editorId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "editorName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "approverId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "approverName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "sourceReviewNeeded": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "sourceReviewReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "bodyHtml": {
                       "type": "string"
                     }
                   },
@@ -3689,7 +3937,8 @@
                       "type": "string",
                       "enum": [
                         "steps",
-                        "retention"
+                        "retention",
+                        "text"
                       ]
                     },
                     "status": {
@@ -3699,6 +3948,7 @@
                         "review",
                         "published",
                         "partial",
+                        "invalid",
                         "archived"
                       ]
                     },
@@ -4046,6 +4296,86 @@
                       "format": "uuid"
                     },
                     "etag": {
+                      "type": "string"
+                    },
+                    "docType": {
+                      "type": "string",
+                      "enum": [
+                        "M",
+                        "R",
+                        "O",
+                        "E",
+                        "S",
+                        "T",
+                        "I"
+                      ]
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      "default": []
+                    },
+                    "worlds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                      },
+                      "default": []
+                    },
+                    "topics": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "default": []
+                    },
+                    "ownerId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "ownerName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "editorId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "editorName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "approverId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "approverName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "sourceReviewNeeded": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "sourceReviewReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "bodyHtml": {
                       "type": "string"
                     }
                   },
@@ -4227,7 +4557,8 @@
                       "type": "string",
                       "enum": [
                         "steps",
-                        "retention"
+                        "retention",
+                        "text"
                       ]
                     },
                     "status": {
@@ -4237,6 +4568,7 @@
                         "review",
                         "published",
                         "partial",
+                        "invalid",
                         "archived"
                       ]
                     },
@@ -4584,6 +4916,86 @@
                       "format": "uuid"
                     },
                     "etag": {
+                      "type": "string"
+                    },
+                    "docType": {
+                      "type": "string",
+                      "enum": [
+                        "M",
+                        "R",
+                        "O",
+                        "E",
+                        "S",
+                        "T",
+                        "I"
+                      ]
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      "default": []
+                    },
+                    "worlds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                      },
+                      "default": []
+                    },
+                    "topics": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "default": []
+                    },
+                    "ownerId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "ownerName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "editorId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "editorName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "approverId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "approverName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "sourceReviewNeeded": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "sourceReviewReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "bodyHtml": {
                       "type": "string"
                     }
                   },
@@ -5080,7 +5492,8 @@
                       "type": "string",
                       "enum": [
                         "steps",
-                        "retention"
+                        "retention",
+                        "text"
                       ]
                     },
                     "status": {
@@ -5090,6 +5503,7 @@
                         "review",
                         "published",
                         "partial",
+                        "invalid",
                         "archived"
                       ]
                     },
@@ -5438,6 +5852,86 @@
                     },
                     "etag": {
                       "type": "string"
+                    },
+                    "docType": {
+                      "type": "string",
+                      "enum": [
+                        "M",
+                        "R",
+                        "O",
+                        "E",
+                        "S",
+                        "T",
+                        "I"
+                      ]
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      "default": []
+                    },
+                    "worlds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                      },
+                      "default": []
+                    },
+                    "topics": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "default": []
+                    },
+                    "ownerId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "ownerName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "editorId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "editorName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "approverId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "approverName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "sourceReviewNeeded": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "sourceReviewReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "bodyHtml": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -5481,6 +5975,14 @@
                   },
                   "markPartial": {
                     "type": "boolean"
+                  },
+                  "resolveFeedbackIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "maxItems": 50
                   }
                 },
                 "required": [
@@ -5578,7 +6080,8 @@
                           "type": "string",
                           "enum": [
                             "steps",
-                            "retention"
+                            "retention",
+                            "text"
                           ]
                         },
                         "status": {
@@ -5588,6 +6091,7 @@
                             "review",
                             "published",
                             "partial",
+                            "invalid",
                             "archived"
                           ]
                         },
@@ -5936,6 +6440,86 @@
                         },
                         "etag": {
                           "type": "string"
+                        },
+                        "docType": {
+                          "type": "string",
+                          "enum": [
+                            "M",
+                            "R",
+                            "O",
+                            "E",
+                            "S",
+                            "T",
+                            "I"
+                          ]
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          },
+                          "default": []
+                        },
+                        "worlds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "default": []
+                        },
+                        "topics": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "default": []
+                        },
+                        "ownerId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true
+                        },
+                        "ownerName": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "editorId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true
+                        },
+                        "editorName": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "approverId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true
+                        },
+                        "approverName": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "publishedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "sourceReviewNeeded": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "sourceReviewReason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "bodyHtml": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -6162,7 +6746,8 @@
                       "type": "string",
                       "enum": [
                         "steps",
-                        "retention"
+                        "retention",
+                        "text"
                       ]
                     },
                     "status": {
@@ -6172,6 +6757,7 @@
                         "review",
                         "published",
                         "partial",
+                        "invalid",
                         "archived"
                       ]
                     },
@@ -6519,6 +7105,86 @@
                       "format": "uuid"
                     },
                     "etag": {
+                      "type": "string"
+                    },
+                    "docType": {
+                      "type": "string",
+                      "enum": [
+                        "M",
+                        "R",
+                        "O",
+                        "E",
+                        "S",
+                        "T",
+                        "I"
+                      ]
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      "default": []
+                    },
+                    "worlds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                      },
+                      "default": []
+                    },
+                    "topics": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "default": []
+                    },
+                    "ownerId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "ownerName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "editorId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "editorName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "approverId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "approverName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "sourceReviewNeeded": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "sourceReviewReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "bodyHtml": {
                       "type": "string"
                     }
                   },
@@ -6823,7 +7489,8 @@
                           "type": "string",
                           "enum": [
                             "steps",
-                            "retention"
+                            "retention",
+                            "text"
                           ]
                         },
                         "status": {
@@ -6833,6 +7500,7 @@
                             "review",
                             "published",
                             "partial",
+                            "invalid",
                             "archived"
                           ]
                         },
@@ -7180,6 +7848,86 @@
                           "format": "uuid"
                         },
                         "etag": {
+                          "type": "string"
+                        },
+                        "docType": {
+                          "type": "string",
+                          "enum": [
+                            "M",
+                            "R",
+                            "O",
+                            "E",
+                            "S",
+                            "T",
+                            "I"
+                          ]
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          },
+                          "default": []
+                        },
+                        "worlds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "default": []
+                        },
+                        "topics": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "default": []
+                        },
+                        "ownerId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true
+                        },
+                        "ownerName": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "editorId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true
+                        },
+                        "editorName": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "approverId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true
+                        },
+                        "approverName": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "publishedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "sourceReviewNeeded": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "sourceReviewReason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "bodyHtml": {
                           "type": "string"
                         }
                       },
@@ -10301,6 +11049,59 @@
             },
             "in": "query",
             "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+            },
+            "in": "query",
+            "name": "world",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "query",
+            "name": "topic",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "M",
+                "R",
+                "O",
+                "E",
+                "S",
+                "T",
+                "I"
+              ]
+            },
+            "in": "query",
+            "name": "docType",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "in": "query",
+            "name": "tag",
             "required": false
           }
         ],
@@ -25009,7 +25810,8 @@
                         "type": "string",
                         "enum": [
                           "steps",
-                          "retention"
+                          "retention",
+                          "text"
                         ]
                       },
                       "status": {
@@ -25019,6 +25821,7 @@
                           "review",
                           "published",
                           "partial",
+                          "invalid",
                           "archived"
                         ]
                       },
@@ -25366,6 +26169,86 @@
                         "format": "uuid"
                       },
                       "etag": {
+                        "type": "string"
+                      },
+                      "docType": {
+                        "type": "string",
+                        "enum": [
+                          "M",
+                          "R",
+                          "O",
+                          "E",
+                          "S",
+                          "T",
+                          "I"
+                        ]
+                      },
+                      "tags": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        },
+                        "default": []
+                      },
+                      "worlds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                        },
+                        "default": []
+                      },
+                      "topics": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "default": []
+                      },
+                      "ownerId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                      },
+                      "ownerName": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "editorId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                      },
+                      "editorName": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "approverId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                      },
+                      "approverName": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "publishedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                      },
+                      "sourceReviewNeeded": {
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "sourceReviewReason": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "bodyHtml": {
                         "type": "string"
                       }
                     },

@@ -11,7 +11,9 @@ describe('wave4 plugin', () => {
     expect(app.notifier.impl).toBeInstanceOf(LogNotifier);
     expect(app.taxonomy.impl).toBeInstanceOf(NullTaxonomy);
     expect(app.usage.impl).toBeInstanceOf(NullUsage);
-    await expect(app.notifier.notify({ userIds: ['u1'], kind: 'system', title: 'x' })).resolves.toBeUndefined();
+    await expect(
+      app.notifier.notify({ userIds: ['u1'], kind: 'system', title: 'x' }),
+    ).resolves.toBeUndefined();
     await expect(app.taxonomy.worldsOf('d1')).resolves.toEqual([]);
     await expect(app.taxonomy.usersWithPermissionInWorld('docs.publish', 'sim')).resolves.toEqual([]);
     await expect(

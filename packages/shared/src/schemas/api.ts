@@ -96,11 +96,13 @@ export const SearchHitSchema = z.object({
   num: z.string().optional(),
   kbd: z.string().optional(),
 });
-export const SearchQuerySchema = z.object({
-  q: z.string().default(''),
-  types: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(40),
-}).merge(TaxonomyFilterSchema);
+export const SearchQuerySchema = z
+  .object({
+    q: z.string().default(''),
+    types: z.string().optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(40),
+  })
+  .merge(TaxonomyFilterSchema);
 export const SearchResponseSchema = z.object({
   groups: z.array(
     z.object({

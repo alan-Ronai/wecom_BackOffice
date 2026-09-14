@@ -86,28 +86,30 @@ export const PhaseSchema = z.object({
 });
 export type Phase = z.infer<typeof PhaseSchema>;
 
-export const DocumentSchema = z.object({
-  id: IdSchema,
-  slug: SlugSchema,
-  code: z.string().optional(),
-  title: z.string().min(1),
-  description: z.string().default(''),
-  category: CategorySchema,
-  wave: WaveSchema,
-  priority: PrioritySchema,
-  kind: DocumentKindSchema,
-  status: DocumentStatusSchema,
-  currentVersion: z.number().int().nonnegative(),
-  sourceId: IdSchema.nullable().optional(),
-  sourceRef: z.string().optional(),
-  phases: z.array(PhaseSchema),
-  related: z.array(z.object({ documentId: IdSchema, why: z.string() })).default([]),
-  createdAt: IsoDateSchema,
-  updatedAt: IsoDateSchema,
-  createdBy: IdSchema.optional(),
-  updatedBy: IdSchema.optional(),
-  etag: z.string().optional(),
-}).merge(DocumentWave4FieldsSchema);
+export const DocumentSchema = z
+  .object({
+    id: IdSchema,
+    slug: SlugSchema,
+    code: z.string().optional(),
+    title: z.string().min(1),
+    description: z.string().default(''),
+    category: CategorySchema,
+    wave: WaveSchema,
+    priority: PrioritySchema,
+    kind: DocumentKindSchema,
+    status: DocumentStatusSchema,
+    currentVersion: z.number().int().nonnegative(),
+    sourceId: IdSchema.nullable().optional(),
+    sourceRef: z.string().optional(),
+    phases: z.array(PhaseSchema),
+    related: z.array(z.object({ documentId: IdSchema, why: z.string() })).default([]),
+    createdAt: IsoDateSchema,
+    updatedAt: IsoDateSchema,
+    createdBy: IdSchema.optional(),
+    updatedBy: IdSchema.optional(),
+    etag: z.string().optional(),
+  })
+  .merge(DocumentWave4FieldsSchema);
 export type Document = z.infer<typeof DocumentSchema>;
 
 /** Library card: what the list endpoint returns. */
@@ -123,16 +125,18 @@ export const DocumentCardSchema = DocumentSchema.pick({
   status: true,
   currentVersion: true,
   updatedAt: true,
-}).extend({
-  stepCount: z.number().int(),
-  linksOut: z.number().int(),
-  linksIn: z.number().int(),
-  views: z.number().int(),
-  crmFields: z.array(z.string()),
-  hasSharedBlocks: z.boolean(),
-  pinned: z.boolean(),
-  authorName: z.string().optional(),
-}).merge(DocumentWave4FieldsSchema.omit({ bodyHtml: true }));
+})
+  .extend({
+    stepCount: z.number().int(),
+    linksOut: z.number().int(),
+    linksIn: z.number().int(),
+    views: z.number().int(),
+    crmFields: z.array(z.string()),
+    hasSharedBlocks: z.boolean(),
+    pinned: z.boolean(),
+    authorName: z.string().optional(),
+  })
+  .merge(DocumentWave4FieldsSchema.omit({ bodyHtml: true }));
 export type DocumentCard = z.infer<typeof DocumentCardSchema>;
 
 export const BlockSchema = z.object({
