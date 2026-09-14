@@ -16,6 +16,7 @@ import { RolesPage } from './components/admin/RolesPage.js';
 import { GroupsMapPage } from './components/admin/GroupsMapPage.js';
 import { SessionsPage } from './components/admin/SessionsPage.js';
 import { AuditPage } from './components/admin/AuditPage.js';
+import { IdentityPage } from './components/admin/IdentityPage.js';
 import { SystemPage } from './components/admin/SystemPage.js';
 
 /** Routes mirror the legacy hashes one-to-one (spec §5). */
@@ -55,6 +56,7 @@ export const routeObjects: RouteObject[] = [
           { path: 'groups', element: <GroupsMapPage /> },
           { path: 'sessions', element: <SessionsPage /> },
           { path: 'audit', element: <AuditPage /> },
+          { path: 'identity', element: <IdentityPage /> },
           { path: 'system', element: <SystemPage /> },
         ],
       },

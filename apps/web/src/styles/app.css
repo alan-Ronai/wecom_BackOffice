@@ -824,3 +824,10 @@ html[data-theme="dark"] .sug .ft .bt span.p { background: var(--red); border-col
 .diff-rows td.was { color: var(--red-dark); text-decoration: line-through; }
 .diff-rows td.now { color: var(--ok); }
 .diff-rows td { word-break: break-word; }
+
+/* ── stage 5: identity settings ────────────────────────────────────────── */
+.settings-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 16px 18px; margin-bottom: 14px; max-width: 620px; }
+.settings-card .eyebrow { margin-bottom: 10px; }
+.settings-card input[dir="ltr"] { font-family: var(--mono); font-size: 12px; }
+.secret-row { display: flex; align-items: center; gap: 8px; }
+.field-error.ok { color: var(--ok); }
