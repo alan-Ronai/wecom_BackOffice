@@ -7,7 +7,7 @@ import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
 import { withMe } from '../msw/handlers.js';
 import { server } from '../msw/server.js';
-import { LINK_CONFLICT, LINK_IMPORT, stage5State } from '../msw/stage5.js';
+import { C_WP, D_UNLINKED, LINK_CONFLICT, LINK_IMPORT, REMOTE_UNLINKED, stage5State } from '../msw/stage5.js';
 
 const asAdmin = () => server.use(withMe({ roles: ['admin'], permissions: [...PERMISSIONS] }));
 
@@ -76,13 +76,83 @@ describe('sync · queue', () => {
   });
 });
 
-describe('sync · parity report', () => {
+describe('sync · parity report (design 4d)', () => {
   it('groups links by connector and counts how many are in step', async () => {
     asAdmin();
     renderWithProviders(<App />, { route: '/sync/parity' });
-    expect(await screen.findByText(/1 מתוך 4 זהים · 1 קונפליקטים/)).toBeInTheDocument();
-    const table = await screen.findByRole('table');
-    expect(within(table).getAllByRole('row')).toHaveLength(5); // header + four links
+    expect(await screen.findByText(/1 מתוך 2 זהים · 1 קונפליקטים/)).toBeInTheDocument();
+    const [table] = await screen.findAllByRole('table');
+    expect(within(table).getAllByRole('row')).toHaveLength(3); // header + two links
+  });
+
+  it('shows each side its own fingerprint, and flags the side that moved', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/sync/parity' });
+    const [table] = await screen.findAllByRole('table');
+    const row = within(table).getByText('איטיות גלישה').closest('tr') as HTMLElement;
+    // Seven characters, as the design shows: a full sha256 in a table cell is noise.
+    expect(within(row).getByText('7d02be9')).toBeInTheDocument(); // remote now
+    expect(within(row).getByText('a91c4f2')).toBeInTheDocument(); // the library
+    // Both sides moved off the baseline, and each says so beside its own hash.
+    expect(within(row).getAllByText('השתנה')).toHaveLength(2);
+
+    // The row that never moved carries no badge at all.
+    const inStep = within(table).getByText('ריענון SIM').closest('tr') as HTMLElement;
+    expect(within(inStep).queryByText('השתנה')).not.toBeInTheDocument();
+  });
+
+  it('says the remote was unreadable instead of printing a column of dashes', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/sync/parity' });
+    expect(await screen.findByText(/לא ניתן היה לקרוא את הצד המרוחק/)).toBeInTheDocument();
+  });
+
+  it('lists what has no link on either side, and links a pair', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/sync/parity' });
+    expect(await screen.findByText('מסמך ללא קישור')).toBeInTheDocument();
+    expect(screen.getByText('עמוד שאין לו מסמך')).toBeInTheDocument();
+
+    // A pairing needs both ends: "קשר" is inert until a document is selected, because completing
+    // it without one would mean inventing an externalId.
+    const linkBtn = screen.getByRole('button', { name: 'קשר' });
+    expect(linkBtn).toBeDisabled();
+
+    await userEvent.click(screen.getByLabelText('בחר מסמך ללא קישור'));
+    expect(linkBtn).toBeEnabled();
+    await userEvent.click(linkBtn);
+
+    await waitFor(() =>
+      expect(stage5State.created).toContainEqual({
+        connectorId: C_WP,
+        documentId: D_UNLINKED,
+        externalId: REMOTE_UNLINKED,
+      }),
+    );
+    expect(await screen.findByText(/הקישור נוצר/)).toBeInTheDocument();
+  });
+
+  it('surfaces a 409 in the server’s own words, not a generic failure', async () => {
+    asAdmin();
+    server.use(
+      http.post('/api/v1/sync/links', () =>
+        HttpResponse.json(
+          { code: 'ALREADY_LINKED', message: 'הפריט המרוחק כבר מקושר למסמך אחר' },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderWithProviders(<App />, { route: '/sync/parity' });
+    await userEvent.click(await screen.findByLabelText('בחר מסמך ללא קישור'));
+    await userEvent.click(screen.getByRole('button', { name: 'קשר' }));
+    expect(await screen.findByText('הפריט המרוחק כבר מקושר למסמך אחר')).toBeInTheDocument();
+  });
+
+  it('shows the lists read-only to a reviewer who cannot create links', async () => {
+    server.use(withMe({ roles: ['lead'], permissions: ['docs.read', 'suggestions.apply'] }));
+    renderWithProviders(<App />, { route: '/sync/parity' });
+    expect(await screen.findByText('מסמך ללא קישור')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'קשר' })).not.toBeInTheDocument();
   });
 });
 

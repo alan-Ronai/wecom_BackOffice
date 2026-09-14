@@ -31,20 +31,41 @@ describe('admin · groups → roles', () => {
     expect(screen.getByText('יש מיפוי בלי מזהה קבוצה או בלי תפקיד')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'שמור' })).toBeDisabled();
 
-    await userEvent.type(screen.getByLabelText('מזהה קבוצה 2'), 'g-admins');
-    await userEvent.type(screen.getByLabelText('שם קבוצה 2'), 'IT-Admins');
-    await userEvent.selectOptions(screen.getByLabelText('תפקיד לקבוצה 2'), ROLE_ADMIN);
+    await userEvent.type(screen.getByLabelText('מזהה קבוצה 3'), 'g-admins');
+    await userEvent.type(screen.getByLabelText('שם קבוצה 3'), 'IT-Admins');
+    await userEvent.selectOptions(screen.getByLabelText('תפקיד לקבוצה 3'), ROLE_ADMIN);
     await userEvent.click(screen.getByRole('button', { name: 'שמור' }));
 
     await waitFor(() =>
       expect(saved).toEqual({
         entries: [
           { idpGroupId: 'g-leads', idpGroupName: 'KB-Leads', roleId: expect.any(String) },
+          { idpGroupId: 'g-new', idpGroupName: 'KB-New', roleId: expect.any(String) },
           { idpGroupId: 'g-admins', idpGroupName: 'IT-Admins', roleId: ROLE_ADMIN },
         ],
       }),
     );
     expect(await screen.findByText('המיפוי נשמר')).toBeInTheDocument();
+  });
+
+  it('sends the mapping fields only — never the job’s own sync bookkeeping', async () => {
+    asAdmin();
+    let saved: { entries: Record<string, unknown>[] } | undefined;
+    server.use(
+      http.put('/api/v1/admin/groups-map', async ({ request }) => {
+        saved = (await request.json()) as typeof saved;
+        return HttpResponse.json({ ok: true, auditId: 'a' });
+      }),
+    );
+    renderWithProviders(<App />, { route: '/admin/groups' });
+    await waitFor(() => expect(screen.getByLabelText('שם קבוצה 1')).toHaveValue('KB-Leads'));
+    await userEvent.type(screen.getByLabelText('שם קבוצה 1'), ' ');
+    await userEvent.click(screen.getByRole('button', { name: 'שמור' }));
+
+    // `lastSyncedAt` rides along on the read shape. Echoing it back would be the client asserting
+    // a sync time it never observed — and the PUT body has no field for it.
+    await waitFor(() => expect(saved).toBeDefined());
+    expect(Object.keys(saved!.entries[0]).sort()).toEqual(['idpGroupId', 'idpGroupName', 'roleId']);
   });
 
   it('shows how many users each mapped role already reaches, and removes a row', async () => {
@@ -55,7 +76,92 @@ describe('admin · groups → roles', () => {
     expect(within(row).getByText('12')).toBeInTheDocument();
 
     await userEvent.click(screen.getByLabelText('הסר מיפוי 1'));
+    await userEvent.click(screen.getByLabelText('הסר מיפוי 1'));
     expect(await screen.findByText('אין מיפויים')).toBeInTheDocument();
+  });
+
+  it('tells "synced an hour ago" apart from "saved since the last run" (3d)', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/admin/groups' });
+    const synced = (await screen.findByLabelText('שם קבוצה 1')).closest('tr') as HTMLElement;
+    const pending = (screen.getByLabelText('שם קבוצה 2') as HTMLElement).closest('tr') as HTMLElement;
+    // A mapping the nightly job has reconciled, and one added since — the second is not broken,
+    // it simply takes effect tonight, and the screen has to say which is which.
+    expect(within(synced).queryByText('טרם סונכרן')).not.toBeInTheDocument();
+    expect(within(pending).getByText('טרם סונכרן')).toBeInTheDocument();
+  });
+});
+
+describe('admin · Entra group search (3d)', () => {
+  const search = async () => screen.findByLabelText('חפש קבוצה ב-Entra');
+
+  it('fills a row from the directory instead of asking for a pasted object id', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/admin/groups' });
+    await userEvent.type(await search(), 'KB-Ed');
+    // The GUID is the whole point: it is what nobody knows and what a typo silently breaks.
+    await userEvent.click(await screen.findByRole('option', { name: /KB-Editors/ }));
+
+    await waitFor(() => expect(screen.getByLabelText('מזהה קבוצה 3')).toHaveValue('g-editors'));
+    expect(screen.getByLabelText('שם קבוצה 3')).toHaveValue('KB-Editors');
+    // Only the role is left to choose, so the row is still incomplete and still unsaveable.
+    expect(screen.getByRole('button', { name: 'שמור' })).toBeDisabled();
+  });
+
+  it('reuses a blank row rather than leaving one above the picked group', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/admin/groups' });
+    await screen.findByLabelText('שם קבוצה 1');
+    await userEvent.click(screen.getByRole('button', { name: '✚ הוסף מיפוי' }));
+    await userEvent.type(await search(), 'Support');
+    await userEvent.click(await screen.findByRole('option', { name: /Support-L2/ }));
+
+    await waitFor(() => expect(screen.getByLabelText('מזהה קבוצה 3')).toHaveValue('g-support'));
+    expect(screen.queryByLabelText('מזהה קבוצה 4')).not.toBeInTheDocument();
+  });
+
+  it('will not offer a group that is already mapped', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/admin/groups' });
+    await userEvent.type(await search(), 'KB-N');
+    const option = await screen.findByRole('option', { name: /KB-New/ });
+    expect(option).toBeDisabled();
+    expect(within(option).getByText('כבר ממופה')).toBeInTheDocument();
+  });
+
+  it('points at the identity screen when no issuer is configured, rather than shrugging', async () => {
+    asAdmin();
+    server.use(
+      http.get('/api/v1/admin/groups/search', () =>
+        HttpResponse.json({ code: 'OIDC_NOT_CONFIGURED', message: 'לא מוגדר' }, { status: 503 }),
+      ),
+    );
+    renderWithProviders(<App />, { route: '/admin/groups' });
+    await userEvent.type(await search(), 'KB');
+    expect(await screen.findByText(/הגדירו אותו במסך הזהויות/)).toBeInTheDocument();
+  });
+
+  it('says a Graph outage is an outage and leaves the manual id field usable', async () => {
+    asAdmin();
+    server.use(
+      http.get('/api/v1/admin/groups/search', () =>
+        HttpResponse.json({ code: 'GRAPH_UNAVAILABLE', message: 'נכשל' }, { status: 502 }),
+      ),
+    );
+    renderWithProviders(<App />, { route: '/admin/groups' });
+    await userEvent.type(await search(), 'KB');
+    expect(await screen.findByText(/אפשר להזין מזהה קבוצה ידנית/)).toBeInTheDocument();
+    expect(screen.getByLabelText('מזהה קבוצה 1')).toBeEnabled();
+  });
+
+  it('is hidden from a viewer who cannot edit the map', async () => {
+    // `audit.read` opens the admin console without `roles.manage`, which is the shape of a real
+    // read-only auditor account — the search fills a field they may not change.
+    server.use(withMe({ roles: ['lead'], permissions: ['docs.read', 'audit.read'] }));
+    renderWithProviders(<App />, { route: '/admin/groups' });
+    await screen.findByRole('table');
+    expect(screen.queryByLabelText('חפש קבוצה ב-Entra')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '✚ הוסף מיפוי' })).not.toBeInTheDocument();
   });
 });
 

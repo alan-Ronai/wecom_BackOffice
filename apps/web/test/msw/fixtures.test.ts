@@ -46,6 +46,7 @@ import {
   ConflictViewSchema,
   ConnectorRowSchema,
   ConnectorTypeInfoSchema,
+  GroupsMapResponseSchema,
   IdentitySettingsSchema,
   IdentityTestResultSchema,
   RoleMatrixSchema,
@@ -262,13 +263,7 @@ const cases: Case[] = [
     roleWithAudit,
   ],
   ['DELETE /admin/roles/:id', DEL(`${B}/admin/roles/${fx.roles[0].id}`), okAudit],
-  [
-    'GET /admin/groups-map',
-    GET(`${B}/admin/groups-map`),
-    z.object({
-      entries: z.array(z.object({ idpGroupId: z.string(), idpGroupName: z.string(), roleId: z.string() })),
-    }),
-  ],
+  ['GET /admin/groups-map', GET(`${B}/admin/groups-map`), GroupsMapResponseSchema],
   ['PUT /admin/groups-map', PUT(`${B}/admin/groups-map`, { entries: [] }), okAudit],
   ['GET /admin/sessions', GET(`${B}/admin/sessions`), z.object({ items: z.array(SessionSchema) })],
   ['DELETE /admin/sessions/:id', DEL(`${B}/admin/sessions/${fx.sessions[0].id}`), okAudit],
