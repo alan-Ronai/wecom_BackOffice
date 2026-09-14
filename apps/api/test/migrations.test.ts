@@ -98,7 +98,9 @@ run('migrations', () => {
       databaseUrl: c.getConnectionUri(),
       dir: 'migrations',
       direction: 'down',
-      count: 9,
+      // Every migration, not a hard-coded nine: each new lane adds files, and a fixed
+      // count silently stopped asserting that the newest ones have a working `down`.
+      count: Infinity,
       migrationsTable: 'pgmigrations',
       ignorePattern: 'package\\.json',
       log: () => undefined,

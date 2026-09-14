@@ -785,21 +785,16 @@ export const roles: Role[] = [
   },
 ];
 
-// `GET /admin/users` returns users *with* their role grants (`UserRoleSchema` rows — note the
-// `userId`/`grantedBy`/`grantedAt` fields the port's hand-written shape omitted).
+// `GET /admin/users` returns `AdminUserRowSchema`: the role grants the people page shows
+// (role, name, category scope) plus the derived IdP groups, live session count and
+// `createdAt`. The grant bookkeeping (`grantedBy`/`grantedAt`) is not part of this row.
 export const users: AdminUser[] = [
   {
     ...me.user,
-    roles: [
-      {
-        userId: U1,
-        roleId: ROLE_LEAD,
-        roleName: 'lead',
-        categoryScope: null,
-        grantedBy: null,
-        grantedAt: T,
-      },
-    ],
+    roles: [{ roleId: ROLE_LEAD, roleName: 'lead', categoryScope: null }],
+    groups: ['KB-Leads'],
+    sessions: 1,
+    createdAt: T,
   },
   {
     id: U2,
@@ -810,16 +805,10 @@ export const users: AdminUser[] = [
     initials: 'ד',
     active: true,
     lastLoginAt: T,
-    roles: [
-      {
-        userId: U2,
-        roleId: ROLE_LEAD,
-        roleName: 'lead',
-        categoryScope: ['ops'],
-        grantedBy: U1,
-        grantedAt: T,
-      },
-    ],
+    roles: [{ roleId: ROLE_LEAD, roleName: 'lead', categoryScope: ['ops'] }],
+    groups: ['KB-Leads'],
+    sessions: 0,
+    createdAt: T,
   },
 ];
 

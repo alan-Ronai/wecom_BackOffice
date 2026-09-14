@@ -32,10 +32,11 @@ export function parseMentions(text: string, users: readonly MentionUser[]): Ment
 
   for (let i = 0; i < text.length; i++) {
     if (text[i] !== '@') continue;
-    // "a@b.com" is an address, not a mention.
-    if (i > 0 && TOKEN.test(text[i - 1])) continue;
     const rest = text.slice(i + 1);
     const restLower = rest.toLowerCase();
+    // A whole display name wins wherever it sits. Hebrew glues one-letter prepositions
+    // straight onto the marker ("ל@ענבר", "ו@דנה"), so the preceding character cannot be
+    // used to decide whether this is a mention at all.
     const exact = byLength.find((u) => u.displayName && restLower.startsWith(u.displayName.toLowerCase()));
     if (exact) {
       push(exact);
@@ -44,6 +45,12 @@ export function parseMentions(text: string, users: readonly MentionUser[]): Ment
     }
     const token = TOKEN.exec(rest)?.[0];
     if (!token || rest.indexOf(token) !== 0) continue;
+    // Only the loose prefix path can be fooled by an address: `inbar@wecom.co.il` looks
+    // like `@wecom…` to it. A dotted token glued to a word is a domain, not a person.
+    if (i > 0 && TOKEN.test(text[i - 1]) && token.includes('.')) {
+      i += token.length;
+      continue;
+    }
     const lower = token.toLowerCase();
     const prefix = byLength.filter((u) => u.displayName.toLowerCase().startsWith(lower));
     // An ambiguous prefix ("@ע" with three matching people) names nobody rather than
