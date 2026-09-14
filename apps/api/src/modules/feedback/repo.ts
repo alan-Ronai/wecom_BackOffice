@@ -145,6 +145,21 @@ export async function getFeedback(q: Q, id: string): Promise<FeedbackRow | null>
 export const feedbackScope = (worldScopes: readonly string[] | null, param: string) =>
   `(${param}::text[] is null or f.world_slug = any(${param}))`;
 
+/**
+ * "A published version of this document created after the report" — spec §5.4's definition of
+ * what may close a report. `getFeedbackDetail` renders this set as `laterVersions` (what the
+ * drawer's picker offers) and `resolveOne` enforces it (B-M5); they are one predicate so the two
+ * can never disagree about which versions are on the menu.
+ *
+ * `kind='published'` matters as much as the version comparison: `restore`, `system` (the wave-4
+ * scripts fold writes one) and suggestion snapshots all land in `document_versions` without
+ * anybody having published anything, so "נסגר עם גרסה 4" against one of them says something
+ * untrue.
+ *
+ * `$1` is the document id, `$2` the version the report was filed against.
+ */
+export const LATER_PUBLISHED_VERSION_SQL = `document_id=$1 and version > $2 and kind='published'`;
+
 export async function getFeedbackDetail(
   q: Q,
   id: string,
@@ -153,22 +168,26 @@ export async function getFeedbackDetail(
   const row = await getFeedback(q, id);
   if (!row) return null;
   if (worldScopes && !worldScopes.includes(row.worldSlug)) return null;
-  const v = await q.query(
-    `select version, label, created_at from document_versions where document_id=$1 and version >= $2 order by version`,
+  const reported = await q.query(
+    `select label from document_versions where document_id=$1 and version=$2`,
     [row.documentId, row.documentVersion],
   );
-  const reported = v.rows.find((x) => x.version === row.documentVersion);
+  const later = await q.query(
+    `select version, label, created_at from document_versions
+      where ${LATER_PUBLISHED_VERSION_SQL} order by version`,
+    [row.documentId, row.documentVersion],
+  );
   return {
     ...row,
-    versionLabel: reported ? (reported.label as string) || `v${row.documentVersion}` : null,
+    versionLabel: reported.rowCount
+      ? (reported.rows[0].label as string) || `v${row.documentVersion}`
+      : null,
     href: `/doc/${row.documentId}` + (row.stepKey ? `/${row.stepKey}` : ''),
-    laterVersions: v.rows
-      .filter((x) => (x.version as number) > row.documentVersion)
-      .map((x) => ({
-        version: x.version as number,
-        label: x.label as string,
-        createdAt: iso(x.created_at as Date)!,
-      })),
+    laterVersions: later.rows.map((x) => ({
+      version: x.version as number,
+      label: x.label as string,
+      createdAt: iso(x.created_at as Date)!,
+    })),
   };
 }
 
@@ -254,13 +273,31 @@ export async function resolveOne(
   note: string | undefined,
   actorId: string,
 ): Promise<FeedbackRow | null> {
-  const f = await tx.query('select document_id from feedback where id=$1 for update', [id]);
+  const f = await tx.query('select document_id, document_version from feedback where id=$1 for update', [
+    id,
+  ]);
   if (!f.rowCount) return null;
   const v = await tx.query('select 1 from document_versions where document_id=$1 and version=$2', [
     f.rows[0].document_id,
     version,
   ]);
   if (!v.rowCount) throw httpError(400, 'UNKNOWN_VERSION', 'הגרסה שנבחרה אינה קיימת למסמך זה', { version });
+  // B-M5: existing is not the same as eligible. Only a *published* version created *after* the
+  // report can have fixed it, which is exactly the set the drawer offers as `laterVersions` —
+  // same predicate, so the picker and this check can never disagree. UNKNOWN_VERSION stays
+  // separate above: "there is no such version" and "that version cannot have fixed this" are
+  // different things to tell an editor.
+  const eligible = await tx.query(
+    `select 1 from document_versions where ${LATER_PUBLISHED_VERSION_SQL} and version=$3`,
+    [f.rows[0].document_id, f.rows[0].document_version, version],
+  );
+  if (!eligible.rowCount)
+    throw httpError(
+      400,
+      'VERSION_NOT_ELIGIBLE',
+      'אפשר לסגור משוב רק מול גרסה שפורסמה אחרי שהמשוב נפתח',
+      { version, reportedVersion: f.rows[0].document_version as number },
+    );
   await tx.query(
     `update feedback set status='done', resolved_version=$2, decision_note=coalesce($3, decision_note),
        decided_by=$4, decided_at=now() where id=$1`,
