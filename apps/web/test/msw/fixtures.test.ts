@@ -44,6 +44,7 @@ import {
   AdminUserRowSchema,
   AuditEntryDetailSchema,
   ConflictViewSchema,
+  DocumentSyncStateSchema,
   ConnectorRowSchema,
   ConnectorTypeInfoSchema,
   GroupsMapResponseSchema,
@@ -331,6 +332,7 @@ const cases: Case[] = [
     z.object({ ok: z.boolean(), message: z.string() }),
   ],
   ['GET /sync/links', GET(`${B}/sync/links`), SyncQueueResponseSchema],
+  ['GET /documents/:id/sync-state', GET(`${B}/documents/${DOC}/sync-state`), DocumentSyncStateSchema],
   ['GET /sync/links/:id/conflict', GET(`${B}/sync/links/${LINK_CONFLICT}/conflict`), ConflictViewSchema],
   [
     'POST /sync/links/:id/sync',

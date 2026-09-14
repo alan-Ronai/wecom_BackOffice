@@ -157,6 +157,18 @@ export const useSyncLinks = (q: SyncLinksQuery, opts: { enabled?: boolean } = {}
     enabled: opts.enabled ?? true,
   });
 
+/**
+ * The article header's sync badge. `staleTime` matches the queue's: a link state changes when a
+ * sync job runs, not while somebody reads.
+ */
+export const useDocumentSyncState = (id: string | undefined) =>
+  useQuery({
+    queryKey: keys.documentSyncState(id ?? ''),
+    queryFn: () => stage5.documentSyncState(id as string),
+    enabled: !!id,
+    staleTime: 60_000,
+  });
+
 export const useConflict = (id: string | undefined) =>
   useQuery({
     queryKey: keys.conflict(id ?? ''),

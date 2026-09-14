@@ -40,6 +40,7 @@ import { UnavailablePage } from '../governance/UnavailablePage.js';
 import { FeedbackButton } from '../feedback/FeedbackButton.js';
 import { PaneModeToggle, type PaneMode } from '../source/PaneModeToggle.js';
 import { SourcePane } from '../source/SourcePane.js';
+import { SyncStateBadge } from '../source/SyncStateBadge.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 import type { FieldInfo } from '../../lib/format.js';
 import type { ScriptRow } from '../../api/types.js';
@@ -403,6 +404,10 @@ export function ArticlePage() {
           {/* Status and the source-review flag are editor information: a reader only ever sees
               published items, so a chip saying so would be noise. */}
           {can('docs.read_unpublished') ? <StatusChip status={doc.status} /> : null}
+          {/* Same reasoning for the sync link: "ממתין לדחיפה" is a thing only somebody who can
+              edit the item can act on, and it is the half of the loop the source-review flag
+              deliberately does not cover. */}
+          {can('docs.edit', doc) ? <SyncStateBadge documentId={doc.id} /> : null}
           {(doc.tags ?? []).map((t) => (
             <span
               key={t}

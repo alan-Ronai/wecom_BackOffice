@@ -696,7 +696,22 @@ export const SyncLinkCreateBodySchema = z.object({
   externalId: z.string().min(1).max(500),
 });
 
+/**
+ * `GET /documents/:id/sync-state` — what the article header needs to say "this item is waiting to
+ * be pushed" or "this item is in conflict" without holding `sources.manage`.
+ *
+ * `GET /sync/links` answers the same question for an operator, but it is the whole queue behind
+ * `sources.manage`, so an editor on an article could not read it. A document with no sync link
+ * answers `state: null`, which is a different thing from `'synced'`: not connected at all.
+ */
+export const DocumentSyncStateSchema = z.object({
+  state: SyncLinkStateSchema.nullable(),
+  connectorName: z.string().nullable(),
+  linkId: IdSchema.nullable(),
+});
+
 export type GroupSearchItem = z.infer<typeof GroupSearchItemSchema>;
+export type DocumentSyncState = z.infer<typeof DocumentSyncStateSchema>;
 export type GroupMapRow = z.infer<typeof GroupMapRowSchema>;
 export type ParityLinkRow = z.infer<typeof ParityLinkRowSchema>;
 export type ParityConnector = z.infer<typeof ParityConnectorSchema>;
