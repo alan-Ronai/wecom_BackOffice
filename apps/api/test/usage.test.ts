@@ -171,28 +171,29 @@ run('usage', () => {
       expect(zero.items.every((i: { results: number }) => i.results === 0)).toBe(true);
     });
 
-    it('fills topTopics once W1-shaped worlds/topics tables exist', async () => {
-      const W = '55555555-5555-4555-8555-555555555555';
-      const T = '66666666-6666-4666-8666-666666666666';
-      await db.pool.query(
-        `create table worlds(id uuid primary key, slug text unique not null, name text not null)`,
-      );
-      await db.pool.query(
-        `create table topics(id uuid primary key, world_id uuid not null references worlds(id), slug text not null, name text not null)`,
-      );
-      await db.pool.query(`insert into worlds(id, slug, name) values ($1,'tech','תמיכה טכנית')`, [W]);
-      await db.pool.query(
-        `insert into topics(id, world_id, slug, name) values ($1,$2,'slow-data','גלישה איטית')`,
-        [T, W],
-      );
+    it('fills topTopics from W1\'s worlds/topics tables', async () => {
+      // W1 (migration 0030) owns `worlds` and `topics`; this test used to fake them.
+      const W = (await db.pool.query(`select id from worlds where slug='tech'`)).rows[0].id as string;
+      const T = (
+        await db.pool.query(
+          `insert into topics(world_id, slug, name, position) values ($1,'slow-data','גלישה איטית',999) returning id`,
+          [W],
+        )
+      ).rows[0].id as string;
       const rec = new PgUsage(db.pool);
       await rec.recordTopicView(u.id, T);
       await rec.recordTopicView(viewer.id, T);
       const r = (
         await app.inject({ method: 'GET', url: '/api/v1/analytics/usage?limit=9', headers: auth(u) })
       ).json();
-      expect(r.topTopics).toEqual([{ topicId: T, name: 'גלישה איטית', worldSlug: 'tech', views: 2 }]);
-      await db.pool.query('drop table topics; drop table worlds');
+      expect(r.topTopics).toContainEqual({
+        topicId: T,
+        name: 'גלישה איטית',
+        worldSlug: 'tech',
+        views: 2,
+      });
+      await db.pool.query('delete from topic_views where topic_id=$1', [T]);
+      await db.pool.query('delete from topics where id=$1', [T]);
     });
   });
 });

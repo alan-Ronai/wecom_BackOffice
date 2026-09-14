@@ -3,15 +3,12 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import { readdir } from 'node:fs/promises';
 import pg from 'pg';
 import { runner } from 'node-pg-migrate';
-import { readdirSync } from 'node:fs';
 import { DEFAULT_ROLES, PERMISSIONS } from '@wecom/shared';
 
 /** However many migrations exist right now — avoids a hardcoded count going stale. */
 const migrationCount = async () => (await readdir('migrations')).filter((f) => f.endsWith('.js')).length;
 
 const run = process.env.RUN_INTEGRATION === '1' ? describe : describe.skip;
-/** Counted, not hard-coded: every lane that adds a migration must still roll back to empty. */
-const MIGRATION_COUNT = readdirSync('migrations').filter((f) => /^\d+_.+\.js$/.test(f)).length;
 run('migrations', () => {
   let c: StartedPostgreSqlContainer;
   let pool: pg.Pool;
@@ -205,6 +202,7 @@ run('migrations', () => {
       pool.query(`insert into feedback(document_id, document_version, world_slug, kind, user_id)
                   values (gen_random_uuid(), 1, 'sim', 'bogus', gen_random_uuid())`),
     ).rejects.toThrow(/feedback_kind_check|violates check constraint/);
+  });
   it('creates the wave 4 usage tables and the zero-result partial index', async () => {
     const t = await pool.query(
       "select table_name from information_schema.tables where table_schema='public' and table_name in ('search_log','topic_views') order by 1",
@@ -220,6 +218,33 @@ run('migrations', () => {
     );
     // only users; deliberately no FK to topics (W1's table)
     expect(fk.rows[0].n).toBe(1);
+  });
+  it('0035 widens the alert and telemetry kinds and keeps both tags and Hebrew stopwords in the search vector', async () => {
+    const u = (
+      await pool.query(
+        `insert into users(subject, source, email, display_name) values ('w6-fixups','local','w6-fixups@wecom.co.il','w6') returning id`,
+      )
+    ).rows[0].id as string;
+    await expect(
+      pool.query(`insert into notifications(user_id, kind, title) values ($1,'feedback','x'),($1,'source','y')`, [u]),
+    ).resolves.toBeTruthy();
+    await expect(
+      pool.query(`insert into telemetry_events(user_id, kind) values ($1,'view_topic'),($1,'search_click')`, [u]),
+    ).resolves.toBeTruthy();
+
+    // A freshly migrated database must index tags (0030) *and* drop stopwords (0023).
+    await pool.query(
+      `insert into documents(slug, title, description, category, wave, priority, tags)
+       values ('w6-vec','מסמך על גלישה','', 'tech', 1, 'm', array['apnfix'])`,
+    );
+    const vec = (await pool.query(`select search_vector::text v from documents where slug='w6-vec'`))
+      .rows[0].v as string;
+    expect(vec).toMatch(/'apnfix':/);
+    expect(vec).not.toMatch(/'על':/);
+    await pool.query(`delete from documents where slug='w6-vec'`);
+    await pool.query('delete from telemetry_events where user_id=$1', [u]);
+    await pool.query('delete from notifications where user_id=$1', [u]);
+    await pool.query('delete from users where id=$1', [u]);
   });
   it('rolls back cleanly', async () => {
     await runner({

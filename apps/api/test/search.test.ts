@@ -140,6 +140,8 @@ run('search', () => {
     });
     const g = r.json().groups.find((x: { type: string }) => x.type === 'scripts');
     expect(g.hits[0]).toMatchObject({ type: 'script', title: 'סיווג תקלה', snippet: 'אתה לא גולש בכלל?' });
+  });
+
   it('logs each search with its result count without delaying the response', async () => {
     await db.pool.query('delete from search_log');
     const r = await app.inject({
@@ -151,7 +153,10 @@ run('search', () => {
     expect(r.json().total).toBe(0);
     // fire-and-forget: give the insert a tick
     await new Promise((res) => setTimeout(res, 50));
-    const rows = await db.pool.query('select user_id, q, filters, results from search_log');
+    // Scoped to this query: earlier cases in this file search too, and every search is logged.
+    const rows = await db.pool.query('select user_id, q, filters, results from search_log where q=$1', [
+      'אין-כזה-מונח',
+    ]);
     expect(rows.rows).toEqual([
       { user_id: u.id, q: 'אין-כזה-מונח', filters: { types: 'documents' }, results: 0 },
     ]);
