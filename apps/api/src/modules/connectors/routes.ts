@@ -394,11 +394,9 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
       const raw = (req as FastifyRequest & { rawBody?: string }).rawBody ?? '';
       let changes;
       try {
-        changes = await conn.parseWebhook(
-          repo.config(row) as never,
-          req.headers as Record<string, string>,
-          { raw },
-        );
+        changes = await conn.parseWebhook(repo.config(row) as never, req.headers as Record<string, string>, {
+          raw,
+        });
       } catch {
         return reply.status(401).send({ code: 'BAD_SIGNATURE', message: 'חתימה שגויה', requestId: req.id });
       }
@@ -419,9 +417,7 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
         );
       }
       if (!(await claimWebhookNonce(app.db, row.id, replayKey(raw))))
-        return reply
-          .status(409)
-          .send({ code: 'REPLAY', message: 'בקשה זו כבר התקבלה', requestId: req.id });
+        return reply.status(409).send({ code: 'REPLAY', message: 'בקשה זו כבר התקבלה', requestId: req.id });
       const jobId = await opts.enqueue('connector.webhook', { connectorId: row.id, changes });
       return reply.status(202).send({ jobId, changes: changes.length });
     },

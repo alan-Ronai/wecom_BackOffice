@@ -4,12 +4,7 @@ import { DashboardSchema, TelemetryBatchSchema } from '@wecom/shared';
 import { requireUser } from '../../lib/user.js';
 import { canReadUnpublished } from '../../lib/visibility.js';
 import * as repo from './repo.js';
-import {
-  bumpDashboardStamp,
-  isFresh,
-  readDashboardCache,
-  writeDashboardCache,
-} from './cache.js';
+import { bumpDashboardStamp, isFresh, readDashboardCache, writeDashboardCache } from './cache.js';
 
 export default async function routes(app: FastifyInstance) {
   /**

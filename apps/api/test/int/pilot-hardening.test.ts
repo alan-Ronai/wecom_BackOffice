@@ -62,10 +62,7 @@ run('0045 — user_role_worlds (A-M14)', () => {
 
   const slugs = async () =>
     (
-      await pool.query(
-        `select world_slug from user_role_worlds where user_id=$1 order by world_slug`,
-        [U],
-      )
+      await pool.query(`select world_slug from user_role_worlds where user_id=$1 order by world_slug`, [U])
     ).rows.map((r) => r.world_slug);
 
   it('backfills only the slugs that name a real world, and cleans the rest out of the array', async () => {
@@ -157,10 +154,7 @@ run('0045 — asset_refs (B-M15)', () => {
     );
   const refsOf = async (n: number) =>
     (
-      await pool.query(
-        `select owner_kind from asset_refs where asset_id=$1 order by owner_kind`,
-        [asset(n)],
-      )
+      await pool.query(`select owner_kind from asset_refs where asset_id=$1 order by owner_kind`, [asset(n)])
     ).rows.map((r) => r.owner_kind);
   const alive = async (n: number) =>
     (await pool.query(`select 1 from assets where id=$1`, [asset(n)])).rowCount === 1;
@@ -212,10 +206,10 @@ run('0045 — asset_refs (B-M15)', () => {
     await mkAsset(3);
     // An image is uploaded the moment it is pasted; the version that will reference it may not
     // be written for another week. `assets` is the only copy, so the draft has to count.
-    await pool.query(
-      `insert into drafts(user_id, draft_key, payload) values ($1, 'source:x', $2)`,
-      [userId, JSON.stringify({ html: href(3) })],
-    );
+    await pool.query(`insert into drafts(user_id, draft_key, payload) values ($1, 'source:x', $2)`, [
+      userId,
+      JSON.stringify({ html: href(3) }),
+    ]);
     expect(await refsOf(3)).toEqual(['draft']);
     // The run collects the image the previous test released and nothing else: the draft is a
     // reference, so the screenshot pasted minutes ago survives a gc pass it would once have
@@ -228,10 +222,10 @@ run('0045 — asset_refs (B-M15)', () => {
   it('collects an asset once the last reference goes, and not before', async () => {
     await mkAsset(4);
     const sd = (
-      await pool.query(
-        `insert into source_documents(document_id, html) values ($1,$2) returning id`,
-        [docId, href(4)],
-      )
+      await pool.query(`insert into source_documents(document_id, html) values ($1,$2) returning id`, [
+        docId,
+        href(4),
+      ])
     ).rows[0].id;
     await pool.query(
       `insert into source_document_versions(source_document_id, version, html) values ($1,1,$2)`,

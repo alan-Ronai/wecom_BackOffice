@@ -22,8 +22,7 @@
  */
 
 /** Same capture the gc used to run inline: the `src` the sanitizer keeps, as a strict uuid. */
-const ASSET_REF_RE =
-  '/api/v1/assets/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
+const ASSET_REF_RE = '/api/v1/assets/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
 
 /**
  * Every column an asset can be referenced from: `[owner_kind, table, ...path into the row]`.
@@ -217,8 +216,7 @@ exports.up = (pgm) => {
 };
 
 exports.down = (pgm) => {
-  for (const [, table] of OWNERS)
-    pgm.sql(`drop trigger if exists ${table}_asset_refs_trg on ${table}`);
+  for (const [, table] of OWNERS) pgm.sql(`drop trigger if exists ${table}_asset_refs_trg on ${table}`);
   pgm.sql('drop function if exists asset_refs_sync()');
   pgm.dropTable('asset_refs');
   pgm.sql('drop function if exists asset_refs_ids(text)');

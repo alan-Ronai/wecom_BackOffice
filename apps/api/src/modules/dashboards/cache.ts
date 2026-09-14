@@ -31,10 +31,7 @@ type Entry = { stamp: string; at: number; value: Dashboard };
  * A missing stamp row reads as `''`, which is also what a snapshot written before the first bump
  * carries — so an untouched deployment hits its cache rather than recomputing on every request.
  */
-export async function readDashboardCache(
-  q: Q,
-  key: string,
-): Promise<{ stamp: string; entry: Entry | null }> {
+export async function readDashboardCache(q: Q, key: string): Promise<{ stamp: string; entry: Entry | null }> {
   const r = await q.query<{ key: string; value: unknown }>(
     'select key, value from system_state where key = any($1::text[])',
     [[STAMP_KEY, cacheKey(key)]],
@@ -55,12 +52,7 @@ export const isFresh = (entry: Entry, stamp: string, now = Date.now()): boolean 
  * lands while `computeDashboard` is running, the snapshot is written under the superseded stamp
  * and the next read discards it. The failure mode is an extra recomputation, never a stale panel.
  */
-export async function writeDashboardCache(
-  q: Q,
-  key: string,
-  stamp: string,
-  value: Dashboard,
-): Promise<void> {
+export async function writeDashboardCache(q: Q, key: string, stamp: string, value: Dashboard): Promise<void> {
   await q.query(
     `insert into system_state(key, value, updated_at) values ($1, $2, now())
        on conflict (key) do update set value = excluded.value, updated_at = now()`,
