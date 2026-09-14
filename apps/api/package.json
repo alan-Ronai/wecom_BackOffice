@@ -7,14 +7,16 @@
     "convert:legacy": "node seed/convert-legacy.mjs",
     "create-admin": "tsx src/cli/create-admin.ts",
     "dev": "tsx watch src/server.ts",
+    "load:fixture": "tsx scripts/load-fixture.ts",
     "migrate": "node-pg-migrate -m migrations -j js --ignore-pattern package.json up",
     "migrate:down": "node-pg-migrate -m migrations -j js --ignore-pattern package.json down",
     "openapi": "tsx src/openapi.ts",
+    "perf:check": "tsx scripts/perf-check.ts",
     "seed": "tsx src/seed.ts",
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:int": "RUN_INTEGRATION=1 vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json"
   },
   "dependencies": {
     "@fastify/cookie": "^10.0.1",

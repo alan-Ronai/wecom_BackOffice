@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin';
 import PgBoss from 'pg-boss';
-import { checkBackupAge } from '../services/backupCheck.js';
+import { checkBackupAge, recordBackupCheck } from '../services/backupCheck.js';
 
 export const QUEUES = {
   pipelineProcess: 'pipeline.process', // L5: turn a source revision into suggestions (concurrency 1)
@@ -45,11 +45,23 @@ export default fp(async (app, opts: { boss?: boolean }) => {
       const result = await checkBackupAge(app.config.BACKUP_DIR);
       if (!result.ok) app.log.warn({ result }, 'backup check: no recent backup found');
       else app.log.info({ result }, 'backup check: ok');
+      try {
+        await recordBackupCheck(app.db, result);
+      } catch (err) {
+        app.log.warn({ err }, 'could not record backup check result');
+      }
     });
     try {
       await boss.schedule(QUEUES.backupCheck, '30 3 * * *', {}, { tz: 'Asia/Jerusalem' });
     } catch (err) {
       app.log.warn({ err }, 'could not schedule system.backup-check');
+    }
+    // Also queue one run at boot so `lastBackupAt`/`lastBackupOk` are populated for
+    // health/admin readers immediately, rather than only after the nightly schedule fires.
+    try {
+      await boss.send(QUEUES.backupCheck, {});
+    } catch (err) {
+      app.log.warn({ err }, 'could not queue an initial system.backup-check run');
     }
   } catch (err) {
     app.log.warn({ err }, 'pg-boss not started (database unreachable)');

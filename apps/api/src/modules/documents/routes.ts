@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { ModelClient } from '@wecom/model';
 import { z } from 'zod';
 import {
   CreateDocumentBodySchema,
@@ -26,6 +27,7 @@ import { hasScope, requireUser } from '../../lib/user.js';
 import * as repo from './repo.js';
 import { annotateBlame, diffDocuments, diffStats } from './diff.js';
 import { inboundFor } from '../graph/repo.js';
+import { updateEmbedding } from '../search/repo.js';
 
 const Params = z.object({ id: IdSchema });
 /** Stage 4 `/documents/:id/backlinks`; the contract spells this response inline. */
@@ -276,6 +278,12 @@ export default async function routes(app: FastifyInstance) {
         return { document: doc, version, auditId };
       });
       await pushOnPublish(app, req, id, user.id);
+      // Best-effort, outside the transaction: a model outage must never fail a publish.
+      const model = (app as unknown as { model?: ModelClient | null }).model;
+      if (model?.embed)
+        updateEmbedding(app.db, id, model).catch((err) =>
+          req.log.warn({ err, id }, 'embed on publish failed'),
+        );
       return result;
     },
   );
@@ -333,10 +341,13 @@ export default async function routes(app: FastifyInstance) {
       const rows = diffDocuments(oldDoc, newDoc, blocks);
       // Blame: the first version between `from` and `to` in which each row's step changed.
       const versions = await repo.listVersions(app.db, id);
+      const inRange = versions.filter((v) => v.version >= from && v.version <= toVersion);
+      // One query for every snapshot in range instead of `getVersion` per version.
+      const need = inRange.filter((v) => v.version !== from).map((v) => v.version);
+      const snapshots = await repo.getVersionsBatch(app.db, id, need);
       const history: { version: number; author: string; doc: typeof current }[] = [];
-      for (const v of versions) {
-        if (v.version < from || v.version > toVersion) continue;
-        const doc = v.version === from ? oldDoc : await repo.getVersion(app.db, id, v.version);
+      for (const v of inRange) {
+        const doc = v.version === from ? oldDoc : snapshots.get(v.version);
         if (doc) history.push({ version: v.version, author: v.authorName, doc });
       }
       annotateBlame(rows, history, blocks);
@@ -375,6 +386,11 @@ export default async function routes(app: FastifyInstance) {
         return { document: doc, version, auditId };
       });
       await pushOnPublish(app, req, id, user.id);
+      const model = (app as unknown as { model?: ModelClient | null }).model;
+      if (model?.embed)
+        updateEmbedding(app.db, id, model).catch((err) =>
+          req.log.warn({ err, id }, 'embed on restore failed'),
+        );
       return result;
     },
   );

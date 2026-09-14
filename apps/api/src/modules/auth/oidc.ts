@@ -109,6 +109,20 @@ export class OidcProvider {
     return (await res.json()) as T;
   }
 
+  private async graphPost<T>(path: string, body: unknown): Promise<T> {
+    const base = this.cfg.graphUrl ?? 'https://graph.microsoft.com/v1.0';
+    const res = await fetch(path.startsWith('http') ? path : base + path, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer ' + (await this.graphAccessToken()),
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`graph ${res.status} for ${path}`);
+    return (await res.json()) as T;
+  }
+
   async fetchGroupsFromGraph(subject: string): Promise<string[]> {
     const ids: string[] = [];
     let next: string | undefined = `/users/${encodeURIComponent(subject)}/memberOf?$select=id&$top=999`;
@@ -123,16 +137,45 @@ export class OidcProvider {
     return this.fetchGroupsFromGraph(subject);
   }
 
+  /**
+   * `GET /users/{id}?$select=accountEnabled` for every subject, but batched through
+   * Graph's `$batch` endpoint (max 20 sub-requests per call — see
+   * https://learn.microsoft.com/graph/json-batching) instead of one HTTP round trip
+   * per user. A missing user (404) counts as disabled, same as before.
+   */
   async listDisabledUsers(subjects: string[]): Promise<Set<string>> {
     const disabled = new Set<string>();
-    for (const s of subjects) {
+    const BATCH_SIZE = 20;
+    for (let i = 0; i < subjects.length; i += BATCH_SIZE) {
+      const chunk = subjects.slice(i, i + BATCH_SIZE);
+      const requests = chunk.map((s, idx) => ({
+        id: String(idx),
+        method: 'GET',
+        url: `/users/${encodeURIComponent(s)}?$select=id,accountEnabled`,
+      }));
       try {
-        const u: { accountEnabled?: boolean } = await this.graphGet(
-          `/users/${encodeURIComponent(s)}?$select=id,accountEnabled`,
-        );
-        if (u.accountEnabled === false) disabled.add(s);
-      } catch (e) {
-        if (String(e).includes('404')) disabled.add(s);
+        const res = await this.graphPost<{
+          responses: { id: string; status: number; body?: { accountEnabled?: boolean } }[];
+        }>('/$batch', { requests });
+        for (const r of res.responses) {
+          const subject = chunk[Number(r.id)];
+          if (!subject) continue;
+          if (r.status === 404) disabled.add(subject);
+          else if (r.status === 200 && r.body?.accountEnabled === false) disabled.add(subject);
+        }
+      } catch {
+        // A failed batch (network blip, throttling) falls back to per-user lookups for
+        // just that chunk rather than losing the whole sync run.
+        for (const s of chunk) {
+          try {
+            const u: { accountEnabled?: boolean } = await this.graphGet(
+              `/users/${encodeURIComponent(s)}?$select=id,accountEnabled`,
+            );
+            if (u.accountEnabled === false) disabled.add(s);
+          } catch (e) {
+            if (String(e).includes('404')) disabled.add(s);
+          }
+        }
       }
     }
     return disabled;

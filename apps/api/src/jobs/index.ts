@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { ModelClient } from '@wecom/model';
 import { makeEvent } from '@wecom/shared';
 import { QUEUES } from '../plugins/boss.js';
 import { withTransaction } from '../lib/sql.js';
@@ -52,7 +53,10 @@ export async function startJobs(app: FastifyInstance): Promise<void> {
 
   await boss.work(QUEUES.searchReindex, async () => {
     try {
-      const n = await reindexAll(app.db);
+      // L5 decorates app.model; embeddings are best-effort and skipped when it's absent
+      // or disabled (reindexAll/updateEmbedding no-op cleanly in that case).
+      const model = (app as unknown as { model?: ModelClient | null }).model ?? null;
+      const n = await reindexAll(app.db, model);
       app.log.info({ n }, 'search reindexed');
     } catch (err) {
       await reportFailure(app, QUEUES.searchReindex, err);

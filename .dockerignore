@@ -3,6 +3,10 @@ node_modules
 **/dist
 legacy
 docs
+# Dockerfile.api and Dockerfile.web both COPY docs/api/openapi.json (client/type
+# generation at build time) — keep it despite the blanket `docs` exclusion above.
+!docs/api
+!docs/api/openapi.json
 .git
 .playwright-mcp
 deploy/certs/*.pem

@@ -88,12 +88,40 @@ run('admin routes', () => {
     expect(body.connectors).toEqual([]);
     expect(body.sources).toEqual({ pending: 0, error: 0 });
     expect(body.suggestions).toEqual({ pending: 0 });
-    // No backup directory in a test container: reported, not thrown.
-    expect(body.backup).toMatchObject({ ok: false, latestFile: null });
+    // No backup directory in a test container, and the worker has never run: falls back to a
+    // live check, which also reports false (not "unknown") since it did run.
+    expect(body.backup).toMatchObject({
+      ok: false,
+      latestFile: null,
+      lastBackupAt: null,
+      lastBackupOk: false,
+    });
     expect(typeof body.version).toBe('string');
     expect(
       (await app.inject({ method: 'GET', url: '/api/v1/admin/system', headers: editor })).statusCode,
     ).toBe(403);
+  });
+
+  it('surfaces the system.backup-check worker result once recorded (lastBackupAt/lastBackupOk)', async () => {
+    const { recordBackupCheck } = await import('../../src/services/backupCheck.js');
+    const latestAt = new Date().toISOString();
+    await recordBackupCheck(db.pool, {
+      ok: true,
+      latestFile: 'kb-20260913-0215.dump',
+      ageHours: 1,
+      latestAt,
+    });
+
+    const health = await app.inject({ method: 'GET', url: '/api/v1/system/health' });
+    expect(health.json()).toMatchObject({ lastBackupAt: latestAt, lastBackupOk: true });
+
+    const sys = await app.inject({ method: 'GET', url: '/api/v1/admin/system', headers: admin });
+    expect(sys.json().backup).toMatchObject({
+      ok: true,
+      latestFile: 'kb-20260913-0215.dump',
+      lastBackupAt: latestAt,
+      lastBackupOk: true,
+    });
   });
 
   it('replaces roles with a category scope and writes audit', async () => {

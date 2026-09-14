@@ -40,6 +40,15 @@
                     },
                     "uptimeSec": {
                       "type": "number"
+                    },
+                    "lastBackupAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "lastBackupOk": {
+                      "type": "boolean",
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -48,7 +57,9 @@
                     "model",
                     "queue",
                     "version",
-                    "uptimeSec"
+                    "uptimeSec",
+                    "lastBackupAt",
+                    "lastBackupOk"
                   ],
                   "additionalProperties": false
                 }
@@ -1941,12 +1952,29 @@
                         "ageHours": {
                           "type": "number",
                           "nullable": true
+                        },
+                        "checkedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "lastBackupAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "lastBackupOk": {
+                          "type": "boolean",
+                          "nullable": true
                         }
                       },
                       "required": [
                         "ok",
                         "latestFile",
-                        "ageHours"
+                        "ageHours",
+                        "checkedAt",
+                        "lastBackupAt",
+                        "lastBackupOk"
                       ],
                       "additionalProperties": false
                     },

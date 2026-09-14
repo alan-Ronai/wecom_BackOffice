@@ -25,6 +25,8 @@ jobs:
         run: |
           pnpm --filter @wecom/api openapi
           git diff --exit-code -- docs/api/openapi.json || (echo 'openapi.json is stale: run pnpm openapi and commit' && exit 1)
+      - name: Lint the WordPress plugin (PHP syntax)
+        run: docker run --rm -v "$PWD/deploy/wp-plugin:/app" php:8.2-cli php -l /app/kb-sync.php
 
   e2e:
     runs-on: ubuntu-latest
@@ -45,4 +47,43 @@ jobs:
         with:
           name: playwright-report
           path: apps/web/playwright-report
+          retention-days: 7
+
+  perf:
+    # §11 non-functional gate: library reads < 300 ms, search < 500 ms (p95) at 5,000
+    # documents. See apps/api/scripts/{load-fixture,perf-check}.ts.
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r build
+      - run: pnpm --filter @wecom/api perf:check
+        env: { TESTCONTAINERS_RYUK_DISABLED: 'true' }
+
+  e2e-real:
+    # The no-mocks gate: a real Postgres, the real API (NODE_ENV=production, no msw
+    # anywhere) and the built SPA under vite preview — see scripts/e2e-real.mjs. Separate
+    # from `e2e` above (which is fast msw-backed component coverage) rather than a
+    # replacement for it: this one catches contract drift between the frontend and the
+    # real backend that a mocked API cannot.
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r build
+      - run: pnpm --filter @wecom/web exec playwright install --with-deps chromium
+      - run: pnpm e2e:real
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-real-results
+          path: apps/web/test-results
           retention-days: 7

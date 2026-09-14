@@ -848,7 +848,14 @@ export const system = {
   modelName: 'qwen2.5:3b-instruct-q4_K_M',
   queue: 0,
   queues: { 'connector.run': 0, 'source.process': 0 },
-  backup: { ok: true, latestFile: 'kb-2026-09-12.dump', ageHours: 8 },
+  backup: {
+    ok: true,
+    latestFile: 'kb-2026-09-12.dump',
+    ageHours: 8,
+    checkedAt: T,
+    lastBackupAt: T,
+    lastBackupOk: true,
+  },
   connectors: [
     {
       id: '55555555-5555-4555-8555-55555555c001',
@@ -873,6 +880,8 @@ export const health = {
   queue: 0,
   version: '0.1.0',
   uptimeSec: 10,
+  lastBackupAt: T,
+  lastBackupOk: true,
 };
 
 export const fx = {

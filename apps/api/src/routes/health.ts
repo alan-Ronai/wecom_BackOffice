@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { HealthResponseSchema, VERSION } from '@wecom/shared';
 import { probeModel, probeQueue } from '../services/probes.js';
+import { getRecordedBackupCheck } from '../services/backupCheck.js';
 
 const started = Date.now();
 const MODEL_PROBE_MS = 2000;
@@ -24,7 +25,11 @@ export default async function routes(app: FastifyInstance) {
             new Promise<boolean>((r) => setTimeout(() => r(false), MODEL_PROBE_MS)),
           ])
         : probeModel(app.config.MODEL_URL, app.config.MODEL_NAME).then((m) => m.up && m.hasModel);
-      const [model, queue] = await Promise.all([probe, probeQueue(app.boss)]);
+      const [model, queue, backup] = await Promise.all([
+        probe,
+        probeQueue(app.boss),
+        db ? getRecordedBackupCheck(app.db).catch(() => null) : Promise.resolve(null),
+      ]);
       return {
         ok: db && model,
         db,
@@ -32,6 +37,8 @@ export default async function routes(app: FastifyInstance) {
         queue,
         version: VERSION,
         uptimeSec: Math.round((Date.now() - started) / 1000),
+        lastBackupAt: backup?.latestAt ?? null,
+        lastBackupOk: backup?.ok ?? null,
       };
     },
   );

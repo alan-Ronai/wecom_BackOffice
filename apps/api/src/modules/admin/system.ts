@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { AdminSystemSchema, VERSION } from '@wecom/shared';
 import { QUEUES } from '../../plugins/boss.js';
-import { checkBackupAge } from '../../services/backupCheck.js';
+import { checkBackupAge, getRecordedBackupCheck } from '../../services/backupCheck.js';
 
 const started = Date.now();
 const MODEL_PROBE_MS = 2000;
@@ -77,13 +77,25 @@ export default async function systemRoutes(instance: FastifyInstance) {
           ).rows[0]
         : { pending: 0, error: 0, suggestions: 0 };
 
+      // Prefer the `system.backup-check` worker's recorded result — it's what the
+      // schedule actually verified — and fall back to a live filesystem check only
+      // when the worker has never run yet (e.g. right after a fresh deploy).
+      const recorded = db ? await getRecordedBackupCheck(app.db) : null;
+      const backup = recorded ?? { ...(await checkBackupAge(app.config.BACKUP_DIR)), checkedAt: null };
       return {
         db,
         model,
         modelName: app.model?.name ?? 'unavailable',
         queue,
         queues,
-        backup: await checkBackupAge(app.config.BACKUP_DIR),
+        backup: {
+          ok: backup.ok,
+          latestFile: backup.latestFile,
+          ageHours: backup.ageHours,
+          checkedAt: backup.checkedAt,
+          lastBackupAt: backup.latestAt,
+          lastBackupOk: backup.ok,
+        },
         connectors,
         sources: { pending: counts.pending, error: counts.error },
         suggestions: { pending: counts.suggestions },

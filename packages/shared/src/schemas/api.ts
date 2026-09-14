@@ -169,6 +169,9 @@ export const HealthResponseSchema = z.object({
   queue: z.number().int().nullable(),
   version: z.string(),
   uptimeSec: z.number(),
+  /** The `system.backup-check` worker's last recorded result (see GET /admin/system). */
+  lastBackupAt: IsoDateSchema.nullable(),
+  lastBackupOk: z.boolean().nullable(),
 });
 
 export const AdminUserPatchSchema = z.object({
@@ -197,6 +200,10 @@ export const AdminSystemSchema = z.object({
     ok: z.boolean(),
     latestFile: z.string().nullable(),
     ageHours: z.number().nullable(),
+    /** The last time the `system.backup-check` worker recorded a result, if ever. */
+    checkedAt: IsoDateSchema.nullable(),
+    lastBackupAt: IsoDateSchema.nullable(),
+    lastBackupOk: z.boolean().nullable(),
   }),
   connectors: z.array(
     z.object({
