@@ -188,10 +188,35 @@ describe('admin · connector wizard', () => {
     await userEvent.click(screen.getByRole('button', { name: 'שמור' }));
 
     await waitFor(() => expect(body).toBeDefined());
-    const config = body!.config as Record<string, unknown>;
-    expect(config).not.toHaveProperty('appPassword');
-    expect(config).not.toHaveProperty('webhookSecret');
-    expect(config.baseUrl).toBe('https://help.wecom.co.il');
+    // Nothing in the config was touched, so there is no `config` key at all. `{}` would be the
+    // spelling that clears one, and restating the unchanged values would mean re-sending the
+    // masked placeholders standing in for secrets this browser never received.
+    expect(body).not.toHaveProperty('config');
+  });
+
+  it('sends only the config key the operator actually changed', async () => {
+    asAdmin();
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.patch('/api/v1/connectors/:id', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(stage5State.connectors[0]);
+      }),
+    );
+    renderWithProviders(<App />, { route: `/admin/connectors/${C_WP}` });
+
+    // The form is seeded from the connector's own `config` — the field that was absent from the
+    // detail route's published shape, which loaded this form blank and PATCHed the blank back.
+    const username = await screen.findByLabelText('משתמש WordPress');
+    expect(username).toHaveValue('kb-bot');
+    await userEvent.clear(username);
+    await userEvent.type(username, 'kb-bot-2');
+
+    await userEvent.click(screen.getByRole('button', { name: '4. תזמון' }));
+    await userEvent.click(screen.getByRole('button', { name: 'שמור' }));
+
+    await waitFor(() => expect(body).toBeDefined());
+    expect(body!.config).toEqual({ username: 'kb-bot-2' });
   });
 
   it('does not offer a type change on a saved connector', async () => {

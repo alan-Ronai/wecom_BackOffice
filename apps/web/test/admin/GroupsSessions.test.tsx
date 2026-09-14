@@ -82,11 +82,40 @@ describe('admin · sessions', () => {
       }),
     );
     renderWithProviders(<App />, { route: '/admin/sessions' });
-    await userEvent.click(await screen.findByLabelText('נתק ענבר ל.'));
+    await userEvent.click(await screen.findByLabelText('נתק דנה ר.'));
     expect(await screen.findByText(/יידרש להיכנס מחדש/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'נתק' }));
-    await waitFor(() => expect(revoked).toBe('cccccccc-cccc-4ccc-8ccc-ccccccccccc1'));
+    await waitFor(() => expect(revoked).toBe('cccccccc-cccc-4ccc-8ccc-ccccccccccc2'));
     expect(await screen.findByText('החיבור נותק')).toBeInTheDocument();
+  });
+
+  it('marks this browser as "מכשיר זה" and warns before revoking it (3e)', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/admin/sessions' });
+    expect(await screen.findByText('מכשיר זה')).toBeInTheDocument();
+
+    // Revoking your own session is a different sentence from revoking someone else's: you do not
+    // "sign in again on that device", you are signed out here and now.
+    await userEvent.click(screen.getByLabelText('נתק ענבר ל. (מכשיר זה)'));
+    expect(await screen.findByText(/זהו החיבור הנוכחי/)).toBeInTheDocument();
+  });
+
+  it('disconnects every other session but never the current one (3e)', async () => {
+    asAdmin();
+    const revoked: string[] = [];
+    server.use(
+      http.delete('/api/v1/admin/sessions/:id', ({ params }) => {
+        revoked.push(String(params.id));
+        return HttpResponse.json({ ok: true, auditId: 'a' });
+      }),
+    );
+    renderWithProviders(<App />, { route: '/admin/sessions' });
+    await userEvent.click(await screen.findByRole('button', { name: 'נתק את כל האחרים' }));
+    expect(await screen.findByText(/החיבור הנוכחי יישאר פעיל/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'נתק את כולם' }));
+
+    await waitFor(() => expect(revoked).toEqual(['cccccccc-cccc-4ccc-8ccc-ccccccccccc2']));
+    expect(await screen.findByText('כל שאר החיבורים נותקו')).toBeInTheDocument();
   });
 
   it('hides revoke from someone without users.manage', async () => {

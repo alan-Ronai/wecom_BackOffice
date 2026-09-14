@@ -43,11 +43,14 @@ function SecretField({
   label,
   stored,
   value,
+  disabled,
   onChange,
 }: {
   label: string;
   stored: boolean;
   value: string | null;
+  /** Threaded through like every other control here — the server enforces, the UI should agree. */
+  disabled?: boolean;
   onChange: (v: string | null) => void;
 }) {
   if (value === null)
@@ -55,7 +58,7 @@ function SecretField({
       <div className="secret-row">
         <span className="small muted">{label}</span>
         {stored ? <Chip tone="chip-green">מוגדר</Chip> : <Chip tone="chip-amber">לא הוגדר</Chip>}
-        <button className="btn xs" onClick={() => onChange('')}>
+        <button className="btn xs" disabled={disabled} onClick={() => onChange('')}>
           {stored ? 'החלף' : 'הגדר'}
         </button>
       </div>
@@ -68,9 +71,15 @@ function SecretField({
         type="password"
         autoComplete="new-password"
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
       />
-      <button className="btn xs ghost" style={{ alignSelf: 'flex-start' }} onClick={() => onChange(null)}>
+      <button
+        className="btn xs ghost"
+        style={{ alignSelf: 'flex-start' }}
+        disabled={disabled}
+        onClick={() => onChange(null)}
+      >
         בטל שינוי
       </button>
     </label>
@@ -95,7 +104,11 @@ export function IdentityPage() {
   }, [settings.data]);
 
   if (settings.isError) return <LoadError what="הגדרות הזהות" error={settings.error} />;
-  if (!draft) return <div className="route-loading">טוען…</div>;
+  // `!draft` covers two very different states, and only one of them is "wait". If the query has
+  // settled with nothing — an empty 200, a 204 — there is nothing further coming, and spinning
+  // forever tells the operator the page is working when it is not.
+  if (!draft && settings.isPending) return <div className="route-loading">טוען…</div>;
+  if (!draft) return <LoadError what="הגדרות הזהות" error={settings.error} />;
 
   const set = (p: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...p } : d));
 
@@ -216,6 +229,7 @@ export function IdentityPage() {
             label="Client secret"
             stored={settings.data?.oidc.hasSecret ?? false}
             value={draft.clientSecret}
+            disabled={!mayEdit}
             onChange={(v) => set({ clientSecret: v })}
           />
           <label>
@@ -277,6 +291,7 @@ export function IdentityPage() {
             label="מפתח API"
             stored={settings.data?.paloalto.hasApiKey ?? false}
             value={draft.paApiKey}
+            disabled={!mayEdit}
             onChange={(v) => set({ paApiKey: v })}
           />
           <label>

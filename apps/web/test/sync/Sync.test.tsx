@@ -153,6 +153,43 @@ describe('sync · three-way merge', () => {
     expect(steps.find((s) => s.sourceRef === '§8')?.description).toMatch(/ל-6 מגה/);
   });
 
+  it('sends text the operator typed over the merge, not just the side they picked (4e)', async () => {
+    asAdmin();
+    let body: { merged?: { phases: Phase[] } } | undefined;
+    server.use(
+      http.post('/api/v1/sync/links/:id/resolve', async ({ request }) => {
+        body = (await request.json()) as typeof body;
+        return HttpResponse.json({ ...stage5State.links[0], state: 'synced' });
+      }),
+    );
+    renderWithProviders(<App />, { route: `/sync/conflicts/${LINK_CONFLICT}` });
+
+    // §8 is the contested paragraph: a WordPress editor and a KB author both changed it, so
+    // neither column is the answer. That is the case the three-way screen could not resolve.
+    const result = await screen.findByLabelText('תוצאה · §8');
+    await userEvent.clear(result);
+    await userEvent.type(result, 'נסח מוסכם לשני הצדדים');
+    expect(screen.getByLabelText('בטל עריכה · §8')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'שמור מיזוג' }));
+    await waitFor(() => expect(body).toBeDefined());
+    const steps = body!.merged!.phases.flatMap((p) => p.steps);
+    expect(steps.find((s) => s.sourceRef === '§8')?.description).toBe('נסח מוסכם לשני הצדדים');
+  });
+
+  it('picking a side after editing discards the edit, so the pick means what it says', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: `/sync/conflicts/${LINK_CONFLICT}` });
+
+    const result = await screen.findByLabelText('תוצאה · §8');
+    await userEvent.clear(result);
+    await userEvent.type(result, 'טיוטה');
+    await userEvent.click(screen.getByLabelText('קח מ-WordPress · §8'));
+
+    expect(screen.queryByLabelText('בטל עריכה · §8')).not.toBeInTheDocument();
+    expect((screen.getByLabelText('תוצאה · §8') as HTMLTextAreaElement).value).toMatch(/כשהוא מנותק מ-Wi-Fi/);
+  });
+
   it('refuses to resolve without suggestions.apply', async () => {
     server.use(withMe({ roles: ['editor'], permissions: ['docs.read', 'sources.manage'] }));
     renderWithProviders(<App />, { route: `/sync/conflicts/${LINK_CONFLICT}` });

@@ -12,9 +12,15 @@
  * what the OpenAPI file is generated from. Annotating each function with the zod type while the
  * body returns the generated one makes the two sides check against each other: if the published
  * contract ever drifts from the schema that is supposed to produce it, this file stops compiling.
+ *
+ * The schemas are imported as **values**, not just types, because every response here is also
+ * parsed at runtime by `checked()` (`src/api/stage45.ts`). The generated types are erased at build
+ * time; `checked` is the half that survives into the browser and notices when a real backend — or
+ * a drifting msw fixture — answers something the contract does not describe. `POST /telemetry` is
+ * the one exception: it answers 204 with no body, so there is nothing to parse.
  */
 import type { z } from 'zod';
-import type {
+import {
   BlockPageSchema,
   ColumnMappingSchema,
   DashboardSchema,
@@ -37,6 +43,7 @@ import type {
   TelemetryBatchSchema,
 } from '@wecom/shared';
 import { api, apiUpload } from './client.js';
+import { checked } from './stage45.js';
 import { unwrap } from './unwrap.js';
 
 /* ── types, every one of them inferred from the shared zod schemas ────────── */
@@ -66,38 +73,51 @@ export type TelemetryBatch = z.input<typeof TelemetryBatchSchema>;
 /* ── graph ────────────────────────────────────────────────────────────────── */
 
 export const getGraph = async (query: GraphQuery = {}): Promise<GraphResponse> =>
-  unwrap(await api.GET('/graph', { params: { query } }));
+  checked(GraphResponseSchema, await api.GET('/graph', { params: { query } }));
 
 /**
  * A node id is `<kind>:<tail>` where the tail is free-form (`field:שירות נדידה`), so it is one
  * path segment — which `openapi-fetch` percent-encodes for us.
  */
 export const getImpact = async (nodeId: string): Promise<ImpactResponse> =>
-  unwrap(await api.GET('/graph/impact/{nodeId}', { params: { path: { nodeId } } }));
+  checked(ImpactResponseSchema, await api.GET('/graph/impact/{nodeId}', { params: { path: { nodeId } } }));
 
 /* ── field & block pages ──────────────────────────────────────────────────── */
 
 export const getFieldPage = async (name: string): Promise<FieldPage> =>
-  unwrap(await api.GET('/fields/{name}/page', { params: { path: { name } } }));
+  checked(FieldPageSchema, await api.GET('/fields/{name}/page', { params: { path: { name } } }));
 
 export const renameField = async (name: string, body: FieldRenameBody): Promise<FieldRenameResult> =>
-  unwrap(await api.POST('/fields/{name}/rename', { params: { path: { name } }, body }));
+  checked(
+    FieldRenameResultSchema,
+    await api.POST('/fields/{name}/rename', { params: { path: { name } }, body }),
+  );
 
 export const getBlockPage = async (id: string): Promise<BlockPage> =>
-  unwrap(await api.GET('/blocks/{id}/page', { params: { path: { id } } }));
+  checked(BlockPageSchema, await api.GET('/blocks/{id}/page', { params: { path: { id } } }));
 
 /* ── data explorer ────────────────────────────────────────────────────────── */
 
-export const getDataFiles = async (): Promise<DataFilesResponse> => unwrap(await api.GET('/data/files'));
+export const getDataFiles = async (): Promise<DataFilesResponse> =>
+  checked(DataFilesResponseSchema, await api.GET('/data/files'));
 
 export const getDataPreview = async (sourceId: string, query: DataPreviewQuery = {}): Promise<DataPreview> =>
-  unwrap(await api.GET('/data/files/{sourceId}/preview', { params: { path: { sourceId }, query } }));
+  checked(
+    DataPreviewSchema,
+    await api.GET('/data/files/{sourceId}/preview', { params: { path: { sourceId }, query } }),
+  );
 
 export const putMapping = async (sourceId: string, body: PutMappingBody): Promise<DataFile> =>
-  unwrap(await api.PUT('/data/files/{sourceId}/mapping', { params: { path: { sourceId } }, body }));
+  checked(
+    DataFileSchema,
+    await api.PUT('/data/files/{sourceId}/mapping', { params: { path: { sourceId } }, body }),
+  );
 
 export const reimportDataFile = async (sourceId: string): Promise<ReimportResult> =>
-  unwrap(await api.POST('/data/files/{sourceId}/reimport', { params: { path: { sourceId } } }));
+  checked(
+    ReimportResultSchema,
+    await api.POST('/data/files/{sourceId}/reimport', { params: { path: { sourceId } } }),
+  );
 
 /**
  * OpenAPI describes this route with a multipart body, which `openapi-fetch` cannot type or
@@ -107,12 +127,13 @@ export const reimportDataFile = async (sourceId: string): Promise<ReimportResult
 export const uploadDataFile = (file: File): Promise<DataFile> => {
   const form = new FormData();
   form.append('file', file);
-  return apiUpload<DataFile>('/data/files', form).then(unwrap);
+  return apiUpload<unknown>('/data/files', form).then((res) => checked(DataFileSchema, res));
 };
 
 /* ── dashboards & telemetry ───────────────────────────────────────────────── */
 
-export const getDashboards = async (): Promise<Dashboard> => unwrap(await api.GET('/dashboards'));
+export const getDashboards = async (): Promise<Dashboard> =>
+  checked(DashboardSchema, await api.GET('/dashboards'));
 
 /** 204, so nothing is unwrapped — usage tiles are only real if the web actually reports. */
 export const postTelemetry = async (body: TelemetryBatch): Promise<void> => {

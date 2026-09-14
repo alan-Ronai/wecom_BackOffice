@@ -851,6 +851,9 @@ export const sessions: Session[] = [
     // Far enough out that "פג" is a state the fixture can still distinguish.
     expiresAt: '2099-01-01T00:00:00.000Z',
     revokedAt: null,
+    // The browser asking the question. `isCurrent` is what "מכשיר זה" reads, and what keeps
+    // "נתק את כל האחרים" from revoking the operator's own session.
+    isCurrent: true,
   },
   {
     id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2',

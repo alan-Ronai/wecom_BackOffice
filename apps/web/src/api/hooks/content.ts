@@ -2,9 +2,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Block, CrmField, Note, Script } from '@wecom/shared';
-import { api } from '../client.js';
+import { api, API_BASE } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap, unwrapMaybe } from '../unwrap.js';
+import { keepaliveJson, useUnloadFlush } from '../../lib/unloadFlush.js';
 import type { DraftEnvelope, UpsertBlockBody, UpsertFieldBody, UpsertScriptBody } from '../types.js';
 
 /* ── blocks ─────────────────────────────────────────────────────────────── */
@@ -245,20 +246,34 @@ export function useSaveDraft(id: string, delay = 600, isNew = false) {
 
   /**
    * Never drop buffered keystrokes. On unmount (leaving the editor by Escape, the topbar, or a
-   * route change) the pending payload is written out instead of being thrown away with the timer;
-   * while something is buffered a `beforeunload` handler also flushes on tab close/reload.
+   * route change) the pending payload is written out instead of being thrown away with the timer.
+   *
+   * The page-teardown path is separate and deliberately does not reuse `flush`: an ordinary
+   * `fetch` started during unload is routinely cancelled, and `beforeunload` does not fire at all
+   * on mobile Safari or into the bfcache — so the up-to-600 ms of typing sitting in the debounce
+   * when someone closes the tab was simply lost. `keepalive` hands the request to the browser to
+   * finish without the page. It is a `PUT`, so `sendBeacon` (POST-only) is not available here.
    */
-  useEffect(() => {
-    const onBeforeUnload = () => {
-      if (pending.current) void flush();
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload);
+  useUnloadFlush(() => {
+    const payload = pending.current;
+    if (!payload) return;
+    pending.current = null;
+    keepaliveJson(
+      'PUT',
+      isNew
+        ? `${API_BASE}/drafts/new/${encodeURIComponent(id)}`
+        : `${API_BASE}/documents/${encodeURIComponent(id)}/draft`,
+      { payload },
+    );
+  });
+
+  useEffect(
+    () => () => {
       if (timer.current) clearTimeout(timer.current);
       void flush();
-    };
-  }, [flush]);
+    },
+    [flush],
+  );
 
   return { save, flush, saving, lastSavedAt };
 }

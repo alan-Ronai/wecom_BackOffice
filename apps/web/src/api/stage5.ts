@@ -14,12 +14,22 @@
  * contract ever drifts from the schema that is supposed to produce it, this file stops compiling.
  * `src/api/stage4.ts` is built the same way.
  *
- * Five routes the screens need are not usable from the generated client yet — two are missing
- * from the contract and three are published with the wrong shape — and go through the small
- * `pending` bridge below, which names each one. They are the whole of the remaining backend ask.
+ * Every route below also goes through `checked()` (`src/api/stage45.ts`): the generated types are
+ * erased at build time and describe what the contract *says*, while `checked` is what notices when
+ * an answer disagrees with it.
+ *
+ * There is no longer a hand-typed bridge on this surface. It carried five routes and each has been
+ * retired for its own reason: `POST /connectors/test` and `POST /sync/links/{id}/sync` were
+ * published and correctly shaped all along (and going through the generated client is what lets
+ * the latter's declared 409 reach the UI as a status instead of a generic error), while the three
+ * single-connector routes were bridged because the contract answered them with a different shape
+ * from the list — a divergence that, because it was hand-typed, neither the compiler nor the tests
+ * could see, and which loaded the edit form blank and PATCHed the blank back. The backend has
+ * since converged all four routes onto the row, and `_ConnectorShapeIsOne` below is what keeps
+ * them converged.
  */
-import type { z } from 'zod';
-import type {
+import { z } from 'zod';
+import {
   AdminUserRowSchema,
   AdminUsersQuerySchema,
   AuditDiffRowSchema,
@@ -36,10 +46,12 @@ import type {
   SyncLinksQuerySchema,
   SyncQueueResponseSchema,
   SyncRunResultSchema,
+  paginated,
 } from '@wecom/shared';
 import { api, API_BASE } from './client.js';
-import { ApiError, unwrap } from './unwrap.js';
-import type { Paginated } from './types.js';
+import { checked } from './stage45.js';
+import { unwrap } from './unwrap.js';
+import type { Paginated, Res } from './types.js';
 
 /* ── types, all inferred from the schemas the routes validate with ────────── */
 
@@ -55,6 +67,31 @@ export type RoleMatrix = z.infer<typeof RoleMatrixSchema>;
 export type MatrixRole = RoleMatrix['roles'][number];
 export type ConnectorTypeInfo = z.infer<typeof ConnectorTypeInfoSchema>;
 export type ConnectorRow = z.infer<typeof ConnectorRowSchema>;
+
+/**
+ * One shape for all four connector routes, and a compile-time proof of it.
+ *
+ * This used to be two shapes. `openapi.json` published `config` + `links` + `conflicts` on the
+ * list and `configMasked` + `capabilities` on `GET|POST|PATCH /connectors/{id}`, while the client
+ * read `.config` off all four — so against a backend implementing the published contract, the edit
+ * form loaded blank and then PATCHed the blank back over a saved configuration. The backend wave
+ * has since converged the detail routes onto the row, which is the shape `ConnectorRowSchema` in
+ * `@wecom/shared` declares and the shape these screens were always written to.
+ *
+ * The assertion below is what keeps that settled. It is not decoration: it failed on the very
+ * merge that brought the contract change in, which is how this file came to be corrected rather
+ * than left describing a split that no longer exists.
+ */
+type _ConnectorShapeIsOne =
+  Res<'/connectors/{id}', 'get'> extends ConnectorRow
+    ? Res<'/connectors', 'post'> extends ConnectorRow
+      ? Res<'/connectors/{id}', 'patch'> extends ConnectorRow
+        ? true
+        : never
+      : never
+    : never;
+const _connectorShapeIsOne: _ConnectorShapeIsOne = true;
+void _connectorShapeIsOne;
 export type SyncLinkRow = z.infer<typeof SyncLinkRowSchema>;
 export type SyncLinkState = SyncLinkRow['state'];
 export type SyncLinksQuery = z.input<typeof SyncLinksQuerySchema>;
@@ -85,6 +122,25 @@ export interface ConnectorUpsert {
   enabled?: boolean;
 }
 
+/**
+ * Drops `schedule: null` from a write body, because the contract has no spelling for it.
+ *
+ * Every connector *response* declares `schedule` nullable, and the wizard offers "ללא תזמון", but
+ * `ConnectorCreateBodySchema` declares the write side `z.string().regex(…).optional()` — no null.
+ * So a real backend answers 400 to the one payload that means "stop running this on a timer",
+ * and omitting the key on a PATCH means "leave it as it is". There is no third option available
+ * to a client, so this function picks the one that fails safe rather than loudly: the schedule is
+ * left alone, and `ConnectorWizard` tells the operator that in so many words instead of letting
+ * them believe a cleared schedule was saved.
+ *
+ * **Backend ask**: make `schedule` nullable on `POST /connectors` and `PATCH /connectors/{id}`,
+ * as it already is on every connector response. Then this function and the wizard's hint both go.
+ */
+const writeBody = <T extends { schedule?: string | null }>({ schedule, ...rest }: T) => ({
+  ...rest,
+  ...(typeof schedule === 'string' ? { schedule } : {}),
+});
+
 /** `POST /connectors/:id/test` and the unsaved-connector dry run. */
 export interface ConnectorTestResult {
   ok: boolean;
@@ -92,89 +148,87 @@ export interface ConnectorTestResult {
   details?: Record<string, unknown>;
 }
 
-/* ── routes not in the published contract yet ─────────────────────────────── */
+/* ── response schemas the shared package does not declare ─────────────────── */
 
 /**
- * The five routes below are the only ones these screens call that the generated client cannot
- * type today. Everything else goes through `api`.
- *
- * Two are simply not in `docs/api/openapi.json`:
- *   - `POST /connectors/test` — the wizard's step-2 dry run, before the connector exists and has
- *     an id to test against;
- *   - `POST /sync/links/{id}/sync` — a queue row's "ייבא עכשיו" / "דחוף עכשיו".
- *
- * Three are published, but with the **wrong shape**, and that is worth naming because the
- * compiler is what found it: `GET /connectors` answers `ConnectorRowSchema` (with `config`,
- * `links` and `conflicts`, and `schedule` nullable) while `GET`/`POST`/`PATCH` on the single
- * connector still answer the older `ConnectorSchema` (`configMasked`, `capabilities`, no counts,
- * `schedule` non-null). One resource with two shapes depending on whether you list it or fetch
- * it. The screens are written to the row shape the list returns, which is also the shape the
- * stage-5 contract specifies, so routing these three through `api` would only have been possible
- * by casting the mismatch away — which is the thing this codebase does not do.
- *
- * The bridge raises the same typed `ApiError` as `unwrap`, so a 403 from one of these still
- * surfaces through `LoadError` like a 403 from a generated call. Each line disappears the moment
- * its route is published or corrected; nothing else changes.
+ * `@wecom/shared` declares the row and the type-info object but not the envelopes they arrive in,
+ * nor the connector-test result. Declaring them here costs four lines and buys `checked()` the
+ * same coverage on these routes as everywhere else.
  */
-async function pending<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown): Promise<T> {
-  const res = await globalThis.fetch(`${API_BASE}${path}`, {
-    method,
-    credentials: 'include',
-    ...(body === undefined
-      ? {}
-      : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
-  });
-  const payload: unknown = res.status === 204 ? undefined : await res.json().catch(() => undefined);
-  if (!res.ok) {
-    const e = (payload ?? {}) as { code?: string; message?: string; details?: unknown };
-    throw new ApiError(res.status, e.code ?? 'ERROR', e.message ?? 'שגיאה', e.details);
-  }
-  return payload as T;
-}
+const ConnectorsResponseSchema = z.object({ items: z.array(ConnectorRowSchema) });
+const ConnectorTypesResponseSchema = z.object({ items: z.array(ConnectorTypeInfoSchema) });
+const ConnectorTestResultSchema = z.object({
+  ok: z.boolean(),
+  message: z.string(),
+  details: z.record(z.unknown()).optional(),
+});
+const AdminUsersResponseSchema = paginated(AdminUserRowSchema);
 
 /* ── the routes ───────────────────────────────────────────────────────────── */
 
 export const stage5 = {
   adminUsers: async (query: AdminUsersQuery): Promise<Paginated<AdminUserRow>> =>
-    unwrap(await api.GET('/admin/users', { params: { query } })),
-  roleMatrix: async (): Promise<RoleMatrix> => unwrap(await api.GET('/admin/roles/matrix')),
+    checked(AdminUsersResponseSchema, await api.GET('/admin/users', { params: { query } })),
+  roleMatrix: async (): Promise<RoleMatrix> =>
+    checked(RoleMatrixSchema, await api.GET('/admin/roles/matrix')),
   auditEntry: async (id: string): Promise<AuditEntryDetail> =>
-    unwrap(await api.GET('/admin/audit/{id}', { params: { path: { id } } })),
-  identity: async (): Promise<IdentitySettings> => unwrap(await api.GET('/admin/identity')),
+    checked(AuditEntryDetailSchema, await api.GET('/admin/audit/{id}', { params: { path: { id } } })),
+  identity: async (): Promise<IdentitySettings> =>
+    checked(IdentitySettingsSchema, await api.GET('/admin/identity')),
   saveIdentity: async (body: IdentitySettingsPut): Promise<IdentitySettings> =>
-    unwrap(await api.PUT('/admin/identity', { body })),
+    checked(IdentitySettingsSchema, await api.PUT('/admin/identity', { body })),
   testIdentity: async (provider: IdentityProvider): Promise<IdentityTestResult> =>
-    unwrap(await api.POST('/admin/identity/test', { body: { provider } })),
+    checked(IdentityTestResultSchema, await api.POST('/admin/identity/test', { body: { provider } })),
 
   connectorTypes: async (): Promise<{ items: ConnectorTypeInfo[] }> =>
-    unwrap(await api.GET('/connectors/types')),
-  connectors: async (): Promise<{ items: ConnectorRow[] }> => unwrap(await api.GET('/connectors')),
-  // The three single-connector routes still answer the pre-stage-5 `ConnectorSchema` — see the
-  // `pending` comment above.
-  connector: (id: string) => pending<ConnectorRow>('GET', `/connectors/${encodeURIComponent(id)}`),
-  createConnector: (body: ConnectorUpsert) => pending<ConnectorRow>('POST', '/connectors', body),
-  updateConnector: (id: string, body: Partial<ConnectorUpsert>) =>
-    pending<ConnectorRow>('PATCH', `/connectors/${encodeURIComponent(id)}`, body),
+    checked(ConnectorTypesResponseSchema, await api.GET('/connectors/types')),
+  connectors: async (): Promise<{ items: ConnectorRow[] }> =>
+    checked(ConnectorsResponseSchema, await api.GET('/connectors')),
+
+  connector: async (id: string): Promise<ConnectorRow> =>
+    checked(ConnectorRowSchema, await api.GET('/connectors/{id}', { params: { path: { id } } })),
+  createConnector: async (body: ConnectorUpsert): Promise<ConnectorRow> =>
+    checked(ConnectorRowSchema, await api.POST('/connectors', { body: writeBody(body) })),
+  updateConnector: async (id: string, body: Partial<ConnectorUpsert>): Promise<ConnectorRow> =>
+    checked(
+      ConnectorRowSchema,
+      await api.PATCH('/connectors/{id}', { params: { path: { id } }, body: writeBody(body) }),
+    ),
   deleteConnector: async (id: string): Promise<void> => {
     unwrap(await api.DELETE('/connectors/{id}', { params: { path: { id } } }));
   },
   runConnector: async (id: string): Promise<SyncRunResult> =>
-    unwrap(await api.POST('/connectors/{id}/run', { params: { path: { id } } })),
+    checked(SyncRunResultSchema, await api.POST('/connectors/{id}/run', { params: { path: { id } } })),
   testConnector: async (id: string): Promise<ConnectorTestResult> =>
-    unwrap(await api.POST('/connectors/{id}/test', { params: { path: { id } } })),
+    checked(ConnectorTestResultSchema, await api.POST('/connectors/{id}/test', { params: { path: { id } } })),
   /** The wizard's step-2 check, before the connector exists and has an id to test against. */
-  testConnectorConfig: (body: { type: string; config: Record<string, unknown> }) =>
-    pending<ConnectorTestResult>('POST', '/connectors/test', body),
+  testConnectorConfig: async (body: {
+    type: string;
+    config: Record<string, unknown>;
+  }): Promise<ConnectorTestResult> =>
+    checked(ConnectorTestResultSchema, await api.POST('/connectors/test', { body })),
 
   syncLinks: async (query: SyncLinksQuery): Promise<SyncQueueResponse> =>
-    unwrap(await api.GET('/sync/links', { params: { query } })),
+    checked(SyncQueueResponseSchema, await api.GET('/sync/links', { params: { query } })),
   conflict: async (id: string): Promise<ConflictView> =>
-    unwrap(await api.GET('/sync/links/{id}/conflict', { params: { path: { id } } })),
+    checked(ConflictViewSchema, await api.GET('/sync/links/{id}/conflict', { params: { path: { id } } })),
   resolveConflict: async (id: string, body: ResolveConflictBody): Promise<SyncLinkRow> =>
-    unwrap(await api.POST('/sync/links/{id}/resolve', { params: { path: { id } }, body })),
-  /** Per-row "ייבא עכשיו" / "דחוף עכשיו" — one link, one direction. */
-  syncLink: (id: string, direction: 'import' | 'push') =>
-    pending<SyncRunResult>('POST', `/sync/links/${encodeURIComponent(id)}/sync`, { direction }),
+    checked(
+      SyncLinkRowSchema,
+      await api.POST('/sync/links/{id}/resolve', { params: { path: { id } }, body }),
+    ),
+  /**
+   * Per-row "ייבא עכשיו" / "דחוף עכשיו" — one link, one direction.
+   *
+   * The contract declares a 409 for "a sync is already running on this link". Going through the
+   * generated client means `unwrap` raises an `ApiError` that still carries `status`, so the queue
+   * can tell that apart from a generic failure — which the old hand-rolled bridge flattened.
+   */
+  syncLink: async (id: string, direction: 'import' | 'push'): Promise<SyncRunResult> =>
+    checked(
+      SyncRunResultSchema,
+      await api.POST('/sync/links/{id}/sync', { params: { path: { id } }, body: { direction } }),
+    ),
 };
 
 /* ── JSON-Schema → form fields ────────────────────────────────────────────── */

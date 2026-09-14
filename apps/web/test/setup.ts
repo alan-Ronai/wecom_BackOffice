@@ -15,20 +15,23 @@ import { __resetUiPrefsCache } from '../src/api/hooks/uiPrefs.js';
  * once several lanes' screens shared one article page those queries started finding two nodes and
  * throwing. Aligning the text queries with the accessibility tree keeps every assertion pointed at
  * what is actually on screen.
- */
-/**
- * `asyncUtilTimeout` is the budget `findBy*`/`waitFor` gets, and Testing Library's default
- * is 1000 ms. Every screen in this app is a `React.lazy` route behind a React Query fetch,
- * so the first assertion in a file waits for a dynamic `import()` (Vite has to transform the
- * route module and everything it pulls in) *and* an MSW round trip. That is comfortably under
- * a second for a warm worker and regularly over it for a cold one, which is why these specs
- * pass file-by-file and fail in the full suite — and why the failing set moved every run.
- * 5 s is still a real failure signal (`testTimeout` is 15 s and nothing here polls that long
- * on success); it just stops the cold-start cost from being reported as a missing element.
+ *
+ * `asyncUtilTimeout` is Testing Library's own budget for `waitFor` / `findBy*`, and it is
+ * independent of vitest's `testTimeout` (`vite.config.ts`). Its 1000 ms default is what a
+ * first-render `waitFor` races under the fully parallel run: before its first real node appears, a
+ * route does four to six msw round trips, and — since the heavy screens became `React.lazy` routes
+ * — a dynamic `import()` that Vite has to transform along with everything it pulls in. That is
+ * comfortably under a second on a warm worker and regularly over it on a cold one, which is why
+ * these specs passed file-by-file, failed in the full suite, and failed in a *different* set every
+ * run on the same commit.
+ *
+ * 5 s is still a real failure signal — `testTimeout` is 15 s and nothing here polls that long on
+ * success. It changes nothing about what the assertions mean: a genuinely broken query still
+ * fails, it just fails for its own reason instead of racing the scheduler.
  */
 configure({
-  defaultIgnore: 'script, style, [aria-hidden="true"], [aria-hidden="true"] *',
   asyncUtilTimeout: 5000,
+  defaultIgnore: 'script, style, [aria-hidden="true"], [aria-hidden="true"] *',
 });
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));

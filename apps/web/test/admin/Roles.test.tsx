@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { PERMISSIONS } from '@wecom/shared';
@@ -47,8 +47,10 @@ describe('admin · role matrix', () => {
 
     await userEvent.click(auditCell);
     await userEvent.click(screen.getByLabelText('docs.publish · lead'));
-    // Two cells, one role, one save — not two round trips and two audit entries.
-    const dirtySave = await screen.findByRole('button', { name: 'שמור (1 שינויים)' });
+    // The count is cells, not roles: "how many requests will this make" is not the question an
+    // operator is asking after five minutes of ticking. Still one save, though — two cells on one
+    // role are one round trip and one audit entry.
+    const dirtySave = await screen.findByRole('button', { name: 'שמור (2 שינויים)' });
     await userEvent.click(dirtySave);
 
     await waitFor(() => expect(patched).toHaveLength(1));
@@ -57,6 +59,43 @@ describe('admin · role matrix', () => {
     expect(perms).toContain('audit.read');
     expect(perms).not.toContain('docs.publish');
     expect(await screen.findByText('נשמרו 1 תפקידים')).toBeInTheDocument();
+  });
+
+  it('dims a permission a role only has because the role under it does (3c)', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/admin/roles' });
+
+    // `lead ⊃ agent`, and `agent` holds docs.read — so lead's docs.read is inherited, not chosen.
+    const leadRead = await screen.findByLabelText('docs.read · agent');
+    expect(leadRead.closest('td')).not.toHaveClass('inherited');
+    expect(screen.getByLabelText('docs.read · lead').closest('td')).toHaveClass('inherited');
+    expect(screen.getByLabelText('docs.read · lead')).toHaveAttribute('title', 'בירושה מתפקיד agent');
+
+    // docs.edit is lead's own — agent does not have it.
+    expect(screen.getByLabelText('docs.edit · lead').closest('td')).not.toHaveClass('inherited');
+    // The column header says what the role is built on.
+    expect(screen.getByText('כולל את lead')).toBeInTheDocument();
+    // A custom role is an ad-hoc set, not a rung, so it is never named as a base — even when its
+    // permissions happen to be a subset of a system role's.
+    expect(screen.queryByText('כולל את צוות חו"ל')).not.toBeInTheDocument();
+  });
+
+  it('says what changes before anything is written (3c)', async () => {
+    asAdmin();
+    renderWithProviders(<App />, { route: '/admin/roles' });
+
+    await screen.findByLabelText('audit.read · lead');
+    expect(screen.getByRole('button', { name: 'מה משתנה' })).toBeDisabled();
+    await userEvent.click(screen.getByLabelText('audit.read · lead'));
+    await userEvent.click(screen.getByLabelText('docs.publish · lead'));
+    await userEvent.click(screen.getByRole('button', { name: 'מה משתנה' }));
+
+    // By name: the onboarding tour is also a `role="dialog"` on a first visit.
+    const dialog = await screen.findByRole('dialog', { name: 'מה משתנה' });
+    // One line per cell, each saying which way it went and how many people it reaches.
+    expect(within(dialog).getByText('audit.read')).toBeInTheDocument();
+    expect(within(dialog).getByText('docs.publish')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('12 משתמשים')).toHaveLength(2);
   });
 
   it('offers delete for custom roles only, and names the blast radius', async () => {

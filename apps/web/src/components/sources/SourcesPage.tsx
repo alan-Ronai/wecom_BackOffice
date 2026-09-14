@@ -146,6 +146,8 @@ export function SourcesPage() {
       <div className="src-main">
         {sources.isError ? (
           <LoadError what="מסמכי מקור" error={sources.error} />
+        ) : sources.isPending ? (
+          <div className="route-loading">טוען…</div>
         ) : !current ? (
           <div className="empty">אין מסמכי מקור</div>
         ) : (

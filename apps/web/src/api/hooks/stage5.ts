@@ -69,11 +69,23 @@ const invalidateConnectors = (qc: ReturnType<typeof useQueryClient>) => {
   void qc.invalidateQueries({ queryKey: ['sync'] });
 };
 
+/**
+ * Create takes a whole `ConnectorUpsert`; edit takes whatever actually changed.
+ *
+ * The asymmetry is the point. `PATCH /connectors/{id}` accepts a partial body, and a connector's
+ * config is the one field where "send it all every time" is destructive rather than merely
+ * wasteful: the secrets in it never reach the browser, so anything the form can restate is by
+ * definition a masked placeholder or a value the server already has. The wizard therefore omits
+ * `config` when nothing in it changed, and this signature is what lets it.
+ */
+export type SaveConnectorArg =
+  { id: string; patch: Partial<ConnectorUpsert> } | { id?: undefined; create: ConnectorUpsert };
+
 export const useSaveConnector = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...body }: ConnectorUpsert & { id?: string }) =>
-      id ? stage5.updateConnector(id, body) : stage5.createConnector(body),
+    mutationFn: (arg: SaveConnectorArg) =>
+      arg.id !== undefined ? stage5.updateConnector(arg.id, arg.patch) : stage5.createConnector(arg.create),
     onSuccess: () => invalidateConnectors(qc),
   });
 };

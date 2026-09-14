@@ -916,6 +916,19 @@ button.bar-row:focus-visible { outline: 2px solid var(--red); outline-offset: 2p
 .perm-matrix th.dirty { color: var(--red-dark); }
 .perm-matrix .grouprow th { background: var(--surface-2); text-align: start; font-size: 11px; letter-spacing: .4px; }
 .perm-matrix td:first-child { min-width: 210px; }
+/*
+  Card 3c's dimmed inheritance: a permission the role also gets from the role it is built on is
+  not a free choice, and the grid should say so before the operator unticks it and wonders why
+  nothing changed. Opacity rather than a colour, so it reads as "less load-bearing" and not as a
+  second state to decode. `:focus-visible` restores full opacity — a dimmed control must still be
+  legible to the person operating it by keyboard.
+*/
+.perm-matrix td.inherited input { opacity: .45; }
+.perm-matrix td.inherited input:focus-visible, .perm-matrix td.inherited input:hover { opacity: 1; }
+.change-preview { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+.change-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.change-row .added { color: var(--ok); }
+.change-row .removed { color: var(--red-dark); }
 
 /* ── stage 5: detail drawer & diff rows ────────────────────────────────── */
 .drawer { position: fixed; inset-block: 0; inset-inline-end: 0; width: min(520px, 100%); background: var(--surface); border-inline-start: 1px solid var(--border); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; z-index: 900; }
@@ -955,6 +968,11 @@ button.bar-row:focus-visible { outline: 2px solid var(--red); outline-offset: 2p
 .merge-col { border: 1px solid var(--border); border-radius: var(--r); padding: 10px; font-size: 12.5px; line-height: 1.6; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .merge-col.base { background: var(--surface-2); color: var(--muted); }
 .merge-col.chosen { border-color: var(--ok); box-shadow: inset 0 0 0 1px var(--ok); }
+/* Card 4e's editable result: the answer, under the evidence. */
+.merge-result { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.merge-result label { display: flex; flex-direction: column; gap: 4px; }
+.merge-result textarea { width: 100%; font-size: 12.5px; line-height: 1.6; resize: vertical; }
+.merge-result-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 @media (max-width: 900px) { .merge-head { display: none; } .merge-cols { grid-template-columns: 1fr; } }
 /* ── QOL round (design/turn6-qol.dc.html) ──────────────────────────────── */
 .tcard .meta .card-del { margin-inline-start: auto; }
@@ -1004,6 +1022,7 @@ html[data-theme="dark"] .seg button.on { background: var(--surface-3); color: va
 .dl-row:hover { background: var(--surface-2); }
 .dl-row.cur { background: var(--red-soft); box-shadow: inset 3px 0 0 var(--red); }
 .dl-row.sel { background: var(--info-bg); }
+.table tr.sel > td { background: var(--info-bg); }
 .dl-row.partial .t > span:nth-child(2) { border-bottom: 1px dashed var(--warn); }
 .dl-row .t { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .dl-row .t > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

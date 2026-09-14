@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNotifications } from '../../api/hooks/collab.js';
+import { useFocusTrap } from '../ui/useFocusTrap.js';
 import { NotificationList } from './NotificationList.js';
 
 /**
@@ -12,6 +13,9 @@ import { NotificationList } from './NotificationList.js';
 export function NotificationBell({ onOpenFull }: { onOpenFull: () => void }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  // The panel is a `role="dialog"`, so it owes the keyboard what a dialog owes: `Tab` stays
+  // inside it, and closing it puts the caret back on the bell rather than wherever Tab stopped.
+  const panel = useFocusTrap<HTMLDivElement>(open);
   const list = useNotifications();
   const unread = list.data?.unread ?? 0;
 
@@ -47,7 +51,7 @@ export function NotificationBell({ onOpenFull }: { onOpenFull: () => void }) {
         {unread ? <span className="b">{unread > 99 ? '99+' : unread}</span> : null}
       </button>
       {open ? (
-        <div className="bell-panel" role="dialog" aria-label="מרכז התראות">
+        <div ref={panel} className="bell-panel" role="dialog" aria-modal="true" aria-label="מרכז התראות">
           <NotificationList onNavigate={() => setOpen(false)} />
           <button
             className="btn xs ghost"

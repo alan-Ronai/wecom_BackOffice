@@ -12,7 +12,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../msw/server.js';
 import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
-import { fx } from '../msw/fixtures.js';
+import { fx, D_BROWSING, T } from '../msw/fixtures.js';
 
 const B = '/api/v1';
 const side = async () => within(await screen.findByRole('complementary', { name: 'ניווט ראשי' }));
