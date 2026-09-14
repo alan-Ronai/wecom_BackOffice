@@ -98,6 +98,15 @@ export const PreferencesSchema = z.object({
   lastSeen: z.record(z.string()).optional(),
   /** The first-login tour has been completed or skipped. */
   tourDone: z.boolean().optional(),
+  /**
+   * W4: which pane the article page opens in — working view, source document, or both.
+   *
+   * Additive and *optional* (ADR 0001): preference rows written before wave 4 validate unchanged,
+   * and the object literals across the app that build a `Preferences` keep compiling. The
+   * effective default lives in `apps/web/src/lib/prefs.ts` (`DEFAULT_PREFERENCES.paneMode`), so
+   * read it as `preferences.paneMode ?? 'work'`.
+   */
+  paneMode: z.enum(['work', 'source', 'split']).optional(),
 });
 export type Preferences = z.infer<typeof PreferencesSchema>;
 

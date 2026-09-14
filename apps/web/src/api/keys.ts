@@ -46,6 +46,11 @@ export const keys = {
   topics: (world: string) => ['topics', world] as const,
   topic: (id: string) => ['topic', id] as const,
   tags: (q = '') => ['tags', q] as const,
+  /* wave 4 — source documents (W4) */
+  source: (id: string) => ['source', id] as const,
+  sourceVersions: (id: string) => ['sourceVersions', id] as const,
+  sourceVersion: (id: string, v: number) => ['sourceVersion', id, v] as const,
+  sourceDraft: (id: string) => ['sourceDraft', id] as const,
   admin: {
     users: (q: unknown = '*') => ['admin', 'users', q] as const,
     roles: ['admin', 'roles'] as const,

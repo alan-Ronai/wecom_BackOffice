@@ -14,4 +14,5 @@ export const DEFAULT_PREFERENCES: Preferences = {
   panel: true,
   callMode: true,
   sidebarExpanded: false,
+  paneMode: 'work',
 };

@@ -33,6 +33,7 @@ import { ConnectorWizard } from './components/admin/ConnectorWizard.js';
 import { SystemPage } from './components/admin/SystemPage.js';
 import { TopicPage } from './components/taxonomy/TopicPage.js';
 import { TaxonomyPage } from './components/admin/TaxonomyPage.js';
+import { SourceEditPage } from './components/source/SourceEditPage.js';
 
 /** Routes mirror the legacy hashes one-to-one (spec §5). */
 export const routeObjects: RouteObject[] = [
@@ -61,6 +62,7 @@ export const routeObjects: RouteObject[] = [
       { path: 'doc/:id/:step', element: <ArticlePage /> },
       { path: 'topic/:id', element: <TopicPage /> },
       { path: 'edit/:id', element: <EditorPage /> },
+      { path: 'edit/:id/source', element: <SourceEditPage /> },
       { path: 'history', element: <HistoryPage /> },
       { path: 'history/:id', element: <HistoryPage /> },
       { path: 'history/:id/:v', element: <HistoryPage /> },
