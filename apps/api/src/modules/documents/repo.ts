@@ -15,9 +15,12 @@ import {
   type Phase,
   type Step,
   type StructureBody,
+  UNPUBLISHED_STATUSES,
 } from '@wecom/shared';
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
+import { canReadUnpublished } from '../../lib/visibility.js';
+import type { ReqUser } from '../../lib/user.js';
 
 export type Q = pg.Pool | Tx;
 
@@ -105,7 +108,15 @@ export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Doc
   if (!ids.length) return new Map();
   const [docs, phases, steps, actions, outcomes, branches, options, worldRows, topicRows] = await Promise.all(
     [
-      q.query('select * from documents where id = any($1) and deleted_at is null', [ids]),
+      q.query(
+        `select d.*, ou.display_name owner_name, eu.display_name editor_name, au.display_name approver_name
+           from documents d
+           left join users ou on ou.id=d.owner_id
+           left join users eu on eu.id=d.editor_id
+           left join users au on au.id=d.approver_id
+          where d.id = any($1) and d.deleted_at is null`,
+        [ids],
+      ),
       q.query('select * from phases where document_id = any($1) order by position', [ids]),
       q.query('select * from steps where document_id = any($1) order by position', [ids]),
       q.query(
@@ -216,6 +227,15 @@ export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Doc
         ),
         topics: (topicsBy.get(row.id) ?? []).map((t) => String(t.topic_id)),
         bodyHtml: (row.body_html as string | null) ?? undefined,
+        ownerId: row.owner_id ?? null,
+        ownerName: row.owner_name ?? null,
+        editorId: row.editor_id ?? null,
+        editorName: row.editor_name ?? null,
+        approverId: row.approver_id ?? null,
+        approverName: row.approver_name ?? null,
+        publishedAt: iso(row.published_at),
+        sourceReviewNeeded: row.source_review_needed ?? false,
+        sourceReviewReason: row.source_review_reason ?? null,
       }),
     );
   }
@@ -224,6 +244,19 @@ export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Doc
 
 export const getDocument = async (q: Q, id: string): Promise<Document | null> =>
   (await assembleMany(q, [id])).get(id) ?? null;
+
+/** `getDocument` plus the reader rule: an unpublished document is a 404 for users without `docs.read_unpublished`. */
+export async function getVisibleDocument(
+  q: Q,
+  id: string,
+  user: Pick<ReqUser, 'permissions'>,
+): Promise<Document | null> {
+  const doc = await getDocument(q, id);
+  if (!doc) return null;
+  if (!canReadUnpublished(user) && (UNPUBLISHED_STATUSES as readonly string[]).includes(doc.status))
+    throw httpError(404, 'NOT_PUBLISHED', 'פריט זה אינו זמין כרגע');
+  return doc;
+}
 
 /**
  * `worldScopes` is the caller's `user_roles.world_scope` union (null = every world).
@@ -236,6 +269,7 @@ export async function listCards(
   query: ListDocumentsQuery,
   userId: string,
   worldScopes: readonly string[] | null = null,
+  readUnpublished = true,
 ): Promise<{ items: DocumentCard[]; total: number }> {
   const params: unknown[] = [userId];
   const p = (v: unknown) => {
@@ -243,6 +277,7 @@ export async function listCards(
     return '$' + params.length;
   };
   const where: string[] = ['d.deleted_at is null'];
+  if (!readUnpublished) where.push(`d.status in ('published','partial')`);
   if (worldScopes)
     where.push(
       `exists (select 1 from document_worlds sw where sw.document_id=d.id and sw.world_slug = any(${p([...worldScopes])}))`,
@@ -289,6 +324,7 @@ export async function listCards(
     left join (select document_id, array_agg(world_slug order by world_slug) ws from document_worlds group by 1) dw on dw.document_id=d.id
     left join (select document_id, array_agg(topic_id::text order by topic_id) ts from document_topics group by 1) dt on dt.document_id=d.id
     left join users au on au.id=d.updated_by
+    left join users ou on ou.id=d.owner_id
     where ${where.join(' and ')}`;
 
   const total = (await q.query(`select count(*)::int n ${base}`, params)).rows[0].n as number;
@@ -298,7 +334,7 @@ export async function listCards(
     `select d.*, coalesce(st.n,0)::int step_count, coalesce(st.shared,false) shared,
        coalesce(lo.n,0)::int links_out, coalesce(li.n,0)::int links_in, coalesce(v.total,0)::int views,
        coalesce(cf.names,'{}') crm, (p.user_id is not null) pinned, au.display_name author_name,
-       coalesce(dw.ws,'{}') ws, coalesce(dt.ts,'{}') ts
+       coalesce(dw.ws,'{}') ws, coalesce(dt.ts,'{}') ts, ou.display_name owner_name
      ${base} order by ${order} limit ${limit} offset ${offset}`,
     params,
   );
@@ -329,6 +365,13 @@ export async function listCards(
         tags: r.tags ?? [],
         worlds: orderWorlds(r.category, r.ws),
         topics: r.ts,
+        ownerId: r.owner_id ?? null,
+        ownerName: r.owner_name ?? null,
+        editorId: r.editor_id ?? null,
+        approverId: r.approver_id ?? null,
+        publishedAt: iso(r.published_at),
+        sourceReviewNeeded: r.source_review_needed ?? false,
+        sourceReviewReason: r.source_review_reason ?? null,
       }),
     ),
   };
@@ -400,6 +443,8 @@ const PATCH_COLUMNS: Record<string, string> = {
   docType: 'doc_type',
   tags: 'tags',
   bodyHtml: 'body_html',
+  ownerId: 'owner_id',
+  editorId: 'editor_id',
 };
 
 /**
@@ -421,6 +466,15 @@ export async function patchDocument(
   if (!cur.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
   if (ifMatch && ifMatch !== cur.rows[0].etag)
     throw httpError(412, 'ETAG_MISMATCH', 'המסמך השתנה בינתיים — טען מחדש ונסה שוב');
+  // A dangling owner/editor would silently render as "unassigned"; fail loudly instead.
+  for (const key of ['ownerId', 'editorId'] as const) {
+    const v = body[key];
+    if (v) {
+      const u = await tx.query('select 1 from users where id=$1 and active', [v]);
+      if (!u.rowCount)
+        throw httpError(400, 'UNKNOWN_USER', 'המשתמש שנבחר אינו קיים או אינו פעיל', { field: key });
+    }
+  }
   const sets: string[] = [];
   const params: unknown[] = [];
   for (const [key, col] of Object.entries(PATCH_COLUMNS)) {
@@ -650,6 +704,8 @@ export interface PublishOptions {
   suggestionId?: string | null;
   markPartial?: boolean;
   kind?: 'published' | 'restore' | 'system' | 'sync';
+  /** W4: the source-document version this working version was derived from. */
+  sourceVersion?: number | null;
 }
 
 /**
@@ -672,12 +728,15 @@ export async function publishDocument(
   const version = (cur.rows[0].current_version as number) + 1;
   const status = opts.markPartial || isPartial(before, blocks) ? 'partial' : 'published';
   await tx.query(
-    'update documents set current_version=$2, status=$3, updated_by=$4, updated_at=now(), etag=gen_random_uuid()::text where id=$1',
+    `update documents set current_version=$2, status=$3, updated_by=$4, updated_at=now(), etag=gen_random_uuid()::text,
+            approver_id=$4, published_at=now(),
+            source_review_needed=false, source_review_reason=null, source_review_at=null
+      where id=$1`,
     [id, version, status, opts.actorId],
   );
   const published = (await getDocument(tx, id))!;
   const inserted = await tx.query(
-    'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id, schema_version) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id',
+    'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id, schema_version, source_version) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id',
     [
       id,
       version,
@@ -687,6 +746,7 @@ export async function publishDocument(
       opts.kind ?? 'published',
       opts.suggestionId ?? null,
       CURRENT_DOCUMENT_SCHEMA_VERSION,
+      opts.sourceVersion ?? null,
     ],
   );
   return { doc: published, version, versionId: inserted.rows[0].id as string };
@@ -822,11 +882,15 @@ const mapLink = (r: Record<string, unknown>) => ({
   origin: r.origin as string,
 });
 
-export async function linksFor(q: Q, id: string) {
+export async function linksFor(q: Q, id: string, readUnpublished = true) {
+  const vis = readUnpublished
+    ? ''
+    : " and (l.to_document_id is null or exists (select 1 from documents t where t.id=l.to_document_id and t.status in ('published','partial')))";
+  const visIn = readUnpublished ? '' : " and d.status in ('published','partial')";
   const [out, incoming] = await Promise.all([
-    q.query('select * from document_links where from_document_id=$1', [id]),
+    q.query(`select l.* from document_links l where l.from_document_id=$1${vis}`, [id]),
     q.query(
-      'select l.* from document_links l join documents d on d.id=l.from_document_id where l.to_document_id=$1 and d.deleted_at is null',
+      `select l.* from document_links l join documents d on d.id=l.from_document_id where l.to_document_id=$1 and d.deleted_at is null${visIn}`,
       [id],
     ),
   ]);
@@ -834,7 +898,7 @@ export async function linksFor(q: Q, id: string) {
 }
 
 /** Explicit related + linked docs + docs sharing a block + docs sharing ≥2 CRM fields (max 6). */
-export async function relatedFor(q: Q, doc: Document) {
+export async function relatedFor(q: Q, doc: Document, readUnpublished = true) {
   const out = new Map<string, string>();
   for (const r of doc.related) out.set(r.documentId, r.why);
   for (const l of (
@@ -866,7 +930,9 @@ export async function relatedFor(q: Q, doc: Document) {
   const ids = [...out.keys()].slice(0, 6);
   if (!ids.length) return [];
   const docs = await q.query(
-    'select id, title, category from documents where id = any($1) and deleted_at is null',
+    `select id, title, category from documents where id = any($1) and deleted_at is null${
+      readUnpublished ? '' : " and status in ('published','partial')"
+    }`,
     [ids],
   );
   return docs.rows.map((d) => ({
@@ -875,6 +941,26 @@ export async function relatedFor(q: Q, doc: Document) {
     category: d.category as string,
     why: out.get(d.id)!,
   }));
+}
+
+export const hasPublishedVersion = async (q: Q, id: string): Promise<boolean> =>
+  ((await q.query(`select 1 from document_versions where document_id=$1 and kind='published' limit 1`, [id]))
+    .rowCount ?? 0) > 0;
+
+/** PRD §10: once-published items are never deleted; they move to 'invalid' or 'archived' (or back to 'draft' to be reworked). */
+export async function setStatus(
+  tx: Tx,
+  id: string,
+  status: 'invalid' | 'archived' | 'draft',
+  userId: string,
+): Promise<Document> {
+  const r = await tx.query(
+    `update documents set status=$2, updated_by=$3, updated_at=now(), etag=gen_random_uuid()::text
+      where id=$1 and deleted_at is null returning id`,
+    [id, status, userId],
+  );
+  if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
+  return (await getDocument(tx, id))!;
 }
 
 export async function restoreVersion(tx: Tx, id: string, v: number, userId: string) {

@@ -130,4 +130,20 @@ run('trash', () => {
     const { purgeExpired } = await import('../src/modules/trash/repo.js');
     expect(await purgeExpired(db.pool, 30)).toBe(1);
   });
+
+  it('purgeExpired never removes a document that has a published version', async () => {
+    const r = await db.pool.query(
+      `insert into documents(slug,title,category,wave,priority,status,current_version,deleted_at)
+       values ('once-pub','x','sim',1,'m','archived',1, now() - interval '400 days') returning id`,
+    );
+    const id = r.rows[0].id as string;
+    await db.pool.query(
+      `insert into document_versions(document_id, version, snapshot, kind, label) values ($1,1,'{}','published','v1')`,
+      [id],
+    );
+    const { purgeExpired } = await import('../src/modules/trash/repo.js');
+    await purgeExpired(db.pool, 30);
+    const still = await db.pool.query('select 1 from documents where id=$1', [id]);
+    expect(still.rowCount).toBe(1);
+  });
 });

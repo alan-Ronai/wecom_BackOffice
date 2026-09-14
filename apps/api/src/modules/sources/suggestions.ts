@@ -193,6 +193,24 @@ export class SuggestionService {
         [id, status, status === 'pending' ? null : actorId],
       );
       const s = row(r.rows[0]);
+      if (status === 'rejected') {
+        // Every suggestion of this revision decided and none accepted/applied → the editor judged the
+        // working view unaffected; the source-review flag on the targeted documents comes down.
+        const left = await client.query(
+          `select count(*) filter (where status='pending') pending,
+                  count(*) filter (where status in ('accepted','applied')) kept,
+                  array_agg(distinct target_document_id) filter (where target_document_id is not null) docs
+             from suggestions where source_revision_id=$1`,
+          [cur.sourceRevisionId],
+        );
+        const row0 = left.rows[0] as { pending: string; kept: string; docs: string[] | null };
+        if (Number(row0.pending) === 0 && Number(row0.kept) === 0)
+          for (const d of row0.docs ?? [])
+            await client.query(
+              `update documents set source_review_needed=false, source_review_reason=null, source_review_at=null where id=$1`,
+              [d],
+            );
+      }
       await this.events.publish(
         client,
         makeEvent('suggestion.decided', { suggestionId: id, status, actorId }),

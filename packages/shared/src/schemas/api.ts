@@ -74,7 +74,11 @@ export const PatchDocumentBodySchema = DocumentSchema.pick({
   sourceRef: true,
 })
   .merge(TaxonomyWriteFields)
-  .partial();
+  .partial()
+  .extend({
+    ownerId: IdSchema.nullable().optional(), // W2
+    editorId: IdSchema.nullable().optional(), // W2
+  });
 export const StructureBodySchema = z.object({
   phases: z.array(PhaseSchema).min(1),
   related: DocumentSchema.shape.related.optional(),

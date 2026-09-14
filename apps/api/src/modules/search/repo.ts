@@ -60,8 +60,11 @@ export async function search(
   query: SearchQuery,
   model: ModelClient | null = null,
   worldScopes: readonly string[] | null = null,
+  readUnpublished = true,
 ): Promise<SearchResponse> {
   const started = Date.now();
+  /** W2 visibility: a read-only role never sees unpublished documents (or their steps). */
+  const visTerm = readUnpublished ? '' : " and d.status in ('published','partial')";
   const text = query.q.trim();
   const requested = query.types
     ? new Set(query.types.split(',').map((t) => t.trim()) as SearchGroupType[])
@@ -127,7 +130,7 @@ export async function search(
               (select a.text from step_actions a where a.step_id=s.id order by a.position limit 1) first_action
        from steps s join documents d on d.id=s.document_id join phases p on p.id=s.phase_id
        left join blocks b on b.id=s.block_id
-       where d.deleted_at is null and (${cond})${stepScope}${stepTax}
+       where d.deleted_at is null and (${cond})${stepScope}${stepTax}${visTerm}
        order by d.title, s.position limit $${params.length}`,
       params,
     );
@@ -178,7 +181,7 @@ export async function search(
     const r = await q.query(
       `select d.id, d.title, d.description, d.category, d.current_version,
               ${rankExpr} + similarity(d.title, $1) score
-       from documents d where d.deleted_at is null and (${cond})${docScope}${docTax}
+       from documents d where d.deleted_at is null and (${cond})${docScope}${docTax}${visTerm}
        order by score desc, d.title limit $${params.length}`,
       params,
     );
@@ -213,7 +216,7 @@ export async function search(
     params.push(limit);
     const r = await q.query(
       `select d.id, d.title, d.category, d.tags from documents d
-        where d.deleted_at is null and d.tags && $1::text[]${scope}${tax} order by d.title limit $${params.length}`,
+        where d.deleted_at is null and d.tags && $1::text[]${scope}${tax}${visTerm} order by d.title limit $${params.length}`,
       params,
     );
     for (const x of r.rows) {
@@ -296,7 +299,7 @@ export async function search(
     params.push(limit);
     const r = await q.query(
       `select d.id, d.title, coalesce(d.body_html,'') body from documents d
-        where d.deleted_at is null and d.doc_type = 'T' and d.kind = 'text' and (${cond})${scope} order by d.title limit $${params.length}`,
+        where d.deleted_at is null and d.doc_type = 'T' and d.kind = 'text' and (${cond})${scope}${visTerm} order by d.title limit $${params.length}`,
       params,
     );
     for (const x of r.rows) {
