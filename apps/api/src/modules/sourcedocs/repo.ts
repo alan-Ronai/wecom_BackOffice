@@ -87,8 +87,7 @@ export async function saveSourceDocument(
          on conflict (document_id) do nothing returning id`,
         [documentId, html, text, hash, version, input.authorId],
       );
-  if (!up.rowCount)
-    throw httpError(412, 'ETAG_MISMATCH', 'מסמך המקור נוצר בינתיים — טען מחדש ונסה שוב');
+  if (!up.rowCount) throw httpError(412, 'ETAG_MISMATCH', 'מסמך המקור נוצר בינתיים — טען מחדש ונסה שוב');
   await tx.query(
     `insert into source_document_versions(source_document_id, version, html, author_id, label, source_revision_id) values ($1,$2,$3,$4,$5,$6)`,
     [up.rows[0].id, version, html, input.authorId, input.label ?? '', input.sourceRevisionId ?? null],

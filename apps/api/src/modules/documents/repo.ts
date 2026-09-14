@@ -627,11 +627,7 @@ export async function recomputeDerived(tx: Tx, doc: Document): Promise<void> {
  * searchable at all: `GET /documents?q=`, the `documents` search group and the semantic re-rank
  * matched its title and tags and nothing else.
  */
-export async function updateSearchText(
-  tx: Tx,
-  doc: Document,
-  blocks?: Map<string, Block>,
-): Promise<void> {
+export async function updateSearchText(tx: Tx, doc: Document, blocks?: Map<string, Block>): Promise<void> {
   const b = blocks ?? (await loadBlocksMap(tx));
   const structure = doc.phases
     .flatMap((p) => p.steps.map((s) => stepText(s, s.blockId ? b.get(s.blockId) : null)))
@@ -796,9 +792,8 @@ export async function publishDocument(
   const published = (await getDocument(tx, id))!;
   const sourceVersion =
     opts.sourceVersion ??
-    ((
-      await tx.query(`select current_version from source_documents where document_id=$1`, [id])
-    ).rows[0]?.current_version as number | undefined) ??
+    ((await tx.query(`select current_version from source_documents where document_id=$1`, [id])).rows[0]
+      ?.current_version as number | undefined) ??
     null;
   const inserted = await tx.query(
     'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id, schema_version, source_version) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id',

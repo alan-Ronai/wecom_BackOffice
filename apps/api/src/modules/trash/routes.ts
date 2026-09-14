@@ -129,8 +129,7 @@ export default async function routes(app: FastifyInstance) {
         let purged = 0;
         // A once-published item skips rather than aborting the whole empty; the operator is
         // told how many stayed behind instead of the request 409ing on the first one.
-        for (const i of items)
-          if (await repo.purge(tx, i.type, i.id, { skipOncePublished: true })) purged++;
+        for (const i of items) if (await repo.purge(tx, i.type, i.id, { skipOncePublished: true })) purged++;
         const skipped = items.length - purged;
         await audit(tx, {
           actorId: user.id,

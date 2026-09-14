@@ -143,10 +143,7 @@ describe('push', () => {
  * image-free HTML back with `updatePost`, deleting the images from the customer's post too.
  */
 describe('absorbMedia (pull-side rewrite)', () => {
-  const png = Buffer.from(
-    '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489',
-    'hex',
-  );
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489', 'hex');
   const A = '22222222-2222-4222-8222-222222222222';
   const doc = () => ({
     document: { ...(JSON.parse(JSON.stringify(docFixture)) as Document), title: 'עם תמונה' },
@@ -204,11 +201,9 @@ describe('absorbMedia (pull-side rewrite)', () => {
 
   it('refuses a remote image outside the host allowlist', async () => {
     const c = new WordPressConnector(fetch, { hostAllowlist: ['127.0.0.1'] });
-    const absorbed = await c.absorbMedia(
-      cfg(),
-      '<p><img src="http://evil.example/x.png"></p>',
-      async () => ({ src: '/api/v1/assets/x' }),
-    );
+    const absorbed = await c.absorbMedia(cfg(), '<p><img src="http://evil.example/x.png"></p>', async () => ({
+      src: '/api/v1/assets/x',
+    }));
     expect(absorbed.dropped).toHaveLength(1);
     expect(absorbed.dropped[0].error).toMatch(/host not allowed/);
   });

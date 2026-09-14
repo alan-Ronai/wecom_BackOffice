@@ -123,7 +123,10 @@ export async function restore(tx: Tx, type: TrashType, id: string, userId: strin
     [id],
   );
   if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'הפריט לא נמצא בסל המיחזור');
-  if (type === 'document') {
+  // A-M11: `script` maps onto `documents` in TABLE above, so it needs the same bookkeeping —
+  // restoring through the legacy `/trash/script/:id` link used to skip the version row and
+  // `recomputeDerived` entirely.
+  if (type === 'document' || type === 'script') {
     const doc = await getDocument(tx, id);
     if (doc) {
       // Version number unchanged: restoring is not a new edition, only a bookkeeping entry.

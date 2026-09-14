@@ -148,11 +148,7 @@ export default function feedbackRoutes(deps: () => AlertDeps) {
       },
       async (req) => {
         const user = requireUser(req);
-        const d = await repo.getFeedbackDetail(
-          app.db,
-          (req.params as { id: string }).id,
-          user.worldScopes,
-        );
+        const d = await repo.getFeedbackDetail(app.db, (req.params as { id: string }).id, user.worldScopes);
         if (!d) throw notFound('המשוב');
         return d;
       },

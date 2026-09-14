@@ -311,7 +311,7 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
          values ($1,$2,$3,'','ops',3,'m','text','published','T',$4,$5,1,$6,$6) on conflict (id) do nothing returning id`,
         [
           s.id,
-          'script-' + s.id.replace(/-/g, '').slice(0, 8),
+          'script-' + s.id.replace(/-/g, '').slice(0, 12),
           s.title,
           s.tags,
           textToHtml(s.text),
@@ -322,8 +322,11 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
       counts.scripts++;
       await membership(tx, s.id, 'ops', null);
       const snapshot = await getDocument(tx, s.id);
+      // A-M7: `kind: 'system'`, the same thing 0030 writes for a folded script (spec §2.1).
+      // With `'published'` here a seeded script was protected by the once-published guard and a
+      // migrated one was not — dev and production behaving differently on the same action.
       await tx.query(
-        `insert into document_versions(document_id, version, snapshot, label, kind, created_at) values ($1,1,$2,'ייבוא מהספרייה הסטטית','published',$3) on conflict do nothing`,
+        `insert into document_versions(document_id, version, snapshot, label, kind, created_at) values ($1,1,$2,'ייבוא מהספרייה הסטטית','system',$3) on conflict do nothing`,
         [s.id, JSON.stringify(snapshot), s.updatedAt],
       );
       for (const documentId of s._usedIn)

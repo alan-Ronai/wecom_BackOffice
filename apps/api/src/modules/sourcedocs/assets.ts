@@ -81,8 +81,7 @@ export async function getAsset(
 }
 
 /** The `src` the sanitizer keeps, as a capture. A strict UUID, so the `::uuid` cast is safe. */
-const ASSET_REF_RE =
-  '/api/v1/assets/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
+const ASSET_REF_RE = '/api/v1/assets/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
 const refs = (table: string, col: string) =>
   `select distinct (regexp_matches(coalesce(${col}, ''), '${ASSET_REF_RE}', 'g'))[1]::uuid id from ${table}`;
 

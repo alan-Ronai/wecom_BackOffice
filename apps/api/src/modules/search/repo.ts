@@ -279,10 +279,14 @@ export async function search(
     const params: unknown[] = [];
     const cond = anyWord(['d.title', "coalesce(d.body_html,'')"], ws, params);
     const scope = scopeTerm(params);
+    // A-M2: the facets apply here too. Scripts are type-T documents since 0030, so they carry
+    // worlds, topics and tags like every other document — `?world=`/`?topic=`/`?tag=` used to
+    // narrow every group except this one, and `?docType=M` still returned script hits.
+    const tax = taxTerm(params);
     params.push(limit);
     const r = await q.query(
       `select d.id, d.title, coalesce(d.body_html,'') body from documents d
-        where d.deleted_at is null and d.doc_type = 'T' and d.kind = 'text' and (${cond})${scope}${visTerm} order by d.title limit $${params.length}`,
+        where d.deleted_at is null and d.doc_type = 'T' and d.kind = 'text' and (${cond})${scope}${visTerm}${tax} order by d.title limit $${params.length}`,
       params,
     );
     for (const x of r.rows) {

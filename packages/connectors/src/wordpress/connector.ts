@@ -173,11 +173,7 @@ export class WordPressConnector implements Connector<WpConfig> {
       }
       const a = await resolve(id);
       if (!a) continue;
-      const m = await client.uploadMedia(
-        a.bytes,
-        a.mime,
-        `${id}.${WordPressConnector.EXT[a.mime] ?? 'jpg'}`,
-      );
+      const m = await client.uploadMedia(a.bytes, a.mime, `${id}.${WordPressConnector.EXT[a.mime] ?? 'jpg'}`);
       uploaded.set(id, m.source_url);
       await media?.put(id, String(m.id), m.source_url);
     }
@@ -221,8 +217,7 @@ export class WordPressConnector implements Connector<WpConfig> {
         const res = await this.fetchImpl(url, { headers });
         if (!res.ok) throw new WpError(res.status, `WordPress GET media → ${res.status}`);
         const mime = (res.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
-        if (!WordPressConnector.EXT[mime])
-          throw new Error(`unsupported media type: ${mime || 'unknown'}`);
+        if (!WordPressConnector.EXT[mime]) throw new Error(`unsupported media type: ${mime || 'unknown'}`);
         const bytes = new Uint8Array(await res.arrayBuffer());
         rewritten.set(url, (await sink(bytes, mime, url)).src);
       } catch (e) {

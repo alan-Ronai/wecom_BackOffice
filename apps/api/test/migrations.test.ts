@@ -253,8 +253,8 @@ run('migrations', () => {
       `insert into documents(slug, title, description, category, wave, priority)
        values ('w6-stop','חוב של לקוח','', 'tech', 1, 'm')`,
     );
-    const vec = (await pool.query(`select search_vector::text v from documents where slug='w6-stop'`))
-      .rows[0].v as string;
+    const vec = (await pool.query(`select search_vector::text v from documents where slug='w6-stop'`)).rows[0]
+      .v as string;
     expect(vec).toMatch(/'חוב':/);
     expect(vec).toMatch(/'לקוח':/);
     expect(vec).not.toMatch(/'של':/); // 0027's ts_delete(…, kb_stopwords()) is still in force

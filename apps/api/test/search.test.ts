@@ -228,7 +228,7 @@ run('search', () => {
      */
     const q = 'select user_id, q, filters, results from search_log where q=$1';
     let rows = await db.pool.query(q, ['אין-כזה-מונח']);
-    for (const deadline = Date.now() + 5000; !rows.rowCount && Date.now() < deadline; ) {
+    for (const deadline = Date.now() + 5000; !rows.rowCount && Date.now() < deadline;) {
       await new Promise((res) => setTimeout(res, 10));
       rows = await db.pool.query(q, ['אין-כזה-מונח']);
     }

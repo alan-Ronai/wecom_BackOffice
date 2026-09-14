@@ -46,10 +46,9 @@ run('feedback', () => {
     // and the B-I1 scoping case below is about scope rather than about the fake.
     setTaxonomy(app, {
       worldsOf: async (id: string) => {
-        const r = await db.pool.query<{ category: string }>(
-          'select category from documents where id=$1',
-          [id],
-        );
+        const r = await db.pool.query<{ category: string }>('select category from documents where id=$1', [
+          id,
+        ]);
         return [...new Set([r.rows[0]?.category ?? 'tech', 'tech', 'ops'])];
       },
       usersWithPermissionInWorld: async () => [],
@@ -424,9 +423,9 @@ run('feedback', () => {
       .json()
       .items.filter((x: { documentTitle: string }) => x.documentTitle === 'סודי לתפעול');
     expect(opsRows).toEqual([]);
-    expect(
-      Object.values(queue.json().counts as Record<string, number>).reduce((a, b) => a + b, 0),
-    ).toBe(queue.json().total);
+    expect(Object.values(queue.json().counts as Record<string, number>).reduce((a, b) => a + b, 0)).toBe(
+      queue.json().total,
+    );
 
     // 404, not 403: the queue and the drawer must not disagree about whether a report exists.
     for (const [method, url, payload] of [

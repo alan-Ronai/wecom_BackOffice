@@ -86,8 +86,7 @@ const ENTITIES: Record<string, string> = {
 const decodeText = (s: string) => s.replace(/&(?:amp|lt|gt|quot|nbsp);/g, (e) => ENTITIES[e]!);
 
 function render(node: Node): string {
-  if (node.nodeType === NodeType.TEXT_NODE)
-    return escText(decodeText((node as HTMLElement).rawText));
+  if (node.nodeType === NodeType.TEXT_NODE) return escText(decodeText((node as HTMLElement).rawText));
   if (node.nodeType !== NodeType.ELEMENT_NODE) return '';
   const el = node as HTMLElement;
   const tag = el.tagName?.toLowerCase();

@@ -88,7 +88,11 @@ function setup(link: Partial<SyncLinkRow>, remoteHash: string, localVersion: num
     upsertLink: vi.fn(async (l) => ({ ...linkRow, ...l, state: l.state })),
     setLinkState: vi.fn(),
     setLinkMediaErrors: vi.fn(),
-    mediaCache: vi.fn(() => ({ get: async () => null, put: async () => undefined, forget: async () => undefined })),
+    mediaCache: vi.fn(() => ({
+      get: async () => null,
+      put: async () => undefined,
+      forget: async () => undefined,
+    })),
     setRun: vi.fn(),
   } as unknown as ConnectorsRepo;
   const revisions = { ingest: vi.fn(async () => ({ revisionId: 'r1', changed: true })) };

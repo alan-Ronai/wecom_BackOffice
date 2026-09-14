@@ -46,11 +46,7 @@ export interface MediaCache {
  * image and answers the `/api/v1/assets/<id>` src it is now served under. Deduping is the
  * sink's job (sha256), which is what makes "downloaded once" true across syncs.
  */
-export type MediaSink = (
-  bytes: Uint8Array,
-  mime: string,
-  remoteUrl: string,
-) => Promise<{ src: string }>;
+export type MediaSink = (bytes: Uint8Array, mime: string, remoteUrl: string) => Promise<{ src: string }>;
 
 /** What `absorbMedia` did: the rewritten HTML, and the remote images it could not keep. */
 export interface AbsorbedMedia {

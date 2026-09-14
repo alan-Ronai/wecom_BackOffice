@@ -62,9 +62,7 @@ describe('sanitizeHtml', () => {
     expect(sanitizeHtml('<a href="https://wecom.co.il/x">קישור</a>')).toBe(
       '<a href="https://wecom.co.il/x" rel="noopener noreferrer">קישור</a>',
     );
-    expect(sanitizeHtml('<a href="javascript:alert(1)">x</a>')).toBe(
-      '<a rel="noopener noreferrer">x</a>',
-    );
+    expect(sanitizeHtml('<a href="javascript:alert(1)">x</a>')).toBe('<a rel="noopener noreferrer">x</a>');
   });
   it('keeps dir on span and bdi, drops everything else', () => {
     expect(sanitizeHtml('<span dir="ltr" class="c" id="i">abc</span><bdi dir="ltr">x</bdi>')).toBe(

@@ -2,7 +2,7 @@ import { sanitizeHtml, type Script, type UpsertScriptBody } from '@wecom/shared'
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
 import { visibleWhere } from '../../lib/visibility.js';
-import { hasPublishedVersion, iso, type Q } from '../documents/repo.js';
+import { getDocument, hasPublishedVersion, iso, type Q } from '../documents/repo.js';
 import { htmlToText, textToHtml } from './html.js';
 
 /** Scripts are `documents` rows with doc_type 'T' / kind 'text' since 0030; these routes are a deprecated adapter. */
@@ -40,9 +40,7 @@ export async function listScripts(
 ): Promise<(Script & { usedIn: { documentId: string; title: string }[] })[]> {
   const scopes = vis.worldScopes ? [...vis.worldScopes] : null;
   const [s, refs] = await Promise.all([
-    q.query(`select d.* from documents d where ${T} and ${scopeTerm(vis, '$1')} order by d.title`, [
-      scopes,
-    ]),
+    q.query(`select d.* from documents d where ${T} and ${scopeTerm(vis, '$1')} order by d.title`, [scopes]),
     q.query(
       `select l.to_document_id script_id, x.id, x.title from document_links l
          join documents x on x.id = l.from_document_id join documents d on d.id = l.to_document_id
@@ -68,14 +66,27 @@ export async function getScript(q: Q, id: string, vis: ScriptVisibility = ALL): 
 }
 
 export async function createScript(tx: Tx, body: UpsertScriptBody, userId: string): Promise<Script> {
+  // A-M10: 12 hex characters, not 8. `documents.slug` is unique and this path has none of
+  // `insertDocument`'s retry, so 32 bits of randomness was a 500 waiting to happen.
   const r = await tx.query(
     `insert into documents(slug, title, description, category, wave, priority, kind, status, doc_type, tags, body_html, current_version, created_by, updated_by)
-     values ('script-' || left(replace(gen_random_uuid()::text, '-', ''), 8), $1, '', 'ops', 3, 'm', 'text', 'published', 'T', $2, $3, 1, $4, $4) returning *`,
+     values ('script-' || left(replace(gen_random_uuid()::text, '-', ''), 12), $1, '', 'ops', 3, 'm', 'text', 'published', 'T', $2, $3, 1, $4, $4) returning *`,
     [body.title, body.tags, sanitizeHtml(textToHtml(body.text)), userId],
   );
   await tx.query(
     `insert into document_worlds(document_id, world_slug) values ($1, 'ops') on conflict do nothing`,
     [r.rows[0].id],
+  );
+  /**
+   * A-M8: the insert says `status='published', current_version=1`, so without a version row
+   * `GET /documents/:id/versions` was empty and `/diff` 404'd for a document the UI shows as
+   * published. `kind: 'system'`, matching what 0030 writes for a folded script and what the
+   * seed writes (A-M7), so the once-published guard treats all three the same way.
+   */
+  await tx.query(
+    `insert into document_versions(document_id, version, snapshot, author_id, label, kind)
+     values ($1, 1, $2, $3, 'נוצר במסך התסריטים', 'system') on conflict (document_id, version) do nothing`,
+    [r.rows[0].id, JSON.stringify(await getDocument(tx, r.rows[0].id as string)), userId],
   );
   return toScript(r.rows[0]);
 }

@@ -184,9 +184,8 @@ run('category scope: an out-of-scope document leaks through no route', () => {
       headers: auth(admin),
       payload: { html: `<p>${SECRET}</p>`, label: 'מקור' },
     });
-    billingSource = (
-      await db.pool.query('select source_id from documents where id=$1', [billingDoc])
-    ).rows[0].source_id as string;
+    billingSource = (await db.pool.query('select source_id from documents where id=$1', [billingDoc])).rows[0]
+      .source_id as string;
     billingRevision = (
       await db.pool.query(
         'select id from source_revisions where source_id=$1 order by imported_at desc limit 1',
@@ -473,8 +472,8 @@ run('category scope: an out-of-scope document leaks through no route', () => {
       headers: auth(admin),
       payload: { html: `<p>${DRAFT}</p>`, label: 'מקור טיוטה' },
     });
-    const draftSource = (await db.pool.query('select source_id from documents where id=$1', [draft]))
-      .rows[0].source_id as string;
+    const draftSource = (await db.pool.query('select source_id from documents where id=$1', [draft])).rows[0]
+      .source_id as string;
     const draftRevision = (
       await db.pool.query(
         'select id from source_revisions where source_id=$1 order by imported_at desc limit 1',

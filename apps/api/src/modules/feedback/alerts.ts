@@ -2,7 +2,6 @@ import type pg from 'pg';
 import type { FastifyBaseLogger } from 'fastify';
 import { FEEDBACK_KIND_LABELS, type FeedbackRow, type Notifier, type TaxonomyResolver } from '@wecom/shared';
 import { hasColumn } from './repo.js';
-import { leadIds } from '../collab/repo.js';
 
 export interface AlertDeps {
   db: pg.Pool;

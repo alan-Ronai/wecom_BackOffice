@@ -155,7 +155,7 @@ exports.up = (pgm) => {
   // 9. scripts → type-T documents; script_refs → document_links
   pgm.sql(`insert into documents(id, slug, title, description, category, wave, priority, kind, status, doc_type, tags, body_html,
                                  current_version, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by)
-    select s.id, 'script-' || left(replace(s.id::text, '-', ''), 8), s.title, '',
+    select s.id, 'script-' || left(replace(s.id::text, '-', ''), 12), s.title, '',
            coalesce((select d.category from script_refs r join documents d on d.id = r.document_id
                       where r.script_id = s.id group by d.category order by count(*) desc, d.category limit 1), 'ops'),
            3, 'm', 'text', 'published', 'T', s.tags,
