@@ -703,3 +703,37 @@ export type ParityConnector = z.infer<typeof ParityConnectorSchema>;
 export type ParityResponse = z.infer<typeof ParityResponseSchema>;
 export type ParityUnlinkedDocument = z.infer<typeof ParityUnlinkedDocumentSchema>;
 export type ParityUnlinkedRemote = z.infer<typeof ParityUnlinkedRemoteSchema>;
+
+// ---------------------------------------------------------------------------
+// Pilot fix E-1 — `GET /documents/:id/sync-state` (docs.read, scope: document).
+// One row per sync link that points at the document (a document may be linked
+// from several connectors). `flagReason` is the Hebrew text the source-review
+// flag keeps while a link is `conflict` / `pending_push`; null when nothing
+// blocks. `overall` collapses the links for badges: 'unlinked' when `links` is
+// empty, else the "worst" state in the order conflict > pending_push >
+// pending_import > synced.
+// ---------------------------------------------------------------------------
+export const DocumentSyncLinkStateSchema = z.object({
+  linkId: IdSchema,
+  connectorId: IdSchema,
+  connectorName: z.string(),
+  connectorType: z.string(),
+  externalId: z.string(),
+  remoteUrl: z.string().nullable(),
+  state: SyncLinkStateSchema,
+  localChanged: z.boolean(),
+  remoteChanged: z.boolean(),
+  currentLocalVersion: z.number().int(),
+  baseLocalVersion: z.number().int().nullable(),
+  lastSyncedAt: IsoDateSchema.nullable(),
+  lastError: z.string().nullable(),
+  lastAttemptAt: IsoDateSchema.nullable(),
+});
+export const DocumentSyncStateSchema = z.object({
+  documentId: IdSchema,
+  overall: z.enum(['unlinked', 'synced', 'pending_import', 'pending_push', 'conflict']),
+  flagReason: z.string().nullable(),
+  links: z.array(DocumentSyncLinkStateSchema),
+});
+export type DocumentSyncLinkState = z.infer<typeof DocumentSyncLinkStateSchema>;
+export type DocumentSyncState = z.infer<typeof DocumentSyncStateSchema>;
