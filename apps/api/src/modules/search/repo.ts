@@ -22,6 +22,21 @@ const ALL_TYPES = new Set(GROUP_ORDER);
 
 const words = (q: string) => q.trim().split(/\s+/).filter(Boolean);
 
+/**
+ * Builds a `to_tsquery('simple', …)`-ready string that AND-joins every word except the
+ * last, which gets a `:*` prefix match — so the command palette (which calls this same
+ * `search()` on every keystroke) ranks "רענ" as a hit for "ריענון" instead of only
+ * matching once the whole word has been typed. Falls back to `''` (caller then falls
+ * back to `plainto_tsquery`) when every word is made of only tsquery-syntax characters.
+ */
+const TSQUERY_UNSAFE = /[&|!():*'"\\]/g;
+const toPrefixTsQuery = (ws: string[]): string =>
+  ws
+    .map((w) => w.replace(TSQUERY_UNSAFE, ''))
+    .filter(Boolean)
+    .map((w, i, arr) => (i === arr.length - 1 ? `${w}:*` : w))
+    .join(' & ');
+
 const wordClause = (cols: string[], w: string, params: unknown[]): string => {
   params.push(w);
   const i = '$' + params.length;
@@ -122,10 +137,19 @@ export async function search(
     const params: unknown[] = [text];
     const cond = allWords(['d.title', "coalesce(d.description,'')", "coalesce(d.code,'')"], ws, params);
     const docScope = scopeTerm(params);
+    // Prefix-match the last word (palette-friendly incremental search); fall back to a
+    // whole-word plainto_tsquery when the query is made of only tsquery-syntax characters.
+    const prefixQuery = toPrefixTsQuery(ws);
+    const rankExpr = prefixQuery
+      ? (() => {
+          params.push(prefixQuery);
+          return `ts_rank(d.search_vector, to_tsquery('simple', $${params.length}))`;
+        })()
+      : `ts_rank(d.search_vector, plainto_tsquery('simple', $1))`;
     params.push(limit);
     const r = await q.query(
       `select d.id, d.title, d.description, d.category, d.current_version,
-              ts_rank(d.search_vector, plainto_tsquery('simple', $1)) + similarity(d.title, $1) score
+              ${rankExpr} + similarity(d.title, $1) score
        from documents d where d.deleted_at is null and (${cond})${docScope}
        order by score desc, d.title limit $${params.length}`,
       params,
@@ -268,8 +292,43 @@ async function rerank(q: Q, hits: SearchHit[], text: string, model: ModelClient)
   hits.sort((a, b) => b.score - a.score);
 }
 
-/** `search.reindex` worker body: recompute derived text for every live document. */
-export async function reindexAll(pool: pg.Pool): Promise<number> {
+/**
+ * Embeds a document's title + description + derived search text and stores it in
+ * `documents.embedding`, so the vector re-rank path in `search()` has something to
+ * compare against. Best-effort: swallows model errors (an unreachable/disabled model
+ * just means search stays text-only, same as before this existed) and no-ops when the
+ * model has no `embed` method. The embedding input is capped at ~8000 chars — plenty for
+ * a title/description/step-text summary and comfortably under typical embedding-model
+ * context limits.
+ */
+export async function updateEmbedding(q: Q, id: string, model: ModelClient | null | undefined): Promise<boolean> {
+  if (!model?.embed) return false;
+  const r = await q.query(
+    "select title, coalesce(description,'') description, coalesce(search_text,'') search_text from documents where id=$1 and deleted_at is null",
+    [id],
+  );
+  if (!r.rowCount) return false;
+  const { title, description, search_text: searchText } = r.rows[0] as {
+    title: string;
+    description: string;
+    search_text: string;
+  };
+  const text = [title, description, searchText].filter(Boolean).join('\n').slice(0, 8000);
+  if (!text) return false;
+  try {
+    const vec = await model.embed(text);
+    await q.query('update documents set embedding=$2::vector where id=$1', [id, JSON.stringify(vec)]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `search.reindex` worker body: recompute derived text for every live document, and —
+ * when a model with `embed` is available — its embedding too.
+ */
+export async function reindexAll(pool: pg.Pool, model?: ModelClient | null): Promise<number> {
   const ids = (await pool.query('select id from documents where deleted_at is null')).rows.map(
     (r) => r.id as string,
   );
@@ -279,6 +338,7 @@ export async function reindexAll(pool: pg.Pool): Promise<number> {
       const doc = await getDocument(tx, id);
       if (doc) {
         await recomputeDerived(tx, doc);
+        await updateEmbedding(tx, id, model);
         n++;
       }
     });

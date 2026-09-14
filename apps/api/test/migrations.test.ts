@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { readdir } from 'node:fs/promises';
 import pg from 'pg';
 import { runner } from 'node-pg-migrate';
 import { DEFAULT_ROLES, PERMISSIONS } from '@wecom/shared';
+
+/** However many migrations exist right now — avoids a hardcoded count going stale. */
+const migrationCount = async () =>
+  (await readdir('migrations')).filter((f) => f.endsWith('.js')).length;
 
 const run = process.env.RUN_INTEGRATION === '1' ? describe : describe.skip;
 run('migrations', () => {
@@ -98,7 +103,7 @@ run('migrations', () => {
       databaseUrl: c.getConnectionUri(),
       dir: 'migrations',
       direction: 'down',
-      count: 9,
+      count: await migrationCount(),
       migrationsTable: 'pgmigrations',
       ignorePattern: 'package\\.json',
       log: () => undefined,

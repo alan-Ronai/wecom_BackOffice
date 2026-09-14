@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { ModelClient } from '@wecom/model';
 import { z } from 'zod';
 import {
   CreateDocumentBodySchema,
@@ -24,6 +25,7 @@ import { forbidden, httpError, notFound } from '../../lib/http.js';
 import { hasScope, requireUser } from '../../lib/user.js';
 import * as repo from './repo.js';
 import { annotateBlame, diffDocuments, diffStats } from './diff.js';
+import { updateEmbedding } from '../search/repo.js';
 
 const Params = z.object({ id: IdSchema });
 const VersionParams = z.object({ id: IdSchema, v: z.coerce.number().int().min(0) });
@@ -263,6 +265,10 @@ export default async function routes(app: FastifyInstance) {
         return { document: doc, version, auditId };
       });
       await pushOnPublish(app, req, id, user.id);
+      // Best-effort, outside the transaction: a model outage must never fail a publish.
+      const model = (app as unknown as { model?: ModelClient | null }).model;
+      if (model?.embed)
+        updateEmbedding(app.db, id, model).catch((err) => req.log.warn({ err, id }, 'embed on publish failed'));
       return result;
     },
   );
@@ -365,6 +371,9 @@ export default async function routes(app: FastifyInstance) {
         return { document: doc, version, auditId };
       });
       await pushOnPublish(app, req, id, user.id);
+      const model = (app as unknown as { model?: ModelClient | null }).model;
+      if (model?.embed)
+        updateEmbedding(app.db, id, model).catch((err) => req.log.warn({ err, id }, 'embed on restore failed'));
       return result;
     },
   );

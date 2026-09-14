@@ -88,8 +88,9 @@ run('admin routes', () => {
     expect(body.connectors).toEqual([]);
     expect(body.sources).toEqual({ pending: 0, error: 0 });
     expect(body.suggestions).toEqual({ pending: 0 });
-    // No backup directory in a test container, and the worker has never run: reported, not thrown.
-    expect(body.backup).toMatchObject({ ok: false, latestFile: null, lastBackupAt: null, lastBackupOk: null });
+    // No backup directory in a test container, and the worker has never run: falls back to a
+    // live check, which also reports false (not "unknown") since it did run.
+    expect(body.backup).toMatchObject({ ok: false, latestFile: null, lastBackupAt: null, lastBackupOk: false });
     expect(typeof body.version).toBe('string');
     expect(
       (await app.inject({ method: 'GET', url: '/api/v1/admin/system', headers: editor })).statusCode,
