@@ -19,7 +19,7 @@ export default async function routes(app: FastifyInstance) {
       const user = requireUser(req);
       // L5 sets `app.model` when the local model is wired up; absent, search stays text-only.
       const model = (app as unknown as { model?: ModelClient | null }).model ?? null;
-      return search(app.db, req.query as Parameters<typeof search>[1], model, user.categoryScopes);
+      return search(app.db, req.query as Parameters<typeof search>[1], model, user.worldScopes);
     },
   );
 }

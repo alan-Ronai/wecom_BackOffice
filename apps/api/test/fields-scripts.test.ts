@@ -115,4 +115,12 @@ run('fields and scripts', () => {
       (await app.inject({ method: 'GET', url: '/api/v1/scripts', headers: auth(u) })).json().items,
     ).toHaveLength(0);
   });
+
+  it('scripts are type-T documents underneath', async () => {
+    const s = (await app.inject({ method: 'POST', url: '/api/v1/scripts', headers: auth(u), payload: { title: 'שם', text: 'טקסט\nשורה', tags: ['a'] } })).json();
+    const doc = await app.inject({ method: 'GET', url: `/api/v1/documents/${s.id}`, headers: auth(u) });
+    expect(doc.json()).toMatchObject({ docType: 'T', kind: 'text', bodyHtml: '<p>טקסט<br>שורה</p>', tags: ['a'], worlds: ['ops'] });
+    const list = await app.inject({ method: 'GET', url: '/api/v1/scripts', headers: auth(u) });
+    expect(list.json().items.find((x: { id: string }) => x.id === s.id).text).toBe('טקסט\nשורה');
+  });
 });

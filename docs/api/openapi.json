@@ -9998,6 +9998,7 @@
         "tags": [
           "scripts"
         ],
+        "deprecated": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -10111,6 +10112,7 @@
             }
           }
         },
+        "deprecated": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -10204,6 +10206,7 @@
             "required": true
           }
         ],
+        "deprecated": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -10263,6 +10266,7 @@
             "required": true
           }
         ],
+        "deprecated": true,
         "responses": {
           "200": {
             "description": "Default Response",

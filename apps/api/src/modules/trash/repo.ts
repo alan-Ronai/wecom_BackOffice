@@ -17,7 +17,7 @@ export async function listTrash(q: Q, days: number): Promise<TrashItem[]> {
   const items: TrashItem[] = [];
 
   const docs = await q.query(
-    `select d.id, d.title, d.category, d.topic_id, d.current_version, d.deleted_at, u.display_name deleted_by,
+    `select d.id, d.title, d.category, d.doc_type, d.current_version, d.deleted_at, u.display_name deleted_by,
             (select count(*)::int from steps s where s.document_id=d.id) steps
      from documents d left join users u on u.id=d.deleted_by
      where d.deleted_at is not null order by d.deleted_at desc`,
@@ -33,8 +33,9 @@ export async function listTrash(q: Q, days: number): Promise<TrashItem[]> {
       id: d.id,
       title: d.title,
       meta: [
+        sourceFile(d.category as string),
         CATEGORY_LABELS[d.category as string] ?? d.category,
-        sourceFile(d.category as string) + '#' + (d.topic_id ?? ''),
+        d.doc_type,
         'v' + d.current_version,
         d.steps + ' שלבים',
       ].join(' · '),
@@ -89,21 +90,7 @@ export async function listTrash(q: Q, days: number): Promise<TrashItem[]> {
       impact: emptyImpact,
     });
 
-  const scripts = await q.query(
-    `select s.id, s.title, s.deleted_at, u.display_name deleted_by from scripts s
-     left join users u on u.id=s.deleted_by where s.deleted_at is not null order by s.deleted_at desc`,
-  );
-  for (const s of scripts.rows)
-    items.push({
-      type: 'script',
-      id: s.id,
-      title: s.title,
-      meta: 'scripts.json',
-      deletedBy: s.deleted_by ?? 'מערכת',
-      deletedAt: iso(s.deleted_at)!,
-      purgeAt: purgeAt(s.deleted_at, days),
-      impact: emptyImpact,
-    });
+  // Scripts are type-T documents since 0030, so they are already listed above as documents.
 
   return items.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
 }
@@ -112,7 +99,8 @@ const TABLE: Record<TrashType, { table: string; key: string }> = {
   document: { table: 'documents', key: 'id' },
   block: { table: 'blocks', key: 'id' },
   field: { table: 'crm_fields', key: 'name' },
-  script: { table: 'scripts', key: 'id' },
+  /** Scripts are documents since 0030; old /trash/script/:id links keep working. */
+  script: { table: 'documents', key: 'id' },
 };
 
 export async function restore(tx: Tx, type: TrashType, id: string, userId: string): Promise<void> {
@@ -179,7 +167,7 @@ export async function purgeExpired(pool: pg.Pool, days: number): Promise<number>
       [b.id],
     );
   }
-  for (const table of ['documents', 'blocks', 'crm_fields', 'scripts']) {
+  for (const table of ['documents', 'blocks', 'crm_fields']) {
     const r = await pool.query(
       `delete from ${table} where deleted_at is not null and deleted_at < ${cutoff}`,
     );
