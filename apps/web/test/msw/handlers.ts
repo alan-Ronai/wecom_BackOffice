@@ -20,10 +20,7 @@ import { resetStage45, stage45Handlers } from './stage45.js';
 import { initialTaxonomy, taxonomyHandlers, type TaxonomyState } from './taxonomy.js';
 import { feedbackHandlers, resetFeedbackState } from './feedback-handlers.js';
 import { learningHandlers, resetLearningState } from './learning-handlers.js';
-import {
-  learningManageHandlers,
-  resetLearningState as resetLearningManageState,
-} from './learning-manage.js';
+import { learningManageHandlers, resetLearningState as resetLearningManageState } from './learning-manage.js';
 import type { TrashItem } from '../../src/api/types.js';
 
 const B = '/api/v1';

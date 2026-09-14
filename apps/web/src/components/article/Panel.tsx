@@ -134,9 +134,7 @@ export function Panel({
                       <a
                         role="button"
                         tabIndex={0}
-                        onClick={() =>
-                          go(can('learning.manage') ? `/learning/manage/${it.id}` : '/learning')
-                        }
+                        onClick={() => go(can('learning.manage') ? `/learning/manage/${it.id}` : '/learning')}
                       >
                         {it.kind === 'quiz' ? 'שאלון' : 'תדריך'} · {it.title}
                       </a>

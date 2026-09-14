@@ -7,7 +7,9 @@ import {
   AttemptAnswersSchema,
   AttemptResultSchema,
   AudienceCreateSchema,
+  AudienceOptionsSchema,
   AudienceSchema,
+  ChangePreviewSchema,
   CompletionResponseSchema,
   DocumentLearningSchema,
   IdSchema,
@@ -26,6 +28,7 @@ import { assertVisibleDocument } from '../../../lib/visibility.js';
 import * as repo from './repo.js';
 import { createAssignments, type TrackingDeps } from './audiences.js';
 import { getPublishedItem } from './itemsPort.js';
+import { previewChangeFlag } from './refresh.js';
 
 const Id = z.object({ id: IdSchema });
 const AssignmentId = z.object({ assignmentId: IdSchema });
@@ -240,6 +243,50 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
       },
       async (req) =>
         repo.dashboard(app.db, (req.query as { world?: string }).world, requireUser(req).worldScopes),
+    );
+
+    /**
+     * V6 seam. The assign dialog needs the role names and the world list; `GET /admin/roles` would
+     * have served, but it is `roles.manage`, so a lead holding only `learning.manage` saw an empty
+     * audience picker against the real API. Names and labels only — no permission grants.
+     */
+    app.get(
+      '/learning/audience-options',
+      {
+        config: { requires: ['learning.manage'] },
+        schema: { tags: ['learning'], response: { 200: AudienceOptionsSchema } },
+      },
+      async () => {
+        const roles = await app.db.query(
+          `select name, coalesce(nullif(description,''), name) as label from roles order by system desc, name`,
+        );
+        const worlds = await app.db.query(
+          `select slug, name from worlds where active order by position, slug`,
+        );
+        return {
+          roles: roles.rows.map((r) => ({ name: r.name as string, label: r.label as string })),
+          worlds: worlds.rows.map((w) => ({ slug: w.slug as string, name: w.name as string })),
+        };
+      },
+    );
+
+    /**
+     * V6 seam (the plan's Task 4 decision): the publish dialog pre-ticks "שינוי מהותי" from the
+     * detector rather than from a client-side diff, so the checkbox and the flag the publish
+     * actually records are the same verdict. Read-only — nothing is written until the publish.
+     */
+    app.get(
+      '/documents/:id/change-preview',
+      {
+        config: { requires: ['docs.publish'], scope: 'document' },
+        schema: { tags: ['learning'], params: Id, response: { 200: ChangePreviewSchema } },
+      },
+      async (req) => {
+        const user = requireUser(req);
+        const { id } = req.params as { id: string };
+        await assertVisibleDocument(app.db, id, user);
+        return previewChangeFlag(app.db, id);
+      },
     );
 
     app.get(

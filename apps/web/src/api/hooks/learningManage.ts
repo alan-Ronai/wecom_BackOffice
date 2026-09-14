@@ -12,7 +12,6 @@ import {
   AssignResultSchema,
   AudienceSchema,
   CompletionResponseSchema,
-  DocumentLearningSchema,
   GenerateQuestionsResponseSchema,
   LearningDashboardSchema,
   LearningItemSchema,

@@ -1,8 +1,8 @@
 import type { ChangeFlag, Document } from '@wecom/shared';
 import { makeEvent } from '@wecom/shared';
-import type { Tx } from '../../../lib/sql.js';
+import type { Queryable, Tx } from '../../../lib/sql.js';
 import { getWorkflowSettings } from '../../../lib/workflowSettings.js';
-import { getVersion, loadBlocksMap, loadFieldNames } from '../../documents/repo.js';
+import { getDocument, getVersion, loadBlocksMap, loadFieldNames } from '../../documents/repo.js';
 import { detectSignificantChange } from './changeDetector.js';
 import { createAssignments, type TrackingDeps } from './audiences.js';
 import { getPublishedItem, itemSourceVersions, listItemsReferencing } from './itemsPort.js';
@@ -57,14 +57,9 @@ export async function applyChangeFlag(
     [i.documentId, i.version, significant, JSON.stringify(reasons), i.actorId],
   );
   if (!significant) return { significant, reasons, affectedItems: 0, refreshAssignments: 0 };
-  /**
-   * `learning_items` is V1's table (migration 0039). Until it is on main this lane's migration
-   * can still be applied on its own, and a publish must not fail because the item side of wave 5
-   * is missing: the flag is recorded either way, and the fan-out simply has nothing to walk.
-   */
-  const items = await tx.query(`select to_regclass('learning_items') t`);
-  if (!items.rows[0]?.t) return { significant, reasons, affectedItems: 0, refreshAssignments: 0 };
-
+  // V6: V1's `learning_items` (0039) is merged, so the `to_regclass` guard that let this lane's
+  // migration stand alone is gone — a missing item table is now a broken deploy, not a state to
+  // tolerate silently. `wave5-seams.test.ts` covers the fan-out end to end.
   const settings = await getWorkflowSettings(tx);
   // Published items whose current version pins this document below the version just published.
   const affected: { itemId: string; itemVersion: number }[] = [];
@@ -119,4 +114,32 @@ export async function applyChangeFlag(
     }),
   );
   return { significant, reasons, affectedItems: affected.length, refreshAssignments };
+}
+
+/**
+ * V6: what `applyChangeFlag` *would* decide if the working document were published right now, with
+ * no write of any kind. The editor's publish dialog pre-ticks "שינוי מהותי" from this, so the
+ * checkbox states the detector's verdict instead of asking the editor to guess it — and unticking
+ * it still wins, because `override: false` is what the publish body then carries.
+ */
+export async function previewChangeFlag(
+  q: Queryable,
+  documentId: string,
+): Promise<Omit<ChangeFlag, 'refreshAssignments'>> {
+  const after = await getDocument(q, documentId);
+  if (!after) return { significant: false, reasons: [], affectedItems: 0 };
+  const previous = after.currentVersion > 0 ? await getVersion(q, documentId, after.currentVersion) : null;
+  const detected = previous
+    ? detectSignificantChange(previous, after, await loadBlocksMap(q), await loadFieldNames(q))
+    : { significant: false, reasons: [] };
+  if (!detected.significant) return { ...detected, affectedItems: 0 };
+  // The version a publish would write next; an item pinned at or above it is already current.
+  const next = after.currentVersion + 1;
+  let affectedItems = 0;
+  for (const it of await listItemsReferencing(q, documentId)) {
+    if (it.status !== 'published') continue;
+    const pins = await itemSourceVersions(q, it.itemId, it.currentVersion);
+    if (pins.some((p) => p.documentId === documentId && p.version < next)) affectedItems += 1;
+  }
+  return { ...detected, affectedItems };
 }

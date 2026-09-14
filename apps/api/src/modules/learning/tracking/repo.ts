@@ -517,7 +517,10 @@ export async function documentLearning(
   const refresh = await q.query(
     `select a.id from learning_assignments a
       where a.user_id=$1 and a.reason='refresh' and a.status in ('open','overdue')
-        and a.item_id = any($2::uuid[]) order by a.due_at asc limit 1`,
+        and a.item_id = any($2::uuid[])
+      -- V6: a deterministic tiebreak. Two refreshes created by the same publish share a due date,
+      -- and "whichever row the planner returned" made the article banner link wander between them.
+      order by a.due_at asc nulls last, a.assigned_at asc, a.id asc limit 1`,
     [userId, items.rows.map((r) => r.id)],
   );
   const last = await q.query(
