@@ -1,7 +1,18 @@
-import type { CrmField, UpsertFieldBody } from '@wecom/shared';
+import type {
+  CrmField,
+  FieldPage,
+  FieldRenameBodySchema,
+  FieldRenameResultSchema,
+  UpsertFieldBody,
+} from '@wecom/shared';
+import type { z } from 'zod';
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
 import { getDocument, iso, recomputeDerived, type Q } from '../documents/repo.js';
+import { publishDocument } from '../documents/publish.js';
+
+type FieldRenameBody = z.infer<typeof FieldRenameBodySchema>;
+type FieldRenameResult = z.infer<typeof FieldRenameResultSchema>;
 
 const toField = (r: Record<string, unknown>): CrmField => ({
   name: r.name as string,
@@ -78,4 +89,143 @@ export async function deleteField(tx: Tx, name: string, userId: string): Promise
   if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'השדה לא נמצא');
   await tx.query('delete from step_field_refs where field_name=$1', [name]);
   return affected;
+}
+
+/* ── Stage 4: field page ────────────────────────────────────────────────── */
+
+/**
+ * Every step that mentions the field, with the text it is mentioned in. Block-backed
+ * steps take their actions from the block, the same way `stepText` assembles them.
+ */
+export async function fieldUsageRows(q: Q, name: string): Promise<FieldPage['usage']> {
+  const r = await q.query(
+    `select d.id, d.title, d.category, s.step_key, s.num, s.title step_title,
+            concat_ws(' · ', s.title, coalesce(
+              (select string_agg(ba.text, ' · ' order by ba.position) from block_actions ba where ba.block_id = s.block_id),
+              (select string_agg(a.text, ' · ' order by a.position) from step_actions a where a.step_id = s.id),
+              '')) as text
+       from step_field_refs r
+       join steps s on s.id = r.step_id
+       join documents d on d.id = s.document_id and d.deleted_at is null
+      where r.field_name = $1
+      order by d.title, s.position`,
+    [name],
+  );
+  return r.rows.map((x) => ({
+    documentId: x.id as string,
+    title: x.title as string,
+    category: x.category as FieldPage['usage'][number]['category'],
+    stepKey: x.step_key as string,
+    stepNum: x.num as string,
+    stepTitle: x.step_title as string,
+    text: x.text as string,
+  }));
+}
+
+export async function fieldHistory(q: Q, name: string): Promise<FieldPage['history']> {
+  const r = await q.query(
+    `select l.at, u.display_name, l.action, l.before, l.after
+       from audit_log l left join users u on u.id = l.actor_id
+      where l.entity_type = 'crm_field' and l.entity_id = $1
+      order by l.at desc limit 50`,
+    [name],
+  );
+  return r.rows.map((x) => ({
+    at: iso(x.at as Date)!,
+    actorName: (x.display_name as string | null) ?? null,
+    action: x.action as string,
+    before: (x.before as unknown) ?? null,
+    after: (x.after as unknown) ?? null,
+  }));
+}
+
+/** What a writer has to know before using the field: it moved, it is on the way out, or it is new. */
+export function fieldAlerts(field: CrmField): FieldPage['alerts'] {
+  const out: FieldPage['alerts'] = [];
+  if (field.status === 'renamed')
+    out.push({ kind: 'renamed', message: `השדה שונה לשם "${field.renamedTo ?? '?'}" — עדכן את ההפניות` });
+  if (field.status === 'retired') out.push({ kind: 'retired', message: 'השדה הוצא משימוש ב-CRM' });
+  if (field.status === 'new') out.push({ kind: 'new', message: 'שדה חדש — ודא שהוא קיים בסביבת הייצור' });
+  if (!field.path.trim())
+    out.push({ kind: 'unknown', message: 'הנתיב של השדה ב-CRM לא ידוע — הוסף אותו כדי שהצ׳יפ יוביל לשם' });
+  return out;
+}
+
+export async function fieldPage(q: Q, name: string): Promise<FieldPage | null> {
+  const field = await getField(q, name);
+  if (!field) return null;
+  const [usage, history] = await Promise.all([fieldUsageRows(q, name), fieldHistory(q, name)]);
+  return {
+    field,
+    usage,
+    documents: new Set(usage.map((u) => u.documentId)).size,
+    history,
+    alerts: fieldAlerts(field),
+  };
+}
+
+/* ── Stage 4: field rename ──────────────────────────────────────────────── */
+
+/** Columns whose free text can carry a CRM field name, scoped to one document set. */
+const REWRITES = [
+  `update steps set title = replace(title, $2, $3), description = replace(description, $2, $3),
+          hint = replace(hint, $2, $3), script = replace(script, $2, $3)
+     where document_id = any($1)`,
+  `update step_actions a set text = replace(a.text, $2, $3)
+     from steps s where s.id = a.step_id and s.document_id = any($1)`,
+  `update step_outcomes o set text = replace(o.text, $2, $3)
+     from steps s where s.id = o.step_id and s.document_id = any($1)`,
+  `update step_branches b set question = replace(b.question, $2, $3)
+     from steps s where s.id = b.step_id and s.document_id = any($1)`,
+  `update step_branch_options o set label = replace(o.label, $2, $3), text = replace(o.text, $2, $3)
+     from step_branches b join steps s on s.id = b.step_id
+    where b.id = o.branch_id and s.document_id = any($1)`,
+];
+
+/**
+ * Renames a CRM field: the new name becomes the live field, the old one stays behind as
+ * `renamed -> newName` so nothing dangles, and (when `updateReferences`) every step text in
+ * the documents that used it is rewritten and republished — one version per document.
+ */
+export async function renameField(
+  tx: Tx,
+  name: string,
+  body: FieldRenameBody,
+  userId: string | null,
+): Promise<{ result: FieldRenameResult; affected: string[] }> {
+  const old = await getField(tx, name);
+  if (!old) throw httpError(404, 'NOT_FOUND', 'השדה לא נמצא');
+  const newName = body.newName.trim();
+  if (!newName) throw httpError(400, 'BAD_REQUEST', 'שם חדש הוא שדה חובה');
+  if (newName === name) throw httpError(400, 'BAD_REQUEST', 'השם החדש זהה לשם הנוכחי');
+  const affected = [...new Set((await fieldUsageRows(tx, name)).map((u) => u.documentId))];
+
+  await tx.query(
+    `insert into crm_fields(name, status, path, note, created_by, updated_by)
+     values ($1,'ok',$2,$3,$4,$4)
+     on conflict (name) do update set status='ok', renamed_to=null, deleted_at=null, deleted_by=null,
+       path=coalesce(nullif(crm_fields.path,''), excluded.path), updated_at=now(), updated_by=$4`,
+    [newName, old.path, old.note ?? null, userId],
+  );
+  await tx.query(
+    `update crm_fields set status='renamed', renamed_to=$2, updated_at=now(), updated_by=$3 where name=$1`,
+    [name, newName, userId],
+  );
+
+  let versionsCreated = 0;
+  if (body.updateReferences && affected.length) {
+    for (const sql of REWRITES) await tx.query(sql, [affected, name, newName]);
+    for (const id of affected) {
+      const doc = await getDocument(tx, id);
+      if (!doc) continue;
+      await recomputeDerived(tx, doc);
+      await publishDocument(tx, id, { actorId: userId, label: body.label });
+      versionsCreated++;
+    }
+  }
+  const field = (await getField(tx, newName))!;
+  return {
+    result: { updatedDocuments: body.updateReferences ? affected.length : 0, versionsCreated, field },
+    affected,
+  };
 }
