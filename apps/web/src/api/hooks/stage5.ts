@@ -78,6 +78,19 @@ export const useSaveConnector = () => {
   });
 };
 
+/**
+ * Enable/disable only. Deliberately not `useSaveConnector` with a `config: {}`: PATCH takes a
+ * whole config object, and a flick of the toggle must not be able to hand the server an empty one.
+ */
+export const useToggleConnector = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      stage5.updateConnector(id, { enabled }),
+    onSuccess: () => invalidateConnectors(qc),
+  });
+};
+
 export const useDeleteConnector = () => {
   const qc = useQueryClient();
   return useMutation({

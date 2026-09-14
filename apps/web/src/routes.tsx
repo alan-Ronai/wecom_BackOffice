@@ -17,6 +17,8 @@ import { GroupsMapPage } from './components/admin/GroupsMapPage.js';
 import { SessionsPage } from './components/admin/SessionsPage.js';
 import { AuditPage } from './components/admin/AuditPage.js';
 import { IdentityPage } from './components/admin/IdentityPage.js';
+import { ConnectorsPage } from './components/admin/ConnectorsPage.js';
+import { ConnectorWizard } from './components/admin/ConnectorWizard.js';
 import { SystemPage } from './components/admin/SystemPage.js';
 
 /** Routes mirror the legacy hashes one-to-one (spec §5). */
@@ -57,6 +59,10 @@ export const routeObjects: RouteObject[] = [
           { path: 'sessions', element: <SessionsPage /> },
           { path: 'audit', element: <AuditPage /> },
           { path: 'identity', element: <IdentityPage /> },
+          { path: 'connectors', element: <ConnectorsPage /> },
+          // `new` before `:id`, or the wizard would try to load a connector called "new".
+          { path: 'connectors/new', element: <ConnectorWizard /> },
+          { path: 'connectors/:id', element: <ConnectorWizard /> },
           { path: 'system', element: <SystemPage /> },
         ],
       },

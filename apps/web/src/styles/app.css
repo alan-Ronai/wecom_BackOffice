@@ -831,3 +831,13 @@ html[data-theme="dark"] .sug .ft .bt span.p { background: var(--red); border-col
 .settings-card input[dir="ltr"] { font-family: var(--mono); font-size: 12px; }
 .secret-row { display: flex; align-items: center; gap: 8px; }
 .field-error.ok { color: var(--ok); }
+
+/* ── stage 5: connector registry & wizard ──────────────────────────────── */
+.linkish { background: none; border: 0; padding: 0; color: var(--red-mid); cursor: pointer; font: inherit; text-decoration: underline; }
+.linkish:disabled { color: var(--muted); text-decoration: none; cursor: default; }
+.row-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.wizard-steps { display: flex; gap: 14px; list-style: none; padding: 0; margin: 0 0 14px; font-size: 12.5px; flex-wrap: wrap; }
+.wizard-steps li.on .linkish { color: var(--text); font-weight: 600; text-decoration: none; }
+.wizard-steps li.done .linkish { color: var(--ok); }
+.copy-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; }
+.copy-row bdi { flex: 1; min-width: 0; overflow-wrap: anywhere; }
