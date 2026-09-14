@@ -43,14 +43,20 @@ export const useWorlds = (includeInactive = false) =>
     staleTime: 60_000,
   });
 
-export const useTopics = (worldSlug: string | undefined) =>
+/** `includeInactive` is for the admin screen, which has to be able to reactivate what it hid. */
+export const useTopics = (worldSlug: string | undefined, includeInactive = false) =>
   useQuery({
-    queryKey: keys.topics(worldSlug ?? ''),
+    queryKey: [...keys.topics(worldSlug ?? ''), includeInactive],
     enabled: !!worldSlug,
     queryFn: async (): Promise<Topic[]> =>
       checked(
         TopicsResponseSchema,
-        await api.GET('/worlds/{slug}/topics', { params: { path: { slug: worldSlug! } } }),
+        await api.GET('/worlds/{slug}/topics', {
+          params: {
+            path: { slug: worldSlug! },
+            query: includeInactive ? { includeInactive: true } : {},
+          },
+        }),
       ).items,
     staleTime: 60_000,
   });

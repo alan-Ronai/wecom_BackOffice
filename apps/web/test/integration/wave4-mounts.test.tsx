@@ -166,6 +166,26 @@ describe('W6 article mounts', () => {
     expect(await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title })).toBeVisible();
   });
 
+  it('falls back to the working view when a persisted pane mode has no source to show', async () => {
+    // `paneMode` is a global preference; whether a document has a source is per-document. An
+    // agent who switched to "מקור" on one item used to open the next one on the source pane's
+    // empty state instead of the article — mid-call, reading as "the document is empty".
+    server.use(
+      http.get(`${B}/me/preferences`, () =>
+        HttpResponse.json({ ...fx.me.preferences, paneMode: 'source' }),
+      ),
+      http.get(`${B}/documents/${D_BROWSING}/source`, () =>
+        HttpResponse.json({ code: 'NOT_FOUND', message: 'אין מקור' }, { status: 404 }),
+      ),
+    );
+    renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
+    expect(
+      await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'מקור' })).toBeDisabled());
+    expect(screen.queryByText('אין עדיין מסמך מקור לפריט זה')).toBeNull();
+  });
+
   it('offers prev/next inside the topic', async () => {
     const topicId = fx.topics[0]!.id;
     server.use(
@@ -275,6 +295,24 @@ describe('W6 library mounts', () => {
     renderWithProviders(<App />, { route: '/library' });
     const grid = await screen.findByTestId('library-grid');
     expect(await within(grid).findByText('לא בתוקף')).toBeInTheDocument();
+  });
+});
+
+describe('W6 source editor route', () => {
+  it('gives an editor the editing surface', async () => {
+    renderWithProviders(<App />, { route: `/edit/${D_BROWSING}/source` });
+    expect(await screen.findByRole('button', { name: 'שמור גרסה' })).toBeInTheDocument();
+    expect(screen.queryByText('אין הרשאה לערוך את מסמך המקור')).toBeNull();
+  });
+
+  it('refuses the editing surface to a reader who guesses the URL', async () => {
+    // The chrome was gated but the editor itself was not: a read-only agent got a working TipTap
+    // surface and an autosave firing `PUT …/source/draft` every three seconds against a server
+    // that refuses all of it.
+    server.use(http.get(`${B}/auth/me`, () => HttpResponse.json({ ...fx.me, permissions: ['docs.read'] })));
+    renderWithProviders(<App />, { route: `/edit/${D_BROWSING}/source` });
+    expect(await screen.findByText('אין הרשאה לערוך את מסמך המקור')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'שמור גרסה' })).toBeNull();
   });
 });
 

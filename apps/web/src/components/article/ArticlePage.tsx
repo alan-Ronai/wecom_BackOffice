@@ -89,7 +89,16 @@ export function ArticlePage() {
    */
   const [paneMode, setPaneMode] = useState<PaneMode | null>(null);
   const source = useSourceDocument(id);
-  const effectivePane: PaneMode = paneMode ?? prefs.data?.paneMode ?? 'work';
+  /**
+   * `paneMode` is a *global* preference but whether a document has a source is per-document, so
+   * the wanted mode is clamped to what this one supports. Without the clamp an agent who switched
+   * to "מקור" on one item opened the next one to the source pane's empty state instead of the
+   * article — mid-call, reading as "the document is empty". `isPending` keeps the clamp from
+   * firing (and the toggle from flashing disabled) while the source query is still in flight.
+   */
+  const hasSource = !!source.data || source.isPending;
+  const wantedPane: PaneMode = paneMode ?? prefs.data?.paneMode ?? 'work';
+  const effectivePane: PaneMode = hasSource ? wantedPane : 'work';
   /**
    * W1: the topic view is what "previous / next in this topic" means (PRD §4).
    *
@@ -528,7 +537,7 @@ export function ArticlePage() {
           <FeedbackButton documentId={doc.id} documentVersion={doc.currentVersion} />
           <PaneModeToggle
             value={effectivePane}
-            hasSource={!!source.data}
+            hasSource={hasSource}
             onChange={(m) => {
               setPaneMode(m);
               savePrefs.mutate({

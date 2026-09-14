@@ -93,11 +93,14 @@ export const taxonomyHandlers = (state: TaxonomyState): RequestHandler[] => [
     w.active = false;
     return noContent();
   }),
-  http.get(`${B}/worlds/:slug/topics`, ({ params }) =>
-    HttpResponse.json({
-      items: state.topics.filter((t) => t.worldSlug === params.slug && t.active).sort(byPosition),
-    }),
-  ),
+  http.get(`${B}/worlds/:slug/topics`, ({ params, request }) => {
+    const inactive = new URL(request.url).searchParams.get('includeInactive') === 'true';
+    return HttpResponse.json({
+      items: state.topics
+        .filter((t) => t.worldSlug === params.slug && (inactive || t.active))
+        .sort(byPosition),
+    });
+  }),
   http.post(`${B}/worlds/:slug/topics`, async ({ params, request }) => {
     const body = (await request.json()) as { slug: string; name: string; description?: string };
     const t: Topic = {
