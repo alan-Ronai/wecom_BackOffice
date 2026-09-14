@@ -420,3 +420,8 @@ export type GapsResponse = z.infer<typeof GapsResponseSchema>;
 export type GapDismissBody = z.infer<typeof GapDismissBodySchema>;
 export type GapResolveBody = z.infer<typeof GapResolveBodySchema>;
 export type GapDetectResult = z.infer<typeof GapDetectResultSchema>;
+
+/* ── V2 additive: dashboard query ────────────────────────────────────────── */
+/** Querystring of `GET /learning/dashboard`; the manager's world scope narrows it further. */
+export const LearningDashboardQuerySchema = z.object({ world: z.string().optional() });
+export type LearningDashboardQuery = z.infer<typeof LearningDashboardQuerySchema>;
