@@ -15,16 +15,8 @@ describe('admin', () => {
     expect(await screen.findByText('אין הרשאה לאזור הניהול')).toBeInTheDocument();
   });
 
-  it('shows the permission matrix to admins and locks the admin role', async () => {
-    asAdmin();
-    renderWithProviders(<App />, { route: '/admin/roles' });
-    expect(await screen.findByText('docs.publish')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getAllByRole('columnheader').length).toBeGreaterThan(1));
-    expect(screen.getByLabelText('roles.manage · admin')).toBeDisabled();
-    expect(screen.getByLabelText('docs.publish · admin')).toBeEnabled();
-  });
-
-  // The users screen has its own suite — `test/admin/Users.test.tsx`.
+  // The users and roles screens have their own suites — `test/admin/Users.test.tsx` and
+  // `test/admin/Roles.test.tsx`.
 
   it('renders the operator diagnostics from /admin/system', async () => {
     asAdmin();

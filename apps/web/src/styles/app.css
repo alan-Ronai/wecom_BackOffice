@@ -810,3 +810,6 @@ html[data-theme="dark"] .sug .ft .bt span.p { background: var(--red); border-col
 .lib-head .facets input, .lib-head .facets select { font-size: 12px; padding: 5px 10px; }
 .table .chip + .chip { margin-inline-start: 4px; }
 .pill-toggle { margin-bottom: 12px; }
+.perm-matrix th.dirty { color: var(--red-dark); }
+.perm-matrix .grouprow th { background: var(--surface-2); text-align: start; font-size: 11px; letter-spacing: .4px; }
+.perm-matrix td:first-child { min-width: 210px; }

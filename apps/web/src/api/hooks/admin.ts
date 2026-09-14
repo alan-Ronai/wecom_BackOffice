@@ -43,6 +43,8 @@ export const useUpsertRole = () => {
           ? await api.PATCH('/admin/roles/{id}', { params: { path: { id } }, body })
           : await api.POST('/admin/roles', { body }),
       ),
+    // `keys.admin.matrix` is `['admin','roles','matrix']`, so this prefix invalidation refreshes
+    // the permission matrix too — the roles screen reads it, not the flat list.
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.admin.roles }),
   });
 };
