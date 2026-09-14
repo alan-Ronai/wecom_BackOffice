@@ -238,6 +238,45 @@ const httpOk = (url) => async () => {
  * check, so the run proceeds and every spec fails against a server wired to a database that no
  * longer exists. Better to stop and say so.
  */
+/**
+ * Ports the WHATWG fetch standard refuses outright ("bad ports"), so neither Node's `fetch` nor
+ * any browser will connect to them whatever is listening.
+ *
+ * This cost a full 120 s timeout to diagnose: a run with `E2E_WEB_PORT=4190` (sieve) started
+ * `vite preview` perfectly — the banner said `http://127.0.0.1:4190/`, and `curl` got a 200 — and
+ * then died at `timed out waiting for web serving at http://127.0.0.1:4190`, because
+ * `fetch(...)` rejects such a URL with `TypeError: fetch failed / cause: bad port` before opening
+ * a socket. Playwright would have refused it next. The failure reads as "the web server never
+ * came up", which is the one thing that was not wrong, so the gate says so up front instead.
+ *
+ * Source: https://fetch.spec.whatwg.org/#bad-port
+ */
+const BAD_PORTS = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104,
+  109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515,
+  526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049,
+  3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
+]);
+
+/**
+ * Refuses a port the HTTP clients in this gate cannot reach. Postgres is exempt: `pg` opens a
+ * plain socket, and nothing ever fetches it.
+ */
+function assertPortsFetchable() {
+  const bad = [
+    ['api', API_PORT, 'E2E_API_PORT'],
+    ['web', WEB_PORT, 'E2E_WEB_PORT'],
+    ...(WITH_OIDC ? [['oidc', OIDC_PORT, 'E2E_OIDC_PORT']] : []),
+  ].filter(([, port]) => BAD_PORTS.has(port));
+  if (bad.length)
+    throw new Error(
+      "port blocked by the WHATWG fetch standard — neither node's fetch nor a browser will " +
+        'connect to it, whatever is listening:\n' +
+        bad.map(([name, port, env]) => `  :${port} (${name}, ${env}) — pick another`).join('\n') +
+        '\n  see https://fetch.spec.whatwg.org/#bad-port',
+    );
+}
+
 function assertPortsFree() {
   const busy = [];
   for (const [name, port] of [
@@ -262,6 +301,7 @@ function assertPortsFree() {
 async function main() {
   const passthrough = process.argv.slice(2);
 
+  assertPortsFetchable();
   assertPortsFree();
 
   console.log('\n── 1. postgres (pgvector/pgvector:pg16) ──────────────────────');
