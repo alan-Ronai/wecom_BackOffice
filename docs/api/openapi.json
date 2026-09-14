@@ -326,14 +326,15 @@
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "enum": [
-                          "sim",
-                          "tech",
-                          "billing",
-                          "plans",
-                          "intl",
-                          "ops"
-                        ]
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                      },
+                      "nullable": true
+                    },
+                    "worldScopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                       },
                       "nullable": true
                     },
@@ -368,6 +369,33 @@
                         "sidebarExpanded": {
                           "type": "boolean",
                           "default": false
+                        },
+                        "density": {
+                          "type": "string",
+                          "enum": [
+                            "comfortable",
+                            "compact"
+                          ]
+                        },
+                        "libraryView": {
+                          "type": "string",
+                          "enum": [
+                            "cards",
+                            "list"
+                          ]
+                        },
+                        "savedViewId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "lastSeen": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "tourDone": {
+                          "type": "boolean"
                         }
                       },
                       "additionalProperties": false
@@ -528,14 +556,7 @@
                                   "type": "array",
                                   "items": {
                                     "type": "string",
-                                    "enum": [
-                                      "sim",
-                                      "tech",
-                                      "billing",
-                                      "plans",
-                                      "intl",
-                                      "ops"
-                                    ]
+                                    "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                                   },
                                   "nullable": true
                                 }
@@ -640,14 +661,7 @@
                           "type": "array",
                           "items": {
                             "type": "string",
-                            "enum": [
-                              "sim",
-                              "tech",
-                              "billing",
-                              "plans",
-                              "intl",
-                              "ops"
-                            ]
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                           },
                           "nullable": true
                         }
@@ -732,14 +746,7 @@
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "enum": [
-                                "sim",
-                                "tech",
-                                "billing",
-                                "plans",
-                                "intl",
-                                "ops"
-                              ]
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                             },
                             "nullable": true
                           },
@@ -812,14 +819,7 @@
                           "type": "array",
                           "items": {
                             "type": "string",
-                            "enum": [
-                              "sim",
-                              "tech",
-                              "billing",
-                              "plans",
-                              "intl",
-                              "ops"
-                            ]
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                           },
                           "nullable": true
                         }
@@ -2502,14 +2502,7 @@
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "sim",
-                "tech",
-                "billing",
-                "plans",
-                "intl",
-                "ops"
-              ]
+              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
             },
             "in": "query",
             "name": "category",
@@ -2745,14 +2738,7 @@
                           },
                           "category": {
                             "type": "string",
-                            "enum": [
-                              "sim",
-                              "tech",
-                              "billing",
-                              "plans",
-                              "intl",
-                              "ops"
-                            ]
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                           },
                           "wave": {
                             "anyOf": [
@@ -2984,14 +2970,7 @@
                   },
                   "category": {
                     "type": "string",
-                    "enum": [
-                      "sim",
-                      "tech",
-                      "billing",
-                      "plans",
-                      "intl",
-                      "ops"
-                    ]
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                   },
                   "wave": {
                     "anyOf": [
@@ -3034,9 +3013,6 @@
                   },
                   "slug": {
                     "type": "string"
-                  },
-                  "topicId": {
-                    "type": "integer"
                   },
                   "phases": {
                     "type": "array",
@@ -3331,6 +3307,50 @@
                       ],
                       "additionalProperties": false
                     }
+                  },
+                  "docType": {
+                    "type": "string",
+                    "enum": [
+                      "M",
+                      "R",
+                      "O",
+                      "E",
+                      "S",
+                      "T",
+                      "I"
+                    ]
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "maxItems": 30,
+                    "default": []
+                  },
+                  "worlds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                    },
+                    "maxItems": 20,
+                    "default": []
+                  },
+                  "topics": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "maxItems": 50,
+                    "default": []
+                  },
+                  "bodyHtml": {
+                    "type": "string",
+                    "maxLength": 200000
                   }
                 },
                 "required": [
@@ -3374,14 +3394,7 @@
                     },
                     "category": {
                       "type": "string",
-                      "enum": [
-                        "sim",
-                        "tech",
-                        "billing",
-                        "plans",
-                        "intl",
-                        "ops"
-                      ]
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                     },
                     "wave": {
                       "anyOf": [
@@ -3927,14 +3940,7 @@
                     },
                     "category": {
                       "type": "string",
-                      "enum": [
-                        "sim",
-                        "tech",
-                        "billing",
-                        "plans",
-                        "intl",
-                        "ops"
-                      ]
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                     },
                     "wave": {
                       "anyOf": [
@@ -4455,14 +4461,7 @@
                   },
                   "category": {
                     "type": "string",
-                    "enum": [
-                      "sim",
-                      "tech",
-                      "billing",
-                      "plans",
-                      "intl",
-                      "ops"
-                    ]
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                   },
                   "wave": {
                     "anyOf": [
@@ -4500,6 +4499,50 @@
                   },
                   "sourceRef": {
                     "type": "string"
+                  },
+                  "docType": {
+                    "type": "string",
+                    "enum": [
+                      "M",
+                      "R",
+                      "O",
+                      "E",
+                      "S",
+                      "T",
+                      "I"
+                    ]
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "maxItems": 30,
+                    "default": []
+                  },
+                  "worlds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                    },
+                    "maxItems": 20,
+                    "default": []
+                  },
+                  "topics": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "maxItems": 50,
+                    "default": []
+                  },
+                  "bodyHtml": {
+                    "type": "string",
+                    "maxLength": 200000
                   },
                   "ownerId": {
                     "type": "string",
@@ -4557,14 +4600,7 @@
                     },
                     "category": {
                       "type": "string",
-                      "enum": [
-                        "sim",
-                        "tech",
-                        "billing",
-                        "plans",
-                        "intl",
-                        "ops"
-                      ]
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                     },
                     "wave": {
                       "anyOf": [
@@ -5492,14 +5528,7 @@
                     },
                     "category": {
                       "type": "string",
-                      "enum": [
-                        "sim",
-                        "tech",
-                        "billing",
-                        "plans",
-                        "intl",
-                        "ops"
-                      ]
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                     },
                     "wave": {
                       "anyOf": [
@@ -6080,14 +6109,7 @@
                         },
                         "category": {
                           "type": "string",
-                          "enum": [
-                            "sim",
-                            "tech",
-                            "billing",
-                            "plans",
-                            "intl",
-                            "ops"
-                          ]
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                         },
                         "wave": {
                           "anyOf": [
@@ -6677,14 +6699,7 @@
                     },
                     "category": {
                       "type": "string",
-                      "enum": [
-                        "sim",
-                        "tech",
-                        "billing",
-                        "plans",
-                        "intl",
-                        "ops"
-                      ]
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                     },
                     "wave": {
                       "anyOf": [
@@ -7251,14 +7266,7 @@
                     },
                     "category": {
                       "type": "string",
-                      "enum": [
-                        "sim",
-                        "tech",
-                        "billing",
-                        "plans",
-                        "intl",
-                        "ops"
-                      ]
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                     },
                     "wave": {
                       "anyOf": [
@@ -7903,14 +7911,7 @@
                     },
                     "category": {
                       "type": "string",
-                      "enum": [
-                        "sim",
-                        "tech",
-                        "billing",
-                        "plans",
-                        "intl",
-                        "ops"
-                      ]
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                     },
                     "wave": {
                       "anyOf": [
@@ -8646,14 +8647,7 @@
                         },
                         "category": {
                           "type": "string",
-                          "enum": [
-                            "sim",
-                            "tech",
-                            "billing",
-                            "plans",
-                            "intl",
-                            "ops"
-                          ]
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                         },
                         "wave": {
                           "anyOf": [
@@ -9440,14 +9434,7 @@
                           },
                           "category": {
                             "type": "string",
-                            "enum": [
-                              "sim",
-                              "tech",
-                              "billing",
-                              "plans",
-                              "intl",
-                              "ops"
-                            ]
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                           },
                           "why": {
                             "type": "string"
@@ -10400,14 +10387,7 @@
                           },
                           "category": {
                             "type": "string",
-                            "enum": [
-                              "sim",
-                              "tech",
-                              "billing",
-                              "plans",
-                              "intl",
-                              "ops"
-                            ]
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                           },
                           "stepKey": {
                             "type": "string"
@@ -10829,14 +10809,7 @@
                           },
                           "category": {
                             "type": "string",
-                            "enum": [
-                              "sim",
-                              "tech",
-                              "billing",
-                              "plans",
-                              "intl",
-                              "ops"
-                            ]
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                           },
                           "stepKey": {
                             "type": "string"
@@ -11205,6 +11178,7 @@
         "tags": [
           "scripts"
         ],
+        "deprecated": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -11318,6 +11292,7 @@
             }
           }
         },
+        "deprecated": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -11411,6 +11386,7 @@
             "required": true
           }
         ],
+        "deprecated": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -11470,6 +11446,7 @@
             "required": true
           }
         ],
+        "deprecated": true,
         "responses": {
           "200": {
             "description": "Default Response",
@@ -12327,7 +12304,8 @@
                               "blocks",
                               "fields",
                               "scripts",
-                              "actions"
+                              "actions",
+                              "tags"
                             ]
                           },
                           "hits": {
@@ -12709,6 +12687,33 @@
                     "sidebarExpanded": {
                       "type": "boolean",
                       "default": false
+                    },
+                    "density": {
+                      "type": "string",
+                      "enum": [
+                        "comfortable",
+                        "compact"
+                      ]
+                    },
+                    "libraryView": {
+                      "type": "string",
+                      "enum": [
+                        "cards",
+                        "list"
+                      ]
+                    },
+                    "savedViewId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastSeen": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "tourDone": {
+                      "type": "boolean"
                     }
                   },
                   "additionalProperties": false
@@ -12757,6 +12762,33 @@
                   "sidebarExpanded": {
                     "type": "boolean",
                     "default": false
+                  },
+                  "density": {
+                    "type": "string",
+                    "enum": [
+                      "comfortable",
+                      "compact"
+                    ]
+                  },
+                  "libraryView": {
+                    "type": "string",
+                    "enum": [
+                      "cards",
+                      "list"
+                    ]
+                  },
+                  "savedViewId": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "lastSeen": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "tourDone": {
+                    "type": "boolean"
                   }
                 },
                 "additionalProperties": false
@@ -12800,6 +12832,33 @@
                     "sidebarExpanded": {
                       "type": "boolean",
                       "default": false
+                    },
+                    "density": {
+                      "type": "string",
+                      "enum": [
+                        "comfortable",
+                        "compact"
+                      ]
+                    },
+                    "libraryView": {
+                      "type": "string",
+                      "enum": [
+                        "cards",
+                        "list"
+                      ]
+                    },
+                    "savedViewId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastSeen": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "tourDone": {
+                      "type": "boolean"
                     }
                   },
                   "additionalProperties": false
@@ -12846,14 +12905,7 @@
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "sim",
-                "tech",
-                "billing",
-                "plans",
-                "intl",
-                "ops"
-              ]
+              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
             },
             "in": "query",
             "name": "category",
@@ -12910,14 +12962,7 @@
                           },
                           "category": {
                             "type": "string",
-                            "enum": [
-                              "sim",
-                              "tech",
-                              "billing",
-                              "plans",
-                              "intl",
-                              "ops"
-                            ]
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                           },
                           "status": {
                             "type": "string"
@@ -13047,14 +13092,7 @@
                         },
                         "category": {
                           "type": "string",
-                          "enum": [
-                            "sim",
-                            "tech",
-                            "billing",
-                            "plans",
-                            "intl",
-                            "ops"
-                          ]
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                         },
                         "status": {
                           "type": "string"
@@ -13694,14 +13732,7 @@
                             "properties": {
                               "category": {
                                 "type": "string",
-                                "enum": [
-                                  "sim",
-                                  "tech",
-                                  "billing",
-                                  "plans",
-                                  "intl",
-                                  "ops"
-                                ]
+                                "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                               },
                               "cards": {
                                 "type": "integer"
@@ -13744,14 +13775,7 @@
                             "properties": {
                               "category": {
                                 "type": "string",
-                                "enum": [
-                                  "sim",
-                                  "tech",
-                                  "billing",
-                                  "plans",
-                                  "intl",
-                                  "ops"
-                                ]
+                                "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                               },
                               "lastUpdatedAt": {
                                 "type": "string",
@@ -15117,14 +15141,7 @@
                           },
                           "category": {
                             "type": "string",
-                            "enum": [
-                              "sim",
-                              "tech",
-                              "billing",
-                              "plans",
-                              "intl",
-                              "ops"
-                            ]
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                           }
                         },
                         "required": [
@@ -15475,14 +15492,7 @@
                           },
                           "category": {
                             "type": "string",
-                            "enum": [
-                              "sim",
-                              "tech",
-                              "billing",
-                              "plans",
-                              "intl",
-                              "ops"
-                            ],
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$",
                             "nullable": true
                           },
                           "kind": {
@@ -15839,14 +15849,7 @@
                   },
                   "category": {
                     "type": "string",
-                    "enum": [
-                      "sim",
-                      "tech",
-                      "billing",
-                      "plans",
-                      "intl",
-                      "ops"
-                    ],
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,40}$",
                     "nullable": true
                   },
                   "kind": {
@@ -16185,14 +16188,7 @@
                     },
                     "category": {
                       "type": "string",
-                      "enum": [
-                        "sim",
-                        "tech",
-                        "billing",
-                        "plans",
-                        "intl",
-                        "ops"
-                      ],
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$",
                       "nullable": true
                     },
                     "kind": {
@@ -16544,14 +16540,7 @@
                   },
                   "category": {
                     "type": "string",
-                    "enum": [
-                      "sim",
-                      "tech",
-                      "billing",
-                      "plans",
-                      "intl",
-                      "ops"
-                    ],
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,40}$",
                     "nullable": true
                   },
                   "kind": {
@@ -16895,14 +16884,7 @@
                     },
                     "category": {
                       "type": "string",
-                      "enum": [
-                        "sim",
-                        "tech",
-                        "billing",
-                        "plans",
-                        "intl",
-                        "ops"
-                      ],
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$",
                       "nullable": true
                     },
                     "kind": {
@@ -17414,14 +17396,7 @@
                   },
                   "category": {
                     "type": "string",
-                    "enum": [
-                      "sim",
-                      "tech",
-                      "billing",
-                      "plans",
-                      "intl",
-                      "ops"
-                    ]
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                   }
                 },
                 "required": [
@@ -17644,6 +17619,1245 @@
         "responses": {
           "204": {
             "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/worlds": {
+      "get": {
+        "tags": [
+          "taxonomy"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "includeInactive",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "slug": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "description": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "active": {
+                            "type": "boolean"
+                          },
+                          "topicCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "itemCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "slug",
+                          "name",
+                          "position",
+                          "active",
+                          "topicCount",
+                          "itemCount",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "taxonomy"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "slug": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "default": ""
+                  },
+                  "active": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                },
+                "required": [
+                  "slug",
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "slug": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "description": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "position": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "topicCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "itemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "slug",
+                    "name",
+                    "position",
+                    "active",
+                    "topicCount",
+                    "itemCount",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worlds/reorder": {
+      "put": {
+        "tags": [
+          "taxonomy"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "minItems": 1,
+                    "maxItems": 500
+                  }
+                },
+                "required": [
+                  "ids"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "slug": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "description": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "active": {
+                            "type": "boolean"
+                          },
+                          "topicCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "itemCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "slug",
+                          "name",
+                          "position",
+                          "active",
+                          "topicCount",
+                          "itemCount",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worlds/{slug}": {
+      "patch": {
+        "tags": [
+          "taxonomy"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "default": ""
+                  },
+                  "active": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+            },
+            "in": "path",
+            "name": "slug",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "slug": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "description": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "position": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "topicCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "itemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "slug",
+                    "name",
+                    "position",
+                    "active",
+                    "topicCount",
+                    "itemCount",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "taxonomy"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "force",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+            },
+            "in": "path",
+            "name": "slug",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/worlds/{slug}/topics": {
+      "get": {
+        "tags": [
+          "taxonomy"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "includeInactive",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+            },
+            "in": "path",
+            "name": "slug",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "worldSlug": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "slug": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          },
+                          "description": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "active": {
+                            "type": "boolean"
+                          },
+                          "itemCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "worldSlug",
+                          "slug",
+                          "name",
+                          "position",
+                          "active",
+                          "itemCount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "taxonomy"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "slug": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "default": ""
+                  },
+                  "active": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                },
+                "required": [
+                  "slug",
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+            },
+            "in": "path",
+            "name": "slug",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "worldSlug": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                    },
+                    "slug": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "description": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "position": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "itemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "worldSlug",
+                    "slug",
+                    "name",
+                    "position",
+                    "active",
+                    "itemCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worlds/{slug}/topics/reorder": {
+      "put": {
+        "tags": [
+          "taxonomy"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "minItems": 1,
+                    "maxItems": 500
+                  }
+                },
+                "required": [
+                  "ids"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+            },
+            "in": "path",
+            "name": "slug",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "worldSlug": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "slug": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          },
+                          "description": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "active": {
+                            "type": "boolean"
+                          },
+                          "itemCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "worldSlug",
+                          "slug",
+                          "name",
+                          "position",
+                          "active",
+                          "itemCount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/topics/{id}": {
+      "patch": {
+        "tags": [
+          "taxonomy"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "default": ""
+                  },
+                  "active": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "worldSlug": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "worldSlug": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                    },
+                    "slug": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "description": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "position": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "itemCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "worldSlug",
+                    "slug",
+                    "name",
+                    "position",
+                    "active",
+                    "itemCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "taxonomy"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/topics/{id}/items": {
+      "get": {
+        "tags": [
+          "taxonomy"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "topic": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "worldSlug": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                        },
+                        "slug": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "description": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "position": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "active": {
+                          "type": "boolean"
+                        },
+                        "itemCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "worldSlug",
+                        "slug",
+                        "name",
+                        "position",
+                        "active",
+                        "itemCount"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "world": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "slug": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "description": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "position": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "active": {
+                          "type": "boolean"
+                        },
+                        "topicCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "itemCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "slug",
+                        "name",
+                        "position",
+                        "active",
+                        "topicCount",
+                        "itemCount",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "docType": {
+                            "type": "string",
+                            "enum": [
+                              "M",
+                              "R",
+                              "O",
+                              "E",
+                              "S",
+                              "T",
+                              "I"
+                            ]
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "slug": {
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "docType": {
+                                  "type": "string",
+                                  "enum": [
+                                    "M",
+                                    "R",
+                                    "O",
+                                    "E",
+                                    "S",
+                                    "T",
+                                    "I"
+                                  ]
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "steps",
+                                    "retention",
+                                    "text"
+                                  ]
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "draft",
+                                    "review",
+                                    "published",
+                                    "partial",
+                                    "invalid",
+                                    "archived"
+                                  ]
+                                },
+                                "worlds": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                                  }
+                                },
+                                "description": {
+                                  "type": "string",
+                                  "default": ""
+                                },
+                                "tags": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "default": []
+                                },
+                                "updatedAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "slug",
+                                "title",
+                                "docType",
+                                "kind",
+                                "status",
+                                "worlds",
+                                "updatedAt"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "docType",
+                          "items"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "topic",
+                    "world",
+                    "groups"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tags": {
+      "get": {
+        "tags": [
+          "taxonomy"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 60
+            },
+            "in": "query",
+            "name": "q",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tag": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "count"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         }
       }
@@ -18258,14 +19472,7 @@
                                   },
                                   "category": {
                                     "type": "string",
-                                    "enum": [
-                                      "sim",
-                                      "tech",
-                                      "billing",
-                                      "plans",
-                                      "intl",
-                                      "ops"
-                                    ]
+                                    "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                                   },
                                   "wave": {
                                     "anyOf": [
@@ -18889,14 +20096,7 @@
                                   },
                                   "category": {
                                     "type": "string",
-                                    "enum": [
-                                      "sim",
-                                      "tech",
-                                      "billing",
-                                      "plans",
-                                      "intl",
-                                      "ops"
-                                    ]
+                                    "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                                   },
                                   "wave": {
                                     "anyOf": [
@@ -19664,14 +20864,7 @@
                             },
                             "category": {
                               "type": "string",
-                              "enum": [
-                                "sim",
-                                "tech",
-                                "billing",
-                                "plans",
-                                "intl",
-                                "ops"
-                              ]
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                             },
                             "wave": {
                               "anyOf": [
@@ -20295,14 +21488,7 @@
                             },
                             "category": {
                               "type": "string",
-                              "enum": [
-                                "sim",
-                                "tech",
-                                "billing",
-                                "plans",
-                                "intl",
-                                "ops"
-                              ]
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                             },
                             "wave": {
                               "anyOf": [
@@ -21050,14 +22236,7 @@
                             },
                             "category": {
                               "type": "string",
-                              "enum": [
-                                "sim",
-                                "tech",
-                                "billing",
-                                "plans",
-                                "intl",
-                                "ops"
-                              ]
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                             },
                             "wave": {
                               "anyOf": [
@@ -21681,14 +22860,7 @@
                             },
                             "category": {
                               "type": "string",
-                              "enum": [
-                                "sim",
-                                "tech",
-                                "billing",
-                                "plans",
-                                "intl",
-                                "ops"
-                              ]
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                             },
                             "wave": {
                               "anyOf": [
@@ -22436,14 +23608,7 @@
                             },
                             "category": {
                               "type": "string",
-                              "enum": [
-                                "sim",
-                                "tech",
-                                "billing",
-                                "plans",
-                                "intl",
-                                "ops"
-                              ]
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                             },
                             "wave": {
                               "anyOf": [
@@ -23067,14 +24232,7 @@
                             },
                             "category": {
                               "type": "string",
-                              "enum": [
-                                "sim",
-                                "tech",
-                                "billing",
-                                "plans",
-                                "intl",
-                                "ops"
-                              ]
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                             },
                             "wave": {
                               "anyOf": [
@@ -23771,14 +24929,7 @@
                           },
                           "category": {
                             "type": "string",
-                            "enum": [
-                              "sim",
-                              "tech",
-                              "billing",
-                              "plans",
-                              "intl",
-                              "ops"
-                            ]
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                           },
                           "wave": {
                             "anyOf": [
@@ -24466,14 +25617,7 @@
                             },
                             "category": {
                               "type": "string",
-                              "enum": [
-                                "sim",
-                                "tech",
-                                "billing",
-                                "plans",
-                                "intl",
-                                "ops"
-                              ]
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                             },
                             "wave": {
                               "anyOf": [
@@ -25097,14 +26241,7 @@
                             },
                             "category": {
                               "type": "string",
-                              "enum": [
-                                "sim",
-                                "tech",
-                                "billing",
-                                "plans",
-                                "intl",
-                                "ops"
-                              ]
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                             },
                             "wave": {
                               "anyOf": [
@@ -27078,14 +28215,7 @@
                       },
                       "category": {
                         "type": "string",
-                        "enum": [
-                          "sim",
-                          "tech",
-                          "billing",
-                          "plans",
-                          "intl",
-                          "ops"
-                        ]
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
                       },
                       "wave": {
                         "anyOf": [
