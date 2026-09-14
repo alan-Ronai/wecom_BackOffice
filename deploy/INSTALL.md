@@ -10,6 +10,11 @@ Target: one VMware VM, Ubuntu 22.04/24.04, 4 vCPU, 16 GB RAM, 80 GB disk, Docker
 5. Start: `docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build`.
    First start pulls the model (~2 GB, 5–20 min on the LAN); progress: `docker compose -f deploy/docker-compose.yml logs -f ollama-pull`.
 6. Verify: `deploy/smoke.sh https://<PUBLIC_URL host>` prints `smoke passed`.
+   The check waits for the database **and** for the exact `MODEL_NAME` tag to appear in Ollama's
+   `ollama list` — not merely for Ollama to answer — so a mistyped `MODEL_NAME` fails here
+   (`waiting for the model tag '<tag>' to be pulled`) instead of at the first suggestion job. It
+   also asserts the five security response headers on `GET /`. Run it with
+   `SMOKE_REQUIRE_MODEL=false deploy/smoke.sh …` if you are deliberately running without a model.
 7. Create the break-glass admin (`--password` is required; the command exits with a usage message without it): `docker compose -f deploy/docker-compose.yml exec api pnpm --filter @wecom/api create-admin --email admin@wecom.local --password '<a strong password>' --name 'מנהל'`.
 8. Seed the initial library: `docker compose -f deploy/docker-compose.yml exec api pnpm --filter @wecom/api seed` (lane L2).
 
@@ -67,7 +72,11 @@ Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST`
 
 ## Troubleshooting
 - `health` shows `db:false` → `docker compose logs db`; check `POSTGRES_PASSWORD` matches in `.env`.
-- `model:false` → `docker compose logs ollama-pull`; rerun with `docker compose up ollama-pull`.
+- `model:false` → look at `modelStatus` in the same body. `reachable:false` means Ollama itself is
+  down (`docker compose logs ollama`); `reachable:true, tagPresent:false` means Ollama is up but
+  `modelStatus.name` has never been pulled — check `MODEL_NAME` in `deploy/.env` against
+  `docker compose exec ollama ollama list`, then `docker compose logs ollama-pull` and rerun with
+  `docker compose up ollama-pull`.
 - Browser certificate error → the cert's CN/SAN does not match `PUBLIC_URL`, or the CA is not trusted on that machine.
 - Slow suggestions → expected on CPU (10–40 s per paragraph); jobs are queued, see `GET /api/v1/admin/system` (queue depths, model reachability, last backup age).
 - Logs: `docker compose logs -f api` (JSON lines; filter by `requestId` shown in error messages).

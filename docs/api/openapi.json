@@ -31,6 +31,26 @@
                       "type": "boolean",
                       "nullable": true
                     },
+                    "modelStatus": {
+                      "type": "object",
+                      "properties": {
+                        "reachable": {
+                          "type": "boolean"
+                        },
+                        "tagPresent": {
+                          "type": "boolean"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "reachable",
+                        "tagPresent",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
                     "queue": {
                       "type": "integer",
                       "nullable": true
@@ -55,6 +75,7 @@
                     "ok",
                     "db",
                     "model",
+                    "modelStatus",
                     "queue",
                     "version",
                     "uptimeSec",

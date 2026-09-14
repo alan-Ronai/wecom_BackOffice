@@ -946,6 +946,7 @@ export const health = {
   ok: true,
   db: true,
   model: false,
+  modelStatus: { reachable: true, tagPresent: false, name: 'qwen2.5:3b-instruct-q4_K_M' },
   queue: 0,
   version: '0.1.0',
   uptimeSec: 10,
