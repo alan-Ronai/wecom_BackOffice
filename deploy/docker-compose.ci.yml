@@ -1,6 +1,14 @@
 services:
-  ollama-pull:
-    entrypoint: ["/bin/sh", "-c", "echo skipping model pull in CI"]
+  # The model pull is NOT skipped any more. It was, which is why the CI smoke could never assert
+  # what O-2 added (that MODEL_NAME is actually pulled) and had to run with
+  # SMOKE_REQUIRE_MODEL=false — so the one automated end-to-end check of the compose stack proved
+  # strictly less than `deploy/smoke.sh` does on the VM. `deploy/ci.env` overrides MODEL_NAME to
+  # the smallest tag in the production model's own family (~0.4 GB against ~2 GB), which pulls in
+  # about a minute on a GitHub runner; nothing in the smoke test performs inference, so the size
+  # is the only thing that matters here.
+  ollama:
+    # The default 30 m keep-alive holds a loaded model in RAM long after the job is done.
+    environment: { OLLAMA_KEEP_ALIVE: 1m, OLLAMA_NUM_PARALLEL: 1, OLLAMA_MAX_LOADED_MODELS: 1 }
   web:
     volumes:
       - ./certs/cert.pem:/etc/nginx/certs/cert.pem:ro
