@@ -134,11 +134,16 @@ export const KEYS: readonly KeyBinding[] = [
   { scope: 'article', combos: ['Enter'], display: '↵', label: 'פתיחת השלב הנוכחי' },
   // Legacy gated outcome selection on 1–3, which is what the overlay advertises; every digit is
   // bound because `digit` doubles as the G-jump buffer.
+  //
+  // A-1: the binding is unchanged — the digits still only do something on a step that has
+  // outcomes — but the card used to imply they always work. The call aside now hides the row on a
+  // step with no rule and shows where the call goes next instead; this label says the same thing
+  // in the one place that describes the whole app's keyboard.
   {
     scope: 'article',
     combos: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
     display: '1 – 3',
-    label: 'בחירת תוצאה בשלב',
+    label: 'בחירת תוצאה בשלב (בשלבים שיש בהם תוצאות)',
   },
   { scope: 'article', combos: ['g'], display: 'G ואז מספר', label: 'קפיצה לשלב' },
   { scope: 'article', combos: ['n'], display: 'N', label: 'הערת נציג לשלב' },

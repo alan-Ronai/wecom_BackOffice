@@ -792,6 +792,12 @@ html[data-theme="dark"] .sug .ft .bt span.p { background: var(--red); border-col
 /* React-only additions */
 .route-loading { padding: 40px; text-align: center; color: var(--muted); }
 
+/* A-1 — the per-step "what next" line, under the outcomes where the decision is made, and its
+   echo in the call aside. A terminal step is marked so "this ends the call" is not just wording. */
+.next-hint { margin-top: 10px; font-size: 11.5px; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 8px; }
+.next-hint[data-terminal] { color: var(--ok, #0e7a4f); }
+.callaside .aside-next { margin-top: 10px; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+
 /* A-8 — the render-crash panel. Centred in whatever box survived (the route outlet, or the whole
    screen when the shell itself threw), so it reads as "this part broke" rather than "reload". */
 .error-boundary { display: grid; place-items: center; padding: 40px 16px; flex: 1; min-height: 240px; }
