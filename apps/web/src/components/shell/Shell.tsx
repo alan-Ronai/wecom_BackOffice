@@ -17,7 +17,7 @@ import { Tour } from './Tour.js';
  * Routes that need the width: the article/editor, and the stage-4 screens that carry their own
  * side panel (`/data`, `/graph`) — two nested sidebars is one too many.
  */
-const RAIL_ROUTES = /^\/(doc|edit|history|sources|data|graph)\b/;
+const RAIL_ROUTES = /^\/(doc|edit|history|sources|data|graph|topic|feedback\/|analytics)\b/;
 
 function ShellInner() {
   const loc = useLocation();

@@ -9,7 +9,8 @@ describe('<Shell>', () => {
   it('renders sidebar counts and category rows', async () => {
     renderWithProviders(<App />, { route: '/library' });
     await waitFor(() => expect(screen.getAllByText('ספריית ידע').length).toBeGreaterThan(0));
-    expect(screen.getByText('חו"ל ונדידה')).toBeInTheDocument();
+    // Wave 4: the world rows come from `GET /worlds`, so this one resolves asynchronously.
+    expect(await screen.findByText('חו"ל ונדידה')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /חיפוש בכל המקורות/ })).toBeInTheDocument();
     expect(screen.getByText('ענבר ל.')).toBeInTheDocument();
   });

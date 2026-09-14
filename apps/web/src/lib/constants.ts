@@ -1,7 +1,12 @@
 import type { Category, Priority } from '@wecom/shared';
 
 /** Ported verbatim from legacy/js/data.js — labels, icons and colours the UI reads. */
-export const CATS: Record<Category, { label: string; short: string; icon: string; color: string }> = {
+/**
+ * Wave 4: worlds are rows in `worlds` now, so a slug can be anything an admin types. `CATS` stays
+ * as the label/icon/colour table for the six seeded slugs and is indexed defensively — every
+ * reader must fall back (`CATS[slug]?.short ?? slug`).
+ */
+export const CATS: Record<string, { label: string; short: string; icon: string; color: string }> = {
   sim: { label: 'SIM / eSIM', short: 'SIM', icon: '📶', color: '#2E5CE0' },
   tech: { label: 'תמיכה טכנית', short: 'טכני', icon: '🔧', color: '#3A4A5C' },
   billing: { label: 'חיובים', short: 'חיובים', icon: '💳', color: '#0E7A4F' },
