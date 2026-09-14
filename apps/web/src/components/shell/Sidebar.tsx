@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { Category } from '@wecom/shared';
-import { useDocuments } from '../../api/hooks/documents.js';
+import { useDocuments, usePinnedIds } from '../../api/hooks/documents.js';
 import { useFields, useScripts } from '../../api/hooks/content.js';
 import { useSources } from '../../api/hooks/pipeline.js';
 import { useTrash } from '../../api/hooks/trash.js';
@@ -33,7 +33,7 @@ export function Sidebar({
   const savePrefs = useSavePreferences();
 
   const all = useDocuments({ sort: 'wave' });
-  const pinned = useDocuments({ pinned: true, sort: 'wave' });
+  const pinned = usePinnedIds();
   const drafts = useDocuments({ drafts: true, sort: 'wave' });
   const trash = useTrash();
   const sources = useSources();
@@ -171,7 +171,7 @@ export function Sidebar({
       <div className="scroll">
         <nav>
           {item('ספריית ידע', '/library', cards.length)}
-          {item('מוצמדים', '/pinned', pinned.data?.items.length ?? 0)}
+          {item('מוצמדים', '/pinned', pinned.data?.length ?? 0)}
           {item('נצפו לאחרונה', '/recent')}
           {item('טיוטות', '/drafts', drafts.data?.items.length || null, true)}
           {item('היסטוריית גרסאות', '/history')}

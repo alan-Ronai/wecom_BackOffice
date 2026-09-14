@@ -5,6 +5,8 @@ export const keys = {
   prefs: ['prefs'] as const,
   providers: ['providers'] as const,
   docs: (q: unknown = '*') => ['documents', q] as const,
+  /** Ids of every pinned document — independent of which library page is loaded (I10). */
+  pins: ['pins'] as const,
   doc: (id: string) => ['document', id] as const,
   related: (id: string) => ['related', id] as const,
   links: (id: string) => ['links', id] as const,

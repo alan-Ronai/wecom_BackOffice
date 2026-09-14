@@ -1,5 +1,6 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Document } from '@wecom/shared';
+import { useMemo } from 'react';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { DocRef, Document } from '@wecom/shared';
 import { api } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap } from '../unwrap.js';
@@ -28,6 +29,32 @@ export const useDocument = (id: string | undefined) =>
     queryFn: async () => unwrap(await api.GET('/documents/{id}', { params: { path: { id: id! } } })),
   });
 
+/**
+ * I10 — pin state, resolved for **any** document, not just the 50 cards on page 1.
+ *
+ * The article topbar star and the `P` hotkey used to read `useDocuments({ sort: 'wave' })`, which
+ * the API pages at 50: a document past card #50 always rendered "☆ הצמד" and `P` toggled the
+ * wrong way. `GET /documents?pinned=true` already exists, so the authoritative set is one small
+ * query — and because it is *ids only*, `useTogglePin` can update it optimistically without
+ * inventing a card for a document that is not in any loaded list.
+ */
+const PINNED_QUERY = { pinned: true, sort: 'wave', pageSize: 200 } as const;
+
+export const usePinnedIds = () =>
+  useQuery({
+    queryKey: keys.pins,
+    staleTime: 30_000,
+    queryFn: async () =>
+      unwrap(await api.GET('/documents', { params: { query: PINNED_QUERY } })).items.map((c) => c.id),
+  });
+
+/** `isPinned(id)` for the topbar star, the `P` hotkey and the card menu. */
+export function useIsPinned(): (id: string | undefined) => boolean {
+  const { data } = usePinnedIds();
+  const set = useMemo(() => new Set(data ?? []), [data]);
+  return (id) => (id ? set.has(id) : false);
+}
+
 export const useRelated = (id: string | undefined) =>
   useQuery({
     queryKey: keys.related(id ?? ''),
@@ -42,6 +69,54 @@ export const useLinks = (id: string | undefined) =>
     enabled: !!id,
     queryFn: async () => unwrap(await api.GET('/documents/{id}/links', { params: { path: { id: id! } } })),
   });
+
+/** How many out-links one document may resolve individually — see `useDocRefs`. */
+const MAX_DOC_REF_LOOKUPS = 20;
+
+/**
+ * I10 — the `[[doc:…]]` / `R-01` reference table for one document.
+ *
+ * `<Fmt>` needs `{ id, title, code }` to turn a reference into a link with a readable label.
+ * That used to come from page 1 of the library, so a reference to card #51 rendered as a raw
+ * uuid. It is derived here from the document's **own** graph instead:
+ *
+ *   - `GET /documents/:id/related` — titles for the explicit `related` set, every link target,
+ *     shared-block neighbours and field neighbours, capped by the API at 6;
+ *   - `GET /documents/:id/links` — the complete out-link target set. Anything that cap left out
+ *     is resolved with a targeted `GET /documents/{id}`, which also supplies `code` (`related`
+ *     does not return it, so `R-01`-style references need the document itself).
+ *
+ * Bounded by the document's own link count, not by the size of the library, and every lookup
+ * lands in the shared `keys.doc(id)` cache — so opening one of those links afterwards is free.
+ */
+export function useDocRefs(id: string | undefined): DocRef[] {
+  const related = useRelated(id);
+  const links = useLinks(id);
+
+  const missing = useMemo(() => {
+    const known = new Set((related.data ?? []).map((r) => r.documentId));
+    const out = new Set<string>();
+    for (const l of links.data?.out ?? [])
+      if (l.toDocumentId && l.toDocumentId !== id && !known.has(l.toDocumentId)) out.add(l.toDocumentId);
+    return [...out].slice(0, MAX_DOC_REF_LOOKUPS);
+  }, [related.data, links.data, id]);
+
+  const extra = useQueries({
+    queries: missing.map((docId) => ({
+      queryKey: keys.doc(docId),
+      staleTime: 60_000,
+      queryFn: async () => unwrap(await api.GET('/documents/{id}', { params: { path: { id: docId } } })),
+    })),
+    combine: (results) =>
+      results.flatMap((r) => (r.data ? [{ id: r.data.id, title: r.data.title, code: r.data.code }] : [])),
+  });
+
+  const fromRelated = related.data;
+  return useMemo(
+    () => [...(fromRelated ?? []).map((r) => ({ id: r.documentId, title: r.title })), ...extra],
+    [fromRelated, extra],
+  );
+}
 
 export const useVersions = (id: string | undefined) =>
   useQuery({
@@ -87,15 +162,27 @@ export function useTogglePin() {
       ),
     onMutate: async ({ id, pinned }) => {
       await qc.cancelQueries(ALL_DOCS);
+      await qc.cancelQueries({ queryKey: keys.pins });
       const prev = qc.getQueriesData<ListDocumentsResponse>(ALL_DOCS);
+      const prevPins = qc.getQueryData<string[]>(keys.pins);
       qc.setQueriesData<ListDocumentsResponse>(
         ALL_DOCS,
         (p) => p && { ...p, items: p.items.map((c) => (c.id === id ? { ...c, pinned } : c)) },
       );
-      return { prev };
+      // Ids only, so a document that is on no loaded library page still flips instantly (I10).
+      qc.setQueryData<string[]>(keys.pins, (ids) =>
+        pinned ? [...new Set([...(ids ?? []), id])] : (ids ?? []).filter((x) => x !== id),
+      );
+      return { prev, prevPins };
     },
-    onError: (_e, _v, ctx) => ctx?.prev.forEach(([k, d]) => qc.setQueryData(k, d)),
-    onSettled: () => qc.invalidateQueries(ALL_DOCS),
+    onError: (_e, _v, ctx) => {
+      ctx?.prev.forEach(([k, d]) => qc.setQueryData(k, d));
+      qc.setQueryData(keys.pins, ctx?.prevPins);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries(ALL_DOCS);
+      void qc.invalidateQueries({ queryKey: keys.pins });
+    },
   });
 }
 

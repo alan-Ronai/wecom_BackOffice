@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { stripFmt } from '@wecom/shared';
-import { useDocument, useDocuments, useRecordView, useTogglePin } from '../../api/hooks/documents.js';
+import {
+  useDocRefs,
+  useDocument,
+  useIsPinned,
+  useRecordView,
+  useTogglePin,
+} from '../../api/hooks/documents.js';
 import { useAddNote, useBlocks, useFields } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
 import { ApiError } from '../../api/unwrap.js';
@@ -37,21 +43,19 @@ export function ArticlePage() {
   const docQ = useDocument(id);
   const blocks = useBlocks();
   const fieldsQ = useFields();
-  const cards = useDocuments({ sort: 'wave' });
   const prefs = usePreferences();
   const savePrefs = useSavePreferences();
   const recordView = useRecordView();
   const togglePin = useTogglePin();
+  const isPinned = useIsPinned();
   const addNote = useAddNote(id ?? '');
 
   const doc = docQ.data;
   const steps = useMemo(() => resolvedSteps(doc, blocks.data), [doc, blocks.data]);
   // Stable identity: a fresh `[]` on every render busts <Fmt>'s useMemo for every step.
   const fields: FieldInfo[] = useMemo(() => fieldsQ.data ?? EMPTY_FIELDS, [fieldsQ.data]);
-  const docRefs = useMemo(
-    () => (cards.data?.items ?? []).map((c) => ({ id: c.id, title: c.title })),
-    [cards.data],
-  );
+  // I10: resolved from this document's own links/related, not from page 1 of the library.
+  const docRefs = useDocRefs(id);
   const callMode = prefs.data?.callMode !== false;
   const showPanel = prefs.data?.panel !== false;
   const call = useCall(doc, steps, callMode);
@@ -82,7 +86,8 @@ export function ArticlePage() {
     }
   }, [stepParam, steps, id, call]);
 
-  const pinned = cards.data?.items.find((c) => c.id === doc?.id)?.pinned ?? false;
+  // I10: the pinned-ids query covers every document, not just the first 50 cards.
+  const pinned = isPinned(doc?.id);
 
   const addNoteFor = async (stepKey: string) => {
     const s = steps.find((x) => x.key === stepKey);
