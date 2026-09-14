@@ -94,6 +94,12 @@ const AnalyticsPage = () =>
 const TaxonomyPage = () =>
   import('./components/admin/TaxonomyPage.js').then((m) => ({ default: m.TaxonomyPage }));
 
+/** Wave 5 (V4a): the agent's learning screens are reached deliberately, not mid-call. */
+const MyLearningPage = () =>
+  import('./components/learning/MyLearningPage.js').then((m) => ({ default: m.MyLearningPage }));
+const AssignmentPage = () =>
+  import('./components/learning/AssignmentPage.js').then((m) => ({ default: m.AssignmentPage }));
+
 /**
  * One boundary around the whole lazy area rather than one per route.
  *
@@ -167,6 +173,10 @@ export const routeObjects: RouteObject[] = [
       { path: 'feedback/:id', element: split(FeedbackPage) },
       // W5. The sidebar entry that leads here is W6's mount; the route stands on its own.
       { path: 'analytics', element: split(AnalyticsPage) },
+      // wave 5 (V4a) — the agent's learning surface. V6 orders `learning/manage*` (V4b) before
+      // `learning/:assignmentId`, or the editor route would load as an assignment id.
+      { path: 'learning', element: split(MyLearningPage) },
+      { path: 'learning/:assignmentId', element: split(AssignmentPage) },
       {
         path: 'admin',
         element: split(AdminLayout),
