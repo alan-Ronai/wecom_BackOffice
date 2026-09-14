@@ -315,4 +315,61 @@ run('feedback', () => {
       ).statusCode,
     ).toBe(403);
   });
+
+  it("publish with resolveFeedbackIds closes only that document's open reports with the new version", async () => {
+    const third = await createDoc('מסמך שלישי');
+    const a = (
+      await app.inject({
+        method: 'POST',
+        url: `/api/v1/documents/${third}/feedback`,
+        headers: auth(agent),
+        payload: { kind: 'outdated' },
+      })
+    ).json();
+    const b = (
+      await app.inject({
+        method: 'POST',
+        url: `/api/v1/documents/${third}/feedback`,
+        headers: auth(agent),
+        payload: { kind: 'error' },
+      })
+    ).json();
+    const foreign = (
+      await app.inject({
+        method: 'POST',
+        url: `/api/v1/documents/${docId}/feedback`,
+        headers: auth(agent),
+        payload: { kind: 'error' },
+      })
+    ).json();
+    const doc = (
+      await app.inject({ method: 'GET', url: `/api/v1/documents/${third}`, headers: auth(lead) })
+    ).json();
+    await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${third}/structure`,
+      headers: { ...auth(lead), 'if-match': doc.etag },
+      payload: minimalStructure,
+    });
+    const p = await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${third}/publish`,
+      headers: auth(lead),
+      payload: { label: 'סגירת משובים', resolveFeedbackIds: [a.id, foreign.id] },
+    });
+    expect(p.statusCode).toBe(200);
+    expect(p.json().version).toBe(2);
+    const fa = (
+      await app.inject({ method: 'GET', url: `/api/v1/feedback/${a.id}`, headers: auth(lead) })
+    ).json();
+    const fb = (
+      await app.inject({ method: 'GET', url: `/api/v1/feedback/${b.id}`, headers: auth(lead) })
+    ).json();
+    const ff = (
+      await app.inject({ method: 'GET', url: `/api/v1/feedback/${foreign.id}`, headers: auth(lead) })
+    ).json();
+    expect(fa).toMatchObject({ status: 'done', resolvedVersion: 2, decidedBy: lead.id });
+    expect(fb.status).toBe('new');
+    expect(ff.status).toBe('new'); // belongs to another document → ignored
+  });
 });

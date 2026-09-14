@@ -28,6 +28,7 @@ import * as repo from './repo.js';
 import { annotateBlame, diffDocuments, diffStats } from './diff.js';
 import { inboundFor } from '../graph/repo.js';
 import { updateEmbedding } from '../search/repo.js';
+import { resolveFeedback } from '../feedback/repo.js'; // W3: close reports with the published version
 
 const Params = z.object({ id: IdSchema });
 /** Stage 4 `/documents/:id/backlinks`; the contract spells this response inline. */
@@ -261,6 +262,14 @@ export default async function routes(app: FastifyInstance) {
           label: body.label,
           markPartial: body.markPartial,
         });
+        if (body.resolveFeedbackIds?.length) {
+          const closed = await resolveFeedback(tx, body.resolveFeedbackIds, id, version, user.id);
+          for (const fid of closed)
+            await app.events.publish(
+              tx,
+              makeEvent('feedback.updated', { feedbackId: fid, documentId: id, status: 'done' }),
+            );
+        }
         const auditId = await audit(tx, {
           actorId: user.id,
           action: 'docs.publish',
