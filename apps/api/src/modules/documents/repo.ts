@@ -773,6 +773,26 @@ export async function relatedFor(q: Q, doc: Document, readUnpublished = true) {
   }));
 }
 
+export const hasPublishedVersion = async (q: Q, id: string): Promise<boolean> =>
+  ((await q.query(`select 1 from document_versions where document_id=$1 and kind='published' limit 1`, [id]))
+    .rowCount ?? 0) > 0;
+
+/** PRD §10: once-published items are never deleted; they move to 'invalid' or 'archived' (or back to 'draft' to be reworked). */
+export async function setStatus(
+  tx: Tx,
+  id: string,
+  status: 'invalid' | 'archived' | 'draft',
+  userId: string,
+): Promise<Document> {
+  const r = await tx.query(
+    `update documents set status=$2, updated_by=$3, updated_at=now(), etag=gen_random_uuid()::text
+      where id=$1 and deleted_at is null returning id`,
+    [id, status, userId],
+  );
+  if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
+  return (await getDocument(tx, id))!;
+}
+
 export async function restoreVersion(tx: Tx, id: string, v: number, userId: string) {
   const snap = await getVersion(tx, id, v);
   if (!snap) throw httpError(404, 'NOT_FOUND', 'הגרסה לא נמצאה');

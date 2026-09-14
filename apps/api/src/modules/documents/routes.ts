@@ -16,6 +16,7 @@ import {
   PatchDocumentBodySchema,
   PublishBodySchema,
   PublishResponseSchema,
+  SetStatusBodySchema,
   StructureBodySchema,
   VersionListSchema,
   makeEvent,
@@ -295,6 +296,45 @@ export default async function routes(app: FastifyInstance) {
     },
   );
 
+  app.post(
+    '/documents/:id/status',
+    {
+      config: { requires: ['docs.publish'], scope: 'document' },
+      schema: {
+        tags: ['documents'],
+        params: Params,
+        body: SetStatusBodySchema,
+        response: { 200: DocumentSchema },
+      },
+    },
+    async (req) => {
+      const user = requireUser(req);
+      const { id } = req.params as { id: string };
+      const body = req.body as z.infer<typeof SetStatusBodySchema>;
+      return withTransaction(app.db, async (tx) => {
+        const before = await repo.getDocument(tx, id);
+        if (!before) throw notFound('המסמך');
+        if (!hasScope(user, before.category)) throw forbidden();
+        const after = await repo.setStatus(tx, id, body.status, user.id);
+        await audit(tx, {
+          actorId: user.id,
+          action: 'docs.status',
+          entityType: 'document',
+          entityId: id,
+          before: { status: before.status },
+          after: { status: after.status, reason: body.reason },
+          requestId: req.id,
+          ip: req.ip,
+        });
+        await app.events.publish(
+          tx,
+          makeEvent('document.updated', { documentId: id, actorId: user.id, etag: after.etag }),
+        );
+        return after;
+      });
+    },
+  );
+
   app.get(
     '/documents/:id/versions',
     {
@@ -418,6 +458,13 @@ export default async function routes(app: FastifyInstance) {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
         if (!hasScope(user, before.category)) throw forbidden();
+        if (await repo.hasPublishedVersion(tx, id))
+          throw httpError(
+            409,
+            'ONCE_PUBLISHED',
+            'פריט שפורסם בעבר אינו נמחק; העבר אותו ל"לא בתוקף" או לארכיון',
+            { allowed: ['invalid', 'archived'] },
+          );
         await repo.softDelete(tx, id, user.id);
         const restoreUntil = new Date(Date.now() + app.config.TRASH_DAYS * 86400_000).toISOString();
         const auditId = await audit(tx, {

@@ -180,8 +180,13 @@ export async function purgeExpired(pool: pg.Pool, days: number): Promise<number>
     );
   }
   for (const table of ['documents', 'blocks', 'crm_fields', 'scripts']) {
+    // PRD §10: an item that was ever published is never hard-deleted, even from the trash.
+    const guard =
+      table === 'documents'
+        ? ` and not exists (select 1 from document_versions v where v.document_id=documents.id and v.kind='published')`
+        : '';
     const r = await pool.query(
-      `delete from ${table} where deleted_at is not null and deleted_at < ${cutoff}`,
+      `delete from ${table} where deleted_at is not null and deleted_at < ${cutoff}${guard}`,
     );
     n += r.rowCount ?? 0;
   }

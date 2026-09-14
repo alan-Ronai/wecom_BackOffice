@@ -134,4 +134,66 @@ run('governance', () => {
       expect(r.statusCode).toBe(404);
     });
   });
+
+  describe('status and deletion', () => {
+    it('marks a published document invalid with a reason and audits it', async () => {
+      const id = (await create('נוהל ישן')).id;
+      await publish(id);
+      const denied = await app.inject({
+        method: 'POST',
+        url: `/api/v1/documents/${id}/status`,
+        headers: auth(reader),
+        payload: { status: 'invalid', reason: 'x' },
+      });
+      expect(denied.statusCode).toBe(403);
+      const r = await app.inject({
+        method: 'POST',
+        url: `/api/v1/documents/${id}/status`,
+        headers: auth(editor),
+        payload: { status: 'invalid', reason: 'הוחלף בנוהל חדש' },
+      });
+      expect(r.statusCode).toBe(200);
+      expect(r.json().status).toBe('invalid');
+      const a = await db.pool.query("select after from audit_log where action='docs.status' and entity_id=$1", [
+        id,
+      ]);
+      expect(a.rows[0].after).toEqual({ status: 'invalid', reason: 'הוחלף בנוהל חדש' });
+      // hidden from readers now
+      const g = await app.inject({ method: 'GET', url: `/api/v1/documents/${id}`, headers: auth(reader) });
+      expect(g.json().code).toBe('NOT_PUBLISHED');
+      // and back to draft is allowed
+      const back = await app.inject({
+        method: 'POST',
+        url: `/api/v1/documents/${id}/status`,
+        headers: auth(editor),
+        payload: { status: 'draft', reason: 'עריכה מחדש' },
+      });
+      expect(back.json().status).toBe('draft');
+    });
+
+    it('refuses to delete a once-published document', async () => {
+      const id = (await create('פורסם פעם')).id;
+      await publish(id);
+      const d = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/documents/${id}`,
+        headers: auth(editor),
+      });
+      expect(d.statusCode).toBe(409);
+      expect(d.json().code).toBe('ONCE_PUBLISHED');
+      expect(d.json().details).toEqual({ allowed: ['invalid', 'archived'] });
+      const still = await db.pool.query('select deleted_at from documents where id=$1', [id]);
+      expect(still.rows[0].deleted_at).toBeNull();
+    });
+
+    it('still deletes a never-published draft', async () => {
+      const id = (await create('טיוטה למחיקה')).id;
+      const d = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/documents/${id}`,
+        headers: auth(editor),
+      });
+      expect(d.statusCode).toBe(200);
+    });
+  });
 });
