@@ -54,7 +54,15 @@ type Row = Record<string, never> & Record<string, unknown>;
 export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Document>> {
   if (!ids.length) return new Map();
   const [docs, phases, steps, actions, outcomes, branches, options] = await Promise.all([
-    q.query('select * from documents where id = any($1) and deleted_at is null', [ids]),
+    q.query(
+      `select d.*, ou.display_name owner_name, eu.display_name editor_name, au.display_name approver_name
+         from documents d
+         left join users ou on ou.id=d.owner_id
+         left join users eu on eu.id=d.editor_id
+         left join users au on au.id=d.approver_id
+        where d.id = any($1) and d.deleted_at is null`,
+      [ids],
+    ),
     q.query('select * from phases where document_id = any($1) order by position', [ids]),
     q.query('select * from steps where document_id = any($1) order by position', [ids]),
     q.query(
@@ -148,6 +156,15 @@ export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Doc
         createdBy: row.created_by ?? undefined,
         updatedBy: row.updated_by ?? undefined,
         etag: row.etag,
+        ownerId: row.owner_id ?? null,
+        ownerName: row.owner_name ?? null,
+        editorId: row.editor_id ?? null,
+        editorName: row.editor_name ?? null,
+        approverId: row.approver_id ?? null,
+        approverName: row.approver_name ?? null,
+        publishedAt: iso(row.published_at),
+        sourceReviewNeeded: row.source_review_needed ?? false,
+        sourceReviewReason: row.source_review_reason ?? null,
       }),
     );
   }
@@ -220,6 +237,7 @@ export async function listCards(
     left join (select to_document_id id, count(distinct from_document_id) n from document_links where to_document_id is not null group by 1) li on li.id=d.id
     left join (select s.document_id, array_agg(distinct f.field_name) names from step_field_refs f join steps s on s.id=f.step_id group by 1) cf on cf.document_id=d.id
     left join users au on au.id=d.updated_by
+    left join users ou on ou.id=d.owner_id
     where ${where.join(' and ')}`;
 
   const total = (await q.query(`select count(*)::int n ${base}`, params)).rows[0].n as number;
@@ -228,7 +246,8 @@ export async function listCards(
   const rows = await q.query(
     `select d.*, coalesce(st.n,0)::int step_count, coalesce(st.shared,false) shared,
        coalesce(lo.n,0)::int links_out, coalesce(li.n,0)::int links_in, coalesce(v.total,0)::int views,
-       coalesce(cf.names,'{}') crm, (p.user_id is not null) pinned, au.display_name author_name
+       coalesce(cf.names,'{}') crm, (p.user_id is not null) pinned, au.display_name author_name,
+       ou.display_name owner_name
      ${base} order by ${order} limit ${limit} offset ${offset}`,
     params,
   );
@@ -255,6 +274,13 @@ export async function listCards(
         hasSharedBlocks: r.shared,
         pinned: r.pinned,
         authorName: r.author_name ?? undefined,
+        ownerId: r.owner_id ?? null,
+        ownerName: r.owner_name ?? null,
+        editorId: r.editor_id ?? null,
+        approverId: r.approver_id ?? null,
+        publishedAt: iso(r.published_at),
+        sourceReviewNeeded: r.source_review_needed ?? false,
+        sourceReviewReason: r.source_review_reason ?? null,
       }),
     ),
   };
@@ -309,6 +335,8 @@ const PATCH_COLUMNS: Record<string, string> = {
   priority: 'priority',
   code: 'code',
   sourceRef: 'source_ref',
+  ownerId: 'owner_id',
+  editorId: 'editor_id',
 };
 
 /**
@@ -329,6 +357,15 @@ export async function patchDocument(
   if (!cur.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
   if (ifMatch && ifMatch !== cur.rows[0].etag)
     throw httpError(412, 'ETAG_MISMATCH', 'המסמך השתנה בינתיים — טען מחדש ונסה שוב');
+  // A dangling owner/editor would silently render as "unassigned"; fail loudly instead.
+  for (const key of ['ownerId', 'editorId'] as const) {
+    const v = body[key];
+    if (v) {
+      const u = await tx.query('select 1 from users where id=$1 and active', [v]);
+      if (!u.rowCount)
+        throw httpError(400, 'UNKNOWN_USER', 'המשתמש שנבחר אינו קיים או אינו פעיל', { field: key });
+    }
+  }
   const sets: string[] = [];
   const params: unknown[] = [];
   for (const [key, col] of Object.entries(PATCH_COLUMNS)) {
@@ -562,7 +599,9 @@ export async function publishDocument(
   const version = (cur.rows[0].current_version as number) + 1;
   const status = opts.markPartial || isPartial(before, blocks) ? 'partial' : 'published';
   await tx.query(
-    'update documents set current_version=$2, status=$3, updated_by=$4, updated_at=now(), etag=gen_random_uuid()::text where id=$1',
+    `update documents set current_version=$2, status=$3, updated_by=$4, updated_at=now(), etag=gen_random_uuid()::text,
+            approver_id=$4, published_at=now()
+      where id=$1`,
     [id, version, status, opts.actorId],
   );
   const published = (await getDocument(tx, id))!;

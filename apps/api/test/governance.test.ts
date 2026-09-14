@@ -196,4 +196,46 @@ run('governance', () => {
       expect(d.statusCode).toBe(200);
     });
   });
+
+  describe('ownership', () => {
+    it('patches owner and editor, and publish stamps approver and publishedAt', async () => {
+      const owner = await makeUser(db.pool, { name: 'רונית מ.' });
+      const id = (await create('עם בעלים')).id;
+      const p = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/documents/${id}`,
+        headers: auth(editor),
+        payload: { ownerId: owner.id, editorId: editor.id },
+      });
+      expect(p.statusCode).toBe(200);
+      expect(p.json().ownerId).toBe(owner.id);
+      expect(p.json().ownerName).toBe('רונית מ.');
+      expect(p.json().editorId).toBe(editor.id);
+      expect(p.json().approverId).toBeNull();
+      expect(p.json().publishedAt).toBeNull();
+      await publish(id);
+      const g = (
+        await app.inject({ method: 'GET', url: `/api/v1/documents/${id}`, headers: auth(editor) })
+      ).json();
+      expect(g.approverId).toBe(editor.id);
+      expect(g.approverName).toBe(editor.name);
+      expect(typeof g.publishedAt).toBe('string');
+      const card = (
+        await app.inject({ method: 'GET', url: '/api/v1/documents?q=בעלים', headers: auth(editor) })
+      ).json().items[0];
+      expect(card.ownerName).toBe('רונית מ.');
+      expect(card.sourceReviewNeeded).toBe(false);
+    });
+    it('rejects an unknown owner id with 400', async () => {
+      const id = (await create('בעלים שגוי')).id;
+      const p = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/documents/${id}`,
+        headers: auth(editor),
+        payload: { ownerId: '00000000-0000-4000-8000-000000000000' },
+      });
+      expect(p.statusCode).toBe(400);
+      expect(p.json().code).toBe('UNKNOWN_USER');
+    });
+  });
 });
