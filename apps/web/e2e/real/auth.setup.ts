@@ -23,7 +23,7 @@ setup('signs in with the break-glass local account', async ({ page }) => {
 
   await page.getByLabel('דוא״ל').fill(email);
   await page.getByLabel('סיסמה').fill(password);
-  await page.getByRole('button', { name: 'כניסה מקומית' }).click();
+  await page.getByRole('button', { name: /^כניסה/ }).click();
 
   // Lands back on the deep link it was sent from, authenticated.
   await expect(page).toHaveURL(/\/library/);
