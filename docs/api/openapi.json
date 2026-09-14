@@ -6909,6 +6909,80 @@
         }
       }
     },
+    "/api/v1/documents/{id}/backlinks": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "stepKey": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "next",
+                              "prerequisite",
+                              "shares_block",
+                              "same_field",
+                              "derived_from_source",
+                              "related",
+                              "link"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "documentId",
+                          "title",
+                          "stepKey",
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/blocks": {
       "get": {
         "tags": [
@@ -7623,6 +7697,220 @@
         }
       }
     },
+    "/api/v1/blocks/{id}/page": {
+      "get": {
+        "tags": [
+          "blocks"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "block": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "slug": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{1,80}$"
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "step",
+                            "script"
+                          ]
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "script": {
+                          "type": "string"
+                        },
+                        "actions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "text"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "default": []
+                        },
+                        "outcomes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "ok",
+                                  "next",
+                                  "alert"
+                                ]
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "goto": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "text"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "default": []
+                        },
+                        "currentVersion": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedBy": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "slug",
+                        "title",
+                        "kind",
+                        "currentVersion",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "usage": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "sim",
+                              "tech",
+                              "billing",
+                              "plans",
+                              "intl",
+                              "ops"
+                            ]
+                          },
+                          "stepKey": {
+                            "type": "string"
+                          },
+                          "stepNum": {
+                            "type": "string"
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "embedded",
+                              "reference"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "documentId",
+                          "title",
+                          "category",
+                          "stepKey",
+                          "stepNum",
+                          "mode"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "versions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "integer"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "authorName": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "label",
+                          "authorName",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "block",
+                    "usage",
+                    "versions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/blocks/{id}/usage": {
       "get": {
         "tags": [
@@ -7887,6 +8175,311 @@
                   },
                   "required": [
                     "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/fields/{name}/page": {
+      "get": {
+        "tags": [
+          "fields"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "field": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "renamed",
+                            "new",
+                            "retired"
+                          ]
+                        },
+                        "renamedTo": {
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "effectiveFrom": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "note": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "status",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "usage": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "sim",
+                              "tech",
+                              "billing",
+                              "plans",
+                              "intl",
+                              "ops"
+                            ]
+                          },
+                          "stepKey": {
+                            "type": "string"
+                          },
+                          "stepNum": {
+                            "type": "string"
+                          },
+                          "stepTitle": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "documentId",
+                          "title",
+                          "category",
+                          "stepKey",
+                          "stepNum",
+                          "stepTitle",
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "documents": {
+                      "type": "integer"
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "actorName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "action": {
+                            "type": "string"
+                          },
+                          "before": {
+                            "nullable": true
+                          },
+                          "after": {
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "actorName",
+                          "action"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "alerts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "renamed",
+                              "unknown",
+                              "retired",
+                              "new"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "usage",
+                    "documents",
+                    "history",
+                    "alerts"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/fields/{name}/rename": {
+      "post": {
+        "tags": [
+          "fields"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "newName": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "updateReferences": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "newName",
+                  "label"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updatedDocuments": {
+                      "type": "integer"
+                    },
+                    "versionsCreated": {
+                      "type": "integer"
+                    },
+                    "field": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "renamed",
+                            "new",
+                            "retired"
+                          ]
+                        },
+                        "renamedTo": {
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "effectiveFrom": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "note": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "status",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "updatedDocuments",
+                    "versionsCreated",
+                    "field"
                   ],
                   "additionalProperties": false
                 }
@@ -9595,6 +10188,1189 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/graph": {
+      "get": {
+        "tags": [
+          "graph"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "focus",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "default": 2
+            },
+            "in": "query",
+            "name": "depth",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "types",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "sim",
+                "tech",
+                "billing",
+                "plans",
+                "intl",
+                "ops"
+              ]
+            },
+            "in": "query",
+            "name": "category",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "kinds",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 2000,
+              "default": 400
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "nodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document",
+                              "block",
+                              "field",
+                              "source",
+                              "script"
+                            ]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "sim",
+                              "tech",
+                              "billing",
+                              "plans",
+                              "intl",
+                              "ops"
+                            ]
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "degree": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "meta": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "label",
+                          "degree"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "edges": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "next",
+                              "prerequisite",
+                              "shares_block",
+                              "same_field",
+                              "derived_from_source",
+                              "related",
+                              "link"
+                            ]
+                          },
+                          "fromStepKey": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "origin": {
+                            "type": "string",
+                            "enum": [
+                              "explicit",
+                              "detected"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "to",
+                          "type",
+                          "fromStepKey",
+                          "origin"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "nodes",
+                    "edges",
+                    "truncated"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/graph/impact/{nodeId}": {
+      "get": {
+        "tags": [
+          "graph"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 3
+            },
+            "in": "path",
+            "name": "nodeId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "node": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "document",
+                            "block",
+                            "field",
+                            "source",
+                            "script"
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "category": {
+                          "type": "string",
+                          "enum": [
+                            "sim",
+                            "tech",
+                            "billing",
+                            "plans",
+                            "intl",
+                            "ops"
+                          ]
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "degree": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "meta": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "kind",
+                        "label",
+                        "degree"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "inbound": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "stepKey": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "next",
+                              "prerequisite",
+                              "shares_block",
+                              "same_field",
+                              "derived_from_source",
+                              "related",
+                              "link"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "documentId",
+                          "title",
+                          "stepKey",
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "brokenLinks": {
+                      "type": "integer"
+                    },
+                    "affectedDocuments": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "node",
+                    "inbound",
+                    "brokenLinks",
+                    "affectedDocuments"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/data/files": {
+      "get": {
+        "tags": [
+          "explorer"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sourceId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "json",
+                              "csv"
+                            ]
+                          },
+                          "rows": {
+                            "type": "integer"
+                          },
+                          "columns": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "mapping": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "column": {
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "type": "string",
+                                  "enum": [
+                                    "title",
+                                    "description",
+                                    "category",
+                                    "wave",
+                                    "priority",
+                                    "code",
+                                    "stepTitle",
+                                    "stepAction",
+                                    "stepOutcome",
+                                    "ignore"
+                                  ]
+                                },
+                                "sample": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "column",
+                                "field"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "syncState": {
+                            "type": "string",
+                            "enum": [
+                              "synced",
+                              "pending",
+                              "processing",
+                              "error"
+                            ]
+                          },
+                          "lastSyncedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "linkedDocuments": {
+                            "type": "integer"
+                          },
+                          "pendingSuggestions": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "sourceId",
+                          "title",
+                          "kind",
+                          "rows",
+                          "columns",
+                          "mapping",
+                          "syncState",
+                          "lastSyncedAt",
+                          "linkedDocuments",
+                          "pendingSuggestions"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "explorer"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sourceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "json",
+                        "csv"
+                      ]
+                    },
+                    "rows": {
+                      "type": "integer"
+                    },
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "mapping": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "column": {
+                            "type": "string"
+                          },
+                          "field": {
+                            "type": "string",
+                            "enum": [
+                              "title",
+                              "description",
+                              "category",
+                              "wave",
+                              "priority",
+                              "code",
+                              "stepTitle",
+                              "stepAction",
+                              "stepOutcome",
+                              "ignore"
+                            ]
+                          },
+                          "sample": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "column",
+                          "field"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "syncState": {
+                      "type": "string",
+                      "enum": [
+                        "synced",
+                        "pending",
+                        "processing",
+                        "error"
+                      ]
+                    },
+                    "lastSyncedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "linkedDocuments": {
+                      "type": "integer"
+                    },
+                    "pendingSuggestions": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "sourceId",
+                    "title",
+                    "kind",
+                    "rows",
+                    "columns",
+                    "mapping",
+                    "syncState",
+                    "lastSyncedAt",
+                    "linkedDocuments",
+                    "pendingSuggestions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/data/files/{sourceId}/preview": {
+      "get": {
+        "tags": [
+          "explorer"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 25
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "sourceId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "columns",
+                    "rows",
+                    "total"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/data/files/{sourceId}/mapping": {
+      "put": {
+        "tags": [
+          "explorer"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mapping": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "column": {
+                          "type": "string"
+                        },
+                        "field": {
+                          "type": "string",
+                          "enum": [
+                            "title",
+                            "description",
+                            "category",
+                            "wave",
+                            "priority",
+                            "code",
+                            "stepTitle",
+                            "stepAction",
+                            "stepOutcome",
+                            "ignore"
+                          ]
+                        },
+                        "sample": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "column",
+                        "field"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1
+                  }
+                },
+                "required": [
+                  "mapping"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "sourceId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sourceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "json",
+                        "csv"
+                      ]
+                    },
+                    "rows": {
+                      "type": "integer"
+                    },
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "mapping": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "column": {
+                            "type": "string"
+                          },
+                          "field": {
+                            "type": "string",
+                            "enum": [
+                              "title",
+                              "description",
+                              "category",
+                              "wave",
+                              "priority",
+                              "code",
+                              "stepTitle",
+                              "stepAction",
+                              "stepOutcome",
+                              "ignore"
+                            ]
+                          },
+                          "sample": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "column",
+                          "field"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "syncState": {
+                      "type": "string",
+                      "enum": [
+                        "synced",
+                        "pending",
+                        "processing",
+                        "error"
+                      ]
+                    },
+                    "lastSyncedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "linkedDocuments": {
+                      "type": "integer"
+                    },
+                    "pendingSuggestions": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "sourceId",
+                    "title",
+                    "kind",
+                    "rows",
+                    "columns",
+                    "mapping",
+                    "syncState",
+                    "lastSyncedAt",
+                    "linkedDocuments",
+                    "pendingSuggestions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/data/files/{sourceId}/reimport": {
+      "post": {
+        "tags": [
+          "explorer"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "sourceId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "revisionId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "duplicate": {
+                      "type": "boolean"
+                    },
+                    "suggestionsQueued": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "revisionId",
+                    "duplicate",
+                    "suggestionsQueued"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboards": {
+      "get": {
+        "tags": [
+          "dashboards"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "coverage": {
+                      "type": "object",
+                      "properties": {
+                        "cards": {
+                          "type": "integer"
+                        },
+                        "withDocument": {
+                          "type": "integer"
+                        },
+                        "partial": {
+                          "type": "integer"
+                        },
+                        "drafts": {
+                          "type": "integer"
+                        },
+                        "byCategory": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "category": {
+                                "type": "string",
+                                "enum": [
+                                  "sim",
+                                  "tech",
+                                  "billing",
+                                  "plans",
+                                  "intl",
+                                  "ops"
+                                ]
+                              },
+                              "cards": {
+                                "type": "integer"
+                              },
+                              "withDocument": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "category",
+                              "cards",
+                              "withDocument"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "cards",
+                        "withDocument",
+                        "partial",
+                        "drafts",
+                        "byCategory"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "freshness": {
+                      "type": "object",
+                      "properties": {
+                        "updatedLast30d": {
+                          "type": "integer"
+                        },
+                        "staleOver180d": {
+                          "type": "integer"
+                        },
+                        "byCategory": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "category": {
+                                "type": "string",
+                                "enum": [
+                                  "sim",
+                                  "tech",
+                                  "billing",
+                                  "plans",
+                                  "intl",
+                                  "ops"
+                                ]
+                              },
+                              "lastUpdatedAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              },
+                              "median_days": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "category",
+                              "lastUpdatedAt",
+                              "median_days"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "updatedLast30d",
+                        "staleOver180d",
+                        "byCategory"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "views7d": {
+                          "type": "integer"
+                        },
+                        "views30d": {
+                          "type": "integer"
+                        },
+                        "topDocuments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "documentId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "views": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "documentId",
+                              "title",
+                              "views"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "outcomesPicked7d": {
+                          "type": "integer"
+                        },
+                        "callsCompleted7d": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "views7d",
+                        "views30d",
+                        "topDocuments",
+                        "outcomesPicked7d",
+                        "callsCompleted7d"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "pipeline": {
+                      "type": "object",
+                      "properties": {
+                        "pending": {
+                          "type": "integer"
+                        },
+                        "accepted": {
+                          "type": "integer"
+                        },
+                        "rejected": {
+                          "type": "integer"
+                        },
+                        "applied": {
+                          "type": "integer"
+                        },
+                        "bySource": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "sourceId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "pending": {
+                                "type": "integer"
+                              },
+                              "applied": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "sourceId",
+                              "title",
+                              "pending",
+                              "applied"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "pending",
+                        "accepted",
+                        "rejected",
+                        "applied",
+                        "bySource"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "sync": {
+                      "type": "object",
+                      "properties": {
+                        "links": {
+                          "type": "integer"
+                        },
+                        "synced": {
+                          "type": "integer"
+                        },
+                        "pendingImport": {
+                          "type": "integer"
+                        },
+                        "pendingPush": {
+                          "type": "integer"
+                        },
+                        "conflicts": {
+                          "type": "integer"
+                        },
+                        "lastRunAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "links",
+                        "synced",
+                        "pendingImport",
+                        "pendingPush",
+                        "conflicts",
+                        "lastRunAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "generatedAt",
+                    "coverage",
+                    "freshness",
+                    "usage",
+                    "pipeline",
+                    "sync"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/telemetry": {
+      "post": {
+        "tags": [
+          "dashboards"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "outcome",
+                            "call_completed",
+                            "palette",
+                            "jump"
+                          ]
+                        },
+                        "documentId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "stepKey": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 200
+                  }
+                },
+                "required": [
+                  "events"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
           }
         }
       }

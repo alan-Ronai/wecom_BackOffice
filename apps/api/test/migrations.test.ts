@@ -2,9 +2,12 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import pg from 'pg';
 import { runner } from 'node-pg-migrate';
+import { readdirSync } from 'node:fs';
 import { DEFAULT_ROLES, PERMISSIONS } from '@wecom/shared';
 
 const run = process.env.RUN_INTEGRATION === '1' ? describe : describe.skip;
+/** Counted, not hard-coded: every lane that adds a migration must still roll back to empty. */
+const MIGRATION_COUNT = readdirSync('migrations').filter((f) => /^\d+_.+\.js$/.test(f)).length;
 run('migrations', () => {
   let c: StartedPostgreSqlContainer;
   let pool: pg.Pool;
@@ -66,8 +69,15 @@ run('migrations', () => {
       'audit_log',
       'connectors',
       'sync_links',
+      'telemetry_events',
     ])
       expect(names, t).toContain(t);
+    // Stage 4 columns the data explorer reads back.
+    const cols = await pool.query(
+      `select table_name || '.' || column_name c from information_schema.columns
+        where table_schema='public' and (table_name, column_name) in (('sources','columns'), ('source_revisions','data_rows'))`,
+    );
+    expect(cols.rows.map((x) => x.c).sort()).toEqual(['source_revisions.data_rows', 'sources.columns']);
   });
   it('seeds permissions and default roles that match packages/shared', async () => {
     // `PERMISSIONS`/`DEFAULT_ROLES` are duplicated verbatim in 0002_identity.js;
@@ -98,7 +108,7 @@ run('migrations', () => {
       databaseUrl: c.getConnectionUri(),
       dir: 'migrations',
       direction: 'down',
-      count: 9,
+      count: MIGRATION_COUNT,
       migrationsTable: 'pgmigrations',
       ignorePattern: 'package\\.json',
       log: () => undefined,
