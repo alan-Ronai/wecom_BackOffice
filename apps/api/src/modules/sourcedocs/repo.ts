@@ -1,5 +1,5 @@
 import type pg from 'pg';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { htmlToText, sanitizeHtml, type SourceDocumentVersion } from '@wecom/shared';
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
@@ -71,11 +71,18 @@ export async function saveSourceDocument(
   if (cur.rowCount && input.ifMatch && input.ifMatch !== cur.rows[0].etag)
     throw httpError(412, 'ETAG_MISMATCH', 'מסמך המקור השתנה בינתיים — טען מחדש ונסה שוב');
   const version = (cur.rowCount ? (cur.rows[0].current_version as number) : 0) + 1;
+  /**
+   * B-M10: the etag is minted here rather than by `gen_random_uuid()` inside the update, because
+   * the same value has to land on both the live row and the version row. A version's etag is the
+   * one that was live while it was current, so `GET /source/versions/:v` can hand back something
+   * that stops matching the moment a newer version is saved.
+   */
+  const etag = randomUUID();
   const up = cur.rowCount
     ? await tx.query(
-        `update source_documents set html=$2, text=$3, hash=$4, current_version=$5, etag=gen_random_uuid()::text, updated_by=$6, updated_at=now()
+        `update source_documents set html=$2, text=$3, hash=$4, current_version=$5, etag=$7, updated_by=$6, updated_at=now()
          where document_id=$1 returning id`,
-        [documentId, html, text, hash, version, input.authorId],
+        [documentId, html, text, hash, version, input.authorId, etag],
       )
     : /**
        * `select … for update` locks nothing when there is no row yet, so two first-saves race
@@ -83,14 +90,22 @@ export async function saveSourceDocument(
        * already knows how to handle, instead of a raw 500 on the unique constraint.
        */
       await tx.query(
-        `insert into source_documents(document_id, html, text, hash, current_version, updated_by) values ($1,$2,$3,$4,$5,$6)
+        `insert into source_documents(document_id, html, text, hash, current_version, updated_by, etag) values ($1,$2,$3,$4,$5,$6,$7)
          on conflict (document_id) do nothing returning id`,
-        [documentId, html, text, hash, version, input.authorId],
+        [documentId, html, text, hash, version, input.authorId, etag],
       );
   if (!up.rowCount) throw httpError(412, 'ETAG_MISMATCH', 'מסמך המקור נוצר בינתיים — טען מחדש ונסה שוב');
   await tx.query(
-    `insert into source_document_versions(source_document_id, version, html, author_id, label, source_revision_id) values ($1,$2,$3,$4,$5,$6)`,
-    [up.rows[0].id, version, html, input.authorId, input.label ?? '', input.sourceRevisionId ?? null],
+    `insert into source_document_versions(source_document_id, version, html, author_id, label, source_revision_id, etag) values ($1,$2,$3,$4,$5,$6,$7)`,
+    [
+      up.rows[0].id,
+      version,
+      html,
+      input.authorId,
+      input.label ?? '',
+      input.sourceRevisionId ?? null,
+      etag,
+    ],
   );
   return (await getSourceDocument(tx, documentId))!;
 }
@@ -113,13 +128,18 @@ export async function listSourceVersions(q: Q, documentId: string): Promise<Sour
   }));
 }
 
+/**
+ * A historical version, served with *its own* etag (`v.etag`, not `s.etag` — B-M10). Handing back
+ * the live etag meant the history pane's edit path could `PUT` on top of a newer version and pass
+ * `If-Match`, overwriting it with no 412.
+ */
 export async function getSourceVersion(
   q: Q,
   documentId: string,
   version: number,
 ): Promise<SourceDocRow | null> {
   const r = await q.query(
-    `select s.document_id, v.html, v.author_id updated_by, u.display_name, v.created_at updated_at, v.version current_version, s.etag,
+    `select s.document_id, v.html, v.author_id updated_by, u.display_name, v.created_at updated_at, v.version current_version, v.etag,
             v.source_revision_id latest_revision_id
      from source_document_versions v join source_documents s on s.id=v.source_document_id left join users u on u.id=v.author_id
      where s.document_id=$1 and v.version=$2`,

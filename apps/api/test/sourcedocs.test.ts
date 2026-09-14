@@ -367,6 +367,75 @@ run('source documents', () => {
     expect(list.json().items[0].label).toBe('שוחזר מגרסה 1');
   });
 
+  /**
+   * B-M10 — a historical version used to be served with the *live* etag, so the history pane's
+   * edit path could save on top of a newer version and pass `If-Match`. Each version now carries
+   * the etag that was current while it was.
+   */
+  it('a version is served with its own etag, and saving against an old one is a 412', async () => {
+    const at = async (v: number) =>
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/v1/documents/${docId}/source/versions/${v}`,
+          headers: auth(editor),
+        })
+      ).json();
+    const live = (
+      await app.inject({ method: 'GET', url: `/api/v1/documents/${docId}/source`, headers: auth(editor) })
+    ).json();
+    const current = await at(live.version);
+    const first = await at(1);
+
+    // The current version and the live document are the same thing, so they share an etag…
+    expect(current.etag).toBe(live.etag);
+    // …and every earlier version has one of its own.
+    expect(first.etag).not.toBe(live.etag);
+    expect(typeof first.etag).toBe('string');
+    expect(first.etag.length).toBeGreaterThan(0);
+    const all = (
+      await db.pool.query<{ etag: string }>(
+        `select v.etag from source_document_versions v join source_documents s on s.id=v.source_document_id
+          where s.document_id=$1`,
+        [docId],
+      )
+    ).rows.map((x) => x.etag);
+    expect(new Set(all).size).toBe(all.length);
+
+    const stale = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${docId}/source`,
+      headers: { ...auth(editor), 'if-match': first.etag as string },
+      payload: { html: '<p>עריכה על גרסה ישנה</p>' },
+    });
+    expect(stale.statusCode, stale.body).toBe(412);
+    expect(stale.json().code).toBe('ETAG_MISMATCH');
+    // Nothing was written: the newer text is still there.
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/v1/documents/${docId}/source`,
+          headers: auth(editor),
+        })
+      ).json(),
+    ).toMatchObject({ html: live.html, version: live.version, etag: live.etag });
+
+    // The current version's etag still saves, which is what keeps the history pane usable.
+    const ok = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${docId}/source`,
+      headers: { ...auth(editor), 'if-match': current.etag as string },
+      payload: { html: '<p>עריכה על הגרסה הנוכחית</p>' },
+    });
+    expect(ok.statusCode, ok.body).toBe(200);
+    expect(ok.json().version).toBe(live.version + 1);
+    expect(ok.json().etag).not.toBe(live.etag);
+    // The version that was current keeps the etag it had; the new one takes the live value.
+    expect((await at(live.version)).etag).toBe(live.etag);
+    expect((await at(live.version + 1)).etag).toBe(ok.json().etag);
+  });
+
   it('gc deletes only unreferenced assets older than a day', async () => {
     const { gcUnreferencedAssets } = await import('../src/modules/sourcedocs/assets.js');
     await db.pool.query(
@@ -448,5 +517,41 @@ run('source documents', () => {
     await db.pool.query(sql.replace(/\\\\n/g, '\\n'));
     const r = await db.pool.query('select html from source_documents where document_id=$1', [d.json().id]);
     expect(r.rows[0].html).toBe('<h2>כותרת</h2><p>גוף</p>');
+  });
+
+  /**
+   * B-M10's backfill, run against rows that predate the column: the version that is current
+   * inherits the live etag (so an editor mid-edit is not bounced), and every older row gets a
+   * value derived from its own version and body — distinct even when a restore made two versions
+   * share their html.
+   */
+  it('backfill: the current version inherits the live etag, older ones get a per-version hash', async () => {
+    const { readFileSync } = await import('node:fs');
+    const backfill = [...readFileSync('migrations/0037_source_version_etag.js', 'utf8').matchAll(
+      /pgm\.sql\(`([\s\S]*?)`\)/g,
+    )].map((m) => m[1]);
+    expect(backfill).toHaveLength(2);
+
+    const sd = await db.pool.query<{ id: string; etag: string; current_version: number }>(
+      'select id, etag, current_version from source_documents where document_id=$1',
+      [docId],
+    );
+    const { id, etag: live, current_version: current } = sd.rows[0];
+    // Put the table back in the state the migration finds it in: the column present but empty.
+    await db.pool.query('alter table source_document_versions alter column etag drop not null');
+    await db.pool.query('update source_document_versions set etag=null where source_document_id=$1', [id]);
+    for (const sql of backfill) await db.pool.query(sql);
+    await db.pool.query('alter table source_document_versions alter column etag set not null');
+
+    const rows = (
+      await db.pool.query<{ version: number; etag: string; expected: string }>(
+        `select version, etag, md5(version::text || ':' || html) expected
+           from source_document_versions where source_document_id=$1 order by version`,
+        [id],
+      )
+    ).rows;
+    expect(rows.length).toBeGreaterThan(1);
+    for (const v of rows) expect(v.etag, `v${v.version}`).toBe(v.version === current ? live : v.expected);
+    expect(new Set(rows.map((v) => v.etag)).size).toBe(rows.length);
   });
 });
