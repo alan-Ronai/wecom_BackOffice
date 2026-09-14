@@ -1,6 +1,7 @@
 import type { DocumentCard } from '@wecom/shared';
 import { PRI } from '../../lib/constants.js';
 import { TypeBadge, worldShort } from '../taxonomy/TypeBadge.js';
+import { StatusChip } from '../governance/StatusChip.js';
 
 /** Port of legacy KB.cardFor — chips, title, description and the computed meta row. */
 export function DocCard({
@@ -15,7 +16,6 @@ export function DocCard({
   onMenu: (anchor: HTMLElement) => void;
 }) {
   const partial = card.status === 'partial';
-  const draft = card.status === 'draft';
   const bits: string[] = [`${card.stepCount} שלבים`];
   if (partial) bits.push('חסרים שלבים · לבדיקה');
   else if (card.views) bits.push(`נצפה ${card.views}×`);
@@ -66,12 +66,12 @@ export function DocCard({
       <div className="chips">
         <span className="chip chip-blue">{worldShort(card.category)}</span>
         {card.docType ? <TypeBadge docType={card.docType} compact /> : null}
-        {partial ? (
-          <span className="chip chip-amber">מסמך חלקי</span>
-        ) : draft ? (
-          <span className="chip chip-amber">טיוטה</span>
-        ) : (
+        {/* W2: one chip covers every non-published state, `invalid` and `archived` included;
+            a published card keeps showing how common the call is instead. */}
+        {card.status === 'published' ? (
           <span className={`chip ${PRI[card.priority].cls}`}>{PRI[card.priority].label}</span>
+        ) : (
+          <StatusChip status={card.status} />
         )}
       </div>
       <div className="title">{card.title}</div>

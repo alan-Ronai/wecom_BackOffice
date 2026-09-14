@@ -196,3 +196,59 @@ describe('W6 article mounts', () => {
     expect(screen.queryByRole('button', { name: /הבא בנושא/ })).toBeNull();
   });
 });
+
+describe('W6 library mounts', () => {
+  it('passes the taxonomy filters from the URL to GET /documents and shows the type badge', async () => {
+    let seen: URL | null = null;
+    server.use(
+      http.get(`${B}/documents`, ({ request }) => {
+        seen = new URL(request.url);
+        return HttpResponse.json({
+          items: [{ ...fx.cards[0]!, docType: 'O', tags: ['apn'] }],
+          total: 1,
+          page: 1,
+          pageSize: 50,
+        });
+      }),
+    );
+    renderWithProviders(<App />, { route: '/library?world=tech&docType=O&tag=apn' });
+    const grid = await screen.findByTestId('library-grid');
+    await waitFor(() => expect(seen?.searchParams.get('docType')).toBe('O'));
+    expect(seen!.searchParams.get('world')).toBe('tech');
+    expect(seen!.searchParams.getAll('tag')).toEqual(['apn']);
+    // The card badge is `compact`, so its label lives in the title attribute.
+    expect(await within(grid).findByTitle('תפעול')).toBeInTheDocument(); // DOC_TYPE_LABELS.O
+  });
+
+  it('shows the status actions to an editor', async () => {
+    renderWithProviders(<App />, { route: '/library' });
+    const grid = await screen.findByTestId('library-grid');
+    await userEvent.click((await within(grid).findAllByTitle('פעולות'))[0]!);
+    expect(await screen.findByText('סמן כלא בתוקף')).toBeInTheDocument();
+  });
+
+  it('hides them from a read-only reader', async () => {
+    server.use(http.get(`${B}/auth/me`, () => HttpResponse.json({ ...fx.me, permissions: ['docs.read'] })));
+    renderWithProviders(<App />, { route: '/library' });
+    const grid = await screen.findByTestId('library-grid');
+    await userEvent.click((await within(grid).findAllByTitle('פעולות'))[0]!);
+    await screen.findByText('🕓 היסטוריית גרסאות');
+    expect(screen.queryByText('סמן כלא בתוקף')).toBeNull();
+  });
+
+  it('marks an invalid item on its card', async () => {
+    server.use(
+      http.get(`${B}/documents`, () =>
+        HttpResponse.json({
+          items: [{ ...fx.cards[0]!, status: 'invalid' }],
+          total: 1,
+          page: 1,
+          pageSize: 50,
+        }),
+      ),
+    );
+    renderWithProviders(<App />, { route: '/library' });
+    const grid = await screen.findByTestId('library-grid');
+    expect(await within(grid).findByText('לא בתוקף')).toBeInTheDocument();
+  });
+});
