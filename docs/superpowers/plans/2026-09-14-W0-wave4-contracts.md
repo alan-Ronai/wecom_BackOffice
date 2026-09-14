@@ -604,7 +604,7 @@ export const SourceDocumentVersionSchema = z.object({
 });
 export type SourceDocumentVersion = z.infer<typeof SourceDocumentVersionSchema>;
 export const SourceDocumentVersionsResponseSchema = z.object({ items: z.array(SourceDocumentVersionSchema) });
-export const ASSET_MIMES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'] as const;
+export const ASSET_MIMES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const; // no SVG: script/foreignObject risk
 export const ASSET_MAX_BYTES = 10 * 1024 * 1024;
 export const AssetSchema = z.object({
   id: IdSchema,
@@ -1164,6 +1164,9 @@ Visibility: without `docs.read_unpublished`, list/get/related/links/backlinks/to
 | POST | `/documents/:id/source/import` | multipart `.docx` | `SourceDocumentSchema` | docs.edit |
 | GET | `/documents/:id/source/export.docx` | — | docx bytes | docs.read |
 | GET | `/sources/:id/revisions/:rev/raw` | — | original upload bytes | docs.read |
+| GET | `/documents/:id/source/draft` | — | `{ html, updatedAt }` or 204 (per-user autosave in `drafts`, key `source:<id>`) | docs.edit |
+| PUT | `/documents/:id/source/draft` | `{ html }` | 204 | docs.edit |
+| DELETE | `/documents/:id/source/draft` | — | 204 | docs.edit |
 | POST | `/assets` | multipart image | `AssetSchema` | docs.edit |
 | GET | `/assets/:id` | — | bytes, immutable cache | docs.read |
 

@@ -74,7 +74,7 @@ All new tables follow the stage-1 conventions (`id uuid`, timestamps, `created_b
 
 - `source_documents(id, document_id → documents unique, html text not null default '', text text not null default '', hash text, current_version int default 0, etag text, updated_by, updated_at, created_at)`.
 - `source_document_versions(id, source_document_id → source_documents cascade, version int, html text, author_id → users, label text default '', source_revision_id → source_revisions null, created_at)`; unique `(source_document_id, version)`.
-- `assets(id, mime text, bytes bytea, sha256 text unique, size int, width int null, height int null, created_by, created_at)`. Max 10 MB per asset; allowed mimes `image/png, image/jpeg, image/gif, image/webp, image/svg+xml` (svg sanitized).
+- `assets(id, mime text, bytes bytea, sha256 text unique, size int, width int null, height int null, created_by, created_at)`. Max 10 MB per asset; allowed mimes `image/png, image/jpeg, image/gif, image/webp` (SVG rejected with 415).
 - Existing `sources` rows of kind `docx`/`wordpress` map onto a source document per linked document: `source_documents.html` is initialised from the latest accepted `source_revisions.paragraphs` rendered to HTML (paragraph → `<p>`/`<hN>`), so the source pane is populated for every existing item.
 
 ### 2.5 Usage (0034, W5)
@@ -170,7 +170,7 @@ Production implementations: `Notifier` writes wave 3's `notifications` table and
 - TipTap (StarterKit + Table, Image, Link, TextAlign, Underline), `dir="rtl"` default, Hebrew toolbar. Server-side sanitizer allowlist: `h1–h4, p, ul, ol, li, table, thead, tbody, tr, th, td, img[src=/api/v1/assets/*] (data: URIs rejected), a[href http(s)], strong, em, u, s, blockquote, code, pre, br, hr, span[dir], bdi`. Anything else is stripped; the stored HTML is therefore always renderable by WordPress and the docx exporter.
 - Images: paste/drop → `POST /assets` → `<img src="/api/v1/assets/:id">`. Export embeds bytes into the docx; WordPress push uploads to `wp/v2/media` and rewrites `src`; pull rewrites WordPress media URLs back to assets (downloaded once, deduped by sha256).
 - Import: mammoth docx → HTML → sanitizer → normal save path (label "יובא מ-Word"). Export: HTML walker in `packages/shared/src/format/htmlToDocx.ts` driving the `docx` package (headings, lists, tables, images, links, bold/italic/underline). Loss is limited to styling outside the allowlist; the export dialog says so.
-- Autosave every 3 s into `drafts` under key `source:<documentId>`; explicit "שמור גרסה" → `PUT /source` with label → version. Etag conflict → the same dialog the step editor uses.
+- Autosave every 3 s through `GET/PUT/DELETE /documents/:id/source/draft` (stored in `drafts` under key `source:<documentId>`, per user); explicit "שמור גרסה" → `PUT /source` with label → version. Etag conflict → the same dialog the step editor uses.
 - Article page pane modes: working / source / split (persisted in preferences). Source pane renders sanitized HTML read-only; editors get "ערוך מקור"; imported items get the raw docx download from the latest revision (`GET /sources/:id/revisions/:rev/raw`, added by W4).
 
 ### 5.2 Source change → working view (W2 + W4)
