@@ -45,11 +45,11 @@ export const WorldBodySchema = z.object({
 });
 export const WorldPatchSchema = WorldBodySchema.omit({ slug: true }).partial();
 export const WorldsResponseSchema = z.object({ items: z.array(WorldSchema) });
-export const WorldsQuerySchema = z.object({
-  includeInactive: z
-    .union([z.boolean(), z.enum(['true', 'false']).transform((v) => v === 'true')])
-    .optional(),
-});
+/** Query-string booleans arrive as strings; one coercion, reused by every wave-4 flag. */
+const boolParam = z.union([z.boolean(), z.enum(['true', 'false']).transform((v) => v === 'true')]);
+export const WorldsQuerySchema = z.object({ includeInactive: boolParam.optional() });
+export const TopicsQuerySchema = z.object({ includeInactive: boolParam.optional() });
+export const ForceQuerySchema = z.object({ force: boolParam.optional() });
 
 export const TopicSchema = z.object({
   id: IdSchema,
@@ -72,6 +72,12 @@ export const TopicPatchSchema = TopicBodySchema.omit({ slug: true }).partial().e
   worldSlug: WorldSlugSchema.optional(), // move a topic to another world
 });
 export const TopicsResponseSchema = z.object({ items: z.array(TopicSchema) });
+/**
+ * `GET /topics/:id/items` records a topic view as a side effect. A caller that wants the
+ * ordered item list for another reason — the article page's prev/next — passes `record=false`
+ * so `topic_views`, and the "נושאים נצפים" card that reads it, keeps meaning *topics browsed*.
+ */
+export const TopicItemsQuerySchema = z.object({ record: boolParam.default(true) });
 export const ReorderBodySchema = z.object({ ids: z.array(IdSchema).min(1).max(500) });
 
 export const TagCountSchema = z.object({
@@ -273,6 +279,12 @@ export const SourceDocumentSchema = z.object({
   updatedById: IdSchema.nullable(),
   updatedByName: z.string().nullable(),
   updatedAt: IsoDateSchema,
+  /**
+   * `source_revisions.id` behind the current version, when this source came from an import or a
+   * sync rather than being typed in. It is what makes the raw-file download reachable:
+   * `GET /sources/:id/revisions/:rev/raw` (spec §5.1).
+   */
+  latestRevisionId: IdSchema.nullable(),
 });
 export type SourceDocument = z.infer<typeof SourceDocumentSchema>;
 export const PutSourceDocumentBodySchema = z.object({

@@ -18,8 +18,8 @@ export default async function routes(app: FastifyInstance) {
     '/trash',
     { config: { requires: ['docs.read'] }, schema: { tags: ['trash'], response: { 200: TrashListSchema } } },
     async (req) => {
-      requireUser(req);
-      return { items: await repo.listTrash(app.db, app.config.TRASH_DAYS) };
+      const user = requireUser(req);
+      return { items: await repo.listTrash(app.db, app.config.TRASH_DAYS, user.worldScopes) };
     },
   );
 
@@ -88,7 +88,7 @@ export default async function routes(app: FastifyInstance) {
     async (req) => {
       const user = requireUser(req);
       return withTransaction(app.db, async (tx) => {
-        const items = await repo.listTrash(tx, app.config.TRASH_DAYS);
+        const items = await repo.listTrash(tx, app.config.TRASH_DAYS, user.worldScopes);
         for (const i of items) await repo.restore(tx, i.type, i.id, user.id);
         await audit(tx, {
           actorId: user.id,
@@ -109,26 +109,39 @@ export default async function routes(app: FastifyInstance) {
     '/trash',
     {
       config: { requires: ['docs.delete'] },
-      schema: { tags: ['trash'], response: { 200: z.object({ purged: z.number().int() }) } },
+      schema: {
+        tags: ['trash'],
+        response: {
+          200: z.object({
+            purged: z.number().int(),
+            /** Items left in the trash because they were published once (PRD §10). */
+            skipped: z.number().int(),
+          }),
+        },
+      },
     },
     async (req) => {
       const user = requireUser(req);
       if (req.headers['x-confirm'] !== 'empty')
         throw httpError(428, 'CONFIRM_REQUIRED', 'ריקון סל המיחזור דורש אישור');
       return withTransaction(app.db, async (tx) => {
-        const items = await repo.listTrash(tx, app.config.TRASH_DAYS);
-        for (const i of items) await repo.purge(tx, i.type, i.id);
+        const items = await repo.listTrash(tx, app.config.TRASH_DAYS, user.worldScopes);
+        let purged = 0;
+        // A once-published item skips rather than aborting the whole empty; the operator is
+        // told how many stayed behind instead of the request 409ing on the first one.
+        for (const i of items) if (await repo.purge(tx, i.type, i.id, { skipOncePublished: true })) purged++;
+        const skipped = items.length - purged;
         await audit(tx, {
           actorId: user.id,
           action: 'trash.purge',
           entityType: 'trash',
           entityId: null,
           before: { items: items.length },
-          after: null,
+          after: { purged, skipped },
           requestId: req.id,
           ip: req.ip,
         });
-        return { purged: items.length };
+        return { purged, skipped };
       });
     },
   );

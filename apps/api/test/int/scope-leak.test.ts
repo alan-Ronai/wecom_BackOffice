@@ -10,6 +10,8 @@ const run = integration ? describe : describe.skip;
 const FIELD = 'גלישה בארץ';
 /** The string the whole file is about: it must appear in no response the scoped user gets. */
 const SECRET = 'סודי לחיובים בלבד';
+/** Same idea for the tag vocabulary: a tag name is content, and the counts are an oracle. */
+const SECRET_TAG = 'לקוח-סודי';
 
 /**
  * One test for the whole boundary rather than one per route.
@@ -32,6 +34,11 @@ run('category scope: an out-of-scope document leaks through no route', () => {
   let billingDoc: string;
   let blockId: string;
   let billingComment: string;
+  let billingScript: string;
+  let techTopic: string;
+  let trashedBilling: string;
+  let billingSource: string;
+  let billingRevision: string;
 
   const post = (url: string, payload: unknown, u = admin) =>
     app.inject({ method: 'POST', url, headers: auth(u), payload });
@@ -126,6 +133,65 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     billingComment = (
       await post(`/api/v1/documents/${billingDoc}/comments`, { stepKey: 's2', text: SECRET })
     ).json().id;
+
+    /**
+     * Wave 4's five new read routes. A-I9: the wave that added them added no rows here, and
+     * A-C2 (`/scripts` served every world's type-T documents, drafts included) and A-I2
+     * (`/tags` served every world's tag vocabulary and counts) are exactly what these catch.
+     */
+    // A type-T "script" in billing, so /scripts has something to leak.
+    billingScript = (
+      await post('/api/v1/documents', {
+        title: SECRET + ' — תסריט',
+        description: '',
+        category: 'billing',
+        wave: 1,
+        priority: 'm',
+        kind: 'text',
+        docType: 'T',
+        bodyHtml: `<p>${SECRET}</p>`,
+      })
+    ).json().id;
+    // A tag that exists only on billing documents, so /tags has something to leak.
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${billingDoc}`,
+      headers: auth(admin),
+      payload: { tags: [SECRET_TAG] },
+    });
+    // A topic in a world the scoped user *can* see, with an out-of-scope document in it: the
+    // sharper case, because the route answers 200 and the filter has to do the work.
+    techTopic = (
+      await post('/api/v1/worlds/tech/topics', { slug: 'boundary', name: 'גבול', description: '' })
+    ).json().id;
+    await db.pool.query('insert into document_topics(document_id, topic_id) values ($1,$2), ($3,$2)', [
+      techDoc,
+      techTopic,
+      billingDoc,
+    ]);
+    // A deleted billing document, so /trash has something to leak (A-M12).
+    trashedBilling = await makeDoc(SECRET + ' — נמחק', 'billing');
+    await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/documents/${trashedBilling}`,
+      headers: auth(admin),
+    });
+    // A source document on the billing item — the fullest representation of an item, and the
+    // thing B-C1 served to anyone.
+    await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${billingDoc}/source`,
+      headers: auth(admin),
+      payload: { html: `<p>${SECRET}</p>`, label: 'מקור' },
+    });
+    billingSource = (await db.pool.query('select source_id from documents where id=$1', [billingDoc])).rows[0]
+      .source_id as string;
+    billingRevision = (
+      await db.pool.query(
+        'select id from source_revisions where source_id=$1 order by imported_at desc limit 1',
+        [billingSource],
+      )
+    ).rows[0].id as string;
   }, 180000);
 
   afterAll(async () => {
@@ -148,6 +214,14 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     // M1: `coverage.byCategory`/`freshness.byCategory` enumerated categories the caller cannot
     // read and `usage.topDocuments` returned titles from them.
     `/api/v1/dashboards`,
+    // A-I9: the five wave-4 read routes, plus the feedback queue W3 added (B-I1).
+    `/api/v1/topics/${techTopic}/items`,
+    `/api/v1/tags?limit=100`,
+    `/api/v1/scripts`,
+    `/api/v1/worlds`,
+    `/api/v1/trash`,
+    `/api/v1/feedback?pageSize=100`,
+    `/api/v1/feedback/analytics`,
   ];
 
   // One `it` rather than `it.each`: the urls are built from ids `beforeAll` assigns, and
@@ -158,6 +232,61 @@ run('category scope: an out-of-scope document leaks through no route', () => {
       expect(r.statusCode, `${url} -> ${r.body}`).toBe(200);
       expect(r.body, url).not.toContain(billingDoc);
       expect(r.body, url).not.toContain(SECRET);
+      expect(r.body, url).not.toContain(billingScript);
+      // A tag name is content in its own right, and its count is an oracle for "how much does
+      // that team have about X" (A-I2).
+      expect(r.body, url).not.toContain(SECRET_TAG);
+      expect(r.body, url).not.toContain(trashedBilling);
+    }
+  });
+
+  /**
+   * B-C1 — the source-document surface. `config.scope: 'document'` answers 403 for the four
+   * routes hung off a document id; `/sources/:id/revisions/:rev/raw` has no `:id` document for
+   * the plugin to resolve, so it resolves its owners itself and 404s. Either way the body must
+   * not carry the source text.
+   */
+  it('B-C1: the source routes of an out-of-scope document give the scoped user nothing', async () => {
+    for (const url of [
+      `/api/v1/documents/${billingDoc}/source`,
+      `/api/v1/documents/${billingDoc}/source/versions`,
+      `/api/v1/documents/${billingDoc}/source/versions/1`,
+      `/api/v1/documents/${billingDoc}/source/export.docx`,
+      `/api/v1/sources/${billingSource}/revisions/${billingRevision}/raw`,
+    ]) {
+      const r = await get(url);
+      expect([403, 404], `${url} -> ${r.statusCode} ${r.body}`).toContain(r.statusCode);
+      expect(r.body, url).not.toContain(SECRET);
+    }
+    // …and the unrestricted user still gets all five, so this is a filter and not a break.
+    for (const url of [
+      `/api/v1/documents/${billingDoc}/source`,
+      `/api/v1/documents/${billingDoc}/source/versions`,
+      `/api/v1/documents/${billingDoc}/source/versions/1`,
+      `/api/v1/documents/${billingDoc}/source/export.docx`,
+      `/api/v1/sources/${billingSource}/revisions/${billingRevision}/raw`,
+    ]) {
+      const r = await app.inject({ method: 'GET', url, headers: auth(admin) });
+      expect(r.statusCode, `${url} -> ${r.body}`).toBe(200);
+    }
+  });
+
+  it('A-C2/A-I1: the /scripts adapter is scoped for reads and for writes', async () => {
+    const list = await get('/api/v1/scripts');
+    expect(list.statusCode).toBe(200);
+    expect(list.json().items.map((x: { id: string }) => x.id)).not.toContain(billingScript);
+    // The same rows the scoped user cannot read, they cannot rewrite or delete either.
+    for (const [method, payload] of [
+      ['PUT', { title: 'חטיפה', text: 'x', tags: [] }],
+      ['DELETE', undefined],
+    ] as const) {
+      const r = await app.inject({
+        method,
+        url: `/api/v1/scripts/${billingScript}`,
+        headers: auth(scoped),
+        payload,
+      });
+      expect(r.statusCode, method).toBe(403);
     }
   });
 
@@ -336,6 +465,22 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     // about an empty graph: everything `makeDoc` creates starts as a draft.
     await post(`/api/v1/documents/${techDoc}/publish`, { label: 'פרסום לבדיקה' });
 
+    // The draft gets a source document, so the B-C1 routes have something to leak.
+    await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${draft}/source`,
+      headers: auth(admin),
+      payload: { html: `<p>${DRAFT}</p>`, label: 'מקור טיוטה' },
+    });
+    const draftSource = (await db.pool.query('select source_id from documents where id=$1', [draft])).rows[0]
+      .source_id as string;
+    const draftRevision = (
+      await db.pool.query(
+        'select id from source_revisions where source_id=$1 order by imported_at desc limit 1',
+        [draftSource],
+      )
+    ).rows[0].id as string;
+
     const urls = [
       `/api/v1/graph?limit=2000`,
       `/api/v1/graph/impact/field:${encodeURIComponent(FIELD)}`,
@@ -345,6 +490,12 @@ run('category scope: an out-of-scope document leaks through no route', () => {
       `/api/v1/search?q=${encodeURIComponent('טיוטה')}`,
       `/api/v1/dashboards`,
       `/api/v1/data/files`,
+      // A-I9: the wave-4 read routes.
+      `/api/v1/topics/${techTopic}/items`,
+      `/api/v1/tags?limit=100`,
+      `/api/v1/scripts`,
+      `/api/v1/worlds`,
+      `/api/v1/trash`,
     ];
     for (const url of urls) {
       const r = await app.inject({ method: 'GET', url, headers: auth(reader) });
@@ -360,11 +511,44 @@ run('category scope: an out-of-scope document leaks through no route', () => {
       `/api/v1/documents/${draft}/comments`,
       `/api/v1/documents/${draft}/notes`,
       `/api/v1/documents/${draft}/draft`,
+      // B-C1: the source surface is the fullest representation of an item, and it carried the
+      // world half of the boundary and not the status half.
+      `/api/v1/documents/${draft}/source`,
+      `/api/v1/documents/${draft}/source/versions`,
+      `/api/v1/documents/${draft}/source/versions/1`,
+      `/api/v1/documents/${draft}/source/export.docx`,
     ]) {
       const r = await app.inject({ method: 'GET', url, headers: auth(reader) });
       expect(r.statusCode, url).toBe(404);
       expect(r.json().code, url).toBe('NOT_PUBLISHED');
+      expect(r.body, url).not.toContain(DRAFT);
     }
+
+    /**
+     * B-C1's worst case: `/sources/:id/revisions/:rev/raw` had neither `scope: 'document'` nor
+     * a visibility check, so it served the original uploaded bytes of any source in any world.
+     */
+    const raw = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sources/${draftSource}/revisions/${draftRevision}/raw`,
+      headers: auth(reader),
+    });
+    expect(raw.statusCode).toBe(404);
+    expect(raw.body).not.toContain(DRAFT);
+
+    /**
+     * B-I5: filing feedback against a draft both puts a report into the editors' queue for an
+     * item the reporter could not read, and answers 201-vs-404 — the oracle
+     * `assertVisibleDocument` exists to close.
+     */
+    const fb = await app.inject({
+      method: 'POST',
+      url: `/api/v1/documents/${draft}/feedback`,
+      headers: auth(reader),
+      payload: { kind: 'unclear', text: 'לא ברור' },
+    });
+    expect(fb.statusCode).toBe(404);
+    expect(fb.json().code).toBe('NOT_PUBLISHED');
 
     // …and an editor still sees all of it, so this is a filter and not a break.
     const asAdmin = await app.inject({

@@ -14,7 +14,9 @@ export interface WpStub {
   url: string;
   posts: Map<string, WpPost>;
   puts: { type: string; id: number | null; body: unknown }[];
-  media: { mime: string; size: number }[];
+  media: { mime: string; size: number; bytes: Buffer }[];
+  /** Media items removed from the library, so a push can be shown re-uploading them. */
+  deleteMedia(id: number): void;
   lastAuth: string | null;
   close(): Promise<void>;
 }
@@ -24,6 +26,7 @@ export async function startWpStub(seed: WpPost[]): Promise<WpStub> {
   const posts = new Map<string, WpPost>(seed.map((p) => ['posts:' + p.id, p]));
   const puts: WpStub['puts'] = [];
   const media: WpStub['media'] = [];
+  const deletedMedia = new Set<number>();
   let lastAuth: string | null = null;
   let nextId = 1000;
   const server = http.createServer((req, res) => {
@@ -35,16 +38,32 @@ export async function startWpStub(seed: WpPost[]): Promise<WpStub> {
       res.end(JSON.stringify(body));
     };
     if (url.pathname === '/wp-json/') return json(200, { name: 'stub', namespaces: ['wp/v2'] });
+    // The uploads themselves, served from the same host so the pull side can fetch them back.
+    const mm = /^\/wp-content\/uploads\/(\d+)\.\w+$/.exec(url.pathname);
+    if (mm) {
+      const mid = Number(mm[1]);
+      const item = deletedMedia.has(mid) ? undefined : media[mid - 501];
+      if (!item) {
+        res.writeHead(404);
+        return res.end();
+      }
+      res.writeHead(200, { 'content-type': item.mime, 'content-length': String(item.size) });
+      return res.end(req.method === 'HEAD' ? undefined : item.bytes);
+    }
     // Media uploads carry raw bytes on a path with no numeric id, so they are matched before `m`.
     if (url.pathname === '/wp-json/wp/v2/media' && req.method === 'POST') {
-      let size = 0;
+      const chunks: Buffer[] = [];
       req.on('data', (c: Buffer) => {
-        size += c.length;
+        chunks.push(c);
       });
       return req.on('end', () => {
-        media.push({ mime: String(req.headers['content-type'] ?? ''), size });
+        const bytes = Buffer.concat(chunks);
+        media.push({ mime: String(req.headers['content-type'] ?? ''), size: bytes.length, bytes });
         const mid = 500 + media.length;
-        json(201, { id: mid, source_url: 'http://wp/media/' + mid + '.png' });
+        json(201, {
+          id: mid,
+          source_url: `http://${req.headers.host}/wp-content/uploads/${mid}.png`,
+        });
       });
     }
     if (!m) return json(404, { code: 'rest_no_route' });
@@ -99,6 +118,7 @@ export async function startWpStub(seed: WpPost[]): Promise<WpStub> {
     posts,
     puts,
     media,
+    deleteMedia: (id: number) => deletedMedia.add(id),
     get lastAuth() {
       return lastAuth;
     },

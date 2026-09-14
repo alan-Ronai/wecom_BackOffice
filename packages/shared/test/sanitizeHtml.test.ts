@@ -41,12 +41,28 @@ describe('sanitizeHtml', () => {
     expect(sanitizeHtml(`<img src="data:image/png;base64,AAAA">`)).toBe('');
     expect(sanitizeHtml(`<img src="https://evil/x.png">`)).toBe('');
     expect(ASSET_SRC_RE.test(A)).toBe(true);
+    // C-M1: a real UUID, not any 36 characters of hex and hyphens. A malformed src used to
+    // survive into stored HTML and then silently vanish in htmlToDocx and the WordPress push.
+    expect(ASSET_SRC_RE.test('/api/v1/assets/' + '-'.repeat(36))).toBe(false);
+    expect(sanitizeHtml(`<img src="/api/v1/assets/${'-'.repeat(36)}">`)).toBe('');
   });
-  it('allows http(s) links only and adds rel=noopener', () => {
+
+  // C-M2: the decoder used to chain `.replace()` calls, so the `&amp;` pass fed the `&lt;`
+  // pass. A user who literally typed `&lt;script&gt;` got `<script>` back as rendered text —
+  // a one-shot content mutation on save in the system of record.
+  it('decodes entities in one pass, so double-encoded text survives', () => {
+    expect(sanitizeHtml('<p>&amp;lt;script&amp;gt;</p>')).toBe('<p>&amp;lt;script&amp;gt;</p>');
+    expect(sanitizeHtml('<p>a &amp; b</p>')).toBe('<p>a &amp; b</p>');
+    const once = sanitizeHtml('<p>&amp;lt;b&amp;gt; &amp; &quot;q&quot;</p>');
+    expect(sanitizeHtml(once)).toBe(once); // still idempotent
+  });
+  // C-M6: `target` is stripped, so `noopener` alone is inert; `noreferrer` is the half that
+  // stops a `Referer` leak to a third-party link from an internal KB.
+  it('allows http(s) links only and adds rel="noopener noreferrer"', () => {
     expect(sanitizeHtml('<a href="https://wecom.co.il/x">קישור</a>')).toBe(
-      '<a href="https://wecom.co.il/x" rel="noopener">קישור</a>',
+      '<a href="https://wecom.co.il/x" rel="noopener noreferrer">קישור</a>',
     );
-    expect(sanitizeHtml('<a href="javascript:alert(1)">x</a>')).toBe('<a rel="noopener">x</a>');
+    expect(sanitizeHtml('<a href="javascript:alert(1)">x</a>')).toBe('<a rel="noopener noreferrer">x</a>');
   });
   it('keeps dir on span and bdi, drops everything else', () => {
     expect(sanitizeHtml('<span dir="ltr" class="c" id="i">abc</span><bdi dir="ltr">x</bdi>')).toBe(

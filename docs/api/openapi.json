@@ -413,7 +413,7 @@
                     "user",
                     "roles",
                     "permissions",
-                    "categoryScopes",
+                    "worldScopes",
                     "preferences"
                   ],
                   "additionalProperties": false
@@ -12669,10 +12669,14 @@
                   "properties": {
                     "purged": {
                       "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "integer"
                     }
                   },
                   "required": [
-                    "purged"
+                    "purged",
+                    "skipped"
                   ],
                   "additionalProperties": false
                 }
@@ -17858,6 +17862,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "latestRevisionId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -17868,7 +17877,8 @@
                     "etag",
                     "updatedById",
                     "updatedByName",
-                    "updatedAt"
+                    "updatedAt",
+                    "latestRevisionId"
                   ],
                   "additionalProperties": false
                 }
@@ -17957,6 +17967,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "latestRevisionId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -17967,7 +17982,8 @@
                     "etag",
                     "updatedById",
                     "updatedByName",
-                    "updatedAt"
+                    "updatedAt",
+                    "latestRevisionId"
                   ],
                   "additionalProperties": false
                 }
@@ -18230,6 +18246,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "latestRevisionId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -18240,7 +18261,8 @@
                     "etag",
                     "updatedById",
                     "updatedByName",
-                    "updatedAt"
+                    "updatedAt",
+                    "latestRevisionId"
                   ],
                   "additionalProperties": false
                 }
@@ -18313,6 +18335,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "latestRevisionId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -18323,7 +18350,8 @@
                     "etag",
                     "updatedById",
                     "updatedByName",
-                    "updatedAt"
+                    "updatedAt",
+                    "latestRevisionId"
                   ],
                   "additionalProperties": false
                 }
@@ -18386,6 +18414,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "latestRevisionId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -18396,7 +18429,8 @@
                     "etag",
                     "updatedById",
                     "updatedByName",
-                    "updatedAt"
+                    "updatedAt",
+                    "latestRevisionId"
                   ],
                   "additionalProperties": false
                 }
@@ -19471,6 +19505,26 @@
           "taxonomy"
         ],
         "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              ],
+              "default": true
+            },
+            "in": "query",
+            "name": "record",
+            "required": false
+          },
           {
             "schema": {
               "type": "string",
@@ -30685,6 +30739,27 @@
                           },
                           "conflict": {
                             "nullable": true
+                          },
+                          "mediaErrors": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "url": {
+                                  "type": "string"
+                                },
+                                "error": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "url",
+                                "error"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "nullable": true,
+                            "default": null
                           }
                         },
                         "required": [
@@ -31491,6 +31566,27 @@
                     },
                     "conflict": {
                       "nullable": true
+                    },
+                    "mediaErrors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "error"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "nullable": true,
+                      "default": null
                     }
                   },
                   "required": [

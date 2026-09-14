@@ -34,6 +34,14 @@ export class WpClient {
     };
   }
 
+  /**
+   * Auth only, no `content-type`: for GETting a media file off the site. A private or
+   * password-protected upload needs the credentials, and a public one ignores them.
+   */
+  mediaHeaders(): Record<string, string> {
+    return { authorization: this.headers().authorization! };
+  }
+
   private async req<T>(method: string, path: string, body?: unknown): Promise<{ data: T; headers: Headers }> {
     const res = await this.fetchImpl(this.cfg.baseUrl + path, {
       method,

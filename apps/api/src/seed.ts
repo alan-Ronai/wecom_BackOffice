@@ -103,7 +103,7 @@ class Authors {
 
 /** Legacy codes carry the PRD letter (M-00, R-01, O-02, E-01); otherwise the spec rule. */
 const docTypeFor = (d: { code?: string; kind: string; phases: unknown[] }): string =>
-  d.code && /^[MROES]-/.test(d.code) ? d.code[0]! : d.kind === 'retention' || d.phases.length ? 'R' : 'I';
+  d.code && /^[MROESTI]-/.test(d.code) ? d.code[0]! : d.kind === 'retention' || d.phases.length ? 'R' : 'I';
 
 /** W1: every item is a member of its primary world, plus its legacy topic when it had one. */
 const membership = async (tx: Tx, documentId: string, world: string, topicSlug: string | null) => {
@@ -311,7 +311,7 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
          values ($1,$2,$3,'','ops',3,'m','text','published','T',$4,$5,1,$6,$6) on conflict (id) do nothing returning id`,
         [
           s.id,
-          'script-' + s.id.replace(/-/g, '').slice(0, 8),
+          'script-' + s.id.replace(/-/g, '').slice(0, 12),
           s.title,
           s.tags,
           textToHtml(s.text),
@@ -322,8 +322,11 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
       counts.scripts++;
       await membership(tx, s.id, 'ops', null);
       const snapshot = await getDocument(tx, s.id);
+      // A-M7: `kind: 'system'`, the same thing 0030 writes for a folded script (spec §2.1).
+      // With `'published'` here a seeded script was protected by the once-published guard and a
+      // migrated one was not — dev and production behaving differently on the same action.
       await tx.query(
-        `insert into document_versions(document_id, version, snapshot, label, kind, created_at) values ($1,1,$2,'ייבוא מהספרייה הסטטית','published',$3) on conflict do nothing`,
+        `insert into document_versions(document_id, version, snapshot, label, kind, created_at) values ($1,1,$2,'ייבוא מהספרייה הסטטית','system',$3) on conflict do nothing`,
         [s.id, JSON.stringify(snapshot), s.updatedAt],
       );
       for (const documentId of s._usedIn)

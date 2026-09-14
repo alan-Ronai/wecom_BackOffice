@@ -231,6 +231,44 @@ run('migrations', () => {
     expect(vec).not.toMatch(/'על':/);
     await pool.query(`delete from documents where slug='w6-vec'`);
   });
+  it('a wave-4-only rollback leaves 0027 in force on both sides of the stopword rule', async () => {
+    // A-I8: 0030.down used to restore *0007*'s definition, not the one that was live when it
+    // ran (0027's). Rolling back only wave 4 — down through 0035…0030, exactly what a bad
+    // wave-4 deploy does — would then leave `kb_tsquery`/`kb_tsquery_prefix` stripping Hebrew
+    // stopwords at query time while the index side stopped stripping them: the two halves
+    // 0027 exists to keep in step, out of step again, with no test noticing.
+    const move = (direction: 'up' | 'down', count?: number) =>
+      runner({
+        databaseUrl: c.getConnectionUri(),
+        dir: 'migrations',
+        direction,
+        count,
+        migrationsTable: 'pgmigrations',
+        ignorePattern: 'package\\.json',
+        log: () => undefined,
+      });
+    const wave4 = (await readdir('migrations')).filter((f) => /^00(3[0-9])_/.test(f)).length;
+    await move('down', wave4);
+    await pool.query(
+      `insert into documents(slug, title, description, category, wave, priority)
+       values ('w6-stop','חוב של לקוח','', 'tech', 1, 'm')`,
+    );
+    const vec = (await pool.query(`select search_vector::text v from documents where slug='w6-stop'`)).rows[0]
+      .v as string;
+    expect(vec).toMatch(/'חוב':/);
+    expect(vec).toMatch(/'לקוח':/);
+    expect(vec).not.toMatch(/'של':/); // 0027's ts_delete(…, kb_stopwords()) is still in force
+    expect(
+      (
+        await pool.query(
+          `select 1 from documents where slug='w6-stop' and search_vector @@ kb_tsquery('חוב של לקוח')`,
+        )
+      ).rowCount,
+    ).toBe(1);
+    await pool.query(`delete from documents where slug='w6-stop'`);
+    await move('up');
+  }, 120000);
+
   it('rolls back cleanly', async () => {
     await runner({
       databaseUrl: c.getConnectionUri(),

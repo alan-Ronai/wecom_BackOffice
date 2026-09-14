@@ -2,7 +2,7 @@ import type pg from 'pg';
 import type { TrashItem } from '@wecom/shared';
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
-import { getDocument, iso, recomputeDerived, type Q } from '../documents/repo.js';
+import { getDocument, hasPublishedVersion, iso, recomputeDerived, type Q } from '../documents/repo.js';
 import { CATEGORY_LABELS, sourceFile } from '../search/repo.js';
 
 export type TrashType = TrashItem['type'];
@@ -13,14 +13,27 @@ const purgeAt = (deletedAt: Date | string, days: number) =>
 
 const emptyImpact = { brokenLinks: 0, documents: [] as { id: string; title: string }[] };
 
-export async function listTrash(q: Q, days: number): Promise<TrashItem[]> {
+/**
+ * A-M12: the trash was the last unscoped document read model in the package — any `docs.read`
+ * user got the titles and doc types of every deleted document in every world. Scope is a
+ * membership intersection like everywhere else. Blocks and fields are catalogue entries with no
+ * world of their own, so they are unfiltered, as they are on every other page.
+ */
+export async function listTrash(
+  q: Q,
+  days: number,
+  worldScopes: readonly string[] | null = null,
+): Promise<TrashItem[]> {
   const items: TrashItem[] = [];
 
   const docs = await q.query(
     `select d.id, d.title, d.category, d.doc_type, d.current_version, d.deleted_at, u.display_name deleted_by,
             (select count(*)::int from steps s where s.document_id=d.id) steps
      from documents d left join users u on u.id=d.deleted_by
-     where d.deleted_at is not null order by d.deleted_at desc`,
+     where d.deleted_at is not null
+       and ($1::text[] is null or exists (select 1 from document_worlds dw where dw.document_id = d.id and dw.world_slug = any($1)))
+     order by d.deleted_at desc`,
+    [worldScopes ? [...worldScopes] : null],
   );
   for (const d of docs.rows) {
     const links = await q.query(
@@ -110,7 +123,10 @@ export async function restore(tx: Tx, type: TrashType, id: string, userId: strin
     [id],
   );
   if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'הפריט לא נמצא בסל המיחזור');
-  if (type === 'document') {
+  // A-M11: `script` maps onto `documents` in TABLE above, so it needs the same bookkeeping —
+  // restoring through the legacy `/trash/script/:id` link used to skip the version row and
+  // `recomputeDerived` entirely.
+  if (type === 'document' || type === 'script') {
     const doc = await getDocument(tx, id);
     if (doc) {
       // Version number unchanged: restoring is not a new edition, only a bookkeeping entry.
@@ -138,7 +154,37 @@ export async function restore(tx: Tx, type: TrashType, id: string, userId: strin
   }
 }
 
-export async function purge(tx: Tx, type: TrashType, id: string): Promise<void> {
+/**
+ * PRD §10 / spec §2.2: an item that was ever published is never hard-deleted, even from the
+ * trash. `purgeExpired` has carried this rule since wave 2; the two operator-facing routes
+ * (`DELETE /trash/:type/:id`, `DELETE /trash`) did not, which made them a route to permanent,
+ * unrecoverable loss of published content and its whole `document_versions` history.
+ *
+ * `script` maps onto `documents` (0030), so it is guarded too.
+ */
+export const isOncePublished = async (q: Q, type: TrashType, id: string): Promise<boolean> =>
+  (type === 'document' || type === 'script') && (await hasPublishedVersion(q, id));
+
+export const oncePublishedError = () =>
+  httpError(409, 'ONCE_PUBLISHED', 'פריט שפורסם בעבר אינו נמחק לצמיתות; הוא נשאר בסל המיחזור', {
+    allowed: ['invalid', 'archived'],
+  });
+
+/**
+ * Hard-delete one trashed item. Returns false when the once-published rule skipped it, which
+ * only happens under `{ skipOncePublished: true }` — empty-trash passes it so one protected
+ * document does not abort the whole operation; the single-item route lets the 409 through.
+ */
+export async function purge(
+  tx: Tx,
+  type: TrashType,
+  id: string,
+  opts: { skipOncePublished?: boolean } = {},
+): Promise<boolean> {
+  if (await isOncePublished(tx, type, id)) {
+    if (opts.skipOncePublished) return false;
+    throw oncePublishedError();
+  }
   const t = TABLE[type];
   if (type === 'block') {
     await tx.query('update steps set block_id=null where block_id=$1', [id]);
@@ -151,6 +197,7 @@ export async function purge(tx: Tx, type: TrashType, id: string): Promise<void> 
     [id],
   );
   if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'הפריט לא נמצא בסל המיחזור');
+  return true;
 }
 
 /** Hard delete everything whose retention window has elapsed. Returns the number of rows removed. */

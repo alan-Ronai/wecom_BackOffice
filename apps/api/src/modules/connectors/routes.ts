@@ -76,6 +76,7 @@ const linkToApi = (l: SyncLinkRow & { document_title?: string }) => ({
   baseLocalVersion: l.base_local_version,
   lastSyncedAt: l.last_synced_at?.toISOString() ?? null,
   conflict: l.conflict ?? null,
+  mediaErrors: l.media_errors ?? null,
 });
 
 export interface ConnectorRoutesOptions {

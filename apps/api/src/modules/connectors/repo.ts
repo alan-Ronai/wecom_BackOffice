@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import type { MediaCache } from '@wecom/connectors';
 import { decryptConfig, encryptConfig } from './crypto.js';
 
 export interface ConnectorRow {
@@ -28,6 +29,7 @@ export interface SyncLinkRow {
   last_synced_at: Date | null;
   state: SyncLinkState;
   conflict: unknown | null;
+  media_errors: { url: string; error: string }[] | null;
 }
 
 const SECRET_KEYS = /password|secret|token|key/i;
@@ -192,5 +194,44 @@ export class ConnectorsRepo {
       state,
       conflict,
     ]);
+  }
+
+  /** B-C2: images an inbound sync could not bring across, so the loss is visible on /sync. */
+  async setLinkMediaErrors(id: string, errors: { url: string; error: string }[] | null): Promise<void> {
+    await this.db.query('update sync_links set media_errors=$2, updated_at=now() where id=$1', [
+      id,
+      errors ? JSON.stringify(errors) : null,
+    ]);
+  }
+
+  /**
+   * B-I6: what a push has already uploaded to one connector's media library, so the same bytes
+   * are not re-uploaded on every publish.
+   */
+  mediaCache(connectorId: string): MediaCache {
+    return {
+      get: async (assetId) => {
+        const r = await this.db.query<{ remote_media_id: string; remote_url: string }>(
+          'select remote_media_id, remote_url from connector_media where connector_id=$1 and asset_id=$2',
+          [connectorId, assetId],
+        );
+        const row = r.rows[0];
+        return row ? { remoteMediaId: row.remote_media_id, remoteUrl: row.remote_url } : null;
+      },
+      put: async (assetId, remoteMediaId, remoteUrl) => {
+        await this.db.query(
+          `insert into connector_media(connector_id, asset_id, remote_media_id, remote_url) values ($1,$2,$3,$4)
+           on conflict (connector_id, asset_id) do update set remote_media_id=excluded.remote_media_id,
+             remote_url=excluded.remote_url, created_at=now()`,
+          [connectorId, assetId, remoteMediaId, remoteUrl],
+        );
+      },
+      forget: async (assetId) => {
+        await this.db.query('delete from connector_media where connector_id=$1 and asset_id=$2', [
+          connectorId,
+          assetId,
+        ]);
+      },
+    };
   }
 }

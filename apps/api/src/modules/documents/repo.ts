@@ -4,6 +4,8 @@ import {
   DocumentSchema,
   detectFieldRefs,
   detectLinks,
+  htmlToText,
+  sanitizeHtml,
   stepText,
   type Block,
   type CreateDocumentBody,
@@ -19,7 +21,7 @@ import {
 } from '@wecom/shared';
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
-import { canReadUnpublished } from '../../lib/visibility.js';
+import { canReadUnpublished, visibleStatusSql, visibleWhere } from '../../lib/visibility.js';
 import type { ReqUser } from '../../lib/user.js';
 
 export type Q = pg.Pool | Tx;
@@ -277,7 +279,7 @@ export async function listCards(
     return '$' + params.length;
   };
   const where: string[] = ['d.deleted_at is null'];
-  if (!readUnpublished) where.push(`d.status in ('published','partial')`);
+  if (!readUnpublished) where.push(visibleStatusSql());
   if (worldScopes)
     where.push(
       `exists (select 1 from document_worlds sw where sw.document_id=d.id and sw.world_slug = any(${p([...worldScopes])}))`,
@@ -384,6 +386,20 @@ export async function listCards(
 /** `slugify` ends in 5 random base-36 chars against a unique constraint: retry rather than 500. */
 const SLUG_ATTEMPTS = 5;
 
+/**
+ * C-C2 — spec §2.1 defines the column as "`documents.body_html text` (**sanitized HTML**, used
+ * by kind `text`)", and nothing on this path sanitized: `TaxonomyWriteFields` accepted the
+ * string and both writes put it straight into the column. It is the canonical body for kind
+ * `text`, and the 0030 fold means every type-T document lives in it, so the store was already
+ * populated at scale — and the neighbouring content model for the same authoring surface
+ * (`source_documents.html`) *is* rendered with `dangerouslySetInnerHTML`.
+ *
+ * Sanitizing at the repo boundary rather than in the routes means no caller can forget, the
+ * same way `saveSourceDocument` does it for the source pane.
+ */
+const cleanBody = (html: string | null | undefined): string | null =>
+  html == null ? (html ?? null) : sanitizeHtml(html);
+
 export async function insertDocument(
   tx: Tx,
   body: CreateDocumentBody,
@@ -401,7 +417,7 @@ export async function insertDocument(
     'draft',
     docType,
     body.tags ?? [],
-    body.bodyHtml ?? null,
+    cleanBody(body.bodyHtml),
     userId,
   ];
   const sql = `insert into documents(slug, title, description, category, wave, priority, kind, status, doc_type, tags, body_html, created_by, updated_by)
@@ -484,7 +500,7 @@ export async function patchDocument(
   for (const [key, col] of Object.entries(PATCH_COLUMNS)) {
     const v = body[key as keyof PatchDocumentBody];
     if (v !== undefined) {
-      params.push(v);
+      params.push(key === 'bodyHtml' ? cleanBody(v as string | null) : v);
       sets.push(`${col} = $${params.length}`);
     }
   }
@@ -501,6 +517,9 @@ export async function patchDocument(
     mapTaxonomyFkError(e);
   }
   if (!updated!.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
+  // A text document never goes through `saveStructure`, so this is the only place its body
+  // reaches `search_text`.
+  if (body.bodyHtml !== undefined) await updateSearchText(tx, (await getDocument(tx, id))!);
   if (body.category !== undefined || body.worlds !== undefined || body.topics !== undefined) {
     const primary = body.category ?? (cur.rows[0].category as string);
     const extra =
@@ -598,10 +617,26 @@ export async function recomputeDerived(tx: Tx, doc: Document): Promise<void> {
         l.origin,
       ],
     );
-  const text = doc.phases
-    .flatMap((p) => p.steps.map((s) => stepText(s, s.blockId ? blocks.get(s.blockId) : null)))
+  await updateSearchText(tx, doc, blocks);
+}
+
+/**
+ * `search_text` is what the 0030/0035 trigger indexes and what `updateEmbedding` embeds, and it
+ * was built from phases/steps only. A `kind: 'text'` document — the whole point of spec §2.1 —
+ * keeps its content in `body_html` and never goes through `saveStructure`, so its body was not
+ * searchable at all: `GET /documents?q=`, the `documents` search group and the semantic re-rank
+ * matched its title and tags and nothing else.
+ */
+export async function updateSearchText(tx: Tx, doc: Document, blocks?: Map<string, Block>): Promise<void> {
+  const b = blocks ?? (await loadBlocksMap(tx));
+  const structure = doc.phases
+    .flatMap((p) => p.steps.map((s) => stepText(s, s.blockId ? b.get(s.blockId) : null)))
     .join(' \n ');
-  await tx.query('update documents set search_text=$2 where id=$1', [doc.id, text]);
+  const body = doc.bodyHtml ? htmlToText(doc.bodyHtml) : '';
+  await tx.query('update documents set search_text=$2 where id=$1', [
+    doc.id,
+    [structure, body].filter(Boolean).join(' \n '),
+  ]);
 }
 
 /** Rewrite the whole phase/step tree in one transaction; rotates the etag. */
@@ -735,22 +770,30 @@ export async function publishDocument(
   const blocks = await loadBlocksMap(tx);
   const version = (cur.rows[0].current_version as number) + 1;
   const status = opts.markPartial || isPartial(before, blocks) ? 'partial' : 'published';
+  /**
+   * This is the shared entry point for the editor publish, an accepted suggestion, a sync push
+   * (`kind: 'sync'`) and a restore. `approver_id` answers "who signed this off" (spec §2.2), so
+   * a system/sync publish with a null actor must not erase it and a restore must not re-stamp
+   * the restorer as the approver. Same for the source-review flag: a WordPress-originated sync
+   * clearing "the source moved, an editor must look" is the opposite of what the flag means.
+   */
+  const humanPublish = (opts.kind ?? 'published') === 'published' && opts.actorId !== null;
   await tx.query(
     `update documents set current_version=$2, status=$3, updated_by=$4, updated_at=now(), etag=gen_random_uuid()::text,
-            approver_id=$4, published_at=now(),
-            source_review_needed=false, source_review_reason=null, source_review_at=null
+            published_at=now()${
+              humanPublish
+                ? `, approver_id=$4,
+            source_review_needed=false, source_review_reason=null, source_review_at=null`
+                : ''
+            }
       where id=$1`,
     [id, version, status, opts.actorId],
   );
   const published = (await getDocument(tx, id))!;
   const sourceVersion =
     opts.sourceVersion ??
-    ((
-      await tx.query(
-        `select current_version from source_documents where document_id=$1 and to_regclass('source_documents') is not null`,
-        [id],
-      )
-    ).rows[0]?.current_version as number | undefined) ??
+    ((await tx.query(`select current_version from source_documents where document_id=$1`, [id])).rows[0]
+      ?.current_version as number | undefined) ??
     null;
   const inserted = await tx.query(
     'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id, schema_version, source_version) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id',
@@ -902,8 +945,8 @@ const mapLink = (r: Record<string, unknown>) => ({
 export async function linksFor(q: Q, id: string, readUnpublished = true) {
   const vis = readUnpublished
     ? ''
-    : " and (l.to_document_id is null or exists (select 1 from documents t where t.id=l.to_document_id and t.status in ('published','partial')))";
-  const visIn = readUnpublished ? '' : " and d.status in ('published','partial')";
+    : ` and (l.to_document_id is null or exists (select 1 from documents t where t.id=l.to_document_id and ${visibleStatusSql('t')}))`;
+  const visIn = visibleWhere(readUnpublished);
   const [out, incoming] = await Promise.all([
     q.query(`select l.* from document_links l where l.from_document_id=$1${vis}`, [id]),
     q.query(
@@ -947,9 +990,10 @@ export async function relatedFor(q: Q, doc: Document, readUnpublished = true) {
   const ids = [...out.keys()].slice(0, 6);
   if (!ids.length) return [];
   const docs = await q.query(
-    `select id, title, category from documents where id = any($1) and deleted_at is null${
-      readUnpublished ? '' : " and status in ('published','partial')"
-    }`,
+    `select id, title, category from documents where id = any($1) and deleted_at is null${visibleWhere(
+      readUnpublished,
+      null,
+    )}`,
     [ids],
   );
   return docs.rows.map((d) => ({

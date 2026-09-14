@@ -1,5 +1,12 @@
 import type pg from 'pg';
-import type { Connector, ConnectorRegistry, RemoteChange, RemoteItem, RemoteRef } from '@wecom/connectors';
+import type {
+  Connector,
+  ConnectorRegistry,
+  MediaCache,
+  RemoteChange,
+  RemoteItem,
+  RemoteRef,
+} from '@wecom/connectors';
 import type { SourceContent } from '@wecom/connectors';
 import { makeEvent, type AssetBytesResolver, type Block, type Document, type Event } from '@wecom/shared';
 import type { ConnectorsRepo, SyncLinkRow } from './repo.js';
@@ -32,6 +39,12 @@ export interface DocumentsService {
   getSourceHtml(documentId: string): Promise<string | null>;
   /** W4: record an inbound remote body as a new source version (author null). Does not ingest — the caller already did. */
   putSourceFromRemote(documentId: string, html: string, label: string): Promise<void>;
+  /**
+   * W4/B-C2: store one image downloaded from a remote and answer the `/api/v1/assets/<id>` src
+   * it is now served under. Dedupes on sha256, so the same picture is downloaded once however
+   * many syncs see it.
+   */
+  putRemoteAsset(bytes: Uint8Array, mime: string): Promise<{ src: string }>;
 }
 
 export interface EventBus {
@@ -47,6 +60,8 @@ export interface SyncDeps {
   events: EventBus;
   /** W4: resolves asset images so a push can re-host them on the remote. */
   assets?: AssetBytesResolver;
+  /** W4/B-I6: per-connector memory of what a push already uploaded. */
+  mediaCache?: (connectorId: string) => MediaCache;
 }
 
 export interface RunResult {
@@ -157,7 +172,7 @@ export class SyncService {
     if (remoteChanged && !localChanged) {
       const content = await conn.fetch(cfg, r!.externalId);
       if (link.source_id) await this.d.revisions.ingest(link.source_id, content, actorId);
-      if (content.raw) await this.d.documents.putSourceFromRemote(doc.id, content.raw, 'מוורדפרס');
+      if (content.raw) await this.importSourceHtml(conn, cfg, link, doc.id, content.raw);
       await this.d.repo.setLinkState(link.id, 'pending_import');
       result.imported++;
       return;
@@ -269,6 +284,52 @@ export class SyncService {
     return { conflict: false, result, link: fresh, errors };
   }
 
+  /**
+   * B-C2 — inbound HTML before it is stored.
+   *
+   * `saveSourceDocument` sanitizes, and the sanitizer keeps a `src` only when it is
+   * `/api/v1/assets/<uuid>`, so a WordPress body's `https://<site>/wp-content/uploads/…`
+   * images were all stripped on the way in. That alone would be a local-only loss; the closing
+   * half is that the next `pushLink` reads the stored (image-free) HTML and `updatePost`s it
+   * back, **removing the images from the WordPress post too**. §5.1 asks for the pull-side
+   * rewrite and it was never implemented.
+   *
+   * So every remote image is downloaded once through the connector's own allowlisted fetch,
+   * stored as an asset (sha256-deduped) and rewritten before the save. An image that could not
+   * be taken is dropped by the sanitizer as before — but it is recorded on the sync link
+   * (`media_errors`) instead of vanishing silently.
+   */
+  private async importSourceHtml(
+    conn: Connector<unknown>,
+    cfg: unknown,
+    link: SyncLinkRow,
+    documentId: string,
+    raw: string,
+  ): Promise<void> {
+    let html = raw;
+    let dropped: { url: string; error: string }[] = [];
+    if (conn.absorbMedia) {
+      const absorbed = await conn.absorbMedia(cfg, raw, (bytes, mime) =>
+        this.d.documents.putRemoteAsset(bytes, mime),
+      );
+      html = absorbed.html;
+      dropped = absorbed.dropped;
+    }
+    await this.d.documents.putSourceFromRemote(documentId, html, 'מוורדפרס');
+    await this.d.repo.setLinkMediaErrors(link.id, dropped.length ? dropped : null);
+    if (dropped.length)
+      this.d.events.publish(
+        makeEvent('job.failed', {
+          jobName: 'sync.importMedia',
+          jobId: link.id,
+          error: `${dropped.length} תמונות מהמקור לא נשמרו: ${dropped
+            .map((x) => x.url)
+            .slice(0, 5)
+            .join(', ')}`,
+        }),
+      );
+  }
+
   private async pushLink(
     conn: Connector<unknown>,
     cfg: unknown,
@@ -282,6 +343,7 @@ export class SyncService {
       html,
       blocks,
       assets: this.d.assets,
+      media: this.d.mediaCache?.(link.connector_id),
     });
     return this.d.repo.upsertLink({
       documentId: doc.id,
@@ -314,6 +376,7 @@ export class SyncService {
       html,
       blocks,
       assets: this.d.assets,
+      media: this.d.mediaCache?.(connectorId),
     });
     await this.d.repo.upsertLink({
       documentId,
@@ -387,7 +450,7 @@ export class SyncService {
     if (body.resolution === 'theirs') {
       const content = await conn.fetch(cfg, link.external_id);
       if (link.source_id) await this.d.revisions.ingest(link.source_id, content, actorId);
-      if (content.raw) await this.d.documents.putSourceFromRemote(doc.id, content.raw, 'מוורדפרס');
+      if (content.raw) await this.importSourceHtml(conn, cfg, link, doc.id, content.raw);
       const row = await this.d.repo.upsertLink({
         documentId: doc.id,
         connectorId: link.connector_id,
