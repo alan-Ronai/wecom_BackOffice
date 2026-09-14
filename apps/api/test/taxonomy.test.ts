@@ -83,4 +83,37 @@ run('taxonomy', () => {
     expect(await app.taxonomy.usersWithPermissionInWorld('docs.publish', 'sim')).toContain(lead.id);
     expect(await app.taxonomy.usersWithPermissionInWorld('docs.publish', 'tech')).not.toContain(lead.id);
   });
+
+  it('groups a topic view by doc type in PRD order and applies visibility', async () => {
+    const topic = (await app.inject({ method: 'POST', url: '/api/v1/worlds/intl/topics', headers: auth(admin), payload: { slug: 'roaming', name: 'נדידה' } })).json();
+    const mk = async (title: string, docType: string, status: string, tags: string[] = []) => {
+      const d = (await app.inject({ method: 'POST', url: '/api/v1/documents', headers: auth(admin),
+        payload: { title, category: 'intl', wave: 1, priority: 'h', kind: 'steps', docType, tags, topics: [topic.id] } })).json();
+      await db.pool.query('update documents set status=$2 where id=$1', [d.id, status]);
+      return d.id as string;
+    };
+    const o = await mk('הפעלת נדידה', 'O', 'published', ['roaming']);
+    const m = await mk('אבחון נדידה', 'M', 'published');
+    const draft = await mk('טיוטה', 'R', 'draft');
+    const asAdmin = await app.inject({ method: 'GET', url: `/api/v1/topics/${topic.id}/items`, headers: auth(admin) });
+    expect(asAdmin.statusCode).toBe(200);
+    expect(asAdmin.json().topic.slug).toBe('roaming');
+    expect(asAdmin.json().world.slug).toBe('intl');
+    expect(asAdmin.json().groups.map((g: { docType: string }) => g.docType)).toEqual(['M', 'R', 'O']);
+    const asAgent = await app.inject({ method: 'GET', url: `/api/v1/topics/${topic.id}/items`, headers: auth(agent) });
+    expect(asAgent.json().groups.map((g: { docType: string }) => g.docType)).toEqual(['M', 'O']);
+    expect(asAgent.json().groups[1].items[0]).toMatchObject({ id: o, docType: 'O', worlds: ['intl'], tags: ['roaming'] });
+    expect(JSON.stringify(asAgent.json())).not.toContain(draft);
+    const scoped = await makeUser(db.pool, { perms: ['docs.read'], scopes: ['sim'] });
+    expect((await app.inject({ method: 'GET', url: `/api/v1/topics/${topic.id}/items`, headers: auth(scoped) })).json().groups).toEqual([]);
+    expect((await app.inject({ method: 'GET', url: `/api/v1/topics/00000000-0000-4000-8000-000000000000/items`, headers: auth(agent) })).statusCode).toBe(404);
+    void m;
+  });
+
+  it('lists tags with counts and a prefix filter', async () => {
+    const r = await app.inject({ method: 'GET', url: '/api/v1/tags?q=roam', headers: auth(agent) });
+    expect(r.json().items).toEqual([{ tag: 'roaming', count: 1 }]);
+    const all = await app.inject({ method: 'GET', url: '/api/v1/tags', headers: auth(agent) });
+    expect(all.json().items.length).toBeGreaterThanOrEqual(1);
+  });
 });

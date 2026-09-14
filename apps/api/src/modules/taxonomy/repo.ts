@@ -1,8 +1,11 @@
 import type pg from 'pg';
 import type { z } from 'zod';
 import {
+  DOC_TYPES,
   TopicSchema,
+  TopicViewSchema,
   WorldSchema,
+  type TopicView,
   type TaxonomyResolver,
   type Topic,
   type TopicBodySchema,
@@ -13,7 +16,7 @@ import {
 } from '@wecom/shared';
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
-import { iso, type Q } from '../documents/repo.js';
+import { iso, orderWorlds, type Q } from '../documents/repo.js';
 
 type WorldBody = z.infer<typeof WorldBodySchema>;
 type WorldPatch = z.infer<typeof WorldPatchSchema>;
@@ -204,4 +207,55 @@ export class PgTaxonomy implements TaxonomyResolver {
     );
     return r.rows.map((x) => x.id);
   }
+}
+
+/* ── topic view + tags ──────────────────────────────────────────────────── */
+export interface Visibility {
+  /** true when the caller holds `docs.read_unpublished` */
+  unpublished: boolean;
+  worldScopes: readonly string[] | null;
+}
+
+/** Every item in a topic, grouped by doc type in PRD order; empty groups are omitted. */
+export async function topicView(q: Q, topicId: string, vis: Visibility): Promise<TopicView | null> {
+  const topic = await getTopic(q, topicId);
+  if (!topic) return null;
+  const world = (await getWorld(q, topic.worldSlug))!;
+  const r = await q.query(
+    `select d.id, d.slug, d.title, d.doc_type, d.kind, d.status, d.description, d.tags, d.updated_at, d.category,
+            coalesce((select array_agg(dw.world_slug order by dw.world_slug) from document_worlds dw where dw.document_id = d.id), '{}') worlds
+       from document_topics dt join documents d on d.id = dt.document_id
+      where dt.topic_id = $1 and d.deleted_at is null
+        and ($2::boolean or d.status in ('published','partial'))
+        and ($3::text[] is null or exists (select 1 from document_worlds sw where sw.document_id = d.id and sw.world_slug = any($3)))
+      order by d.title`,
+    [topicId, vis.unpublished, vis.worldScopes ? [...vis.worldScopes] : null],
+  );
+  const items = r.rows.map((x) => ({
+    id: x.id as string,
+    slug: x.slug as string,
+    title: x.title as string,
+    docType: x.doc_type as string,
+    kind: x.kind as string,
+    status: x.status as string,
+    worlds: orderWorlds(x.category as string, x.worlds as string[]),
+    description: (x.description as string) ?? '',
+    tags: (x.tags as string[]) ?? [],
+    updatedAt: iso(x.updated_at as Date)!,
+  }));
+  const groups = DOC_TYPES.map((docType) => ({
+    docType,
+    items: items.filter((i) => i.docType === docType),
+  })).filter((g) => g.items.length);
+  return TopicViewSchema.parse({ topic, world, groups });
+}
+
+export async function listTags(q: Q, o: { q?: string; limit: number }): Promise<{ tag: string; count: number }[]> {
+  const r = await q.query(
+    `select tag, count(*)::int count from documents d, unnest(d.tags) tag
+      where d.deleted_at is null and ($1::text is null or tag ilike '%' || $1 || '%')
+      group by tag order by count desc, tag limit $2`,
+    [o.q ?? null, o.limit],
+  );
+  return r.rows.map((x) => ({ tag: x.tag as string, count: x.count as number }));
 }

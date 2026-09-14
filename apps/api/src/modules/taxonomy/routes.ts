@@ -3,10 +3,13 @@ import { z } from 'zod';
 import {
   IdSchema,
   ReorderBodySchema,
+  TagsQuerySchema,
+  TagsResponseSchema,
   TopicBodySchema,
   TopicPatchSchema,
   TopicSchema,
   TopicsResponseSchema,
+  TopicViewSchema,
   WorldBodySchema,
   WorldPatchSchema,
   WorldSchema,
@@ -16,6 +19,7 @@ import {
   makeEvent,
 } from '@wecom/shared';
 import { audit } from '../../lib/audit.js';
+import { notFound } from '../../lib/errors.js';
 import { withTransaction } from '../../lib/sql.js';
 import { requireUser } from '../../lib/user.js';
 import * as repo from './repo.js';
@@ -266,6 +270,40 @@ export default async function routes(app: FastifyInstance) {
       });
       reply.code(204);
       return null;
+    },
+  );
+
+  app.get(
+    '/topics/:id/items',
+    {
+      config: { requires: ['docs.read'] },
+      schema: { tags: ['taxonomy'], params: IdParams, response: { 200: TopicViewSchema } },
+    },
+    async (req) => {
+      const user = requireUser(req);
+      const { id } = req.params as z.infer<typeof IdParams>;
+      const view = await repo.topicView(app.db, id, {
+        unpublished: user.permissions.has('docs.read_unpublished'),
+        worldScopes: user.worldScopes,
+      });
+      if (!view) throw notFound('הנושא');
+      // W5 records topic views; W0's default is a no-op. Never let usage failures break the page.
+      void app.usage
+        .recordTopicView(user.id, id)
+        .catch((e: unknown) => app.log.warn({ err: e }, 'recordTopicView failed'));
+      return view;
+    },
+  );
+
+  app.get(
+    '/tags',
+    {
+      config: { requires: ['docs.read'] },
+      schema: { tags: ['taxonomy'], querystring: TagsQuerySchema, response: { 200: TagsResponseSchema } },
+    },
+    async (req) => {
+      requireUser(req);
+      return { items: await repo.listTags(app.db, req.query as z.infer<typeof TagsQuerySchema>) };
     },
   );
 }
