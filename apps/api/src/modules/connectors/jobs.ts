@@ -65,9 +65,7 @@ export async function refreshSchedules(
   const rows = await deps.repo.list();
   // A `null` schedule ("ללא תזמון") is a connector that runs on demand only — it must
   // drop out of `wanted` just like a disabled one, so the loop below unschedules its cron.
-  const wanted = new Map(
-    rows.filter((r) => r.enabled && r.schedule).map((r) => [runQueueOf(r.id), r]),
-  );
+  const wanted = new Map(rows.filter((r) => r.enabled && r.schedule).map((r) => [runQueueOf(r.id), r]));
   for (const name of [...scheduled])
     if (!wanted.has(name)) {
       await boss.unschedule(name);
