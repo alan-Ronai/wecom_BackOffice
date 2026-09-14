@@ -57,10 +57,6 @@ import { ConflictBanner } from './ConflictBanner.js';
 import { ApiError as ApiErrorClass } from '../../api/unwrap.js';
 
 const emptyDoc = (cat: Category): Document => ({
-  worlds: [],
-  tags: [],
-  topics: [],
-  sourceReviewNeeded: false,
   id: 'new',
   slug: 'new-document',
   title: '',
