@@ -103,6 +103,33 @@ run('migrations', () => {
       ).toEqual([...perms].sort());
     }
   });
+  it('seeds the wave 4 permissions and role grants', async () => {
+    const p = await pool.query(
+      "select name from permissions where name in ('taxonomy.manage','docs.read_unpublished','feedback.manage','analytics.read') order by 1",
+    );
+    expect(p.rows.map((r) => r.name)).toEqual([
+      'analytics.read',
+      'docs.read_unpublished',
+      'feedback.manage',
+      'taxonomy.manage',
+    ]);
+    const rp = await pool.query(
+      `select r.name role, rp.permission from role_permissions rp join roles r on r.id=rp.role_id
+       where rp.permission in ('taxonomy.manage','docs.read_unpublished','feedback.manage','analytics.read') order by 1,2`,
+    );
+    const grants = rp.rows.map((x) => x.role + ':' + x.permission);
+    expect(grants).toEqual(
+      expect.arrayContaining([
+        'editor:docs.read_unpublished',
+        'editor:feedback.manage',
+        'editor:analytics.read',
+        'lead:taxonomy.manage',
+        'admin:taxonomy.manage',
+      ]),
+    );
+    expect(grants).not.toContain('agent:docs.read_unpublished');
+    expect(grants).not.toContain('editor:taxonomy.manage');
+  });
   it('rolls back cleanly', async () => {
     await runner({
       databaseUrl: c.getConnectionUri(),
