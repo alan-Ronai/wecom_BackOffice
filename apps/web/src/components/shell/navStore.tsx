@@ -51,6 +51,41 @@ export interface Nav {
 const Ctx = createContext<Nav | null>(null);
 const MAX_TABS = 8;
 
+/**
+ * Legacy `nav.titleOf`, which fed `document.title = 'wecom | ' + …` on every route change. The
+ * tab strip, the OS window switcher, the browser's own history menu and every bookmark read this
+ * — and with a single static title they all said "wecom · מאגר ידע פנימי", which identifies
+ * nothing once more than one screen is open.
+ *
+ * A route that knows its own subject (the article, which has a document title) reports it through
+ * `setTitle`; this map is the name for everything else, keyed by the first path segment.
+ */
+const ROUTE_TITLES: Record<string, string> = {
+  library: 'ספרייה',
+  doc: 'מסמך',
+  edit: 'עריכה',
+  history: 'גרסאות',
+  trash: 'סל מיחזור',
+  sources: 'מסמכי מקור',
+  pinned: 'מוצמדים',
+  recent: 'נצפו לאחרונה',
+  drafts: 'טיוטות',
+  fields: 'שדות CRM',
+  blocks: 'בלוקים משותפים',
+  topic: 'נושא',
+  reviews: 'סקירות',
+  feedback: 'משוב',
+  notifications: 'התראות',
+  graph: 'גרף קשרים',
+  data: 'קבצי נתונים',
+  dashboards: 'לוחות בקרה',
+  analytics: 'נתוני שימוש',
+  sync: 'סנכרון',
+  admin: 'ניהול',
+  login: 'כניסה',
+};
+const docTitle = (name: string) => `wecom | ${name}`;
+
 const load = <T,>(k: string, d: T): T => {
   try {
     const raw = sessionStorage.getItem(k);
@@ -99,6 +134,13 @@ export function NavProvider({ children }: { children: ReactNode }) {
     }
     if (!path.startsWith('/doc/')) setSplit(null);
     tick((n) => n + 1);
+  }, [loc.pathname]);
+
+  useEffect(() => {
+    const known = titles.current.get(loc.pathname);
+    document.title = docTitle(
+      known ?? ROUTE_TITLES[loc.pathname.split('/')[1] ?? ''] ?? 'מאגר ידע פנימי',
+    );
   }, [loc.pathname]);
 
   // M6: both pieces of state are derived up front and set separately. Calling `setActiveTab`
@@ -203,6 +245,9 @@ export function NavProvider({ children }: { children: ReactNode }) {
         titles.current.set(p, t);
         const e = stack.current.find((x) => x.path === p);
         if (e) e.title = t;
+        // The map is a ref, so the effect above cannot see this write. A page reporting the title
+        // of the screen that is *currently* open is naming the tab, so name it here.
+        if (p === loc.pathname) document.title = docTitle(t);
       },
       activeScope,
       setActiveScope,
