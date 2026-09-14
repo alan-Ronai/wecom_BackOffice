@@ -193,19 +193,30 @@ run('admin routes', () => {
       { idpGroupId: 'g1', idpGroupName: 'KB-Editors', roleId: editorRole },
     ]);
   });
-  it('lists and revokes sessions', async () => {
+  it('lists and revokes sessions, flagging the callers own row', async () => {
     const list = await app.inject({
       method: 'GET',
       url: `/api/v1/admin/sessions?userId=${editorId}`,
       headers: admin,
     });
     expect(list.json().items.length).toBe(1);
+    // Not the caller's own session — no isCurrent flag (or false).
+    expect(list.json().items[0].isCurrent).toBeFalsy();
+    // The admin's own session, fetched without a userId filter, is flagged.
+    const mine = await app.inject({ method: 'GET', url: '/api/v1/admin/sessions', headers: admin });
+    const ownRow = mine.json().items.find((s: { userId: string }) => s.userId === adminId);
+    expect(ownRow.isCurrent).toBe(true);
+    const others = mine.json().items.filter((s: { userId: string }) => s.userId !== adminId);
+    for (const s of others) expect(s.isCurrent).toBeFalsy();
+
     const del = await app.inject({
       method: 'DELETE',
       url: `/api/v1/admin/sessions/${list.json().items[0].id}`,
       headers: admin,
     });
     expect(del.statusCode).toBe(200);
+    // Someone else's session was revoked — the deleter is not logged out.
+    expect(del.json().loggedOut).toBeFalsy();
     expect((await app.inject({ method: 'GET', url: '/api/v1/auth/me', headers: editor })).statusCode).toBe(
       401,
     );
@@ -219,5 +230,20 @@ run('admin routes', () => {
     expect(r.statusCode).toBe(200);
     expect(r.json().total).toBeGreaterThan(0);
     expect(r.json().items[0].actorName).toBe('Admin');
+  });
+  it('revoking your own session logs you out, so the UI can redirect', async () => {
+    const mine = await app.inject({ method: 'GET', url: '/api/v1/admin/sessions', headers: admin });
+    const ownRow = mine.json().items.find((s: { userId: string }) => s.userId === adminId);
+    expect(ownRow.isCurrent).toBe(true);
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/admin/sessions/${ownRow.id}`,
+      headers: admin,
+    });
+    expect(del.statusCode).toBe(200);
+    expect(del.json()).toMatchObject({ ok: true, loggedOut: true });
+    expect((await app.inject({ method: 'GET', url: '/api/v1/auth/me', headers: admin })).statusCode).toBe(
+      401,
+    );
   });
 });
