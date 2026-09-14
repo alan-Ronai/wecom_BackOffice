@@ -188,9 +188,7 @@ const card = (o: {
  * behaviour untouched.
  */
 export const isNewSourcePath = (ctx: ProposalContext): boolean =>
-  ctx.linkedSteps.length === 0 &&
-  ctx.paragraphs.length > 0 &&
-  ctx.diffs.some((d) => d.kind !== 'same');
+  ctx.linkedSteps.length === 0 && ctx.paragraphs.length > 0 && ctx.diffs.some((d) => d.kind !== 'same');
 
 /**
  * One `new-card` per section — or, when the source is a single remote item
@@ -209,8 +207,7 @@ export function sectionCards(ctx: ProposalContext): ProposedSuggestion[] {
         title: ctx.source.title,
         text,
         phases: buildPhases(sections),
-        rationale:
-          'פריט מרוחק חדש ללא מסמך מתאים: ' + sections.length + ' סעיפים אוחדו לכרטיס אחד.',
+        rationale: 'פריט מרוחק חדש ללא מסמך מתאים: ' + sections.length + ' סעיפים אוחדו לכרטיס אחד.',
       }),
     ];
   }
@@ -230,10 +227,7 @@ export function sectionCards(ctx: ProposalContext): ProposedSuggestion[] {
  * `new-card` suggestions are replaced by the section cards (a language model that emits one
  * card per paragraph would re-create the fan-out), while everything else it proposed is kept.
  */
-export function enforceSectionCards(
-  ctx: ProposalContext,
-  items: ProposedSuggestion[],
-): ProposedSuggestion[] {
+export function enforceSectionCards(ctx: ProposalContext, items: ProposedSuggestion[]): ProposedSuggestion[] {
   if (!isNewSourcePath(ctx)) return items;
   return [...sectionCards(ctx), ...items.filter((i) => i.type !== 'new-card')];
 }

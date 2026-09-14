@@ -28,8 +28,7 @@ const ctxFor = (
 });
 
 /** The body `scripts/wp-stub.mjs` serves and the edit `apps/web/e2e/real/wordpress-source.spec.ts` makes. */
-const WP_HTML =
-  '<h2>מבוא</h2><p>סף מהירות: 5 מגה.</p><ul><li>בדיקת APN</li><li>ניתוק מ-Wi-Fi</li></ul>';
+const WP_HTML = '<h2>מבוא</h2><p>סף מהירות: 5 מגה.</p><ul><li>בדיקת APN</li><li>ניתוק מ-Wi-Fi</li></ul>';
 const WP_HTML_EDITED =
   '<h2>מבוא</h2><p>סף מהירות: 6 מגה.</p><ul><li>בדיקת APN</li><li>ניתוק מ-Wi-Fi</li></ul>';
 const WP_TITLE = 'נוהל WordPress לבדיקה';
@@ -89,7 +88,9 @@ describe('groupSections', () => {
 
   it('leaves a table paragraph whole — only an all-bullet paragraph is a list', () => {
     const sections = groupSections(
-      htmlToParagraphs('<h2>טבלה</h2><table><tr><td>א</td><td>ב</td></tr><tr><td>ג</td><td>ד</td></tr></table>'),
+      htmlToParagraphs(
+        '<h2>טבלה</h2><table><tr><td>א</td><td>ב</td></tr><tr><td>ג</td><td>ד</td></tr></table>',
+      ),
       'מקור',
     );
     expect(sections[0].items).toHaveLength(1);
