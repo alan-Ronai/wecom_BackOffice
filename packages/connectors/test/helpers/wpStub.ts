@@ -14,6 +14,7 @@ export interface WpStub {
   url: string;
   posts: Map<string, WpPost>;
   puts: { type: string; id: number | null; body: unknown }[];
+  media: { mime: string; size: number }[];
   lastAuth: string | null;
   close(): Promise<void>;
 }
@@ -22,6 +23,7 @@ export interface WpStub {
 export async function startWpStub(seed: WpPost[]): Promise<WpStub> {
   const posts = new Map<string, WpPost>(seed.map((p) => ['posts:' + p.id, p]));
   const puts: WpStub['puts'] = [];
+  const media: WpStub['media'] = [];
   let lastAuth: string | null = null;
   let nextId = 1000;
   const server = http.createServer((req, res) => {
@@ -33,6 +35,18 @@ export async function startWpStub(seed: WpPost[]): Promise<WpStub> {
       res.end(JSON.stringify(body));
     };
     if (url.pathname === '/wp-json/') return json(200, { name: 'stub', namespaces: ['wp/v2'] });
+    // Media uploads carry raw bytes on a path with no numeric id, so they are matched before `m`.
+    if (url.pathname === '/wp-json/wp/v2/media' && req.method === 'POST') {
+      let size = 0;
+      req.on('data', (c: Buffer) => {
+        size += c.length;
+      });
+      return req.on('end', () => {
+        media.push({ mime: String(req.headers['content-type'] ?? ''), size });
+        const mid = 500 + media.length;
+        json(201, { id: mid, source_url: 'http://wp/media/' + mid + '.png' });
+      });
+    }
     if (!m) return json(404, { code: 'rest_no_route' });
     const [, type, id] = m;
     let raw = '';
@@ -84,6 +98,7 @@ export async function startWpStub(seed: WpPost[]): Promise<WpStub> {
     url,
     posts,
     puts,
+    media,
     get lastAuth() {
       return lastAuth;
     },

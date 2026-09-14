@@ -59,6 +59,7 @@ function setup(link: Partial<SyncLinkRow>, remoteHash: string, localVersion: num
     fetch: vi.fn(async () => ({
       title: 'מסמך',
       paragraphs: [{ ref: 'h2-1', runs: [{ t: 'x' }] }],
+      raw: '<h2>שלב</h2><p>x</p>',
       hash: remoteHash,
     })),
     push: vi.fn(async () => ({
@@ -95,6 +96,8 @@ function setup(link: Partial<SyncLinkRow>, remoteHash: string, localVersion: num
     getBlocksFor: vi.fn(async () => []),
     ensureSourceForConnector: vi.fn(async () => ({ sourceId: S })),
     replaceStructure: vi.fn(async () => doc(localVersion + 1)),
+    getSourceHtml: vi.fn(async () => '<h2>מקור</h2><p>מהמערכת</p>'),
+    putSourceFromRemote: vi.fn(async () => undefined),
   };
   const events = { publish: vi.fn() };
   const svc = new SyncService({
@@ -127,6 +130,25 @@ describe('SyncService.runConnector', () => {
         name: 'sync.completed',
         payload: expect.objectContaining({ imported: 1, conflicts: 0 }),
       }),
+    );
+  });
+  it('remote changed → ingests and writes the remote html as a source version', async () => {
+    const { svc, revisions, documents } = setup({}, 'h1', 1);
+    await svc.runConnector(C, null);
+    expect(revisions.ingest).toHaveBeenCalledTimes(1);
+    expect(documents.putSourceFromRemote).toHaveBeenCalledWith(
+      D,
+      expect.stringContaining('<p>'),
+      'מוורדפרס',
+    );
+  });
+  it('local changed → pushes the source html when present', async () => {
+    const { svc, connector } = setup({}, 'h0', 2);
+    await svc.runConnector(C, null);
+    expect(connector.push).toHaveBeenCalledWith(
+      expect.anything(),
+      'posts:7',
+      expect.objectContaining({ html: '<h2>מקור</h2><p>מהמערכת</p>' }),
     );
   });
   it('pushes when only local changed and rebases', async () => {
