@@ -10,6 +10,7 @@ import trash from './trash/routes.js';
 import preferences from './preferences/routes.js';
 import events from './events/routes.js';
 import graph from './graph/routes.js';
+import explorer from './explorer/routes.js';
 import { startJobs } from '../jobs/index.js';
 
 /**
@@ -29,6 +30,7 @@ export async function registerModules(v1: FastifyInstance) {
     preferences,
     events,
     graph,
+    explorer,
   ])
     await v1.register(m);
   // L2 background workers (trash.purge, search.reindex) bind to L1's `app.boss` once it is up.
