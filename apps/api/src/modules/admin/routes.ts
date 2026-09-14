@@ -5,6 +5,7 @@ import groupsMap from './groups-map.js';
 import sessions from './sessions.js';
 import auditR from './audit.js';
 import system from './system.js';
+import identity from './identity-settings.js'; // stage 5: identity settings
 
 export default async function adminRoutes(app: FastifyInstance) {
   await app.register(users);
@@ -13,4 +14,5 @@ export default async function adminRoutes(app: FastifyInstance) {
   await app.register(sessions);
   await app.register(auditR);
   await app.register(system);
+  await app.register(identity);
 }

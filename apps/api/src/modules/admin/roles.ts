@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { ADMIN_LOCKED, RoleSchema, RoleUpsertSchema, type Permission } from '@wecom/shared';
+import { ADMIN_LOCKED, RoleMatrixSchema, RoleSchema, RoleUpsertSchema, type Permission } from '@wecom/shared';
 import { HttpError, notFound } from '../../lib/errors.js';
 import { audit } from '../../lib/audit.js';
 
@@ -39,6 +39,45 @@ export default async function roleRoutes(instance: FastifyInstance) {
            from roles r order by r.system desc, r.name`,
       );
       return { items: r.rows };
+    },
+  );
+
+  /**
+   * Stage-5 §admin. The whole permission grid in one request: every permission with its
+   * resource and description, every role with the permissions it grants and how many
+   * people hold it. Built from the `permissions` table rather than the TypeScript
+   * catalogue so a permission added by a migration shows up without a redeploy.
+   */
+  app.get(
+    '/roles/matrix',
+    {
+      config: { requires: ['roles.manage'] },
+      schema: { tags: ['admin'], response: { 200: RoleMatrixSchema } },
+    },
+    async () => {
+      const [perms, roles] = await Promise.all([
+        app.db.query(`select name, resource, description from permissions order by resource, name`),
+        app.db.query(
+          `select r.id, r.name, r.system,
+                  coalesce((select array_agg(permission order by permission) from role_permissions where role_id=r.id), '{}') as permissions,
+                  (select count(*)::int from user_roles ur where ur.role_id = r.id) as users
+             from roles r order by r.system desc, r.name`,
+        ),
+      ]);
+      return {
+        permissions: perms.rows.map((p) => ({
+          name: p.name as Permission,
+          resource: p.resource as string,
+          description: (p.description as string) ?? '',
+        })),
+        roles: roles.rows.map((r) => ({
+          id: r.id as string,
+          name: r.name as string,
+          system: r.system as boolean,
+          permissions: r.permissions as Permission[],
+          users: r.users as number,
+        })),
+      };
     },
   );
 

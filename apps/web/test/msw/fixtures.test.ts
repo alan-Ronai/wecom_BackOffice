@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import {
   AdminSystemSchema,
+  AdminUserRowSchema,
   AuditEntrySchema,
   BlockListSchema,
   BlockSchema,
@@ -214,11 +215,8 @@ const cases: Case[] = [
 
   ['GET /me/preferences', GET(`${B}/me/preferences`), PreferencesSchema],
 
-  [
-    'GET /admin/users',
-    GET(`${B}/admin/users`),
-    paginated(UserSchema.extend({ roles: z.array(UserRoleSchema) })),
-  ],
+  // Stage 5: the people page row — roles, derived IdP groups, live session count.
+  ['GET /admin/users', GET(`${B}/admin/users`), paginated(AdminUserRowSchema)],
   ['PATCH /admin/users/:id', PATCH(`${B}/admin/users/${fx.users[0].id}`, { active: true }), okAudit],
   ['GET /admin/roles', GET(`${B}/admin/roles`), z.object({ items: z.array(RoleSchema) })],
   [

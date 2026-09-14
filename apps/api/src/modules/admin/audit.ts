@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { AuditEntrySchema, AuditQuerySchema, paginated } from '@wecom/shared';
+import { z } from 'zod';
+import { AuditEntryDetailSchema, AuditEntrySchema, AuditQuerySchema, paginated } from '@wecom/shared';
+import { notFound } from '../../lib/errors.js';
+import { diffRows } from './audit-diff.js';
 
 export default async function auditRoutes(instance: FastifyInstance) {
   const app = instance.withTypeProvider<ZodTypeProvider>();
@@ -55,6 +58,45 @@ export default async function auditRoutes(instance: FastifyInstance) {
         total,
         page: q.page,
         pageSize: q.pageSize,
+      };
+    },
+  );
+
+  /**
+   * Stage-5 §admin. One entry with the before/after snapshots already reduced to the
+   * rows the drawer renders, so the UI never re-implements the diff and two clients
+   * can never disagree about what an entry says changed.
+   */
+  app.get(
+    '/audit/:id',
+    {
+      config: { requires: ['audit.read'] },
+      schema: {
+        tags: ['admin'],
+        params: z.object({ id: z.string().uuid() }),
+        response: { 200: AuditEntryDetailSchema },
+      },
+    },
+    async (req) => {
+      const r = await app.db.query(
+        `select a.*, u.display_name as actor_name from audit_log a
+           left join users u on u.id = a.actor_id where a.id = $1`,
+        [req.params.id],
+      );
+      if (!r.rowCount) throw notFound('רשומת הביקורת');
+      const e = r.rows[0];
+      return {
+        id: e.id as string,
+        action: e.action as string,
+        entityType: e.entity_type as string,
+        entityId: (e.entity_id as string | null) ?? null,
+        actorName: (e.actor_name as string | null) ?? null,
+        ip: (e.ip as string | null) ?? null,
+        requestId: (e.request_id as string | null) ?? null,
+        at: new Date(e.at as Date).toISOString(),
+        diff: diffRows(e.before, e.after),
+        before: e.before ?? null,
+        after: e.after ?? null,
       };
     },
   );

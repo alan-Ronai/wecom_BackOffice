@@ -12,6 +12,7 @@ import events from './events/routes.js';
 import graph from './graph/routes.js';
 import explorer from './explorer/routes.js';
 import dashboards from './dashboards/routes.js';
+import collab from './collab/routes.js'; // stage 5: collaboration
 import { startJobs } from '../jobs/index.js';
 
 /**
@@ -33,6 +34,7 @@ export async function registerModules(v1: FastifyInstance) {
     graph,
     explorer,
     dashboards,
+    collab,
   ])
     await v1.register(m);
   // L2 background workers (trash.purge, search.reindex) bind to L1's `app.boss` once it is up.
