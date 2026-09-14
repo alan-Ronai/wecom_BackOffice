@@ -11,6 +11,7 @@ import { HistoryPage } from './components/history/HistoryPage.js';
 import { TrashPage } from './components/trash/TrashPage.js';
 import { SourcesPage } from './components/sources/SourcesPage.js';
 import { DataPage } from './components/data/DataPage.js';
+import { GraphPage } from './components/graph/GraphPage.js';
 import { AdminLayout } from './components/admin/AdminLayout.js';
 import { UsersPage } from './components/admin/UsersPage.js';
 import { RolesPage } from './components/admin/RolesPage.js';
@@ -48,6 +49,7 @@ export const routeObjects: RouteObject[] = [
       { path: 'sources/:id', element: <SourcesPage /> },
       { path: 'data', element: <DataPage /> },
       { path: 'data/:sourceId', element: <DataPage /> },
+      { path: 'graph', element: <GraphPage /> },
       {
         path: 'admin',
         element: <AdminLayout />,
