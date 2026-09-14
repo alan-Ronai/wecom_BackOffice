@@ -1,0 +1,23 @@
+{
+  "name": "wecom · מאגר ידע פנימי",
+  "short_name": "מאגר הידע",
+  "description": "מאגר הידע הפנימי של wecom — תסריטי שיחה, נהלים ומידע לנציגי השירות.",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#1F2E3B",
+  "background_color": "#F4F5F7",
+  "icons": [
+    { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/apple-touch-icon.png", "type": "image/png", "sizes": "180x180" },
+    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    {
+      "src": "/icon-512-maskable.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ]
+}

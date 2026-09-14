@@ -4,6 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>wecom · מאגר ידע פנימי</title>
+
+    <!--
+      A-7. `favicon.ico` was the only console error in the whole agent path: browsers request it
+      from the origin root whether or not anything asks them to, and `location /`'s
+      `try_files $uri /index.html` answered with the HTML document, which the icon parser then
+      rejected. Shipping the file is the fix; the `.ico` stays because that implicit request is
+      made by anything that has ever indexed a page, and `icon.svg` is what modern browsers
+      actually pick (it is the only one that stays sharp on a HiDPI tab strip).
+
+      All five files live in `public/`, so Vite copies them to the dist root and nginx serves them
+      from the existing `location /` — no new block in `deploy/nginx.conf`.
+
+      Regenerate with `node scripts/make-icons.mjs`.
+    -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#1F2E3B" />
     <script>
       /*
         Stamps the theme before the first paint.
