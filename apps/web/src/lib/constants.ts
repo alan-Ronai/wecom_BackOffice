@@ -1,12 +1,15 @@
 import type { Category, Priority } from '@wecom/shared';
 
 /** Ported verbatim from legacy/js/data.js — labels, icons and colours the UI reads. */
+export type CatInfo = { label: string; short: string; icon: string; color: string };
+
 /**
  * Wave 4: worlds are rows in `worlds` now, so a slug can be anything an admin types. `CATS` stays
- * as the label/icon/colour table for the six seeded slugs and is indexed defensively — every
- * reader must fall back (`CATS[slug]?.short ?? slug`).
+ * as the label/icon/colour table for the six seeded slugs only, and the `Partial<>` is load-bearing:
+ * it makes the compiler reject `CATS[slug].label`, which used to type-check and then throw on the
+ * first admin-created world. Read through {@link cat} (or `CATS[slug]?.x ?? fallback`) instead.
  */
-export const CATS: Record<string, { label: string; short: string; icon: string; color: string }> = {
+export const CATS: Partial<Record<string, CatInfo>> = {
   sim: { label: 'SIM / eSIM', short: 'SIM', icon: '📶', color: '#2E5CE0' },
   tech: { label: 'תמיכה טכנית', short: 'טכני', icon: '🔧', color: '#3A4A5C' },
   billing: { label: 'חיובים', short: 'חיובים', icon: '💳', color: '#0E7A4F' },
@@ -14,7 +17,24 @@ export const CATS: Record<string, { label: string; short: string; icon: string; 
   intl: { label: 'חו"ל ונדידה', short: 'חו"ל', icon: '✈️', color: '#0891B2' },
   ops: { label: 'טיפול בשיחה', short: 'שיחה', icon: '🎧', color: '#C2410C' },
 };
-export const CAT_KEYS = Object.keys(CATS) as Category[];
+
+/** Neutral display for a world the seed table does not know: the slug itself, in grey. */
+const CAT_FALLBACK = (slug: string): CatInfo => ({
+  label: slug,
+  short: slug,
+  icon: '▸',
+  color: '#6B7280',
+});
+
+/**
+ * The one supported way to render a world slug. Always returns something displayable, so a world
+ * an admin created after deploy renders as its slug rather than unmounting the React root.
+ */
+export const cat = (slug: string): CatInfo => CATS[slug] ?? CAT_FALLBACK(slug);
+
+/* `CAT_KEYS` used to live here. It is gone on purpose: every picker that offered worlds from it
+   could only ever offer the six seeded slugs, so a world an admin created was unassignable. The
+   replacement is `useWorlds()`. */
 
 export const PRI: Record<Priority, { label: string; cls: string }> = {
   hh: { label: 'שכיח מאוד', cls: 'chip-red' },

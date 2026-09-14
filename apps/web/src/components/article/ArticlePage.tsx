@@ -14,7 +14,7 @@ import { useCan } from '../../api/hooks/me.js';
 import { ApiError } from '../../api/unwrap.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
 import { useUiPrefs } from '../../api/hooks/uiPrefs.js';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 import { copy } from '../../lib/format.js';
 import { useHotkeys, type ActiveScope } from '../../lib/keys.js';
 import { resolvedSteps } from '../../lib/steps.js';
@@ -375,7 +375,7 @@ export function ArticlePage() {
           <span className="chip chip-blue">
             {doc.kind === 'retention'
               ? 'שימור לקוחות'
-              : `תפעולי – ${CATS[doc.category]?.short ?? doc.category}`}
+              : `תפעולי – ${cat(doc.category).short}`}
           </span>
           <span className="chip chip-gray">v{doc.currentVersion}</span>
           <span className="chip chip-gray">{steps.length} שלבים</span>
@@ -461,7 +461,7 @@ export function ArticlePage() {
           </a>
           <span className="sep">/</span>
           <a role="button" tabIndex={0} onClick={() => go(`/library/${doc.category}`)}>
-            {CATS[doc.category]?.label ?? doc.category}
+            {cat(doc.category).label}
           </a>
           <span className="sep">/</span>
           <b>{doc.title}</b>

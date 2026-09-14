@@ -118,6 +118,31 @@ describe('W6 article mounts', () => {
     expect(screen.queryByText(/סל המיחזור/)).toBeNull();
   });
 
+  it('opens an article in a world the seed table does not know', async () => {
+    // The regression this locks down: `CATS[slug].label` on an admin-created world threw inside
+    // `QuickSwitch`/`PrintFrame`, and with no error boundary the whole root unmounted — a blank
+    // page with the URL still in the bar, which is exactly what spec §9 promises will work.
+    server.use(
+      http.get(`${B}/worlds`, () =>
+        HttpResponse.json({
+          items: [
+            ...fx.worlds,
+            { ...fx.worlds[0]!, id: 'aaaaaaaa-aaaa-4aaa-8aaa-000000000099', slug: 'field', name: 'שטח' },
+          ],
+        }),
+      ),
+      http.get(`${B}/documents/${D_BROWSING}`, () =>
+        HttpResponse.json({ ...fx.docBrowsing, category: 'field', worlds: ['field'] }),
+      ),
+    );
+    renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
+    expect(
+      await screen.findByRole('heading', { level: 1, name: fx.docBrowsing.title }),
+    ).toBeInTheDocument();
+    // Falls back to the slug rather than crashing on `undefined.label`.
+    expect(screen.getAllByText(/field/).length).toBeGreaterThan(0);
+  });
+
   it('switches to the source pane and back', async () => {
     server.use(
       http.get(`${B}/documents/${D_BROWSING}/source`, () =>

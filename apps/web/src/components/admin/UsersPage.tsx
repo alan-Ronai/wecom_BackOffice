@@ -4,7 +4,8 @@ import { useCreateUser, usePatchUser, useRoles } from '../../api/hooks/admin.js'
 import { useAdminUsers } from '../../api/hooks/stage5.js';
 import { useCan } from '../../api/hooks/me.js';
 import type { AdminUserRow, AdminUsersQuery } from '../../api/stage5.js';
-import { CATS, CAT_KEYS } from '../../lib/constants.js';
+import { useWorlds } from '../../api/hooks/taxonomy.js';
+import { cat } from '../../lib/constants.js';
 import { ago, fmtDate } from '../../lib/format.js';
 import { useDebounced } from '../../lib/useDebounced.js';
 import { useModal } from '../ui/Modal.js';
@@ -27,7 +28,7 @@ const TABS: [string, AdminUsersQuery][] = [
 ];
 
 const scopeLabel = (scope: Category[] | null | undefined): string =>
-  scope?.length ? scope.map((c) => CATS[c]?.label ?? c).join(' · ') : 'כל הקטגוריות';
+  scope?.length ? scope.map((c) => cat(c).label).join(' · ') : 'כל הקטגוריות';
 
 /**
  * The role + category-scope editor. Kept in a dialog rather than as two inline selects: a scope is
@@ -37,10 +38,15 @@ const scopeLabel = (scope: Category[] | null | undefined): string =>
 function RoleEditor({
   user,
   roles,
+  worlds,
   onSave,
 }: {
   user: AdminUserRow;
   roles: { id: string; name: string }[];
+  /** Slugs from `GET /worlds`, not the six seeded keys: a world an admin just created has to be
+      grantable without a deploy (spec §9). Passed as a prop because the dialog body is rendered
+      through `modal.open`, and a query hook belongs on the page that owns the data. */
+  worlds: string[];
   onSave: (roleId: string, categoryScope: Category[] | null) => void;
 }) {
   const [roleId, setRoleId] = useState(user.roles[0]?.roleId ?? roles[0]?.id ?? '');
@@ -70,15 +76,15 @@ function RoleEditor({
       </label>
       {!allCats ? (
         <div className="cat-checks">
-          {CAT_KEYS.map((c) => (
+          {worlds.map((c) => (
             <label key={c} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <input
                 type="checkbox"
-                aria-label={CATS[c].label}
+                aria-label={cat(c).label}
                 checked={scope.includes(c)}
                 onChange={(e) => setScope((s) => (e.target.checked ? [...s, c] : s.filter((x) => x !== c)))}
               />
-              {CATS[c].label}
+              {cat(c).label}
             </label>
           ))}
         </div>
@@ -158,6 +164,7 @@ export function UsersPage() {
   const query: AdminUsersQuery = { ...TABS[tab][1], ...(q ? { q } : {}), ...(role ? { role } : {}) };
   const users = useAdminUsers(query);
   const roles = useRoles();
+  const worlds = useWorlds();
   const patch = usePatchUser();
   const create = useCreateUser();
   const modal = useModal();
@@ -166,6 +173,7 @@ export function UsersPage() {
   const mayEdit = can('users.manage');
 
   const roleOptions = (roles.data ?? []).map((r) => ({ id: r.id, name: r.name }));
+  const worldSlugs = (worlds.data ?? []).map((w) => w.slug);
   const items = users.data?.items ?? [];
 
   /**
@@ -231,6 +239,7 @@ export function UsersPage() {
         <RoleEditor
           user={u}
           roles={roleOptions}
+          worlds={worldSlugs}
           onSave={async (roleId, categoryScope) => {
             modal.close();
             await patch.mutateAsync({ id: u.id, roles: [{ roleId, categoryScope }] });
@@ -249,6 +258,7 @@ export function UsersPage() {
           // Seeded from the first selected user so the dialog opens on something, not on blank.
           user={visibleSelected[0]}
           roles={roleOptions}
+          worlds={worldSlugs}
           onSave={bulkAssign}
         />
       ),

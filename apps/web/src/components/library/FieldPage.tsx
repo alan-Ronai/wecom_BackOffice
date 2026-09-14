@@ -5,7 +5,7 @@ import { useFieldPage, useImpact, useRenameField } from '../../api/hooks/stage4.
 import { useDeleteField } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
 import type { FieldPage as FieldPageData } from '../../api/stage4.js';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 import { fmtDate } from '../../lib/format.js';
 import { Fmt, Html } from '../Fmt.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
@@ -279,7 +279,7 @@ function FieldPageBody({ data, canEdit }: { data: FieldPageData; canEdit: boolea
                           className="rowlink"
                           onClick={() => go(`/doc/${row.documentId}/${row.stepKey}`)}
                         >
-                          <td>{i === 0 ? `${CATS[row.category].icon} ${row.title}` : ''}</td>
+                          <td>{i === 0 ? `${cat(row.category).icon} ${row.title}` : ''}</td>
                           <td>
                             {row.stepNum} · {row.stepTitle}
                           </td>

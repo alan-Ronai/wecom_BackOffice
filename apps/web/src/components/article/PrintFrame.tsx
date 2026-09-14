@@ -1,5 +1,5 @@
 import type { Document } from '@wecom/shared';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 import { fmtDate } from '../../lib/format.js';
 
 /**
@@ -16,7 +16,7 @@ export function PrintFrame({ doc, steps }: { doc: Document; steps: number }) {
       <div className="print-head" aria-hidden="true">
         <b>{doc.title}</b>
         <span>
-          {CATS[doc.category].label} · {steps} שלבים · v{doc.currentVersion}
+          {cat(doc.category).label} · {steps} שלבים · v{doc.currentVersion}
         </span>
       </div>
       <div className="print-foot" aria-hidden="true">

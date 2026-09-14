@@ -5,7 +5,7 @@ import type { Document } from '@wecom/shared';
 import { useLinks, useRelated, useVersions } from '../../api/hooks/documents.js';
 import { useAddNote, useLikeNote, useNotes } from '../../api/hooks/content.js';
 import { useCan } from '../../api/hooks/me.js';
-import { CATS } from '../../lib/constants.js';
+import { cat } from '../../lib/constants.js';
 import { ago, fmtDate } from '../../lib/format.js';
 import { Fmt, Html } from '../Fmt.js';
 import type { ResolvedStep } from '../../lib/steps.js';
@@ -89,7 +89,7 @@ export function Panel({
                 {related.data?.length ? (
                   related.data.map((r) => (
                     <a key={r.documentId} className="rel" data-doc={r.documentId}>
-                      <span className="ic">{CATS[r.category as keyof typeof CATS]?.icon ?? '📄'}</span>
+                      <span className="ic">{cat(r.category).icon}</span>
                       <div className="tx">
                         {r.title}
                         <div>{r.why}</div>
