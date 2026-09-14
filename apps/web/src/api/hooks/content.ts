@@ -1,11 +1,11 @@
 /** Blocks, CRM fields, scripts, notes and drafts — the rest of the content surface. */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Block, CrmField, Note } from '@wecom/shared';
+import type { Block, CrmField, Note, Script } from '@wecom/shared';
 import { api } from '../client.js';
 import { keys } from '../keys.js';
 import { unwrap, unwrapMaybe } from '../unwrap.js';
-import type { DraftEnvelope, UpsertBlockBody, UpsertFieldBody } from '../types.js';
+import type { DraftEnvelope, UpsertBlockBody, UpsertFieldBody, UpsertScriptBody } from '../types.js';
 
 /* ── blocks ─────────────────────────────────────────────────────────────── */
 export const useBlocks = () =>
@@ -74,6 +74,21 @@ export const useUpsertField = () => {
   });
 };
 
+export const useDeleteField = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) =>
+      unwrap(await api.DELETE('/fields/{name}', { params: { path: { name } } })),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.fields });
+      // A deleted field turns every chip that referenced it into "unknown", so the documents
+      // rendering those chips have to be re-read as well.
+      void qc.invalidateQueries({ queryKey: ['documents'] });
+      void qc.invalidateQueries({ queryKey: keys.trash });
+    },
+  });
+};
+
 /* ── scripts ────────────────────────────────────────────────────────────── */
 export const useScripts = () =>
   useQuery({
@@ -81,6 +96,30 @@ export const useScripts = () =>
     queryFn: async () => unwrap(await api.GET('/scripts')).items,
     staleTime: 30_000,
   });
+
+export const useUpsertScript = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: UpsertScriptBody & { id?: string }): Promise<Script> =>
+      unwrap(
+        id
+          ? await api.PUT('/scripts/{id}', { params: { path: { id } }, body })
+          : await api.POST('/scripts', { body }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.scripts }),
+  });
+};
+
+export const useDeleteScript = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => unwrap(await api.DELETE('/scripts/{id}', { params: { path: { id } } })),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.scripts });
+      void qc.invalidateQueries({ queryKey: keys.trash });
+    },
+  });
+};
 
 /* ── notes ──────────────────────────────────────────────────────────────── */
 export const useNotes = (id: string | undefined) =>

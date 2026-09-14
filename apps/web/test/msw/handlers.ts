@@ -11,7 +11,14 @@
  * `state.drafts`, …) and is reset between tests by `setup.ts`.
  */
 import { http, HttpResponse, type RequestHandler } from 'msw';
-import { PreferencesSchema, type Document, type Note, type Suggestion } from '@wecom/shared';
+import {
+  PreferencesSchema,
+  type CrmField,
+  type Document,
+  type Note,
+  type Script,
+  type Suggestion,
+} from '@wecom/shared';
 import * as fixtures from './fixtures.js';
 import { fx } from './fixtures.js';
 import { resetStage45, stage45Handlers } from './stage45.js';
@@ -27,6 +34,8 @@ interface State {
   published: { id: string; label: string }[];
   trash: TrashItem[];
   documents: Map<string, Document>;
+  scripts: Script[];
+  fields: CrmField[];
   views: string[];
   processed: string[];
   publishedSources: string[];
@@ -44,6 +53,8 @@ const initial = (): State => ({
     [fx.docBrowsing.id, fx.docBrowsing],
     [fx.docIntl.id, fx.docIntl],
   ]),
+  scripts: fx.scripts.map((s) => ({ ...s })),
+  fields: fx.fields.map((f) => ({ ...f })),
   views: [],
   processed: [],
   publishedSources: [],
@@ -313,14 +324,17 @@ export const handlers: RequestHandler[] = [
   ),
 
   // The list endpoint enriches each field with a `usedIn` count (the element schema has none).
-  http.get(`${B}/fields`, () => HttpResponse.json({ items: fx.fields.map((f) => ({ ...f, usedIn: 1 })) })),
+  http.get(`${B}/fields`, () => HttpResponse.json({ items: state.fields.map((f) => ({ ...f, usedIn: 1 })) })),
   http.put(`${B}/fields/:name`, async ({ request, params }) =>
     HttpResponse.json({
       ...fx.fields.find((f) => f.name === decodeURIComponent(String(params.name))),
       ...((await request.json()) as object),
     }),
   ),
-  http.delete(`${B}/fields/:name`, () => HttpResponse.json({ auditId: AUDIT })),
+  http.delete(`${B}/fields/:name`, ({ params }) => {
+    state.fields = state.fields.filter((f) => f.name !== decodeURIComponent(String(params.name)));
+    return HttpResponse.json({ auditId: AUDIT });
+  }),
   // Rows carry `stepKeys: string[]`, not `category`/`currentVersion`.
   http.get(`${B}/fields/:name/usage`, () =>
     HttpResponse.json({
@@ -331,12 +345,37 @@ export const handlers: RequestHandler[] = [
   // …and each script with the documents that reference it.
   http.get(`${B}/scripts`, () =>
     HttpResponse.json({
-      items: fx.scripts.map((s) => ({
+      items: state.scripts.map((s) => ({
         ...s,
         usedIn: [{ documentId: fx.docBrowsing.id, title: fx.docBrowsing.title }],
       })),
     }),
   ),
+  http.post(`${B}/scripts`, async ({ request }) => {
+    const body = (await request.json()) as { title: string; text: string; tags?: string[] };
+    const created = {
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb9',
+      tags: [],
+      ...body,
+      updatedAt: new Date().toISOString(),
+    };
+    state.scripts.push(created);
+    return HttpResponse.json(created);
+  }),
+  http.put(`${B}/scripts/:id`, async ({ params, request }) => {
+    const i = state.scripts.findIndex((s) => s.id === String(params.id));
+    if (i < 0) return notFound();
+    state.scripts[i] = {
+      ...state.scripts[i],
+      ...((await request.json()) as object),
+      updatedAt: new Date().toISOString(),
+    };
+    return HttpResponse.json(state.scripts[i]);
+  }),
+  http.delete(`${B}/scripts/:id`, ({ params }) => {
+    state.scripts = state.scripts.filter((s) => s.id !== String(params.id));
+    return HttpResponse.json({ auditId: AUDIT });
+  }),
 
   http.get(`${B}/search`, ({ request }) => {
     const u = new URL(request.url);

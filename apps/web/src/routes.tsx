@@ -5,6 +5,7 @@ import { LoginPage } from './components/auth/LoginPage.js';
 import { LibraryPage } from './components/library/LibraryPage.js';
 import { FieldsPage } from './components/library/FieldsPage.js';
 import { BlocksPage } from './components/library/BlocksPage.js';
+import { ScriptsPage } from './components/library/ScriptsPage.js';
 import { ArticlePage } from './components/article/ArticlePage.js';
 import { EditorPage } from './components/editor/EditorPage.js';
 import { HistoryPage } from './components/history/HistoryPage.js';
@@ -36,6 +37,7 @@ export const routeObjects: RouteObject[] = [
       { path: 'drafts', element: <LibraryPage mode="drafts" /> },
       { path: 'fields', element: <FieldsPage /> },
       { path: 'blocks', element: <BlocksPage /> },
+      { path: 'scripts', element: <ScriptsPage /> },
       { path: 'doc/:id', element: <ArticlePage /> },
       { path: 'doc/:id/:step', element: <ArticlePage /> },
       { path: 'edit/:id', element: <EditorPage /> },

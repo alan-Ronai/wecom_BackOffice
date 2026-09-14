@@ -202,7 +202,7 @@ export function Sidebar({
                 onClick={() => {
                   onNavigate();
                   if (src.kind === 'fields') nav('/fields');
-                  else if (src.kind === 'scripts') palette.open({ type: 'script' });
+                  else if (src.kind === 'scripts') nav('/scripts');
                   else nav(src.id === 'intl' ? '/library/intl' : '/library');
                 }}
               >

@@ -129,6 +129,7 @@ export function Palette() {
       { id: 'recent', title: 'נצפו לאחרונה', icon: '🕘', run: () => go('/recent') },
       { id: 'fields', title: 'שדות CRM – מה השתנה השבוע', icon: 'CRM', run: () => go('/fields') },
       { id: 'blocks', title: 'בלוקים משותפים', icon: '⧉', run: () => go('/blocks') },
+      { id: 'scripts', title: 'תסריטים – נוסח אחיד ללקוח', icon: '“', run: () => go('/scripts') },
       {
         id: 'font',
         title:
