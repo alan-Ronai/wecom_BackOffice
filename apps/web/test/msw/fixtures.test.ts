@@ -59,7 +59,24 @@ import {
   WorldsResponseSchema,
   UsageAnalyticsSchema,
 } from '@wecom/shared';
-import { fx, D_BROWSING, SUG_1, U1 } from './fixtures.js';
+/* wave 5 — V4b */
+import {
+  AssignResultSchema,
+  AudienceSchema,
+  CompletionResponseSchema,
+  DocumentLearningSchema,
+  GapDetectResultSchema,
+  GapSchema,
+  GapsResponseSchema,
+  GenerateQuestionsResponseSchema,
+  LearningDashboardSchema,
+  LearningItemCardSchema,
+  LearningItemSchema,
+  LearningItemsResponseSchema,
+  LearningVersionsResponseSchema,
+  WorkflowSettingsSchema,
+} from '@wecom/shared';
+import { fx, D_BROWSING, LI_BRIEF, LI_QUIZ, SUG_1, U1, U2 } from './fixtures.js';
 import {
   C_WP,
   LINK_CONFLICT,
@@ -433,5 +450,69 @@ describe('msw handlers answer the published response envelopes', () => {
     const body = SearchResponseSchema.parse(await res.json());
     expect(body.groups.map((g) => g.type)).toEqual(['documents']);
     expect(state.views).toBeDefined();
+  });
+});
+
+/* ── wave 5 (V4b) ─────────────────────────────────────────────────────────── */
+
+describe('wave 5 (V4b) fixtures match the zod contract', () => {
+  it('learning items, cards, completion, dashboard, gaps, workflow', () => {
+    for (const c of fx.learningItems) expect(LearningItemCardSchema.safeParse(c).success).toBe(true);
+    expect(LearningItemSchema.safeParse(fx.learningItemQuiz).success).toBe(true);
+    expect(LearningItemSchema.safeParse(fx.learningItemBriefing).success).toBe(true);
+    expect(CompletionResponseSchema.safeParse(fx.completion).success).toBe(true);
+    expect(LearningDashboardSchema.safeParse(fx.learningDashboard).success).toBe(true);
+    for (const g of fx.gaps) expect(GapSchema.safeParse(g).success).toBe(true);
+    expect(WorkflowSettingsSchema.safeParse(fx.workflow).success).toBe(true);
+  });
+
+  it('the V4b msw group answers the contract shapes (reads)', async () => {
+    const cases: [string, string, z.ZodTypeAny][] = [
+      ['GET /learning/items', `${B}/learning/items`, LearningItemsResponseSchema],
+      ['GET /learning/items/:id', `${B}/learning/items/${LI_QUIZ}`, LearningItemSchema],
+      [
+        'GET /learning/items/:id/completion',
+        `${B}/learning/items/${LI_BRIEF}/completion`,
+        CompletionResponseSchema,
+      ],
+      [
+        'GET /learning/items/:id/versions',
+        `${B}/learning/items/${LI_BRIEF}/versions`,
+        LearningVersionsResponseSchema,
+      ],
+      ['GET /learning/dashboard', `${B}/learning/dashboard`, LearningDashboardSchema],
+      ['GET /documents/:id/learning', `${B}/documents/${D_BROWSING}/learning`, DocumentLearningSchema],
+      ['GET /gaps', `${B}/gaps`, GapsResponseSchema],
+      ['GET /admin/workflow', `${B}/admin/workflow`, WorkflowSettingsSchema],
+    ];
+    for (const [name, url, schema] of cases) {
+      const parsed = schema.safeParse(await (await fetch(url)).json());
+      expect(parsed.success, `${name}: ${parsed.success ? '' : parsed.error.message}`).toBe(true);
+    }
+  });
+
+  it('the V4b msw group answers the contract shapes (writes)', async () => {
+    const post = (path: string, body: unknown) =>
+      fetch(`${B}${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const generated = await (
+      await post(`/learning/items/${LI_QUIZ}/generate`, { documentIds: [D_BROWSING] })
+    ).json();
+    expect(GenerateQuestionsResponseSchema.safeParse(generated).success).toBe(true);
+    const audience = await (
+      await post(`/learning/items/${LI_BRIEF}/audiences`, {
+        roleNames: ['lead'],
+        worldSlugs: ['intl'],
+        userIds: [],
+        dueDays: 14,
+      })
+    ).json();
+    expect(AudienceSchema.safeParse(audience).success).toBe(true);
+    const assigned = await (await post(`/learning/items/${LI_BRIEF}/assign`, { userIds: [U2] })).json();
+    expect(AssignResultSchema.safeParse(assigned).success).toBe(true);
+    expect(GapDetectResultSchema.safeParse(await (await post('/gaps/detect', {})).json()).success).toBe(true);
   });
 });

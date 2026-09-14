@@ -8,9 +8,14 @@
 import type {
   AuditEntry,
   Block,
+  CompletionResponse,
   CrmField,
   Document,
   DocumentCard,
+  Gap,
+  LearningDashboard,
+  LearningItem,
+  LearningItemCard,
   Me,
   Note,
   Role,
@@ -22,6 +27,7 @@ import type {
   TopicView,
   User,
   Version,
+  WorkflowSettings,
   World,
 } from '@wecom/shared';
 import { PERMISSIONS } from '@wecom/shared';
@@ -1149,6 +1155,199 @@ export const searchLog = {
   pageSize: 50,
 };
 
+/* ── wave 5 (V4b) — learning items, completion, gaps, workflow ─────────── */
+export const LI_QUIZ = 'b0000000-0000-4000-8000-000000000001';
+export const LI_BRIEF = 'b0000000-0000-4000-8000-000000000002';
+export const Q1 = 'c0000000-0000-4000-8000-000000000001';
+export const Q2 = 'c0000000-0000-4000-8000-000000000002';
+export const GAP1 = 'd0000000-0000-4000-8000-000000000001';
+export const GAP2 = 'd0000000-0000-4000-8000-000000000002';
+const T5 = '2026-09-15T08:00:00.000Z';
+
+export const learningItemQuiz: LearningItem = {
+  id: LI_QUIZ,
+  kind: 'quiz',
+  title: 'שאלון: תקלות גלישה',
+  description: '',
+  worldSlug: 'tech',
+  status: 'draft',
+  currentVersion: 0,
+  passMark: 80,
+  maxAttempts: null,
+  estimatedMinutes: 10,
+  entries: [],
+  questions: [
+    {
+      id: Q1,
+      documentId: D_BROWSING,
+      stepKey: 's2',
+      stem: 'מה עושים אם אין גלישה אחרי איפוס?',
+      kind: 'single',
+      options: [
+        { id: 'a', text: 'בודקים APN', correct: true },
+        { id: 'b', text: 'מנתקים שיחה', correct: false },
+      ],
+      explanation: 'לפי שלב 2',
+      generated: true,
+      modelConf: 0.8,
+    },
+    {
+      id: Q2,
+      documentId: D_BROWSING,
+      stepKey: null,
+      stem: 'איזה שדה CRM מתעדכן?',
+      kind: 'single',
+      options: [
+        { id: 'a', text: 'סטטוס קו', correct: true },
+        { id: 'b', text: 'חבילה', correct: false },
+      ],
+      explanation: '',
+      generated: false,
+      modelConf: null,
+    },
+  ],
+  sourceVersions: [],
+  needsUpdate: false,
+  createdBy: U1,
+  updatedAt: T5,
+  publishedAt: null,
+};
+
+export const learningItemBriefing: LearningItem = {
+  id: LI_BRIEF,
+  kind: 'briefing',
+  title: 'תדריך: נדידה בחו"ל',
+  description: '<p>מה חדש בנדידה</p>',
+  worldSlug: 'intl',
+  status: 'published',
+  currentVersion: 2,
+  passMark: null,
+  maxAttempts: null,
+  estimatedMinutes: 5,
+  entries: [
+    { id: 'e0000000-0000-4000-8000-000000000001', documentId: D_INTL, stepKey: null, note: 'לקרוא את שלב 1' },
+  ],
+  questions: [],
+  sourceVersions: [{ documentId: D_INTL, version: 3 }],
+  needsUpdate: false,
+  createdBy: U1,
+  updatedAt: T5,
+  publishedAt: T5,
+};
+
+const learningCard = (i: LearningItem, over: Partial<LearningItemCard> = {}): LearningItemCard => ({
+  id: i.id,
+  kind: i.kind,
+  title: i.title,
+  description: i.description,
+  worldSlug: i.worldSlug,
+  status: i.status,
+  currentVersion: i.currentVersion,
+  estimatedMinutes: i.estimatedMinutes,
+  needsUpdate: i.needsUpdate,
+  updatedAt: i.updatedAt,
+  publishedAt: i.publishedAt,
+  entryCount: i.entries.length,
+  questionCount: i.questions.length,
+  assignedUsers: 0,
+  completionRate: null,
+  ...over,
+});
+
+export const learningItems: LearningItemCard[] = [
+  learningCard(learningItemQuiz),
+  learningCard(learningItemBriefing, { assignedUsers: 12, completionRate: 0.75 }),
+];
+
+export const completion: CompletionResponse = {
+  item: learningItems[1]!,
+  rows: [
+    {
+      userId: U1,
+      displayName: 'דנה ר.',
+      worldSlugs: ['intl'],
+      status: 'completed',
+      dueAt: T5,
+      completedAt: T5,
+      score: null,
+      attempts: 0,
+    },
+    {
+      userId: U2,
+      displayName: 'יוסי ק.',
+      worldSlugs: ['intl'],
+      status: 'overdue',
+      dueAt: '2026-09-01T08:00:00.000Z',
+      completedAt: null,
+      score: null,
+      attempts: 0,
+    },
+  ],
+  byWorld: [{ worldSlug: 'intl', assigned: 12, completed: 9, overdue: 2 }],
+};
+
+export const learningDashboard: LearningDashboard = {
+  generatedAt: T5,
+  totals: { items: 2, assigned: 12, completed: 9, overdue: 2, refreshPending: 1 },
+  byWorld: [{ worldSlug: 'intl', assigned: 12, completed: 9, overdue: 2, rate: 0.75 }],
+  failedQuestions: [
+    {
+      questionId: Q1,
+      itemId: LI_QUIZ,
+      itemTitle: 'שאלון: תקלות גלישה',
+      stem: 'מה עושים אם אין גלישה אחרי איפוס?',
+      failRate: 0.6,
+      attempts: 5,
+    },
+  ],
+  recentCompletions: [
+    { userId: U1, displayName: 'דנה ר.', itemTitle: 'תדריך: נדידה בחו"ל', completedAt: T5, passed: null },
+  ],
+};
+
+export const gaps: Gap[] = [
+  {
+    id: GAP1,
+    kind: 'zero_results',
+    key: 'esim',
+    title: 'חיפושים ללא תוצאה: "esim"',
+    score: 9.5,
+    status: 'open',
+    evidence: { count: 7, lastTerms: ['esim', 'e-sim'] },
+    suggestedAction: 'create',
+    documentId: null,
+    topicId: null,
+    worldSlug: 'sim',
+    firstSeenAt: T5,
+    lastSeenAt: T5,
+    dismissedReason: null,
+    resolvedDocumentId: null,
+  },
+  {
+    id: GAP2,
+    kind: 'stale_high_traffic',
+    key: D_BROWSING,
+    title: 'פריט נצפה שלא עודכן 180 יום',
+    score: 6.1,
+    status: 'open',
+    evidence: { views30d: 140, updatedAt: '2026-01-01T00:00:00.000Z' },
+    suggestedAction: 'update',
+    documentId: D_BROWSING,
+    topicId: null,
+    worldSlug: 'tech',
+    firstSeenAt: T5,
+    lastSeenAt: T5,
+    dismissedReason: null,
+    resolvedDocumentId: null,
+  },
+];
+
+export const workflow: WorkflowSettings = {
+  requireApprover: false,
+  learning: { defaultPassMark: 80, defaultMaxAttempts: null, refreshDueDays: 7, reminderDaysBefore: 2 },
+  gaps: { zeroResultMin: 3, feedbackClusterMin: 3, staleDays: 180, failedQuestionRate: 0.5 },
+};
+
 export const fx = {
   me,
   docBrowsing,
@@ -1175,6 +1374,14 @@ export const fx = {
   system,
   usageAnalytics,
   searchLog,
+  /* wave 5 — V4b */
+  learningItemQuiz,
+  learningItemBriefing,
+  learningItems,
+  completion,
+  learningDashboard,
+  gaps,
+  workflow,
 };
 
 export type Fixtures = typeof fx;
