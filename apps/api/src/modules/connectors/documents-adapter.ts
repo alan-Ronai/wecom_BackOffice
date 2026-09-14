@@ -4,6 +4,7 @@ import { withTransaction } from '../../lib/sql.js';
 import { publishDocument } from '../documents/publish.js';
 import { getDocument, getVersion, loadBlocksMap, saveStructure } from '../documents/repo.js';
 import { getSourceDocument, saveSourceDocument } from '../sourcedocs/repo.js';
+import { assetUrl, putAsset } from '../sourcedocs/assets.js';
 import type { DocumentsService } from './sync.js';
 
 /** `sources.kind` values a connector can own; anything else is stored as a generic json source. */
@@ -54,6 +55,16 @@ export function documentsAdapter(pool: pg.Pool): DocumentsService {
       withTransaction(pool, async (tx) => {
         await saveSourceDocument(tx, id, { html, label, authorId: null });
       }),
+
+    /**
+     * B-C2: one image downloaded from the remote, stored as an asset. `putAsset` dedupes on
+     * sha256, so the same picture pulled by ten syncs is stored once — which is what makes
+     * §5.1's "downloaded once" true rather than aspirational.
+     */
+    putRemoteAsset: async (bytes, mime) => {
+      const a = await putAsset(pool, { bytes: Buffer.from(bytes), mime, createdBy: null });
+      return { src: assetUrl(a.id) };
+    },
 
     /** Conflict resolution `merged`: write the merged tree and freeze it as a `sync` version. */
     replaceStructure: (id, doc, actorId, label) =>

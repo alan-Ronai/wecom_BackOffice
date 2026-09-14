@@ -58,6 +58,10 @@ exports.up = (pgm) => {
   });
   pgm.createIndex('connector_media', 'asset_id');
 
+  // B-C2 — an image an inbound sync could not bring across is recorded here rather than
+  // vanishing silently between the remote body and the sanitized source version.
+  pgm.addColumns('sync_links', { media_errors: 'jsonb' });
+
   // B-M3 — makes `alertOnce`'s `on conflict do nothing` mean something.
   pgm.sql(`delete from feedback_alerts a using feedback_alerts b
             where a.ctid > b.ctid and a.document_id = b.document_id
@@ -72,6 +76,7 @@ exports.down = (pgm) => {
   pgm.dropIndex('feedback_alerts', ['document_id', 'kind', 'window_start'], {
     name: 'feedback_alerts_window_uniq',
   });
+  pgm.dropColumns('sync_links', ['media_errors']);
   pgm.dropTable('connector_media');
   // The doc_type and search_text fixups are data repair towards the spec; there is nothing to
   // undo that would not be a second bug.
