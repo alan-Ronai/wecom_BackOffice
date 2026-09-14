@@ -39,10 +39,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  * "terminating connection due to unexpected postmaster exit" a minute later, nowhere near the
  * cause. The ports are already overridable for the same reason.
  */
-const CONTAINER = process.env.E2E_PG_CONTAINER ?? 'wecom-e2e-pg';
 const PG_PORT = Number(process.env.E2E_PG_PORT ?? 55432);
 const API_PORT = Number(process.env.E2E_API_PORT ?? 3101);
 const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 4174);
+const CONTAINER = process.env.E2E_PG_CONTAINER ?? `wecom-e2e-pg-${PG_PORT}`;
 const OIDC_PORT = Number(process.env.E2E_OIDC_PORT ?? 9401);
 const WITH_OIDC = process.env.E2E_OIDC === '1';
 const PG_PASSWORD = 'e2e-postgres';
