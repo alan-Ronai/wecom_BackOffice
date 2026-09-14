@@ -4,6 +4,7 @@ import type pg from 'pg';
 import { getDocument, recomputeDerived, type Q } from '../documents/repo.js';
 import { htmlToText } from '../scripts/html.js';
 import { withTransaction } from '../../lib/sql.js';
+import { visibleWhere } from '../../lib/visibility.js';
 
 /** Hebrew category labels, mirroring the legacy `KB.CATS`. */
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -49,7 +50,7 @@ export async function search(
 ): Promise<SearchResponse> {
   const started = Date.now();
   /** W2 visibility: a read-only role never sees unpublished documents (or their steps). */
-  const visTerm = readUnpublished ? '' : " and d.status in ('published','partial')";
+  const visTerm = visibleWhere(readUnpublished);
   const text = query.q.trim();
   const requested = query.types
     ? new Set(query.types.split(',').map((t) => t.trim()) as SearchGroupType[])

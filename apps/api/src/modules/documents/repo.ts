@@ -19,7 +19,7 @@ import {
 } from '@wecom/shared';
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
-import { canReadUnpublished } from '../../lib/visibility.js';
+import { canReadUnpublished, visibleStatusSql, visibleWhere } from '../../lib/visibility.js';
 import type { ReqUser } from '../../lib/user.js';
 
 export type Q = pg.Pool | Tx;
@@ -277,7 +277,7 @@ export async function listCards(
     return '$' + params.length;
   };
   const where: string[] = ['d.deleted_at is null'];
-  if (!readUnpublished) where.push(`d.status in ('published','partial')`);
+  if (!readUnpublished) where.push(visibleStatusSql());
   if (worldScopes)
     where.push(
       `exists (select 1 from document_worlds sw where sw.document_id=d.id and sw.world_slug = any(${p([...worldScopes])}))`,
@@ -902,8 +902,8 @@ const mapLink = (r: Record<string, unknown>) => ({
 export async function linksFor(q: Q, id: string, readUnpublished = true) {
   const vis = readUnpublished
     ? ''
-    : " and (l.to_document_id is null or exists (select 1 from documents t where t.id=l.to_document_id and t.status in ('published','partial')))";
-  const visIn = readUnpublished ? '' : " and d.status in ('published','partial')";
+    : ` and (l.to_document_id is null or exists (select 1 from documents t where t.id=l.to_document_id and ${visibleStatusSql('t')}))`;
+  const visIn = visibleWhere(readUnpublished);
   const [out, incoming] = await Promise.all([
     q.query(`select l.* from document_links l where l.from_document_id=$1${vis}`, [id]),
     q.query(
@@ -947,9 +947,10 @@ export async function relatedFor(q: Q, doc: Document, readUnpublished = true) {
   const ids = [...out.keys()].slice(0, 6);
   if (!ids.length) return [];
   const docs = await q.query(
-    `select id, title, category from documents where id = any($1) and deleted_at is null${
-      readUnpublished ? '' : " and status in ('published','partial')"
-    }`,
+    `select id, title, category from documents where id = any($1) and deleted_at is null${visibleWhere(
+      readUnpublished,
+      null,
+    )}`,
     [ids],
   );
   return docs.rows.map((d) => ({

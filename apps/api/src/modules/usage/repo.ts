@@ -2,6 +2,7 @@ import type pg from 'pg';
 import type { UsageAnalytics } from '@wecom/shared';
 import type { z } from 'zod';
 import type { SearchLogQuerySchema, UsageAnalyticsQuerySchema } from '@wecom/shared';
+import { visibleStatusSql } from '../../lib/visibility.js';
 
 type Q = pg.Pool | pg.PoolClient;
 export type UsageQuery = z.infer<typeof UsageAnalyticsQuerySchema>;
@@ -117,7 +118,7 @@ export async function usageAnalytics(q: Q, query: UsageQuery, caps: Caps): Promi
     `select d.id document_id, d.title, ${ownerSel}, d.updated_at, ${publishedSel},
             floor(extract(epoch from (now() - d.updated_at)) / 86400)::int days
      from documents d ${ownerJoin}
-     where d.deleted_at is null and d.status in ('published','partial')${w4}
+     where d.deleted_at is null and ${visibleStatusSql()}${w4}
      order by d.updated_at asc limit $${p4.length}`,
     p4,
   );

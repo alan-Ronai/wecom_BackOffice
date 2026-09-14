@@ -1,5 +1,6 @@
 import type { GraphEdge, GraphNode } from '@wecom/shared';
 import type { Q } from '../documents/repo.js';
+import { visibleWhere } from '../../lib/visibility.js';
 
 /** `@wecom/shared` exports `LinkTypeSchema` but no inferred alias; the edge carries it. */
 export type LinkType = GraphEdge['type'];
@@ -71,8 +72,7 @@ const scopeClause = (alias: string, param: string) =>
   `(${param}::text[] is null or exists (select 1 from document_worlds dws where dws.document_id=${alias}.id and dws.world_slug = any(${param})))`;
 
 /** The status half of the same boundary. Empty for a caller who may read unpublished items. */
-const visibleClause = (readUnpublished: boolean, alias: string) =>
-  readUnpublished ? '' : ` and ${alias}.status in ('published','partial')`;
+const visibleClause = visibleWhere;
 
 export interface GraphData {
   nodes: Map<string, GraphNode>;

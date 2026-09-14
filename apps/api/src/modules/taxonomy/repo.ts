@@ -17,6 +17,7 @@ import {
 import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
 import { iso, orderWorlds, type Q } from '../documents/repo.js';
+import { visibleStatusSql } from '../../lib/visibility.js';
 
 type WorldBody = z.infer<typeof WorldBodySchema>;
 type WorldPatch = z.infer<typeof WorldPatchSchema>;
@@ -221,7 +222,7 @@ export async function topicView(q: Q, topicId: string, vis: Visibility): Promise
             coalesce((select array_agg(dw.world_slug order by dw.world_slug) from document_worlds dw where dw.document_id = d.id), '{}') worlds
        from document_topics dt join documents d on d.id = dt.document_id
       where dt.topic_id = $1 and d.deleted_at is null
-        and ($2::boolean or d.status in ('published','partial'))
+        and ($2::boolean or ${visibleStatusSql()})
         and ($3::text[] is null or exists (select 1 from document_worlds sw where sw.document_id = d.id and sw.world_slug = any($3)))
       order by d.title`,
     [topicId, vis.unpublished, vis.worldScopes ? [...vis.worldScopes] : null],

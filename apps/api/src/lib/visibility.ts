@@ -9,12 +9,23 @@ export const canReadUnpublished = (user: Pick<ReqUser, 'permissions'>): boolean 
   user.permissions.has('docs.read_unpublished');
 
 /**
- * SQL fragment to append to a `where` clause on a documents alias. Empty for editors.
- * Literal statuses, not a parameter, so callers can splice it into any query without
- * renumbering their placeholders.
+ * `alias.status in ('published','partial')` — the single spelling of the reader rule.
+ * Pass `null` for a query whose `status` column needs no qualifier.
  */
-export const visibilityWhere = (user: Pick<ReqUser, 'permissions'>, alias = 'd'): string =>
-  canReadUnpublished(user) ? '' : ` and ${alias}.status in ('published','partial')`;
+export const visibleStatusSql = (alias: string | null = 'd'): string =>
+  `${alias ? alias + '.' : ''}status in (${VISIBLE_TO_READERS.map((s) => `'${s}'`).join(',')})`;
+
+/**
+ * SQL fragment to append to a `where` clause on a documents alias. Empty for a caller
+ * that may read unpublished content. Literal statuses, not a parameter, so callers can
+ * splice it into any query without renumbering their placeholders.
+ */
+export const visibleWhere = (readUnpublished: boolean, alias: string | null = 'd'): string =>
+  readUnpublished ? '' : ` and ${visibleStatusSql(alias)}`;
+
+/** `visibleWhere` for the common case of a `ReqUser` rather than a resolved boolean. */
+export const visibilityWhere = (user: Pick<ReqUser, 'permissions'>, alias: string | null = 'd'): string =>
+  visibleWhere(canReadUnpublished(user), alias);
 
 /**
  * Guard for the routes that hang off a document id but do not load the document — comments,

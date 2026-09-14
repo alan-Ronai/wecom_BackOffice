@@ -1,6 +1,7 @@
 import type { Dashboard } from '@wecom/shared';
 import type { Q } from '../documents/repo.js';
 import { iso } from '../documents/repo.js';
+import { visibleStatusSql, visibleWhere } from '../../lib/visibility.js';
 
 const int = (v: unknown): number => Number(v ?? 0);
 
@@ -26,7 +27,7 @@ export async function computeDashboard(
   // half of the boundary rides along with the world half in the same fragment.
   const inScope =
     '($1::text[] is null or exists (select 1 from document_worlds dws where dws.document_id=d.id and dws.world_slug = any($1)))' +
-    (readUnpublished ? '' : " and d.status in ('published','partial')");
+    visibleWhere(readUnpublished);
   const [
     coverage,
     coverageByCategory,
@@ -41,7 +42,7 @@ export async function computeDashboard(
   ] = await Promise.all([
     q.query(
       `select count(*)::int cards,
-                count(*) filter (where d.status in ('published','partial'))::int with_document,
+                count(*) filter (where ${visibleStatusSql()})::int with_document,
                 count(*) filter (where d.status = 'partial')::int partial,
                 count(*) filter (where d.status = 'draft')::int drafts
            from documents d where d.deleted_at is null and ${inScope}`,
@@ -49,7 +50,7 @@ export async function computeDashboard(
     ),
     q.query(
       `select d.category, count(*)::int cards,
-                count(*) filter (where d.status in ('published','partial'))::int with_document
+                count(*) filter (where ${visibleStatusSql()})::int with_document
            from documents d where d.deleted_at is null and ${inScope}
           group by d.category order by d.category`,
       p1,
