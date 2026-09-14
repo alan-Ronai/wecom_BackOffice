@@ -2,8 +2,7 @@ import { useCallback } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useEvents } from '../../api/events.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
-import { KEYMAP } from '../../lib/constants.js';
-import { useHotkeys } from '../../lib/keyboard.js';
+import { KEYMAP, useHotkeys } from '../../lib/keys.js';
 import { Palette } from '../palette/Palette.js';
 import { usePalette } from '../palette/paletteStore.js';
 import { Peek } from '../article/Peek.js';
@@ -63,6 +62,7 @@ function ShellInner() {
   }, [prefs.data, savePrefs]);
 
   useHotkeys(
+    'global',
     {
       'ctrl+k': (e) => {
         e.preventDefault();

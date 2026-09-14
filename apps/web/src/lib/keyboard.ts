@@ -1,5 +1,3 @@
-import { useEffect, useRef } from 'react';
-
 export const isTyping = (): boolean => {
   const a = document.activeElement as HTMLElement | null;
   return (
@@ -62,26 +60,8 @@ export function bindRoleButtonKeys(target: Document = document): () => void {
   return () => target.removeEventListener('keydown', onKeyDown as EventListener);
 }
 
-export type HotkeyMap = Record<string, (e: KeyboardEvent) => void>;
-
-/**
- * Binds `'ctrl+k'`, `'alt+t'`, `'ArrowDown'`, `'1'`, `'?'` … to handlers.
- * Modifier combos fire even while typing; bare keys do not.
+/*
+ * Hotkeys themselves live in `./keys.ts`: one registry, scoped, with the map it dispatches
+ * declared alongside it. This module keeps the pieces that are about the keyboard rather than
+ * about the app's bindings — `isTyping`, the Hebrew aliases, and `role="button"` activation.
  */
-export function useHotkeys(map: HotkeyMap, deps: unknown[] = []): void {
-  const ref = useRef(map);
-  ref.current = map;
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      const mod = e.ctrlKey || e.metaKey;
-      const key = normalizeKey(e.key);
-      const combo = `${mod ? 'ctrl+' : ''}${e.altKey ? 'alt+' : ''}${key}`;
-      const fn = ref.current[combo] ?? (mod || e.altKey ? undefined : ref.current[e.key]);
-      if (!fn) return;
-      if (!mod && !e.altKey && isTyping()) return;
-      fn(e);
-    };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, deps);
-}

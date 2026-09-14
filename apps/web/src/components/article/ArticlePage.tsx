@@ -16,7 +16,7 @@ import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.
 import { useUiPrefs } from '../../api/hooks/uiPrefs.js';
 import { CATS } from '../../lib/constants.js';
 import { copy } from '../../lib/format.js';
-import { useHotkeys } from '../../lib/keyboard.js';
+import { useHotkeys } from '../../lib/keys.js';
 import { resolvedSteps } from '../../lib/steps.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { useNav } from '../shell/navStore.js';
@@ -188,6 +188,7 @@ export function ArticlePage() {
   };
 
   useHotkeys(
+    'article',
     {
       ArrowDown: (e) => {
         e.preventDefault();
