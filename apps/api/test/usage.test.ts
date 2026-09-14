@@ -171,7 +171,7 @@ run('usage', () => {
       expect(zero.items.every((i: { results: number }) => i.results === 0)).toBe(true);
     });
 
-    it('fills topTopics from W1\'s worlds/topics tables', async () => {
+    it("fills topTopics from W1's worlds/topics tables", async () => {
       // W1 (migration 0030) owns `worlds` and `topics`; this test used to fake them.
       const W = (await db.pool.query(`select id from worlds where slug='tech'`)).rows[0].id as string;
       const T = (

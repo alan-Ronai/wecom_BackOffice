@@ -225,8 +225,8 @@ run('migrations', () => {
       `insert into documents(slug, title, description, category, wave, priority, tags)
        values ('w6-vec','מסמך על גלישה','', 'tech', 1, 'm', array['apnfix'])`,
     );
-    const vec = (await pool.query(`select search_vector::text v from documents where slug='w6-vec'`))
-      .rows[0].v as string;
+    const vec = (await pool.query(`select search_vector::text v from documents where slug='w6-vec'`)).rows[0]
+      .v as string;
     expect(vec).toMatch(/'apnfix':/);
     expect(vec).not.toMatch(/'על':/);
     await pool.query(`delete from documents where slug='w6-vec'`);
