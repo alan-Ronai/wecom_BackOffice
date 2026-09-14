@@ -41,6 +41,11 @@ export const keys = {
   views: ['views'] as const,
   templates: ['templates'] as const,
   presence: (id: string) => ['presence', id] as const,
+  /* wave 4 — W3 feedback (typed from the zod contract — see `src/api/hooks/feedback.ts`) */
+  feedback: (q: unknown = '*') => ['feedback', q] as const,
+  feedbackItem: (id: string) => ['feedback', 'item', id] as const,
+  feedbackAnalytics: (q: unknown = '*') => ['feedback', 'analytics', q] as const,
+  docFeedback: (id: string) => ['docFeedback', id] as const,
   admin: {
     users: (q: unknown = '*') => ['admin', 'users', q] as const,
     roles: ['admin', 'roles'] as const,
