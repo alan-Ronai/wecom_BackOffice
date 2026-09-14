@@ -134,6 +134,22 @@ run('migrations', () => {
     expect(grants).not.toContain('agent:docs.read_unpublished');
     expect(grants).not.toContain('editor:taxonomy.manage');
   });
+  it('creates the wave 4 usage tables and the zero-result partial index', async () => {
+    const t = await pool.query(
+      "select table_name from information_schema.tables where table_schema='public' and table_name in ('search_log','topic_views') order by 1",
+    );
+    expect(t.rows.map((r) => r.table_name)).toEqual(['search_log', 'topic_views']);
+    const idx = await pool.query(
+      "select indexname, indexdef from pg_indexes where tablename='search_log' and indexname='search_log_zero_idx'",
+    );
+    expect(idx.rowCount).toBe(1);
+    expect(idx.rows[0].indexdef).toMatch(/WHERE \(results = 0\)/);
+    const fk = await pool.query(
+      "select count(*)::int n from information_schema.table_constraints where table_name='topic_views' and constraint_type='FOREIGN KEY'",
+    );
+    // only users; deliberately no FK to topics (W1's table)
+    expect(fk.rows[0].n).toBe(1);
+  });
   it('rolls back cleanly', async () => {
     await runner({
       databaseUrl: c.getConnectionUri(),
