@@ -14,6 +14,7 @@ import { DataPage } from './components/data/DataPage.js';
 import { GraphPage } from './components/graph/GraphPage.js';
 import { FieldPage } from './components/library/FieldPage.js';
 import { BlockPage } from './components/library/BlockPage.js';
+import { DashboardsPage } from './components/dashboards/DashboardsPage.js';
 import { AdminLayout } from './components/admin/AdminLayout.js';
 import { UsersPage } from './components/admin/UsersPage.js';
 import { RolesPage } from './components/admin/RolesPage.js';
@@ -56,6 +57,7 @@ export const routeObjects: RouteObject[] = [
       { path: 'data', element: <DataPage /> },
       { path: 'data/:sourceId', element: <DataPage /> },
       { path: 'graph', element: <GraphPage /> },
+      { path: 'dashboards', element: <DashboardsPage /> },
       {
         path: 'admin',
         element: <AdminLayout />,
