@@ -241,4 +241,78 @@ run('feedback', () => {
     ).json();
     expect(r.items.map((f: { kind: string }) => f.kind)).toEqual(['unclear']);
   });
+
+  it('analytics: counts, kinds, mean hours to close, change rate; recurringByTopic empty without W1 tables', async () => {
+    const other = await createDoc('מסמך שני');
+    for (const kind of ['error', 'error', 'missing'] as const)
+      await app.inject({
+        method: 'POST',
+        url: `/api/v1/documents/${other}/feedback`,
+        headers: auth(agent),
+        payload: { kind },
+      });
+    const l = (
+      await app.inject({
+        method: 'GET',
+        url: `/api/v1/feedback?documentId=${other}`,
+        headers: auth(lead),
+      })
+    ).json();
+    // close one without a version (no_change) and one with a version
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/feedback/${l.items[0].id}`,
+      headers: auth(lead),
+      payload: { status: 'no_change' },
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/feedback/${l.items[1].id}/resolve`,
+      headers: auth(lead),
+      payload: { version: 1 },
+    });
+    const r = await app.inject({
+      method: 'GET',
+      url: '/api/v1/feedback/analytics',
+      headers: auth(lead),
+    });
+    expect(r.statusCode).toBe(200);
+    const a = r.json();
+    expect(a.total).toBeGreaterThanOrEqual(5);
+    const second = a.perItem.find((x: { documentId: string }) => x.documentId === other);
+    expect(second).toMatchObject({ title: 'מסמך שני', count: 3, open: 1 });
+    expect(a.byKind.find((x: { kind: string }) => x.kind === 'error').count).toBeGreaterThanOrEqual(3);
+    expect(a.topItems[0].count).toBeGreaterThanOrEqual(2);
+    expect(typeof a.meanHoursToClose).toBe('number');
+    // closed so far across the suite: done(v2) + no_change + done(v1) → 2 of 3 carry a version
+    expect(a.changeRate).toBeCloseTo(2 / 3, 5);
+    expect(a.recurringByTopic).toEqual([]);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/v1/feedback/analytics?world=tech',
+          headers: auth(lead),
+        })
+      ).json().total,
+    ).toBe(a.total);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/v1/feedback/analytics?world=sim',
+          headers: auth(lead),
+        })
+      ).json().total,
+    ).toBe(0);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/v1/feedback/analytics',
+          headers: auth(agent),
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
 });

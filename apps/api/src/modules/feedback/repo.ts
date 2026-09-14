@@ -2,9 +2,11 @@ import type pg from 'pg';
 import type { z } from 'zod';
 import type {
   Feedback,
+  FeedbackAnalytics,
   FeedbackRow,
   FeedbackStatus,
   TaxonomyResolver,
+  FeedbackAnalyticsQuerySchema,
   FeedbackDetailSchema,
   FeedbackPatchBodySchema,
   FeedbackQuerySchema,
@@ -17,6 +19,7 @@ import type { Tx } from '../../lib/sql.js';
 export type FeedbackDetail = z.infer<typeof FeedbackDetailSchema>;
 export type FeedbackPatchBody = z.infer<typeof FeedbackPatchBodySchema>;
 export type FeedbackQuery = z.infer<typeof FeedbackQuerySchema>;
+export type FeedbackAnalyticsQuery = z.infer<typeof FeedbackAnalyticsQuerySchema>;
 
 export type Q = pg.Pool | Tx;
 const iso = (d: Date | string | null): string | null => (d ? new Date(d).toISOString() : null);
@@ -269,6 +272,82 @@ export async function resolveFeedback(
     [ids, documentId, version, actorId],
   );
   return r.rows.map((x) => x.id as string);
+}
+
+/* ── analytics ───────────────────────────────────────────────────────────── */
+export async function feedbackAnalytics(
+  q: Q,
+  query: FeedbackAnalyticsQuery,
+): Promise<FeedbackAnalytics> {
+  const to = query.to ? new Date(query.to) : new Date();
+  const from = query.from ? new Date(query.from) : new Date(to.getTime() - 90 * 86400_000);
+  const params: unknown[] = [from.toISOString(), to.toISOString()];
+  let scope = 'f.created_at >= $1 and f.created_at <= $2';
+  if (query.world) {
+    params.push(query.world);
+    scope += ` and f.world_slug = $${params.length}`;
+  }
+  const [total, perItem, byKind, closing, topics] = await Promise.all([
+    q.query(`select count(*)::int n from feedback f where ${scope}`, params),
+    q.query(
+      `select f.document_id, d.title, max(f.doc_type) doc_type, count(*)::int count,
+              count(*) filter (where f.status in ('new','in_review','needs_update'))::int open
+       from feedback f join documents d on d.id=f.document_id where ${scope}
+       group by f.document_id, d.title order by count desc, d.title limit 100`,
+      params,
+    ),
+    q.query(
+      `select f.kind, count(*)::int count from feedback f where ${scope} group by f.kind order by count desc`,
+      params,
+    ),
+    q.query(
+      `select avg(extract(epoch from (f.decided_at - f.created_at))/3600.0) mean_hours,
+              count(*) filter (where f.status in ('done','no_change'))::int closed,
+              count(*) filter (where f.status='done' and f.resolved_version is not null)::int changed
+       from feedback f where ${scope} and f.decided_at is not null`,
+      params,
+    ),
+    // W1's tables may not exist yet: to_regclass keeps the query planner from erroring on a missing relation.
+    q.query(`select to_regclass('document_topics') dt, to_regclass('topics') t`),
+  ]);
+  let recurringByTopic: FeedbackAnalytics['recurringByTopic'] = [];
+  if (topics.rows[0].dt && topics.rows[0].t) {
+    const r = await q.query(
+      `select dt.topic_id, t.name topic_name, f.kind, count(*)::int count
+       from feedback f join document_topics dt on dt.document_id=f.document_id join topics t on t.id=dt.topic_id
+       where ${scope} group by dt.topic_id, t.name, f.kind having count(*) >= 2 order by count desc limit 20`,
+      params,
+    );
+    recurringByTopic = r.rows.map((x) => ({
+      topicId: x.topic_id as string,
+      topicName: x.topic_name as string,
+      kind: x.kind as FeedbackAnalytics['recurringByTopic'][number]['kind'],
+      count: x.count as number,
+    }));
+  }
+  const c = closing.rows[0] as { mean_hours: string | null; closed: number; changed: number };
+  return {
+    from: from.toISOString(),
+    to: to.toISOString(),
+    total: total.rows[0].n as number,
+    perItem: perItem.rows.map((x) => ({
+      documentId: x.document_id as string,
+      title: x.title as string,
+      docType: (x.doc_type as FeedbackAnalytics['perItem'][number]['docType']) ?? null,
+      count: x.count as number,
+      open: x.open as number,
+    })),
+    byKind: byKind.rows.map((x) => ({
+      kind: x.kind as FeedbackAnalytics['byKind'][number]['kind'],
+      count: x.count as number,
+    })),
+    topItems: perItem.rows
+      .slice(0, 10)
+      .map((x) => ({ documentId: x.document_id as string, title: x.title as string, count: x.count as number })),
+    meanHoursToClose: c.mean_hours == null ? null : Number(c.mean_hours),
+    changeRate: c.closed ? c.changed / c.closed : 0,
+    recurringByTopic,
+  };
 }
 
 export async function openForDocument(q: Q, documentId: string): Promise<FeedbackRow[]> {

@@ -3,6 +3,8 @@ import { z } from 'zod';
 import {
   CreateFeedbackBodySchema,
   DocumentFeedbackResponseSchema,
+  FeedbackAnalyticsQuerySchema,
+  FeedbackAnalyticsSchema,
   FeedbackDetailSchema,
   FeedbackListResponseSchema,
   FeedbackPatchBodySchema,
@@ -104,6 +106,30 @@ export default function feedbackRoutes(deps: () => AlertDeps) {
         const q = req.query as z.infer<typeof FeedbackQuerySchema>;
         const r = await repo.listFeedback(app.db, q);
         return { ...r, page: q.page, pageSize: q.pageSize };
+      },
+    );
+
+    const cache = new Map<string, { at: number; value: unknown }>();
+    app.get(
+      '/feedback/analytics',
+      {
+        config: { requires: ['feedback.manage'] },
+        schema: {
+          tags: ['feedback'],
+          querystring: FeedbackAnalyticsQuerySchema,
+          response: { 200: FeedbackAnalyticsSchema },
+        },
+      },
+      async (req) => {
+        requireUser(req);
+        const q = req.query as z.infer<typeof FeedbackAnalyticsQuerySchema>;
+        const key = JSON.stringify(q);
+        const hit = cache.get(key);
+        // 60 s cache (spec §3): the page polls, the SQL scans the whole table.
+        if (hit && Date.now() - hit.at < 60_000 && app.config.NODE_ENV !== 'test') return hit.value;
+        const value = await repo.feedbackAnalytics(app.db, q);
+        cache.set(key, { at: Date.now(), value });
+        return value;
       },
     );
 
