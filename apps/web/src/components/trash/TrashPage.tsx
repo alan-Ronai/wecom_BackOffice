@@ -14,6 +14,7 @@ import { ago } from '../../lib/format.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
+import { LoadError } from '../ui/index.js';
 import { Fmt } from '../Fmt.js';
 import type { TrashItem } from '../../api/types.js';
 
@@ -144,7 +145,10 @@ export function TrashPage() {
             </div>
           </div>
 
-          {!items.length ? (
+          {trash.isError ? <LoadError what="סל המיחזור" error={trash.error} /> : null}
+          {trash.isPending ? (
+            <div className="route-loading">טוען…</div>
+          ) : !items.length && !trash.isError ? (
             <div className="empty">
               <b>סל המיחזור ריק</b>
               פריטים שנמחקים נשמרים כאן {TRASH_DAYS} יום לפני מחיקה סופית

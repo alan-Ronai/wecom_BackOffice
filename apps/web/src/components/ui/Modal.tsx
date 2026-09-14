@@ -225,7 +225,6 @@ export function ModalProvider({ children }: { children: ReactNode }) {
         });
       },
     },
-    [stack.length],
   );
 
   return (

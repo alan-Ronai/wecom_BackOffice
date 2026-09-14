@@ -92,7 +92,22 @@ const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
 let attempt = 0;
 let retry: ReturnType<typeof setTimeout> | null = null;
 
-function scheduleReconnect(qc: QueryClient): void {
+/**
+ * The `QueryClient` the stream invalidates through, read at dispatch time rather than captured.
+ *
+ * The stream is a module-level singleton shared by every `useEvents()` caller, but its handlers
+ * used to close over whichever client the *first* subscriber happened to bring. One client exists
+ * today (`main.tsx`), so nothing was wrong — but a second subscriber with its own client (a test
+ * rendering two providers, a future embedded view) would have had its cache silently never
+ * invalidated, which looks like "SSE is broken" and is not.
+ */
+let client: QueryClient | null = null;
+const qcRef = (): QueryClient => {
+  if (!client) throw new Error('event stream used before a QueryClient was registered');
+  return client;
+};
+
+function scheduleReconnect(): void {
   if (retry || subscribers === 0) return;
   const base = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)];
   // Jitter so 200 agents refused at once do not all come back in the same instant.
@@ -103,11 +118,11 @@ function scheduleReconnect(qc: QueryClient): void {
     if (subscribers === 0) return;
     source?.close();
     source = null;
-    open(qc);
+    open();
   }, wait);
 }
 
-function open(qc: QueryClient): void {
+function open(): void {
   const es = new EventSource(`${API_BASE}/events`, { withCredentials: true });
   source = es;
   es.addEventListener('open', () => {
@@ -122,7 +137,7 @@ function open(qc: QueryClient): void {
    */
   es.addEventListener('error', () => {
     publish({ ...state, connected: false });
-    if (es.readyState === EventSource.CLOSED) scheduleReconnect(qc);
+    if (es.readyState === EventSource.CLOSED) scheduleReconnect();
   });
 
   const handle = (raw: MessageEvent) => {
@@ -136,7 +151,7 @@ function open(qc: QueryClient): void {
     if (!parsed.success) return;
     const ev = parsed.data as Event;
     publish({ ...state, last: ev });
-    invalidate(qc, ev);
+    invalidate(qcRef(), ev);
   };
 
   for (const name of EVENTS) es.addEventListener(name, handle as EventListener);
@@ -150,7 +165,7 @@ function open(qc: QueryClient): void {
     } catch {
       /* an unparseable frame still means "something changed"; fall through to invalidation */
     }
-    invalidateStage5(qc, name, payload);
+    invalidateStage5(qcRef(), name, payload);
   };
   for (const name of STAGE5_EVENTS) es.addEventListener(name, handleStage5(name) as EventListener);
 }
@@ -162,6 +177,7 @@ function close(): void {
   source?.close();
   source = null;
   state = { connected: false };
+  client = null;
 }
 
 export function useEvents(): StreamState {
@@ -171,7 +187,10 @@ export function useEvents(): StreamState {
   useEffect(() => {
     if (typeof EventSource === 'undefined') return;
     subscribers += 1;
-    if (!source) open(qc);
+    // The most recent subscriber's client wins, and the handlers read it through `qcRef` on every
+    // frame — so a second client is invalidated too, instead of being quietly ignored.
+    client = qc;
+    if (!source) open();
     listeners.add(setLocal);
     setLocal(state);
     return () => {

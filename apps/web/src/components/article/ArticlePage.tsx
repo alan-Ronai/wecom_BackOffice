@@ -22,6 +22,7 @@ import { Hamburger } from '../shell/MobileDrawer.js';
 import { useNav } from '../shell/navStore.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
+import { LoadError } from '../ui/index.js';
 import { useEntityDialogs } from '../library/dialogs.js';
 import { DocBody, type StepCtx } from './StepView.js';
 import { StepConnections } from './StepConnections.js';
@@ -238,7 +239,6 @@ export function ArticlePage() {
         if (doc) go(`/history/${doc.id}`);
       },
     },
-    [call, doc, jumpBuf, pinned, can, steps, callMode],
   );
 
   if (docQ.isPending) return <div className="route-loading">טוען…</div>;
@@ -251,6 +251,7 @@ export function ArticlePage() {
         <b>אין לך הרשאה למסמך הזה</b>הקטגוריה מחוץ להרשאות שלך · פנו למנהל הצוות
       </div>
     );
+  if (docQ.isError) return <LoadError what="המסמך" error={docQ.error} />;
   if (!doc)
     return (
       <div className="empty">

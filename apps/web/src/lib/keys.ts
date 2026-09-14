@@ -200,8 +200,15 @@ function bind(): () => void {
  *
  * Pass `{}` to bind nothing — the library's list-mode bindings are registered that way so the
  * card grid keeps behaving the way it always has.
+ *
+ * There is deliberately no dependency array. Registration depends on the scope and nothing else:
+ * the map is read live through a ref at dispatch time, so a handler closing over fresh state is
+ * already current without re-registering. The signature used to take one, inherited from the four
+ * separate `window` listeners this replaced, and every caller passed a different-length array into
+ * `[scope, ...deps]` — a variable-length dependency list, which React warns about and which
+ * re-runs unpredictably the moment a caller's array changes length. Nothing was gained by it.
  */
-export function useHotkeys(scope: Scope, map: HotkeyMap, deps: unknown[] = []): void {
+export function useHotkeys(scope: Scope, map: HotkeyMap): void {
   if (import.meta.env.DEV) {
     const allowed = declared.get(scope)!;
     const undeclared = Object.keys(map).filter((k) => !allowed.has(k));
@@ -214,7 +221,14 @@ export function useHotkeys(scope: Scope, map: HotkeyMap, deps: unknown[] = []): 
   }
 
   const ref = useRef(map);
-  ref.current = map;
+  // In an effect, not during render. A render React discards — StrictMode's double-invoke, a
+  // concurrent pass that gets interrupted — would otherwise leave the ref holding handlers that
+  // close over state from a pass that never committed, and the next keystroke would act on it.
+  // Effects only run for committed renders, and they run before any keystroke can be dispatched.
+  useEffect(() => {
+    ref.current = map;
+  });
+
   useEffect(() => {
     const entry: Entry = { ref };
     const set = registry.get(scope)!;
@@ -224,7 +238,5 @@ export function useHotkeys(scope: Scope, map: HotkeyMap, deps: unknown[] = []): 
       set.delete(entry);
       unbind();
     };
-    // `deps` is the caller's own list, as it was before this became a registry — the map itself
-    // is read through a ref, so re-registering is only about the scope changing.
-  }, [scope, ...deps]);
+  }, [scope]);
 }

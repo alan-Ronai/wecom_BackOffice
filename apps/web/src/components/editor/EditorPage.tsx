@@ -247,19 +247,6 @@ export function EditorPage() {
         if (!isNew && doc && can('docs.edit', doc)) requestReview({ id, title: doc.title });
       },
     },
-    [
-      leave,
-      modal.count,
-      palette.state.open,
-      isNew,
-      doc,
-      can,
-      requestReview,
-      id,
-      history,
-      restore,
-      multi.size,
-    ],
   );
 
   /**

@@ -18,6 +18,7 @@ import { Hamburger } from '../shell/MobileDrawer.js';
 import { useNav } from '../shell/navStore.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
+import { LoadError } from '../ui/index.js';
 import { DocCard } from './DocCard.js';
 import { Facets, type FacetValue } from './Facets.js';
 import { AutoCrmCard } from './AutoCrmCard.js';
@@ -330,7 +331,6 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
           },
         }
       : {},
-    [listMode, items, cursor, selected.size, toggleSelect, clearSelection, togglePin],
   );
 
   return (
@@ -422,8 +422,14 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
             />
           ) : null}
 
+          {docs.isError ? <LoadError what="הספרייה" error={docs.error} /> : null}
           <div className="grid" data-testid="library-grid" hidden={listMode}>
-            {!items.length ? (
+            {docs.isPending ? (
+              <div className="route-loading" style={{ gridColumn: '1/-1' }}>
+                טוען…
+              </div>
+            ) : null}
+            {!items.length && !docs.isPending && !docs.isError ? (
               <div className="empty" style={{ gridColumn: '1/-1' }}>
                 <b>
                   {mode === 'pinned'

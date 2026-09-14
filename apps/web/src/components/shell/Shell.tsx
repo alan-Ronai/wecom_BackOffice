@@ -115,7 +115,6 @@ function ShellInner() {
         else if (nav.split) nav.toggleSplit();
       },
     },
-    [palette, modal, nav, drawer, onDocRoute, toggleTheme],
   );
 
   return (
