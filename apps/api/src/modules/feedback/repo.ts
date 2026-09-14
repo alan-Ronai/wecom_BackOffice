@@ -181,10 +181,7 @@ export async function listFeedback(
     `select f.status, count(*)::int n from feedback f ${baseWhere} group by f.status`,
     params,
   );
-  const counts = Object.fromEntries(FEEDBACK_STATUSES.map((s) => [s, 0])) as Record<
-    FeedbackStatus,
-    number
-  >;
+  const counts = Object.fromEntries(FEEDBACK_STATUSES.map((s) => [s, 0])) as Record<FeedbackStatus, number>;
   for (const r of c.rows) counts[r.status as FeedbackStatus] = r.n as number;
 
   const where = [...base];
@@ -243,8 +240,7 @@ export async function resolveOne(
     f.rows[0].document_id,
     version,
   ]);
-  if (!v.rowCount)
-    throw httpError(400, 'UNKNOWN_VERSION', 'הגרסה שנבחרה אינה קיימת למסמך זה', { version });
+  if (!v.rowCount) throw httpError(400, 'UNKNOWN_VERSION', 'הגרסה שנבחרה אינה קיימת למסמך זה', { version });
   await tx.query(
     `update feedback set status='done', resolved_version=$2, decision_note=coalesce($3, decision_note),
        decided_by=$4, decided_at=now() where id=$1`,
@@ -275,10 +271,7 @@ export async function resolveFeedback(
 }
 
 /* ── analytics ───────────────────────────────────────────────────────────── */
-export async function feedbackAnalytics(
-  q: Q,
-  query: FeedbackAnalyticsQuery,
-): Promise<FeedbackAnalytics> {
+export async function feedbackAnalytics(q: Q, query: FeedbackAnalyticsQuery): Promise<FeedbackAnalytics> {
   const to = query.to ? new Date(query.to) : new Date();
   const from = query.from ? new Date(query.from) : new Date(to.getTime() - 90 * 86400_000);
   const params: unknown[] = [from.toISOString(), to.toISOString()];
@@ -341,9 +334,11 @@ export async function feedbackAnalytics(
       kind: x.kind as FeedbackAnalytics['byKind'][number]['kind'],
       count: x.count as number,
     })),
-    topItems: perItem.rows
-      .slice(0, 10)
-      .map((x) => ({ documentId: x.document_id as string, title: x.title as string, count: x.count as number })),
+    topItems: perItem.rows.slice(0, 10).map((x) => ({
+      documentId: x.document_id as string,
+      title: x.title as string,
+      count: x.count as number,
+    })),
     meanHoursToClose: c.mean_hours == null ? null : Number(c.mean_hours),
     changeRate: c.closed ? c.changed / c.closed : 0,
     recurringByTopic,

@@ -137,9 +137,7 @@ run('feedback', () => {
   });
 
   it('detail carries the deep link and the versions published after the report', async () => {
-    const list = (
-      await app.inject({ method: 'GET', url: '/api/v1/feedback', headers: auth(lead) })
-    ).json();
+    const list = (await app.inject({ method: 'GET', url: '/api/v1/feedback', headers: auth(lead) })).json();
     const id = list.items[0].id as string;
     // publish v2 after the report
     const doc = (
@@ -166,9 +164,7 @@ run('feedback', () => {
   });
 
   it('patch moves status, assigns, records the decision; resolve links a version', async () => {
-    const list = (
-      await app.inject({ method: 'GET', url: '/api/v1/feedback', headers: auth(lead) })
-    ).json();
+    const list = (await app.inject({ method: 'GET', url: '/api/v1/feedback', headers: auth(lead) })).json();
     const id = list.items[0].id as string;
     const p = await app.inject({
       method: 'PATCH',

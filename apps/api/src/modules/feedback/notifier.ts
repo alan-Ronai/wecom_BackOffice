@@ -36,7 +36,10 @@ export class PgNotifier implements Notifier {
     const userIds = [...new Set(input.userIds)].filter(Boolean);
     if (!userIds.length) return;
     if (!(await this.hasTable())) {
-      this.log?.info({ notify: { ...input, userIds } }, 'notification (log sink: notifications table absent)');
+      this.log?.info(
+        { notify: { ...input, userIds } },
+        'notification (log sink: notifications table absent)',
+      );
       return;
     }
     // `notification.created` exists on main (wave 3 lane B); the guard keeps this file compiling

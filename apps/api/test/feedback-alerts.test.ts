@@ -128,9 +128,7 @@ run('feedback alerts', () => {
     );
     expect(rows.rowCount).toBe(2);
     expect(
-      rows.rows.every(
-        (r) => r.kind === 'review' && r.entity_type === 'feedback' && r.href === '/feedback/x',
-      ),
+      rows.rows.every((r) => r.kind === 'review' && r.entity_type === 'feedback' && r.href === '/feedback/x'),
     ).toBe(true);
   });
 
