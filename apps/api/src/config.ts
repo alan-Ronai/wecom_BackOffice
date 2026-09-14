@@ -53,6 +53,16 @@ export const BaseConfigSchema = z.object({
    * refused unless listed here explicitly.
    */
   CONNECTOR_HOST_ALLOWLIST: z.string().default(''),
+  /**
+   * Whether `POST /connectors/:id/webhook` refuses a delivery with no `X-KB-Nonce` header.
+   *
+   * Replay protection itself does not depend on this: the route claims a hash of the signed
+   * body either way, so a captured request is a 409 on its second arrival whatever the flag
+   * says. What the flag gates is the *deprecation* — leave it false for one release while
+   * WordPress plugins predating the header are still in the field (each such delivery logs a
+   * warning), then set it true so a stale plugin fails loudly instead of quietly.
+   */
+  WEBHOOK_REQUIRE_NONCE: boolEnv(false),
   BACKUP_DIR: z.string().default('/backups'),
   /**
    * How Fastify derives `req.ip` from `X-Forwarded-For` behind the nginx reverse

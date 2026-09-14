@@ -22,6 +22,7 @@ import {
   type SyncLinkRow,
 } from './repo.js';
 import type { SyncService } from './sync.js';
+import { claimWebhookNonce, replayKey, NONCE_HEADER } from './nonces.js';
 import { auditOf, userOf, type Enqueue } from './context.js';
 
 /**
@@ -378,6 +379,7 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
           400: E,
           401: E,
           404: E,
+          409: E,
         },
       },
     },
@@ -389,18 +391,39 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
         return reply
           .status(400)
           .send({ code: 'NO_WEBHOOKS', message: 'המחבר אינו תומך ב-webhook', requestId: req.id });
+      const raw = (req as FastifyRequest & { rawBody?: string }).rawBody ?? '';
+      let changes;
       try {
-        const raw = (req as FastifyRequest & { rawBody?: string }).rawBody ?? '';
-        const changes = await conn.parseWebhook(
+        changes = await conn.parseWebhook(
           repo.config(row) as never,
           req.headers as Record<string, string>,
           { raw },
         );
-        const jobId = await opts.enqueue('connector.webhook', { connectorId: row.id, changes });
-        return reply.status(202).send({ jobId, changes: changes.length });
       } catch {
         return reply.status(401).send({ code: 'BAD_SIGNATURE', message: 'חתימה שגויה', requestId: req.id });
       }
+      // I7 residual. The signature and `assertFresh` above prove the bytes are ours and at most
+      // five minutes old; they say nothing about how many times the same bytes have arrived.
+      // Claiming the body hash makes the second delivery a 409 instead of a second sync run.
+      const nonceHeader = req.headers[NONCE_HEADER];
+      if (!nonceHeader) {
+        if (app.config.WEBHOOK_REQUIRE_NONCE)
+          return reply
+            .status(400)
+            .send({ code: 'MISSING_NONCE', message: 'חסרה כותרת nonce', requestId: req.id });
+        // One release of grace for plugins predating the header — the body hash protects them
+        // anyway; the warning is what tells the operator they can turn the flag on.
+        req.log.warn(
+          { connectorId: row.id, header: NONCE_HEADER },
+          'deprecated: webhook without a nonce header; set WEBHOOK_REQUIRE_NONCE once the plugin is updated',
+        );
+      }
+      if (!(await claimWebhookNonce(app.db, row.id, replayKey(raw))))
+        return reply
+          .status(409)
+          .send({ code: 'REPLAY', message: 'בקשה זו כבר התקבלה', requestId: req.id });
+      const jobId = await opts.enqueue('connector.webhook', { connectorId: row.id, changes });
+      return reply.status(202).send({ jobId, changes: changes.length });
     },
   );
 
