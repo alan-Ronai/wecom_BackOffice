@@ -73,6 +73,19 @@ export const me: Me = {
   preferences: { theme: null, font: 'plex', panel: true, callMode: true, sidebarExpanded: false },
 };
 
+/**
+ * Wave 4 (W0) made `worlds`/`tags`/`topics`/`sourceReviewNeeded` required in the zod output type
+ * of `Document`/`DocumentCard`. W1 and W2 own the real fixture values; until they land, every
+ * document fixture carries the empty shape so `tsc` is green.
+ */
+type W4DocFields = 'worlds' | 'tags' | 'topics' | 'sourceReviewNeeded';
+const W4_DOC_FIELDS: Pick<Document, W4DocFields> = {
+  worlds: [],
+  tags: [],
+  topics: [],
+  sourceReviewNeeded: false,
+};
+
 export const docBrowsing: Document = {
   id: D_BROWSING,
   slug: 'browsing',
@@ -85,6 +98,7 @@ export const docBrowsing: Document = {
   kind: 'steps',
   status: 'published',
   currentVersion: 7,
+  ...W4_DOC_FIELDS,
   sourceId: SRC_TECH,
   sourceRef: 'פרק 4',
   related: [{ documentId: D_INTL, why: 'מסלול מקביל · APN, ריענון SIM' }],
@@ -450,7 +464,7 @@ export const fields: CrmField[] = [
   { name: 'חסימת גלישה בחו"ל', status: 'new', path: 'CRM ↗ שירותים', updatedAt: T },
 ];
 
-export const cards: DocumentCard[] = [
+const cardsBase: Omit<DocumentCard, W4DocFields>[] = [
   {
     id: D_BROWSING,
     slug: 'browsing',
@@ -615,6 +629,7 @@ export const cards: DocumentCard[] = [
     pinned: false,
   },
 ];
+export const cards: DocumentCard[] = cardsBase.map((c) => ({ ...W4_DOC_FIELDS, ...c }));
 
 export const scripts: Script[] = [
   {

@@ -67,6 +67,11 @@ const emptyDoc = (cat: Category): Document => ({
   kind: 'steps',
   status: 'draft',
   currentVersion: 0,
+  // Wave 4 (W0) made these required in the zod output type; W1/W2 own the real values.
+  worlds: [],
+  tags: [],
+  topics: [],
+  sourceReviewNeeded: false,
   phases: [{ id: uid('p'), label: 'שלב 1 – מסנן', steps: [] }],
   related: [],
   createdAt: new Date().toISOString(),
