@@ -66,9 +66,9 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
   await expect(page.getByText(/פורסמו [1-9]\d* שינויים/)).toBeVisible({ timeout: 20_000 });
 
   /*
-   * The created item is found by its **source**, not by its title: a new-card suggestion names
-   * itself after the first sentence of the paragraph it came from (`packages/model/rules.ts`),
-   * not after the WordPress post. Its identity here is "the document this source produced".
+   * The created item is found by its **source**, not by its title: the title is the pipeline's
+   * to choose (`packages/model/src/sections.ts`), and its identity here is "the document this
+   * source produced".
    */
   const srcs = await request.get('/api/v1/sources');
   expect(srcs.ok(), await srcs.text()).toBeTruthy();
@@ -78,12 +78,12 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
   expect(sourceId, `the connector created the source "${WP_TITLE}"`).toBeTruthy();
 
   /*
-   * A WordPress post is one *source*, but the pipeline may fan it out into several new cards
-   * (one per paragraph the model could not fold into a step), and the sync link — unique per
-   * (connector, external id) — lands on exactly one of them. The document this flow follows is
-   * therefore "the one the link points at", read from the queue once the asynchronous apply has
-   * written it; `sourceId` is still verified so a link that points elsewhere is rejected rather
-   * than believed. (Ledger: the fan-out itself is a pipeline defect to fix separately.)
+   * A WordPress post is one source, one document and one sync link — unique per
+   * (connector, external id). The document this flow follows is "the one the link points at",
+   * read from the queue once the asynchronous apply has written it; `sourceId` is still
+   * verified so a link that points elsewhere is rejected rather than believed. (The fan-out
+   * this loop was written to survive — a card per paragraph, the link landing on one of them —
+   * is fixed in `packages/model/src/sections.ts`; the loop stays because the apply is async.)
    */
   const feedsFromSource = async (id: string): Promise<boolean> => {
     const doc = await request.get(`/api/v1/documents/${id}`);

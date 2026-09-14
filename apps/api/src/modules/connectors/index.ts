@@ -82,6 +82,7 @@ export default fp(async (app: FastifyInstance, opts: ConnectorsModuleOptions = {
     },
     // W4/B-I6: per-connector memory of what a push already uploaded.
     mediaCache: (connectorId) => repo.mediaCache(connectorId),
+    log: app.log,
   });
   const enqueue: Enqueue =
     opts.enqueue ??

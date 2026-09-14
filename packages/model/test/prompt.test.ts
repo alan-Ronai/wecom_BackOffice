@@ -31,8 +31,30 @@ describe('prompt', () => {
     expect(msgs[0].content).toContain('update-step');
     expect(msgs[1].content).toContain('§4.8');
     expect(msgs[1].content).toContain('s8');
-    expect(PROMPT_VERSION).toBe('propose-v1');
+    // v2: the prompt now carries the section rule for a brand-new source (pipeline fan-out).
+    expect(PROMPT_VERSION).toBe('propose-v2');
     expect(RESPONSE_FORMAT.required).toEqual(['suggestions']);
+  });
+
+  it('shows the sections, not a list of added paragraphs, for a source with no linked steps', () => {
+    const fresh: ProposalContext = {
+      source: { id: 'src', title: 'נוהל WordPress לבדיקה', singleDocument: true },
+      paragraphs: [
+        { ref: 'h2-1', heading: 'מבוא', level: 2, runs: [{ t: 'מבוא' }] },
+        { ref: 'h2-1.p-1', runs: [{ t: 'סף מהירות: 6 מגה.' }] },
+      ],
+      diffs: [{ ref: 'h2-1.p-1', kind: 'added', before: null, after: 'סף מהירות: 6 מגה.', similarity: 0 }],
+      linkedSteps: [],
+      fields: [],
+      blocks: [],
+    };
+    const user = buildMessages(fresh)[1].content;
+    expect(user).toContain('פריט מרוחק יחיד');
+    expect(user).toContain('סעיפי המקור');
+    expect(user).toContain('סעיף 1 §h2-1 "מבוא"');
+    expect(user).toContain('§h2-1.p-1');
+    // The update-path context is unchanged: no section block when steps are already mapped.
+    expect(buildMessages(ctx)[1].content).not.toContain('סעיפי המקור');
   });
 
   it('parses and validates model JSON', () => {

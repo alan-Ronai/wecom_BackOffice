@@ -13,7 +13,11 @@ export class ProposalService {
   ) {}
 
   async buildContext(revision: SourceRevision, diffs: ParagraphDiff[]): Promise<ProposalContext> {
-    const src = await this.pool.query(`select title from sources where id=$1`, [revision.sourceId]);
+    const src = await this.pool.query<{
+      title: string;
+      connector_id: string | null;
+      external_id: string | null;
+    }>(`select title, connector_id, external_id from sources where id=$1`, [revision.sourceId]);
     const client = await this.pool.connect();
     try {
       const [linkedSteps, blocks, fields] = await Promise.all([
@@ -22,7 +26,17 @@ export class ProposalService {
         this.content.listFields(client),
       ]);
       return {
-        source: { id: revision.sourceId, title: (src.rows[0]?.title as string) ?? '' },
+        source: {
+          id: revision.sourceId,
+          title: src.rows[0]?.title ?? '',
+          /**
+           * A connector-backed source is exactly one remote item (one WordPress post, one
+           * JSON/CSV row-group). Its sections belong to a single document, otherwise the
+           * single `(connector, external_id)` sync link can only point at one of the cards
+           * the item fanned out into and the rest are orphaned.
+           */
+          singleDocument: !!(src.rows[0]?.connector_id && src.rows[0]?.external_id),
+        },
         diffs,
         paragraphs: revision.paragraphs,
         linkedSteps,

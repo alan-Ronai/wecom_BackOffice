@@ -62,6 +62,8 @@ export interface SyncDeps {
   assets?: AssetBytesResolver;
   /** W4/B-I6: per-connector memory of what a push already uploaded. */
   mediaCache?: (connectorId: string) => MediaCache;
+  /** Optional so tests can omit it; `app.log` in the real wiring. */
+  log?: { warn(obj: Record<string, unknown>, msg: string): void };
 }
 
 export interface RunResult {
@@ -474,7 +476,17 @@ export class SyncService {
     return this.pushLink(conn, cfg, link, merged);
   }
 
-  /** L5 calls this after applying accepted suggestions from a connector-backed source. */
+  /**
+   * L5 calls this after applying accepted suggestions from a connector-backed source — once
+   * per published document.
+   *
+   * `sync_links` is unique on (connector, external_id), so this used to upsert the one row
+   * per applied document and the LAST one won: the document the link previously pointed at
+   * lost its link, its `putSourceFromRemote` flow and its place in the parity report, with
+   * nothing said. An existing link pointing at another document is therefore kept as it is;
+   * the skipped document is reported (`sync.link_skipped` + a warning) rather than silently
+   * taking the link over.
+   */
   async afterSuggestionsApplied(sourceId: string, documentId: string, newVersion: number): Promise<void> {
     const rows = await this.d.db.query<{ connector_id: string | null; external_id: string | null }>(
       'select s.connector_id, s.external_id from sources s where s.id=$1',
@@ -482,6 +494,27 @@ export class SyncService {
     );
     const row = rows.rows[0];
     if (!row || !row.connector_id || !row.external_id) return;
+    const existing = await this.d.repo.linkByRemote(row.connector_id, row.external_id);
+    if (existing && existing.document_id !== documentId) {
+      this.d.log?.warn(
+        {
+          connectorId: row.connector_id,
+          externalId: row.external_id,
+          documentId: existing.document_id,
+          skippedDocumentId: documentId,
+        },
+        'sync link already points at another document; keeping it',
+      );
+      this.d.events.publish(
+        makeEvent('sync.link_skipped', {
+          connectorId: row.connector_id,
+          externalId: row.external_id,
+          documentId: existing.document_id,
+          skippedDocumentId: documentId,
+        }),
+      );
+      return;
+    }
     const { conn, cfg } = await this.connectorFor(row.connector_id);
     const content = await conn.fetch(cfg, row.external_id);
     await this.d.repo.upsertLink({
