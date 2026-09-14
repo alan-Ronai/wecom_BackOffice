@@ -2,7 +2,15 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useDragOrder } from '../../src/lib/useDragOrder.js';
 
-function List({ ids, commit, enabled = true }: { ids: string[]; commit: (n: string[]) => void; enabled?: boolean }) {
+function List({
+  ids,
+  commit,
+  enabled = true,
+}: {
+  ids: string[];
+  commit: (n: string[]) => void;
+  enabled?: boolean;
+}) {
   const drag = useDragOrder(ids, commit, enabled);
   return (
     <ul>

@@ -2,10 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../render.js';
-import {
-  TaxonomyFacets,
-  type TaxonomyFacetValue,
-} from '../../src/components/taxonomy/TaxonomyFacets.js';
+import { TaxonomyFacets, type TaxonomyFacetValue } from '../../src/components/taxonomy/TaxonomyFacets.js';
 
 const empty: TaxonomyFacetValue = { world: null, topic: null, docType: null, tags: [] };
 

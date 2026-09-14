@@ -569,9 +569,7 @@ run('source documents', () => {
     const { readFileSync } = await import('node:fs');
     // 0037 also carries A-M13's `document_links` work; take only the two etag statements.
     const backfill = [
-      ...readFileSync('migrations/0037_source_version_etag.js', 'utf8').matchAll(
-        /pgm\.sql\(`([\s\S]*?)`\)/g,
-      ),
+      ...readFileSync('migrations/0037_source_version_etag.js', 'utf8').matchAll(/pgm\.sql\(`([\s\S]*?)`\)/g),
     ]
       .map((m) => m[1])
       .filter((sql) => sql.includes('source_document_versions'));

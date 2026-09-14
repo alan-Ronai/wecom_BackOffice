@@ -38,7 +38,11 @@ export interface DragOrder {
   };
 }
 
-export function useDragOrder(ids: readonly string[], commit: (next: string[]) => void, enabled = true): DragOrder {
+export function useDragOrder(
+  ids: readonly string[],
+  commit: (next: string[]) => void,
+  enabled = true,
+): DragOrder {
   const [dragging, setDragging] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
 

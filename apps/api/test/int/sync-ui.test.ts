@@ -137,8 +137,9 @@ run('stage 5 — connectors & sync UI', () => {
 
     // A conflict outranks everything else, whichever link carries it.
     await db.pool.query("update sync_links set state='conflict' where id=$1", [linkId]);
-    expect((await app.inject({ method: 'GET', url: `/api/v1/documents/${docId}/sync-state` })).json()).
-      toMatchObject({ state: 'conflict' });
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/v1/documents/${docId}/sync-state` })).json(),
+    ).toMatchObject({ state: 'conflict' });
     await db.pool.query("update sync_links set state='synced' where id=$1", [linkId]);
 
     // Not connected is `null`, which is not the same answer as "in sync".

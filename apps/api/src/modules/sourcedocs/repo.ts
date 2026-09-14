@@ -97,15 +97,7 @@ export async function saveSourceDocument(
   if (!up.rowCount) throw httpError(412, 'ETAG_MISMATCH', 'מסמך המקור נוצר בינתיים — טען מחדש ונסה שוב');
   await tx.query(
     `insert into source_document_versions(source_document_id, version, html, author_id, label, source_revision_id, etag) values ($1,$2,$3,$4,$5,$6,$7)`,
-    [
-      up.rows[0].id,
-      version,
-      html,
-      input.authorId,
-      input.label ?? '',
-      input.sourceRevisionId ?? null,
-      etag,
-    ],
+    [up.rows[0].id, version, html, input.authorId, input.label ?? '', input.sourceRevisionId ?? null, etag],
   );
   return (await getSourceDocument(tx, documentId))!;
 }

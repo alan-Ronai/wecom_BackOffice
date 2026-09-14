@@ -291,7 +291,10 @@ run('taxonomy', () => {
     const viewsOf = async (id: string) =>
       (await db.pool.query('select count(*)::int n from topic_views where topic_id = $1', [id])).rows[0].n;
 
-    expect((await app.inject({ method: 'GET', url: `/api/v1/topics/${empty.id}/items`, headers: auth(agent) })).statusCode).toBe(200);
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/v1/topics/${empty.id}/items`, headers: auth(agent) }))
+        .statusCode,
+    ).toBe(200);
     await new Promise((r) => setTimeout(r, 50));
     expect(await viewsOf(empty.id)).toBe(0);
 
@@ -320,7 +323,10 @@ run('taxonomy', () => {
       })
     ).json();
     await db.pool.query(`update documents set status='published' where id=$1`, [d.id]);
-    expect((await app.inject({ method: 'GET', url: `/api/v1/topics/${filled.id}/items`, headers: auth(agent) })).statusCode).toBe(200);
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/v1/topics/${filled.id}/items`, headers: auth(agent) }))
+        .statusCode,
+    ).toBe(200);
     await new Promise((r) => setTimeout(r, 50));
     expect(await viewsOf(filled.id)).toBe(1);
   });

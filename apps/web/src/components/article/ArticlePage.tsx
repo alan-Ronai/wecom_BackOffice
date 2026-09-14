@@ -348,7 +348,7 @@ export function ArticlePage() {
     onOutcome: pickOutcome,
     onNote: (k) => void addNoteFor(k),
     onShowBlock: dialogs.showBlock,
-    headBadges: (s) => {
+    renderHeadBadges: (s) => {
       const n = (comments.data ?? []).filter((c) => c.stepKey === s.key && !c.resolvedAt).length;
       return n ? (
         <span className="chip chip-gray" title={`${n} תגובות פתוחות`}>

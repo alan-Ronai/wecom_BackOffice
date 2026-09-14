@@ -13,9 +13,7 @@ describe('<Shell>', () => {
     // name is scoped to `.world-name` because the library toolbar's world select now offers the
     // same six names as `<option>`s.
     await waitFor(() =>
-      expect(
-        screen.getAllByText('חו"ל ונדידה').some((el) => el.classList.contains('world-name')),
-      ).toBe(true),
+      expect(screen.getAllByText('חו"ל ונדידה').some((el) => el.classList.contains('world-name'))).toBe(true),
     );
     expect(screen.getByRole('button', { name: /חיפוש בכל המקורות/ })).toBeInTheDocument();
     expect(screen.getByText('ענבר ל.')).toBeInTheDocument();

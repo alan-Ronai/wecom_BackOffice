@@ -31,10 +31,7 @@ export function SyncStateBadge({ documentId }: { documentId: string }) {
       ⇄ קונפליקט
     </span>
   ) : (
-    <span
-      className="chip chip-amber sync-state"
-      title={`השינוי המקומי טרם נדחף למקור המרוחק${where}`}
-    >
+    <span className="chip chip-amber sync-state" title={`השינוי המקומי טרם נדחף למקור המרוחק${where}`}>
       ⇡ ממתין לדחיפה
     </span>
   );

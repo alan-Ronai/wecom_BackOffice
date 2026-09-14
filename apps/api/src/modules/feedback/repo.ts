@@ -168,10 +168,10 @@ export async function getFeedbackDetail(
   const row = await getFeedback(q, id);
   if (!row) return null;
   if (worldScopes && !worldScopes.includes(row.worldSlug)) return null;
-  const reported = await q.query(
-    `select label from document_versions where document_id=$1 and version=$2`,
-    [row.documentId, row.documentVersion],
-  );
+  const reported = await q.query(`select label from document_versions where document_id=$1 and version=$2`, [
+    row.documentId,
+    row.documentVersion,
+  ]);
   const later = await q.query(
     `select version, label, created_at from document_versions
       where ${LATER_PUBLISHED_VERSION_SQL} order by version`,
@@ -179,9 +179,7 @@ export async function getFeedbackDetail(
   );
   return {
     ...row,
-    versionLabel: reported.rowCount
-      ? (reported.rows[0].label as string) || `v${row.documentVersion}`
-      : null,
+    versionLabel: reported.rowCount ? (reported.rows[0].label as string) || `v${row.documentVersion}` : null,
     href: `/doc/${row.documentId}` + (row.stepKey ? `/${row.stepKey}` : ''),
     laterVersions: later.rows.map((x) => ({
       version: x.version as number,
@@ -273,9 +271,7 @@ export async function resolveOne(
   note: string | undefined,
   actorId: string,
 ): Promise<FeedbackRow | null> {
-  const f = await tx.query('select document_id, document_version from feedback where id=$1 for update', [
-    id,
-  ]);
+  const f = await tx.query('select document_id, document_version from feedback where id=$1 for update', [id]);
   if (!f.rowCount) return null;
   const v = await tx.query('select 1 from document_versions where document_id=$1 and version=$2', [
     f.rows[0].document_id,
@@ -292,12 +288,10 @@ export async function resolveOne(
     [f.rows[0].document_id, f.rows[0].document_version, version],
   );
   if (!eligible.rowCount)
-    throw httpError(
-      400,
-      'VERSION_NOT_ELIGIBLE',
-      'אפשר לסגור משוב רק מול גרסה שפורסמה אחרי שהמשוב נפתח',
-      { version, reportedVersion: f.rows[0].document_version as number },
-    );
+    throw httpError(400, 'VERSION_NOT_ELIGIBLE', 'אפשר לסגור משוב רק מול גרסה שפורסמה אחרי שהמשוב נפתח', {
+      version,
+      reportedVersion: f.rows[0].document_version as number,
+    });
   await tx.query(
     `update feedback set status='done', resolved_version=$2, decision_note=coalesce($3, decision_note),
        decided_by=$4, decided_at=now() where id=$1`,

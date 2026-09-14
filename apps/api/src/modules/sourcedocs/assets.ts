@@ -40,8 +40,7 @@ export function imageSize(bytes: Buffer, mime: string): { width: number; height:
  * XSS path; what it could not do was keep the stored bytes honest.
  */
 export function sniffImageMime(bytes: Buffer): (typeof ASSET_MIMES)[number] | null {
-  const starts = (...sig: number[]) =>
-    bytes.length >= sig.length && sig.every((b, i) => bytes[i] === b);
+  const starts = (...sig: number[]) => bytes.length >= sig.length && sig.every((b, i) => bytes[i] === b);
   if (starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return 'image/png';
   if (starts(0xff, 0xd8, 0xff)) return 'image/jpeg';
   // GIF87a / GIF89a.
