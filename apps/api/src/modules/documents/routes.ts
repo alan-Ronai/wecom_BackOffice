@@ -35,6 +35,47 @@ import { updateEmbedding } from '../search/repo.js';
 import { resolveFeedback } from '../feedback/repo.js'; // W3: close reports with the published version
 
 const Params = z.object({ id: IdSchema });
+
+/**
+ * `body.worlds` is a full replacement, not an addition: `syncMemberships` deletes every
+ * `document_worlds` row outside `{category} ∪ worlds`. Checking only the worlds being *added*
+ * therefore let an editor scoped to one world send `worlds: []` and strip a document out of a
+ * world they cannot see — that team loses it from their list, topic view, search and graph.
+ *
+ * So both directions are checked, and `body.topics` (which was not checked at all) must name
+ * topics that live in the document's resulting world set and in the caller's scope. A topic in
+ * a third world would otherwise pull the item onto a topic page the editor cannot reach.
+ */
+async function assertTaxonomyScope(
+  tx: Parameters<typeof audit>[0],
+  user: ReturnType<typeof requireUser>,
+  before: { category: string; worlds: string[] },
+  body: { category?: string; worlds?: string[]; topics?: string[] },
+): Promise<void> {
+  if (body.category === undefined && body.worlds === undefined && body.topics === undefined) return;
+  const primary = body.category ?? before.category;
+  const resulting = new Set([primary, ...(body.worlds ?? before.worlds)]);
+  for (const w of resulting) if (!hasScope(user, w)) throw forbidden();
+  for (const w of before.worlds) if (!resulting.has(w) && !hasScope(user, w)) throw forbidden();
+  if (body.topics?.length) {
+    const r = await tx.query<{ id: string; world_slug: string }>(
+      'select id, world_slug from topics where id = any($1::uuid[])',
+      [body.topics],
+    );
+    const found = new Map(r.rows.map((x) => [x.id, x.world_slug]));
+    for (const t of body.topics) {
+      const world = found.get(t);
+      if (!world) throw httpError(400, 'UNKNOWN_TOPIC', 'הנושא אינו קיים', { topicId: t });
+      if (!resulting.has(world))
+        throw httpError(400, 'TOPIC_OUT_OF_WORLD', 'הנושא שייך לעולם תוכן שהפריט אינו נמצא בו', {
+          topicId: t,
+          worldSlug: world,
+        });
+      if (!hasScope(user, world)) throw forbidden();
+    }
+  }
+}
+
 /** Stage 4 `/documents/:id/backlinks`; the contract spells this response inline. */
 const BacklinksResponseSchema = z.object({
   items: z.array(
@@ -131,8 +172,8 @@ export default async function routes(app: FastifyInstance) {
     async (req, reply) => {
       const user = requireUser(req);
       const body = req.body as z.infer<typeof CreateDocumentBodySchema>;
-      for (const w of [body.category, ...(body.worlds ?? [])]) if (!hasScope(user, w)) throw forbidden();
       const doc = await withTransaction(app.db, async (tx) => {
+        await assertTaxonomyScope(tx, user, { category: body.category, worlds: [] }, body);
         const d = await repo.insertDocument(tx, body, user.id);
         await audit(tx, {
           actorId: user.id,
@@ -170,8 +211,7 @@ export default async function routes(app: FastifyInstance) {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
         if (!hasScope(user, before.worlds)) throw forbidden();
-        for (const w of [body.category, ...(body.worlds ?? [])])
-          if (w && !hasScope(user, w)) throw forbidden();
+        await assertTaxonomyScope(tx, user, before, body);
         const after = await repo.patchDocument(
           tx,
           id,
@@ -184,12 +224,16 @@ export default async function routes(app: FastifyInstance) {
           action: 'docs.edit',
           entityType: 'document',
           entityId: id,
+          // `worlds`/`topics` are in the payload because a membership change is otherwise
+          // invisible in the audit — a document silently leaving a team's world left no trace.
           before: {
             title: before.title,
             wave: before.wave,
             category: before.category,
             docType: before.docType,
             tags: before.tags,
+            worlds: before.worlds,
+            topics: before.topics,
           },
           after: {
             title: after.title,
@@ -197,6 +241,8 @@ export default async function routes(app: FastifyInstance) {
             category: after.category,
             docType: after.docType,
             tags: after.tags,
+            worlds: after.worlds,
+            topics: after.topics,
           },
           requestId: req.id,
           ip: req.ip,
@@ -338,7 +384,7 @@ export default async function routes(app: FastifyInstance) {
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.category)) throw forbidden();
+        if (!hasScope(user, before.worlds)) throw forbidden();
         const after = await repo.setStatus(tx, id, body.status, user.id);
         await audit(tx, {
           actorId: user.id,
@@ -377,7 +423,7 @@ export default async function routes(app: FastifyInstance) {
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.category)) throw forbidden();
+        if (!hasScope(user, before.worlds)) throw forbidden();
         await clearSourceReview(tx, id);
         await audit(tx, {
           actorId: user.id,

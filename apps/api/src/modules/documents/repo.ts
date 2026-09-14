@@ -4,6 +4,7 @@ import {
   DocumentSchema,
   detectFieldRefs,
   detectLinks,
+  htmlToText,
   stepText,
   type Block,
   type CreateDocumentBody,
@@ -501,6 +502,9 @@ export async function patchDocument(
     mapTaxonomyFkError(e);
   }
   if (!updated!.rowCount) throw httpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
+  // A text document never goes through `saveStructure`, so this is the only place its body
+  // reaches `search_text`.
+  if (body.bodyHtml !== undefined) await updateSearchText(tx, (await getDocument(tx, id))!);
   if (body.category !== undefined || body.worlds !== undefined || body.topics !== undefined) {
     const primary = body.category ?? (cur.rows[0].category as string);
     const extra =
@@ -598,10 +602,30 @@ export async function recomputeDerived(tx: Tx, doc: Document): Promise<void> {
         l.origin,
       ],
     );
-  const text = doc.phases
-    .flatMap((p) => p.steps.map((s) => stepText(s, s.blockId ? blocks.get(s.blockId) : null)))
+  await updateSearchText(tx, doc, blocks);
+}
+
+/**
+ * `search_text` is what the 0030/0035 trigger indexes and what `updateEmbedding` embeds, and it
+ * was built from phases/steps only. A `kind: 'text'` document — the whole point of spec §2.1 —
+ * keeps its content in `body_html` and never goes through `saveStructure`, so its body was not
+ * searchable at all: `GET /documents?q=`, the `documents` search group and the semantic re-rank
+ * matched its title and tags and nothing else.
+ */
+export async function updateSearchText(
+  tx: Tx,
+  doc: Document,
+  blocks?: Map<string, Block>,
+): Promise<void> {
+  const b = blocks ?? (await loadBlocksMap(tx));
+  const structure = doc.phases
+    .flatMap((p) => p.steps.map((s) => stepText(s, s.blockId ? b.get(s.blockId) : null)))
     .join(' \n ');
-  await tx.query('update documents set search_text=$2 where id=$1', [doc.id, text]);
+  const body = doc.bodyHtml ? htmlToText(doc.bodyHtml) : '';
+  await tx.query('update documents set search_text=$2 where id=$1', [
+    doc.id,
+    [structure, body].filter(Boolean).join(' \n '),
+  ]);
 }
 
 /** Rewrite the whole phase/step tree in one transaction; rotates the etag. */
@@ -735,10 +759,22 @@ export async function publishDocument(
   const blocks = await loadBlocksMap(tx);
   const version = (cur.rows[0].current_version as number) + 1;
   const status = opts.markPartial || isPartial(before, blocks) ? 'partial' : 'published';
+  /**
+   * This is the shared entry point for the editor publish, an accepted suggestion, a sync push
+   * (`kind: 'sync'`) and a restore. `approver_id` answers "who signed this off" (spec §2.2), so
+   * a system/sync publish with a null actor must not erase it and a restore must not re-stamp
+   * the restorer as the approver. Same for the source-review flag: a WordPress-originated sync
+   * clearing "the source moved, an editor must look" is the opposite of what the flag means.
+   */
+  const humanPublish = (opts.kind ?? 'published') === 'published' && opts.actorId !== null;
   await tx.query(
     `update documents set current_version=$2, status=$3, updated_by=$4, updated_at=now(), etag=gen_random_uuid()::text,
-            approver_id=$4, published_at=now(),
-            source_review_needed=false, source_review_reason=null, source_review_at=null
+            published_at=now()${
+              humanPublish
+                ? `, approver_id=$4,
+            source_review_needed=false, source_review_reason=null, source_review_at=null`
+                : ''
+            }
       where id=$1`,
     [id, version, status, opts.actorId],
   );
@@ -746,10 +782,7 @@ export async function publishDocument(
   const sourceVersion =
     opts.sourceVersion ??
     ((
-      await tx.query(
-        `select current_version from source_documents where document_id=$1 and to_regclass('source_documents') is not null`,
-        [id],
-      )
+      await tx.query(`select current_version from source_documents where document_id=$1`, [id])
     ).rows[0]?.current_version as number | undefined) ??
     null;
   const inserted = await tx.query(
