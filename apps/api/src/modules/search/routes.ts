@@ -19,7 +19,21 @@ export default async function routes(app: FastifyInstance) {
       const user = requireUser(req);
       // L5 sets `app.model` when the local model is wired up; absent, search stays text-only.
       const model = (app as unknown as { model?: ModelClient | null }).model ?? null;
-      return search(app.db, req.query as Parameters<typeof search>[1], model, user.categoryScopes);
+      const query = req.query as Parameters<typeof search>[1] & {
+        world?: string;
+        topic?: string;
+        docType?: string;
+        tag?: string[];
+      };
+      const result = await search(app.db, query, model, user.categoryScopes);
+      // W5: usage log. Not awaited on purpose — the response must not wait for, or fail on, the insert.
+      const filters: Record<string, unknown> = {};
+      for (const k of ['types', 'world', 'topic', 'docType', 'tag'] as const)
+        if (query[k] !== undefined) filters[k] = query[k];
+      void app.usage
+        .recordSearch({ userId: user.id, q: query.q, filters, results: result.total, tookMs: result.tookMs })
+        .catch(() => undefined);
+      return result;
     },
   );
 }
