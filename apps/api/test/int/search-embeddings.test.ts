@@ -83,7 +83,9 @@ run('search: Hebrew stopwords, prefix matching, vector re-rank', () => {
         payload: { title: 'quantum network guide', category: 'tech', wave: 1, priority: 'hh', kind: 'steps' },
       })
     ).json();
-    expect((await db.pool.query('select embedding from documents where id=$1', [c.id])).rows[0].embedding).toBeNull();
+    expect(
+      (await db.pool.query('select embedding from documents where id=$1', [c.id])).rows[0].embedding,
+    ).toBeNull();
 
     embedCalls = [];
     const { reindexAll } = await import('../../src/modules/search/repo.js');
@@ -118,7 +120,8 @@ run('search: Hebrew stopwords, prefix matching, vector re-rank', () => {
     let embedding = null;
     for (let i = 0; i < 20 && !embedding; i++) {
       await new Promise((r) => setTimeout(r, 50));
-      embedding = (await db.pool.query('select embedding from documents where id=$1', [c.id])).rows[0].embedding;
+      embedding = (await db.pool.query('select embedding from documents where id=$1', [c.id])).rows[0]
+        .embedding;
     }
     expect(embedding).not.toBeNull();
   });
