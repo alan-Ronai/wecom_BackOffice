@@ -38,6 +38,11 @@ const rowToRevision = (r: Record<string, unknown>): SourceRevision => ({
   meta: (r.meta as Record<string, unknown>) ?? undefined,
 });
 
+export interface RevisionHooks {
+  /** Runs after the revision row is committed and the job is queued (W2 raises the source-review flag here). */
+  onIngested?: (info: { sourceId: string; revisionId: string; actorId: string | null }) => Promise<void>;
+}
+
 /**
  * The pipeline entry point for every lane: L5's uploads, L6's connectors and the
  * watched-folder job all land here. Ingest is idempotent on the content hash.
@@ -46,6 +51,7 @@ export class SourceRevisionService {
   constructor(
     readonly pool: pg.Pool,
     private readonly queue: JobQueue,
+    private readonly hooks: RevisionHooks = {},
   ) {}
 
   async createSource(
@@ -119,6 +125,7 @@ export class SourceRevisionService {
       client.release();
     }
     await this.queue.send(QUEUES.pipelineProcess, { revisionId }, { singletonKey: revisionId });
+    if (this.hooks.onIngested) await this.hooks.onIngested({ sourceId, revisionId, actorId });
     return { revisionId, duplicate: false };
   }
 

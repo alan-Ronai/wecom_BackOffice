@@ -17,6 +17,7 @@ import {
   PublishBodySchema,
   PublishResponseSchema,
   SetStatusBodySchema,
+  SourceReviewClearBodySchema,
   StructureBodySchema,
   VersionListSchema,
   makeEvent,
@@ -29,6 +30,7 @@ import { canReadUnpublished } from '../../lib/visibility.js';
 import * as repo from './repo.js';
 import { annotateBlame, diffDocuments, diffStats } from './diff.js';
 import { inboundFor } from '../graph/repo.js';
+import { clearSourceReview } from './sourceReview.js';
 import { updateEmbedding } from '../search/repo.js';
 
 const Params = z.object({ id: IdSchema });
@@ -326,6 +328,46 @@ export default async function routes(app: FastifyInstance) {
           requestId: req.id,
           ip: req.ip,
         });
+        await app.events.publish(
+          tx,
+          makeEvent('document.updated', { documentId: id, actorId: user.id, etag: after.etag }),
+        );
+        return after;
+      });
+    },
+  );
+
+  app.post(
+    '/documents/:id/source-review/clear',
+    {
+      config: { requires: ['docs.edit'], scope: 'document' },
+      schema: {
+        tags: ['documents'],
+        params: Params,
+        body: SourceReviewClearBodySchema,
+        response: { 200: DocumentSchema },
+      },
+    },
+    async (req) => {
+      const user = requireUser(req);
+      const { id } = req.params as { id: string };
+      const { note } = req.body as z.infer<typeof SourceReviewClearBodySchema>;
+      return withTransaction(app.db, async (tx) => {
+        const before = await repo.getDocument(tx, id);
+        if (!before) throw notFound('המסמך');
+        if (!hasScope(user, before.category)) throw forbidden();
+        await clearSourceReview(tx, id);
+        await audit(tx, {
+          actorId: user.id,
+          action: 'docs.source_review_cleared',
+          entityType: 'document',
+          entityId: id,
+          before: { reason: before.sourceReviewReason ?? null },
+          after: { note },
+          requestId: req.id,
+          ip: req.ip,
+        });
+        const after = (await repo.getDocument(tx, id))!;
         await app.events.publish(
           tx,
           makeEvent('document.updated', { documentId: id, actorId: user.id, etag: after.etag }),

@@ -577,6 +577,8 @@ export interface PublishOptions {
   suggestionId?: string | null;
   markPartial?: boolean;
   kind?: 'published' | 'restore' | 'system' | 'sync';
+  /** W4: the source-document version this working version was derived from. */
+  sourceVersion?: number | null;
 }
 
 /**
@@ -600,13 +602,14 @@ export async function publishDocument(
   const status = opts.markPartial || isPartial(before, blocks) ? 'partial' : 'published';
   await tx.query(
     `update documents set current_version=$2, status=$3, updated_by=$4, updated_at=now(), etag=gen_random_uuid()::text,
-            approver_id=$4, published_at=now()
+            approver_id=$4, published_at=now(),
+            source_review_needed=false, source_review_reason=null, source_review_at=null
       where id=$1`,
     [id, version, status, opts.actorId],
   );
   const published = (await getDocument(tx, id))!;
   const inserted = await tx.query(
-    'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id, schema_version) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id',
+    'insert into document_versions(document_id, version, snapshot, author_id, label, kind, suggestion_id, schema_version, source_version) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id',
     [
       id,
       version,
@@ -616,6 +619,7 @@ export async function publishDocument(
       opts.kind ?? 'published',
       opts.suggestionId ?? null,
       CURRENT_DOCUMENT_SCHEMA_VERSION,
+      opts.sourceVersion ?? null,
     ],
   );
   return { doc: published, version, versionId: inserted.rows[0].id as string };
