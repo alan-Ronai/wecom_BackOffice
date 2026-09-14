@@ -19,6 +19,43 @@ run('learning tracking', () => {
   let quizQuestionIds: string[] = [];
   let audienceId: string;
 
+  /**
+   * The document the learning items point at. Five steps, not `minimalStructure`'s two: the
+   * detector's "more than 40% of the steps changed" rule would otherwise fire on every
+   * single-step edit, and a non-significant publish would be impossible to express.
+   */
+  const structure = {
+    phases: [
+      {
+        ...minimalStructure.phases[0],
+        steps: [
+          ...minimalStructure.phases[0].steps,
+          {
+            key: 's3',
+            num: '3',
+            title: 'בדיקת כיסוי באזור',
+            actions: [{ id: 'a1', text: 'מפת כיסוי ↗ הזן כתובת' }],
+            outcomes: [{ kind: 'ok', text: '✓ כיסוי תקין' }],
+          },
+          {
+            key: 's4',
+            num: '4',
+            title: 'איפוס הגדרות רשת',
+            actions: [{ id: 'a1', text: 'הנחה את הלקוח לאפס הגדרות רשת' }],
+            outcomes: [{ kind: 'ok', text: '✓ אופס' }],
+          },
+          {
+            key: 's5',
+            num: '5',
+            title: 'פתיחת תקלה',
+            actions: [{ id: 'a1', text: 'פתח תקלה במערכת' }],
+            outcomes: [{ kind: 'ok', text: '✓ סיום' }],
+          },
+        ],
+      },
+    ],
+  };
+
   const createDoc = async (title = 'מסמך למידה') => {
     const c = (
       await app.inject({
@@ -32,7 +69,7 @@ run('learning tracking', () => {
       method: 'PUT',
       url: `/api/v1/documents/${c.id}/structure`,
       headers: { ...auth(manager), 'if-match': c.etag },
-      payload: minimalStructure,
+      payload: structure,
     });
     await app.inject({
       method: 'POST',
@@ -394,6 +431,147 @@ run('learning tracking', () => {
     expect(after - before).toBe(1);
     const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentB) })).json();
     expect(mine.overdue.some((a: { itemId: string }) => a.itemId === late)).toBe(true);
+  });
+
+  /** Re-publishes the document from the pristine structure plus one mutation. */
+  const republish = async (
+    mutate: (s: typeof structure) => unknown,
+    body: Record<string, unknown> = {},
+  ) => {
+    const cur = (
+      await app.inject({ method: 'GET', url: `/api/v1/documents/${docId}`, headers: auth(manager) })
+    ).json();
+    const s = JSON.parse(JSON.stringify(structure)) as typeof structure;
+    const payload = mutate(s) ?? s;
+    await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${docId}/structure`,
+      headers: { ...auth(manager), 'if-match': cur.etag },
+      payload,
+    });
+    return (
+      await app.inject({
+        method: 'POST',
+        url: `/api/v1/documents/${docId}/publish`,
+        headers: auth(manager),
+        payload: { label: 'עדכון', ...body },
+      })
+    ).json();
+  };
+
+  it('a non-significant publish flags nothing and creates no refresh work', async () => {
+    const r = await republish((s) => {
+      s.phases[0].steps[0].title = 'כותרת חדשה';
+    });
+    expect(r.changeFlag).toMatchObject({ significant: false, refreshAssignments: 0 });
+    const flags = await db.pool.query(
+      `select significant from document_change_flags where document_id=$1 order by version desc limit 1`,
+      [docId],
+    );
+    expect(flags.rows[0].significant).toBe(false);
+  });
+
+  it('a significant publish invalidates completions and assigns a refresh with a due date', async () => {
+    const r = await republish((s) => {
+      s.phases[0].steps[0].outcomes = [{ kind: 'alert', text: 'עצור והסלם' }];
+    });
+    expect(r.changeFlag.significant).toBe(true);
+    expect(r.changeFlag.reasons.join(' ')).toMatch(/תוצאה/);
+    expect(r.changeFlag.affectedItems).toBeGreaterThanOrEqual(2);
+    const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })).json();
+    expect(mine.invalidated.some((a: { itemId: string }) => a.itemId === quizId)).toBe(true);
+    const refresh = (
+      mine.open as { id: string; itemId: string; reason: string; dueAt: string; refreshReason: string | null }[]
+    ).find((a) => a.itemId === quizId && a.reason === 'refresh');
+    expect(refresh).toBeTruthy();
+    expect(refresh!.refreshReason).toMatch(/שינוי מהותי/);
+    const days = (new Date(refresh!.dueAt).getTime() - Date.now()) / 86400000;
+    expect(days).toBeGreaterThan(6);
+    expect(days).toBeLessThanOrEqual(7.01);
+    expect((await port.needsUpdate(db.pool, [quizId])).get(quizId)).toBe(true);
+    const stored = await db.pool.query(
+      `select answers from learning_attempts where finished_at is not null order by finished_at desc limit 1`,
+    );
+    expect(
+      Object.values(stored.rows[0].answers as Record<string, { correct: boolean }>).every(
+        (v) => typeof v.correct === 'boolean',
+      ),
+    ).toBe(true);
+    const dl = (
+      await app.inject({ method: 'GET', url: `/api/v1/documents/${docId}/learning`, headers: auth(agentA) })
+    ).json();
+    expect(dl.refreshRequired).toBe(true);
+    expect(
+      (mine.open as { id: string; reason: string }[]).filter((a) => a.reason === 'refresh').map((a) => a.id),
+    ).toContain(dl.refreshAssignmentId);
+    expect(dl.items.find((i: { id: string }) => i.id === quizId)?.needsUpdate).toBe(true);
+    expect(dl.lastSignificantChange.reasons.length).toBeGreaterThan(0);
+  });
+
+  it('a second significant publish re-points the open refresh instead of stacking one', async () => {
+    const openBefore = (
+      await db.pool.query(
+        `select count(*)::int n from learning_assignments where reason='refresh' and status in ('open','overdue')`,
+      )
+    ).rows[0].n as number;
+    const r = await republish((s) => {
+      s.phases[0].steps[1].outcomes = [{ kind: 'alert', text: 'עצור גם כאן' }];
+    });
+    expect(r.changeFlag.significant).toBe(true);
+    const openAfter = (
+      await db.pool.query(
+        `select count(*)::int n from learning_assignments where reason='refresh' and status in ('open','overdue')`,
+      )
+    ).rows[0].n as number;
+    expect(openAfter).toBe(openBefore);
+    const mine = (await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })).json();
+    const refresh = (mine.open as { itemId: string; reason: string; refreshReason: string }[]).find(
+      (a) => a.itemId === quizId && a.reason === 'refresh',
+    )!;
+    expect(refresh.refreshReason).toContain(`גרסה ${r.version}`);
+  });
+
+  it('the publish dialog override wins in both directions', async () => {
+    const forced = await republish(
+      (s) => {
+        s.phases[0].steps[0].title = 'שינוי קטן נוסף';
+      },
+      { significantChange: true },
+    );
+    expect(forced.changeFlag.significant).toBe(true);
+    expect(forced.changeFlag.reasons).toContain('סומן כשינוי מהותי על ידי העורך');
+    const suppressed = await republish(
+      (s) => {
+        s.phases[0].steps[0].outcomes = [{ kind: 'ok', text: 'סיום' }];
+      },
+      { significantChange: false },
+    );
+    expect(suppressed.changeFlag).toMatchObject({ significant: false, refreshAssignments: 0 });
+  });
+
+  it('completion and dashboard are world-scoped for managers', async () => {
+    const billingLead = await makeUser(db.pool, { scopes: ['billing'], name: 'ראש צוות חיובים' });
+    const c = (
+      await app.inject({
+        method: 'GET',
+        url: `/api/v1/learning/items/${quizId}/completion`,
+        headers: auth(billingLead),
+      })
+    ).json();
+    expect(c.rows.length).toBeGreaterThanOrEqual(1);
+    expect(c.rows.every((r: { worldSlugs: string[] }) => r.worldSlugs.includes('billing'))).toBe(true);
+    const d = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/dashboard', headers: auth(billingLead) })
+    ).json();
+    expect(d.totals.assigned).toBeGreaterThanOrEqual(1);
+    const all = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/dashboard?world=tech', headers: auth(manager) })
+    ).json();
+    expect(all.totals.assigned).toBeGreaterThanOrEqual(1);
+    const unscoped = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/dashboard', headers: auth(manager) })
+    ).json();
+    expect(unscoped.totals.assigned).toBeGreaterThanOrEqual(d.totals.assigned);
   });
 
   it('deleting an audience leaves the assignments it already made', async () => {
