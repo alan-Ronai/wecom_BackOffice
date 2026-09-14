@@ -28,7 +28,9 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { E2E_OIDC_CLIENT, E2E_OIDC_USER } from './e2e-oidc-issuer.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -67,6 +69,59 @@ function run(cmd, args, opts = {}) {
   const r = spawnSync(cmd, args, { cwd: ROOT, stdio, ...opts });
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} exited ${r.status ?? r.signal}`);
   return r;
+}
+
+/**
+ * Runs Playwright and, when it fails, prints the failing **spec names** in a grep-friendly block.
+ *
+ * `list`'s output is streamed live but scrolls past hundreds of lines of API and browser log, and
+ * the coordinator reading these runs wants one thing: which specs are red. The `json` reporter
+ * writes a report beside it; this reads that report rather than the terminal, so a spec whose own
+ * output happens to contain the word "failed" cannot confuse the summary.
+ */
+function runPlaywright(args, jsonReport, opts) {
+  rmSync(jsonReport, { force: true });
+  const r = spawnSync('pnpm', args, { cwd: ROOT, stdio: 'inherit', ...opts });
+  const failures = readFailingSpecs(jsonReport);
+  rmSync(jsonReport, { force: true });
+  if (failures.length) {
+    console.error(`\n── failing specs (${failures.length}) ──────────────`);
+    for (const f of failures) console.error(`FAILED SPEC: ${f}`);
+    console.error('');
+  }
+  if (r.status !== 0) {
+    throw new Error(
+      failures.length
+        ? `playwright: ${failures.length} spec(s) failed:\n  ${failures.join('\n  ')}`
+        : `playwright exited ${r.status ?? r.signal} with no failing spec in the report (a crash, a timeout before the first test, or a config error — see the output above)`,
+    );
+  }
+  return r;
+}
+
+/** `file:line › [project] title path` for every spec the JSON report marks not-ok. */
+function readFailingSpecs(jsonReport) {
+  let report;
+  try {
+    report = JSON.parse(readFileSync(jsonReport, 'utf8'));
+  } catch {
+    return []; // playwright died before writing one; the thrown error says so
+  }
+  const out = [];
+  const walk = (suite, titles) => {
+    const next = suite.title && suite.title !== suite.file ? [...titles, suite.title] : titles;
+    for (const spec of suite.specs ?? []) {
+      if (spec.ok) continue;
+      const project = spec.tests?.[0]?.projectName;
+      const where = `${spec.file ?? suite.file ?? '?'}:${spec.line ?? '?'}`;
+      out.push(
+        `${where} › ${project ? `[${project}] ` : ''}${[...next, spec.title].join(' › ')}`,
+      );
+    }
+    for (const child of suite.suites ?? []) walk(child, next);
+  };
+  for (const suite of report.suites ?? []) walk(suite, []);
+  return out;
 }
 
 /**
@@ -226,12 +281,37 @@ async function main() {
     `${PG_PORT}:5432`,
     'pgvector/pgvector:pg16',
   ]);
-  await waitFor(`postgres accepting connections on :${PG_PORT}`, () => {
-    const r = spawnSync('docker', ['exec', CONTAINER, 'pg_isready', '-U', 'postgres'], { stdio: 'ignore' });
-    return r.status === 0;
-  });
-  // pg_isready goes green a moment before the server finishes its first-boot restart.
-  await sleep(1000);
+  /**
+   * F-2: `pg_isready` plus a fixed `sleep(1000)` was a heuristic, and it lost. The pgvector image
+   * starts Postgres once to run its init scripts, shuts it down, and starts it again for real —
+   * so the *first* green `pg_isready` is against a server that is about to go away, and the next
+   * step (`seed`) died with "Connection terminated unexpectedly" on a slow machine.
+   *
+   * Two greens at least `MIN_READY_GAP_MS` apart cannot both fall inside that window: the
+   * shutdown between them makes the second probe fail and resets the count. Any failure at any
+   * point discards the streak, so this is a *consecutive* pair, not two greens ever.
+   */
+  const MIN_READY_GAP_MS = 500;
+  let firstReadyAt = 0;
+  await waitFor(
+    `postgres accepting connections on :${PG_PORT} (two consecutive probes ≥${MIN_READY_GAP_MS}ms apart)`,
+    () => {
+      const ready =
+        spawnSync('docker', ['exec', CONTAINER, 'pg_isready', '-U', 'postgres'], { stdio: 'ignore' })
+          .status === 0;
+      if (!ready) {
+        firstReadyAt = 0; // the restart happened — start the streak again
+        return false;
+      }
+      const now = Date.now();
+      if (!firstReadyAt) {
+        firstReadyAt = now;
+        return false;
+      }
+      return now - firstReadyAt >= MIN_READY_GAP_MS;
+    },
+    { everyMs: 250 },
+  );
 
   const dbEnv = { ...process.env, DATABASE_URL };
 
@@ -350,8 +430,10 @@ async function main() {
   });
 
   console.log('\n── 5. playwright (no mocks) ─────────────────────────────────\n');
-  run(
-    'pnpm',
+  // A second, machine-readable reporter alongside `list`, so a failure can be summarised by spec
+  // name (see `reportFailingSpecs`). `list` still streams to the terminal exactly as before.
+  const jsonReport = join(tmpdir(), `wecom-e2e-real-${process.pid}.json`);
+  runPlaywright(
     [
       '--filter',
       '@wecom/web',
@@ -360,11 +442,14 @@ async function main() {
       'test',
       '--config',
       'playwright.real.config.ts',
+      '--reporter=list,json',
       ...passthrough,
     ],
+    jsonReport,
     {
       env: {
         ...process.env,
+        PLAYWRIGHT_JSON_OUTPUT_NAME: jsonReport,
         E2E_REAL_BASE_URL: WEB_URL,
         E2E_ADMIN_EMAIL: ADMIN_EMAIL,
         E2E_ADMIN_PASSWORD: ADMIN_PASSWORD,
