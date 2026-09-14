@@ -5,10 +5,12 @@ import { DocumentSchema, type Document } from '@wecom/shared';
 import { loadConfig } from './config.js';
 import { withTransaction, type Tx } from './lib/sql.js';
 import { getDocument, recomputeDerived, saveStructure } from './modules/documents/repo.js';
+import { textToHtml } from './modules/scripts/html.js';
 
 export interface SeedCounts {
   documents: number;
   cards: number;
+  topics: number;
   blocks: number;
   fields: number;
   scripts: number;
@@ -99,6 +101,23 @@ class Authors {
   }
 }
 
+/** Legacy codes carry the PRD letter (M-00, R-01, O-02, E-01); otherwise the spec rule. */
+const docTypeFor = (d: { code?: string; kind: string; phases: unknown[] }): string =>
+  d.code && /^[MROES]-/.test(d.code) ? d.code[0]! : d.kind === 'retention' || d.phases.length ? 'R' : 'I';
+
+/** W1: every item is a member of its primary world, plus its legacy topic when it had one. */
+const membership = async (tx: Tx, documentId: string, world: string, topicSlug: string | null) => {
+  await tx.query('insert into document_worlds(document_id, world_slug) values ($1,$2) on conflict do nothing', [
+    documentId,
+    world,
+  ]);
+  if (topicSlug)
+    await tx.query(
+      'insert into document_topics(document_id, topic_id) select $1, t.id from topics t where t.slug=$2 on conflict do nothing',
+      [documentId, topicSlug],
+    );
+};
+
 export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
   const documents = read<SeedDocument[]>('documents.json');
   const cards = read<SeedCard[]>('cards.json');
@@ -112,6 +131,7 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
     const counts: SeedCounts = {
       documents: 0,
       cards: 0,
+      topics: 0,
       blocks: 0,
       fields: 0,
       scripts: 0,
@@ -179,13 +199,34 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
       if (ins.rowCount) counts.fields++;
     }
 
+    // 2b. topics: the card row names the topic; a topic with no card is named by its document
+    for (const c of cards) {
+      const ins = await tx.query(
+        `insert into topics(world_id, slug, name, description, position)
+         select w.id, $1, $2, $3, $4 from worlds w where w.slug = $5
+           and not exists (select 1 from topics t where t.slug = $1) returning id`,
+        [`topic-${c.topicId}`, c.title, c.description, c.topicId, c.category],
+      );
+      if (ins.rowCount) counts.topics++;
+    }
+    for (const d of documents) {
+      if (d._topicId == null) continue;
+      const ins = await tx.query(
+        `insert into topics(world_id, slug, name, description, position)
+         select w.id, $1, $2, $3, $4 from worlds w where w.slug = $5
+           and not exists (select 1 from topics t where t.slug = $1) returning id`,
+        [`topic-${d._topicId}`, d.title, d.description, d._topicId, d.category],
+      );
+      if (ins.rowCount) counts.topics++;
+    }
+
     // 3. document rows first, structures second: links between documents need every row to exist
     const fresh: SeedDocument[] = [];
     for (const d of documents) {
       const authorId = await authors.id(d._author);
       const ins = await tx.query(
         `insert into documents(id, slug, code, title, description, category, wave, priority, kind, status,
-           current_version, source_ref, topic_id, created_by, updated_by, created_at, updated_at)
+           current_version, source_ref, doc_type, created_by, updated_by, created_at, updated_at)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'draft',0,$10,$11,$12,$12,$13,$13)
          on conflict (slug) do nothing returning id`,
         [
@@ -199,7 +240,7 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
           d.priority,
           d.kind,
           d.sourceRef ?? null,
-          d._topicId,
+          docTypeFor(d),
           authorId,
           d.updatedAt,
         ],
@@ -207,17 +248,20 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
       if (ins.rowCount) {
         counts.documents++;
         fresh.push(d);
+        await membership(tx, d.id, d.category, d._topicId == null ? null : `topic-${d._topicId}`);
       }
     }
 
     // 4. card-only topics: real documents with no phases (see convert-legacy.mjs for the decision)
     for (const c of cards) {
       const ins = await tx.query(
-        `insert into documents(id, slug, title, description, category, wave, priority, kind, status, current_version, topic_id)
-         values ($1,$2,$3,$4,$5,$6,$7,'steps','draft',0,$8) on conflict (slug) do nothing returning id`,
-        [c.id, c.slug, c.title, c.description, c.category, c.wave, c.priority, c.topicId],
+        `insert into documents(id, slug, title, description, category, wave, priority, kind, status, current_version, doc_type)
+         values ($1,$2,$3,$4,$5,$6,$7,'steps','draft',0,'I') on conflict (slug) do nothing returning id`,
+        [c.id, c.slug, c.title, c.description, c.category, c.wave, c.priority],
       );
-      if (ins.rowCount) counts.cards++;
+      if (!ins.rowCount) continue;
+      counts.cards++;
+      await membership(tx, c.id, c.category, `topic-${c.topicId}`);
     }
 
     // 5. structures + the final published state
@@ -260,19 +304,26 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
       if (ins.rowCount) counts.versions++;
     }
 
-    // 7. scripts and their document references
+    // 7. scripts are type-T `text` documents since 0030; `_usedIn` becomes explicit document links
     for (const s of scripts) {
       const ins = await tx.query(
-        `insert into scripts(id, title, text, tags, updated_at) values ($1,$2,$3,$4,$5)
-         on conflict (id) do nothing returning id`,
-        [s.id, s.title, s.text, s.tags, s.updatedAt],
+        `insert into documents(id, slug, title, description, category, wave, priority, kind, status, doc_type, tags, body_html, current_version, created_at, updated_at)
+         values ($1,$2,$3,'','ops',3,'m','text','published','T',$4,$5,1,$6,$6) on conflict (id) do nothing returning id`,
+        [s.id, 'script-' + s.id.replace(/-/g, '').slice(0, 8), s.title, s.tags, textToHtml(s.text), s.updatedAt],
       );
       if (!ins.rowCount) continue;
       counts.scripts++;
+      await membership(tx, s.id, 'ops', null);
+      const snapshot = await getDocument(tx, s.id);
+      await tx.query(
+        `insert into document_versions(document_id, version, snapshot, label, kind, created_at) values ($1,1,$2,'ייבוא מהספרייה הסטטית','published',$3) on conflict do nothing`,
+        [s.id, JSON.stringify(snapshot), s.updatedAt],
+      );
       for (const documentId of s._usedIn)
         await tx.query(
-          'insert into script_refs(script_id, document_id) select $1,$2 where exists (select 1 from documents where id=$2) on conflict do nothing',
-          [s.id, documentId],
+          `insert into document_links(from_document_id, to_document_id, type, origin)
+           select $1, $2, 'link', 'explicit' where exists (select 1 from documents where id = $1)`,
+          [documentId, s.id],
         );
     }
 
