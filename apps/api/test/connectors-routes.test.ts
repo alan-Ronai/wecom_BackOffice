@@ -367,6 +367,138 @@ run('connector routes', () => {
     await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
   });
 
+  /**
+   * I7 residual. The signature proves the bytes are ours and `assertFresh` proves they are at
+   * most five minutes old; neither says how many times they have arrived. Before this, anyone
+   * who could observe one delivery could post it again inside that window, as often as they
+   * liked, and every copy was a real sync run.
+   */
+  it('rejects a replayed signed webhook as 409 REPLAY, and still rejects a stale one as 401', async () => {
+    const conn = (await app.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })).json();
+    const deliver = (raw: string) =>
+      app.inject({
+        method: 'POST',
+        url: `/api/v1/connectors/${conn.id}/webhook`,
+        payload: raw,
+        headers: {
+          'content-type': 'application/json',
+          'x-kb-signature': signBody('topsecret1', raw),
+          'x-kb-nonce': JSON.parse(raw).nonce,
+        },
+      });
+    const raw = JSON.stringify({
+      event: 'save_post',
+      post_type: 'posts',
+      post_id: 11,
+      modified_gmt: '2025-06-12T10:00:00',
+      sent_at: new Date().toISOString(),
+      nonce: 'nonce-' + Date.now(),
+    });
+
+    const first = await deliver(raw);
+    expect(first.statusCode).toBe(202);
+    const before = enqueued.length;
+
+    // Byte-for-byte the same request, signature and all — which is exactly what a capture is.
+    const second = await deliver(raw);
+    expect(second.statusCode).toBe(409);
+    expect(second.json().code).toBe('REPLAY');
+    // The point of the 409: no second sync run was queued.
+    expect(enqueued.length).toBe(before);
+
+    // A different body under the same connector is not a replay.
+    const other = await deliver(raw.replace('"post_id":11', '"post_id":12'));
+    expect(other.statusCode).toBe(202);
+
+    // The out-of-window rejection is unchanged: still 401, still not distinguishable from a
+    // bad secret, so probing cannot tell a stale capture from a wrong key.
+    const staleRaw = JSON.stringify({
+      event: 'save_post',
+      post_type: 'posts',
+      post_id: 13,
+      modified_gmt: '2025-06-12T10:00:00',
+      sent_at: new Date(Date.now() - 20 * 60_000).toISOString(),
+      nonce: 'stale',
+    });
+    expect((await deliver(staleRaw)).statusCode).toBe(401);
+
+    // The nonce header is optional for one release: an old plugin that omits it still works.
+    const oldPluginRaw = JSON.stringify({
+      event: 'save_post',
+      post_type: 'posts',
+      post_id: 14,
+      modified_gmt: '2025-06-12T10:00:00',
+      sent_at: new Date().toISOString(),
+    });
+    const oldPlugin = await app.inject({
+      method: 'POST',
+      url: `/api/v1/connectors/${conn.id}/webhook`,
+      payload: oldPluginRaw,
+      headers: {
+        'content-type': 'application/json',
+        'x-kb-signature': signBody('topsecret1', oldPluginRaw),
+      },
+    });
+    expect(oldPlugin.statusCode).toBe(202);
+
+    // The TTL purge is what keeps the table from growing one row per post save forever.
+    const { purgeWebhookNonces } = await import('../src/modules/connectors/nonces.js');
+    expect(await purgeWebhookNonces(pool, -1)).toBeGreaterThan(0);
+    expect((await pool.query('select count(*)::int n from webhook_nonces')).rows[0].n).toBe(0);
+    // Purged means forgettable: the same bytes are accepted again once the window has passed.
+    expect((await deliver(raw)).statusCode).toBe(202);
+
+    await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
+  });
+
+  /** The flag is the deprecation switch, not the protection: it makes a pre-header plugin loud. */
+  it('refuses a webhook with no nonce header once WEBHOOK_REQUIRE_NONCE is on', async () => {
+    const strict = await buildL6TestApp({
+      pool,
+      databaseUrl: c.getConnectionUri(),
+      env: { WEBHOOK_REQUIRE_NONCE: 'true' },
+      testUser: { id: userId, permissions: ['connectors.manage', 'suggestions.apply'] },
+      revisions: memoryRevisions(),
+      documents: sqlDocumentsService(pool),
+      enqueue: async () => 'job-strict',
+    });
+    try {
+      const conn = (
+        await strict.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })
+      ).json();
+      const raw = JSON.stringify({
+        event: 'save_post',
+        post_type: 'posts',
+        post_id: 21,
+        modified_gmt: '2025-06-12T10:00:00',
+        sent_at: new Date().toISOString(),
+        nonce: 'n-21',
+      });
+      const headers = {
+        'content-type': 'application/json',
+        'x-kb-signature': signBody('topsecret1', raw),
+      };
+      const without = await strict.inject({
+        method: 'POST',
+        url: `/api/v1/connectors/${conn.id}/webhook`,
+        payload: raw,
+        headers,
+      });
+      expect(without.statusCode).toBe(400);
+      expect(without.json().code).toBe('MISSING_NONCE');
+      const with_ = await strict.inject({
+        method: 'POST',
+        url: `/api/v1/connectors/${conn.id}/webhook`,
+        payload: raw,
+        headers: { ...headers, 'x-kb-nonce': 'n-21' },
+      });
+      expect(with_.statusCode).toBe(202);
+      await strict.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
+    } finally {
+      await strict.close();
+    }
+  });
+
   it('forbids without permission', async () => {
     const noPerm = await buildL6TestApp({
       pool,

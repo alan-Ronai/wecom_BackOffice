@@ -9,7 +9,6 @@ import {
   ErrorEnvelopeSchema,
   IdSchema,
   SyncLinkSchema,
-  SyncResolveBodySchema,
   SyncRunResultSchema,
   paginated,
   type Permission,
@@ -23,6 +22,7 @@ import {
   type SyncLinkRow,
 } from './repo.js';
 import type { SyncService } from './sync.js';
+import { claimWebhookNonce, replayKey, NONCE_HEADER } from './nonces.js';
 import { auditOf, userOf, type Enqueue } from './context.js';
 
 /**
@@ -379,6 +379,7 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
           400: E,
           401: E,
           404: E,
+          409: E,
         },
       },
     },
@@ -390,55 +391,43 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
         return reply
           .status(400)
           .send({ code: 'NO_WEBHOOKS', message: 'המחבר אינו תומך ב-webhook', requestId: req.id });
+      const raw = (req as FastifyRequest & { rawBody?: string }).rawBody ?? '';
+      let changes;
       try {
-        const raw = (req as FastifyRequest & { rawBody?: string }).rawBody ?? '';
-        const changes = await conn.parseWebhook(
-          repo.config(row) as never,
-          req.headers as Record<string, string>,
-          { raw },
-        );
-        const jobId = await opts.enqueue('connector.webhook', { connectorId: row.id, changes });
-        return reply.status(202).send({ jobId, changes: changes.length });
+        changes = await conn.parseWebhook(repo.config(row) as never, req.headers as Record<string, string>, {
+          raw,
+        });
       } catch {
         return reply.status(401).send({ code: 'BAD_SIGNATURE', message: 'חתימה שגויה', requestId: req.id });
       }
+      // I7 residual. The signature and `assertFresh` above prove the bytes are ours and at most
+      // five minutes old; they say nothing about how many times the same bytes have arrived.
+      // Claiming the body hash makes the second delivery a 409 instead of a second sync run.
+      const nonceHeader = req.headers[NONCE_HEADER];
+      if (!nonceHeader) {
+        if (app.config.WEBHOOK_REQUIRE_NONCE)
+          return reply
+            .status(400)
+            .send({ code: 'MISSING_NONCE', message: 'חסרה כותרת nonce', requestId: req.id });
+        // One release of grace for plugins predating the header — the body hash protects them
+        // anyway; the warning is what tells the operator they can turn the flag on.
+        req.log.warn(
+          { connectorId: row.id, header: NONCE_HEADER },
+          'deprecated: webhook without a nonce header; set WEBHOOK_REQUIRE_NONCE once the plugin is updated',
+        );
+      }
+      if (!(await claimWebhookNonce(app.db, row.id, replayKey(raw))))
+        return reply.status(409).send({ code: 'REPLAY', message: 'בקשה זו כבר התקבלה', requestId: req.id });
+      const jobId = await opts.enqueue('connector.webhook', { connectorId: row.id, changes });
+      return reply.status(202).send({ jobId, changes: changes.length });
     },
   );
 
-  /**
-   * @deprecated Superseded by `POST /sync/links/:id/resolve` (`sync-ui.ts`), which is the one
-   * the stage-5 contract names and the one the web calls. Both are registered and take
-   * different bodies (`SyncResolveBodySchema` vs `ResolveConflictBodySchema`), which is one
-   * resolve endpoint too many; this one is kept for the L6-era callers and marked `deprecated`
-   * in the OpenAPI so a client sees it before it is removed.
-   */
-  app.post(
-    '/sync-links/:id/resolve',
-    {
-      config: { requires: ['suggestions.apply'] as Permission[] },
-      schema: {
-        tags: ['connectors'],
-        deprecated: true,
-        params,
-        body: SyncResolveBodySchema,
-        response: { 200: SyncLinkSchema, 403: E, 404: E },
-      },
-    },
-    async (req, reply) => {
-      const link = await repo.linkById(req.params.id);
-      if (!link) return reply.status(404).send(notFound(req, 'קישור סנכרון לא נמצא'));
-      const updated = await sync.resolveConflict(link, req.body, userOf(req)?.id ?? null);
-      await audit(
-        req,
-        'sync.resolve',
-        'sync_link',
-        link.id,
-        { state: link.state },
-        { state: updated.state, resolution: req.body.resolution },
-      );
-      return reply.send(linkToApi(updated));
-    },
-  );
+  // The deprecated `POST /sync-links/:id/resolve` spelling was removed here: `POST
+  // /sync/links/:id/resolve` (`sync-ui.ts`) is the one the stage-5 contract names, the one the
+  // web calls, and the one `connectors-sync.int.test.ts` covers. The two took different bodies
+  // (`SyncResolveBodySchema` vs `ResolveConflictBodySchema`), which was one resolve endpoint too
+  // many; the acceptance review §6.1 marked this half for removal rather than for new tests.
 };
 
 export default routes;

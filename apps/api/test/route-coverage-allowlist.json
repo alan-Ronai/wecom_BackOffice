@@ -1,5 +1,4 @@
 {
   "POST /api/v1/suggestions/{id}/reset": "Reaching it needs a pipeline-produced suggestion in the 'accepted' state, which only the stubbed source harness (test/sources/routes.test.ts) builds; the accept/reject/apply path it reverses is covered there and in int/wiring.test.ts. Cover it when that harness gains a reusable fixture.",
-  "PUT /api/v1/suggestions/{id}/edit": "Same fixture cost as the reset above: it edits a pending suggestion's payload before acceptance, and only the stubbed source harness produces one. The accept path that consumes the edited payload is covered in int/wiring.test.ts.",
-  "POST /api/v1/sync-links/{id}/resolve": "Deprecated adapter kept for one web caller; the acceptance review (§6.1) marks it for removal rather than for new tests. It needs a real connector, a sync link and a conflict, all of which connectors-sync.int.test.ts already builds for the replacement route. Delete the route and this entry together."
+  "PUT /api/v1/suggestions/{id}/edit": "Same fixture cost as the reset above: it edits a pending suggestion's payload before acceptance, and only the stubbed source harness produces one. The accept path that consumes the edited payload is covered in int/wiring.test.ts."
 }
