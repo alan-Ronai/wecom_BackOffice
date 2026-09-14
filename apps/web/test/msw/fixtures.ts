@@ -74,6 +74,10 @@ export const me: Me = {
 };
 
 export const docBrowsing: Document = {
+  worlds: [],
+  tags: [],
+  topics: [],
+  sourceReviewNeeded: false,
   id: D_BROWSING,
   slug: 'browsing',
   code: 'T-01',
@@ -452,6 +456,10 @@ export const fields: CrmField[] = [
 
 export const cards: DocumentCard[] = [
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: D_BROWSING,
     slug: 'browsing',
     title: docBrowsing.title,
@@ -473,6 +481,10 @@ export const cards: DocumentCard[] = [
     authorName: 'ענבר ל.',
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: D_INTL,
     slug: 'no-data-abroad',
     title: docIntl.title,
@@ -494,6 +506,10 @@ export const cards: DocumentCard[] = [
     authorName: 'אלון ר.',
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: D_CHURN,
     slug: 'churn-debug',
     title: 'דיבאג נטישה',
@@ -515,6 +531,10 @@ export const cards: DocumentCard[] = [
     authorName: 'דנה ר.',
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: 'aaaaaaaa-1111-4111-8111-000000000004',
     slug: 'esim-activation',
     title: 'הפעלת eSIM – קוד QR',
@@ -535,6 +555,10 @@ export const cards: DocumentCard[] = [
     pinned: false,
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: 'aaaaaaaa-1111-4111-8111-000000000005',
     slug: 'high-bill',
     title: 'בירור חיוב גבוה / לא מזוהה',
@@ -555,6 +579,10 @@ export const cards: DocumentCard[] = [
     pinned: false,
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: 'aaaaaaaa-1111-4111-8111-000000000006',
     slug: 'freeze-line',
     title: 'הקפאת קו זמנית',
@@ -575,6 +603,10 @@ export const cards: DocumentCard[] = [
     pinned: false,
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: 'aaaaaaaa-1111-4111-8111-000000000007',
     slug: 'roaming-package',
     title: 'רכישת חבילת חו"ל לפני טיסה',
@@ -595,6 +627,10 @@ export const cards: DocumentCard[] = [
     pinned: false,
   },
   {
+    worlds: [],
+    tags: [],
+    topics: [],
+    sourceReviewNeeded: false,
     id: 'aaaaaaaa-1111-4111-8111-000000000008',
     slug: 'customer-identification',
     title: 'זיהוי ואימות לקוח',
