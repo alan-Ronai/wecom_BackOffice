@@ -8,8 +8,18 @@ const int = (v: unknown): number => Number(v ?? 0);
  * Every number on the dashboards is a SQL aggregate over the live tables — coverage and
  * freshness from `documents`, usage from `recent_views` + `telemetry_events`, pipeline from
  * `suggestions` and sync from `sync_links`. Nothing here is estimated or cached in a table.
+ *
+ * `scopes` is the caller's `user.worldScopes`. The five aggregates that read `documents`
+ * take it: `coverage.byCategory` and `freshness.byCategory` used to enumerate categories the
+ * caller cannot read, and `usage.topDocuments` returned *titles* from any of them. The
+ * pipeline and sync panels stay org-wide — they count suggestions, source revisions and sync
+ * links, none of which are category-bearing, and a lead watching the sync queue needs the
+ * whole queue.
  */
-export async function computeDashboard(q: Q): Promise<Dashboard> {
+export async function computeDashboard(q: Q, scopes: string[] | null = null): Promise<Dashboard> {
+  const p1 = [scopes];
+  const inScope =
+    '($1::text[] is null or exists (select 1 from document_worlds dws where dws.document_id=d.id and dws.world_slug = any($1)))';
   const [
     coverage,
     coverageByCategory,
@@ -24,26 +34,32 @@ export async function computeDashboard(q: Q): Promise<Dashboard> {
   ] = await Promise.all([
     q.query(
       `select count(*)::int cards,
-                count(*) filter (where status in ('published','partial'))::int with_document,
-                count(*) filter (where status = 'partial')::int partial,
-                count(*) filter (where status = 'draft')::int drafts
-           from documents where deleted_at is null`,
+                count(*) filter (where d.status in ('published','partial'))::int with_document,
+                count(*) filter (where d.status = 'partial')::int partial,
+                count(*) filter (where d.status = 'draft')::int drafts
+           from documents d where d.deleted_at is null and ${inScope}`,
+      p1,
     ),
     q.query(
-      `select category, count(*)::int cards,
-                count(*) filter (where status in ('published','partial'))::int with_document
-           from documents where deleted_at is null group by category order by category`,
+      `select d.category, count(*)::int cards,
+                count(*) filter (where d.status in ('published','partial'))::int with_document
+           from documents d where d.deleted_at is null and ${inScope}
+          group by d.category order by d.category`,
+      p1,
     ),
     q.query(
-      `select count(*) filter (where updated_at > now() - interval '30 days')::int updated_30,
-                count(*) filter (where updated_at < now() - interval '180 days')::int stale_180
-           from documents where deleted_at is null`,
+      `select count(*) filter (where d.updated_at > now() - interval '30 days')::int updated_30,
+                count(*) filter (where d.updated_at < now() - interval '180 days')::int stale_180
+           from documents d where d.deleted_at is null and ${inScope}`,
+      p1,
     ),
     q.query(
-      `select category, max(updated_at) last_updated,
+      `select d.category, max(d.updated_at) last_updated,
                 coalesce(percentile_cont(0.5) within group
-                  (order by extract(epoch from (now() - updated_at)) / 86400), 0) median_days
-           from documents where deleted_at is null group by category order by category`,
+                  (order by extract(epoch from (now() - d.updated_at)) / 86400), 0) median_days
+           from documents d where d.deleted_at is null and ${inScope}
+          group by d.category order by d.category`,
+      p1,
     ),
     q.query(
       `select coalesce(sum(count) filter (where viewed_at > now() - interval '7 days'), 0)::int views_7,
@@ -53,7 +69,9 @@ export async function computeDashboard(q: Q): Promise<Dashboard> {
     q.query(
       `select d.id, d.title, sum(v.count)::int views
            from recent_views v join documents d on d.id = v.document_id and d.deleted_at is null
+          where ${inScope}
           group by d.id, d.title order by views desc, d.title limit 5`,
+      p1,
     ),
     q.query(
       `select count(*) filter (where kind = 'outcome' and at > now() - interval '7 days')::int outcomes,
@@ -158,18 +176,43 @@ export interface TelemetryRow {
 
 /**
  * Telemetry arrives in batches from a client that may hold a card id the KB has since
- * deleted, so a row whose document is gone is dropped rather than failing the batch.
+ * deleted, so a row whose document is gone is dropped rather than failing the batch —
+ * including one that is only *soft* deleted, which the guard used to miss even though the
+ * comment above it said "the KB has since deleted".
+ *
+ * One statement for the whole batch. The loop issued one `INSERT` per event, so a full 200-event
+ * batch was 200 sequential round trips; `unnest` makes it one.
  */
 export async function recordTelemetry(q: Q, userId: string, events: TelemetryRow[]): Promise<number> {
-  let written = 0;
-  for (const e of events) {
-    const r = await q.query(
-      `insert into telemetry_events(user_id, kind, document_id, step_key, at)
-       select $1, $2, $3::uuid, $4, coalesce($5::timestamptz, now())
-        where $3::uuid is null or exists (select 1 from documents where id = $3::uuid)`,
-      [userId, e.kind, e.documentId ?? null, e.stepKey ?? null, e.at ?? null],
-    );
-    written += r.rowCount ?? 0;
-  }
-  return written;
+  if (!events.length) return 0;
+  const r = await q.query(
+    `insert into telemetry_events(user_id, kind, document_id, step_key, at)
+     select $1, e.kind, e.document_id::uuid, e.step_key, coalesce(e.at::timestamptz, now())
+       from unnest($2::text[], $3::text[], $4::text[], $5::text[])
+            as e(kind, document_id, step_key, at)
+      where e.document_id is null
+         or exists (select 1 from documents d where d.id = e.document_id::uuid and d.deleted_at is null)`,
+    [
+      userId,
+      events.map((e) => e.kind),
+      events.map((e) => e.documentId ?? null),
+      events.map((e) => e.stepKey ?? null),
+      events.map((e) => e.at ?? null),
+    ],
+  );
+  return r.rowCount ?? 0;
+}
+
+/**
+ * The dashboard reads 7- and 30-day windows, so a `telemetry_events` row older than this is
+ * dead weight — and the table has no other retention: `POST /telemetry` needs only `docs.read`,
+ * the permission every agent has, so it grows without bound otherwise.
+ */
+export const TELEMETRY_RETENTION_DAYS = 90;
+
+export async function purgeTelemetry(q: Q, days = TELEMETRY_RETENTION_DAYS): Promise<number> {
+  const r = await q.query(`delete from telemetry_events where at < now() - ($1 || ' days')::interval`, [
+    String(days),
+  ]);
+  return r.rowCount ?? 0;
 }

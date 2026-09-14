@@ -47,7 +47,23 @@ export interface GraphFilter {
   types?: LinkType[];
   kinds?: NodeKind[];
   category?: string;
+  /**
+   * The caller's `user.worldScopes` — `null`/absent means every world.
+   *
+   * Category scope is the product's only tenancy boundary, and `config.scope: 'document'`
+   * can only enforce it where the scoped entity *is* `params.id`. A cross-cutting read model
+   * like the graph has no such id, so scope is a repo argument here: every query below that
+   * joins `documents` takes it, and a caller that forgets it is visible at the call site.
+   */
+  scopes?: string[] | null;
 }
+
+/**
+ * The scope predicate, as a SQL fragment over the `documents` alias `d`. `null` scopes make
+ * it a no-op, so an unrestricted caller sees exactly what they saw before.
+ */
+const scopeClause = (alias: string, param: string) =>
+  `(${param}::text[] is null or exists (select 1 from document_worlds dws where dws.document_id=${alias}.id and dws.world_slug = any(${param})))`;
 
 export interface GraphData {
   nodes: Map<string, GraphNode>;
@@ -66,11 +82,15 @@ const edgeKey = (e: GraphEdge) => `${e.from}|${e.to}|${e.type}|${e.fromStepKey ?
  * thousand rows and a per-request round trip per BFS level would cost far more.
  */
 export async function loadGraph(q: Q, filter: GraphFilter = {}): Promise<GraphData> {
+  const scopes = filter.scopes ?? null;
+  const p = [scopes];
+  const inScope = scopeClause('d', '$1');
   const [documents, blocks, fields, sources, scripts, links, blockUse, fieldUse, docSources, scriptUse] =
     await Promise.all([
       q.query(
-        `select id, title, category, status from documents
-          where deleted_at is null and not (doc_type = 'T' and kind = 'text')`,
+        `select d.id, d.title, d.category, d.status from documents d
+          where d.deleted_at is null and not (d.doc_type = 'T' and d.kind = 'text') and ${inScope}`,
+        p,
       ),
       q.query('select id, title from blocks where deleted_at is null'),
       q.query('select name, status from crm_fields where deleted_at is null'),
@@ -83,28 +103,39 @@ export async function loadGraph(q: Q, filter: GraphFilter = {}): Promise<GraphDa
         `select l.from_document_id, l.from_step_key, l.to_document_id, l.to_block_id, l.to_field_name,
                 l.to_source_id, l.type, l.origin
            from document_links l
-           join documents d on d.id = l.from_document_id and d.deleted_at is null`,
+           join documents d on d.id = l.from_document_id and d.deleted_at is null
+          where ${inScope}`,
+        p,
       ),
       q.query(
         `select s.document_id, s.step_key, b.id as block_id
            from steps s
            join documents d on d.id = s.document_id and d.deleted_at is null
-           join blocks b on b.deleted_at is null and (b.id = s.block_id or b.id = any(s.block_refs))`,
+           join blocks b on b.deleted_at is null and (b.id = s.block_id or b.id = any(s.block_refs))
+          where ${inScope}`,
+        p,
       ),
       q.query(
         `select s.document_id, s.step_key, r.field_name
            from step_field_refs r
            join steps s on s.id = r.step_id
-           join documents d on d.id = s.document_id and d.deleted_at is null`,
+           join documents d on d.id = s.document_id and d.deleted_at is null
+          where ${inScope}`,
+        p,
       ),
-      q.query('select id, source_id from documents where deleted_at is null and source_id is not null'),
+      q.query(
+        `select d.id, d.source_id from documents d
+          where d.deleted_at is null and d.source_id is not null and ${inScope}`,
+        p,
+      ),
       q.query(
         `select l.from_document_id document_id, l.from_step_key step_key, l.to_document_id script_id
            from document_links l
            join documents d on d.id = l.from_document_id and d.deleted_at is null
            join documents s on s.id = l.to_document_id and s.deleted_at is null
                            and s.doc_type = 'T' and s.kind = 'text'
-          where l.type = 'link' and l.origin = 'explicit'`,
+          where l.type = 'link' and l.origin = 'explicit' and ${inScope}`,
+        p,
       ),
     ]);
 
@@ -199,6 +230,20 @@ export async function loadGraph(q: Q, filter: GraphFilter = {}): Promise<GraphDa
       'explicit',
     );
 
+  // A block, field, source or script is only in the graph because documents use it. When the
+  // documents that used it are out of the caller's scope, every edge to it has already been
+  // dropped above — keeping the bare node would still disclose its label *and* let the BFS in
+  // `selectGraph` walk through it, so it goes too. Unscoped callers keep the old behaviour,
+  // where an unused catalogue entry is a legitimate isolated node.
+  if (scopes) {
+    const touched = new Set<string>();
+    for (const e of edges) {
+      touched.add(e.from);
+      touched.add(e.to);
+    }
+    for (const [id, n] of nodes) if (n.kind !== 'document' && !touched.has(id)) nodes.delete(id);
+  }
+
   const adjacency = new Map<string, Set<string>>();
   const link = (a: string, b: string) => {
     const set = adjacency.get(a);
@@ -276,9 +321,13 @@ export interface InboundRow {
   type: LinkType;
 }
 
-/** Every live document that points at the node, however the reference is recorded. */
-export async function inboundFor(q: Q, ref: NodeRef): Promise<InboundRow[]> {
+/**
+ * Every live document *the caller may see* that points at the node, however the reference is
+ * recorded. `scopes` is `user.worldScopes`; `null` means every world.
+ */
+export async function inboundFor(q: Q, ref: NodeRef, scopes: string[] | null = null): Promise<InboundRow[]> {
   const parts: { sql: string; params: unknown[] }[] = [];
+  const inScope = `and ${scopeClause('d', '$2')}`;
   const linkColumn = {
     document: 'to_document_id',
     block: 'to_block_id',
@@ -290,36 +339,36 @@ export async function inboundFor(q: Q, ref: NodeRef): Promise<InboundRow[]> {
     parts.push({
       sql: `select d.id, d.title, l.from_step_key as step_key, l.type
               from document_links l join documents d on d.id = l.from_document_id and d.deleted_at is null
-             where l.${linkColumn} = $1`,
-      params: [ref.key],
+             where l.${linkColumn} = $1 ${inScope}`,
+      params: [ref.key, scopes],
     });
   if (ref.kind === 'block')
     parts.push({
       sql: `select d.id, d.title, s.step_key, 'shares_block' as type
               from steps s join documents d on d.id = s.document_id and d.deleted_at is null
-             where s.block_id = $1 or $1 = any(s.block_refs)`,
-      params: [ref.key],
+             where (s.block_id = $1 or $1 = any(s.block_refs)) ${inScope}`,
+      params: [ref.key, scopes],
     });
   if (ref.kind === 'field')
     parts.push({
       sql: `select d.id, d.title, s.step_key, 'same_field' as type
               from step_field_refs r join steps s on s.id = r.step_id
               join documents d on d.id = s.document_id and d.deleted_at is null
-             where r.field_name = $1`,
-      params: [ref.key],
+             where r.field_name = $1 ${inScope}`,
+      params: [ref.key, scopes],
     });
   if (ref.kind === 'source')
     parts.push({
       sql: `select d.id, d.title, null as step_key, 'derived_from_source' as type
-              from documents d where d.deleted_at is null and d.source_id = $1`,
-      params: [ref.key],
+              from documents d where d.deleted_at is null and d.source_id = $1 ${inScope}`,
+      params: [ref.key, scopes],
     });
   if (ref.kind === 'script')
     parts.push({
       sql: `select d.id, d.title, l.from_step_key as step_key, 'link' as type
               from document_links l join documents d on d.id = l.from_document_id and d.deleted_at is null
-             where l.to_document_id = $1 and l.type = 'link' and l.origin = 'explicit'`,
-      params: [ref.key],
+             where l.to_document_id = $1 and l.type = 'link' and l.origin = 'explicit' ${inScope}`,
+      params: [ref.key, scopes],
     });
 
   const out = new Map<string, InboundRow>();
@@ -342,7 +391,7 @@ export async function inboundFor(q: Q, ref: NodeRef): Promise<InboundRow[]> {
  * References recorded against a step key that no longer exists in the referring document —
  * the links that are already dangling and would stay dangling if the node went away.
  */
-export async function brokenLinkCount(q: Q, ref: NodeRef): Promise<number> {
+export async function brokenLinkCount(q: Q, ref: NodeRef, scopes: string[] | null = null): Promise<number> {
   const column = {
     document: 'to_document_id',
     block: 'to_block_id',
@@ -351,11 +400,14 @@ export async function brokenLinkCount(q: Q, ref: NodeRef): Promise<number> {
     script: null,
   }[ref.kind];
   if (!column) return 0;
+  // Counted over the referring documents the caller may see, so the number cannot be used to
+  // infer how many out-of-scope documents point at the node.
   const r = await q.query(
     `select count(*)::int n from document_links l
-      where l.${column} = $1 and l.from_step_key is not null
+       join documents d on d.id = l.from_document_id and d.deleted_at is null
+      where l.${column} = $1 and l.from_step_key is not null and ${scopeClause('d', '$2')}
         and not exists (select 1 from steps s where s.document_id = l.from_document_id and s.step_key = l.from_step_key)`,
-    [ref.key],
+    [ref.key, scopes],
   );
   return r.rows[0].n as number;
 }

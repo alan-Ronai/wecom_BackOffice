@@ -233,7 +233,9 @@ export const DashboardSchema = z.object({
 });
 /** Telemetry the web sends so usage dashboards are real: outcome picks and completed calls. */
 export const TelemetryEventSchema = z.object({
-  kind: z.enum(['outcome', 'call_completed', 'palette', 'jump']),
+  // Wave 4 appends `view_topic` and `search_click`; the enum is append-only, never reordered,
+  // and `0026_notification_kinds.js` widens the matching `telemetry_events.kind` check.
+  kind: z.enum(['outcome', 'call_completed', 'palette', 'jump', 'view_topic', 'search_click']),
   documentId: IdSchema.optional(),
   stepKey: z.string().optional(),
   at: IsoDateSchema.optional(),
@@ -241,6 +243,8 @@ export const TelemetryEventSchema = z.object({
 export const TelemetryBatchSchema = z.object({ events: z.array(TelemetryEventSchema).min(1).max(200) });
 
 /* ── Stage 5: notifications & mentions ──────────────────────────────────── */
+// Append-only, same as above: wave 4's feedback and source-document flows raise a bell of their
+// own, and `0026_notification_kinds.js` widens the `notifications.kind` check to match.
 export const NotificationKindSchema = z.enum([
   'suggestion',
   'sync',
@@ -248,6 +252,8 @@ export const NotificationKindSchema = z.enum([
   'review',
   'publish',
   'system',
+  'feedback',
+  'source',
 ]);
 export const NotificationSchema = z.object({
   id: IdSchema,

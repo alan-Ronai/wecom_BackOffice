@@ -52,8 +52,9 @@ export default async function routes(app: FastifyInstance) {
       schema: { tags: ['blocks'], params: Params, response: { 200: BlockPageSchema } },
     },
     async (req) => {
-      requireUser(req);
-      const page = await repo.blockPage(app.db, (req.params as { id: string }).id);
+      const user = requireUser(req);
+      // `usage` names the documents that embed the block, so it is scoped like the field page.
+      const page = await repo.blockPage(app.db, (req.params as { id: string }).id, user.worldScopes);
       if (!page) throw notFound('הבלוק');
       return page;
     },

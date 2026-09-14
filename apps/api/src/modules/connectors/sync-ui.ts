@@ -37,6 +37,20 @@ interface StoredConflict {
 
 const E = ErrorEnvelopeSchema;
 
+/**
+ * "The remote is down / refusing / not allowed" — the failures a queue row exists to *show*, as
+ * distinct from a bug in this process, which must reach the error handler and the logs. A
+ * transport failure from `fetch` surfaces as a `TypeError` whose `cause` carries the libuv code;
+ * connector and guard failures carry a `code`/`statusCode` of their own.
+ */
+export function isRemoteFailure(err: unknown): boolean {
+  const e = err as { name?: string; code?: unknown; statusCode?: unknown; cause?: { code?: unknown } };
+  if (typeof e?.statusCode === 'number') return true;
+  if (typeof e?.code === 'string') return true;
+  if (typeof e?.cause?.code === 'string') return true;
+  return e?.name === 'AbortError' || e?.name === 'TimeoutError' || err instanceof TypeError;
+}
+
 /** Joined row behind `SyncLinkRowSchema`: the link plus the two names the UI shows. */
 const LINK_SELECT = `
   select l.*, c.name as connector_name, d.title, d.current_version
@@ -209,12 +223,15 @@ const routes: FastifyPluginAsyncZod<SyncUiOptions> = async (app, opts) => {
    * direction, synchronous like "run now" for the same reason. The permission
    * required depends on which way data would move: importing writes a source
    * revision (`sources.manage`), pushing writes the published document out to the
-   * remote (`docs.publish`) — so this checks it in the handler rather than through
-   * the usual static `config.requires`.
+   * remote (`docs.publish`) — so the precise check stays in the handler. `config.requires`
+   * still declares the floor both directions share, so the route is not invisible to a sweep
+   * of `config.requires` (which is how this review's route audit read it as ungated) and a
+   * refactor that reorders the handler cannot silently drop the gate to "authenticated".
    */
   app.post(
     '/sync/links/:id/sync',
     {
+      config: { requires: ['docs.read'] as Permission[] },
       schema: {
         tags: ['connectors'],
         params,
@@ -261,10 +278,14 @@ const routes: FastifyPluginAsyncZod<SyncUiOptions> = async (app, opts) => {
           { state: link.state },
           { ...outcome.result, state: outcome.link.state },
         );
-        return reply.send({ ...outcome.result, errors: [] });
+        return reply.send({ ...outcome.result, errors: outcome.errors ?? [] });
       } catch (err) {
-        // A remote that is down or refuses the direction (e.g. a read-only
-        // connector asked to push) is a result to show, not a 500.
+        // A remote that is down, refusing, or misconfigured is a result to show, not a 500 —
+        // but only those. A catch-all here turned every programming error into a cheerful
+        // `{imported:0, pushed:0, conflicts:0}` with a 200, which is the one outcome nobody
+        // would investigate. Anything without the shape of a transport or connector failure
+        // goes to the error handler.
+        if (!isRemoteFailure(err)) throw err;
         return reply.send({ imported: 0, pushed: 0, conflicts: 0, errors: [(err as Error).message] });
       }
     },

@@ -47,9 +47,16 @@ export class PaloAltoClient {
   ) {}
   async lookup(ip: string): Promise<{ domain: string | null; user: string } | null> {
     const cmd = `<show><user><ip-user-mapping><ip>${ip}</ip></ip-user-mapping></user></show>`;
-    const url = `${this.scheme}://${this.host}/api/?type=op&key=${encodeURIComponent(this.apiKey)}&cmd=${encodeURIComponent(cmd)}`;
+    const url = `${this.scheme}://${this.host}/api/`;
     try {
-      const res = await this.fetchImpl(url, { signal: AbortSignal.timeout(3000) });
+      // `key` travels in the body, not the query string: this runs on every fallback sign-in,
+      // and a credential in a URL is written to the firewall's access log every time.
+      const res = await this.fetchImpl(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ type: 'op', key: this.apiKey, cmd }),
+        signal: AbortSignal.timeout(3000),
+      });
       if (!res.ok) return null;
       const raw = parseUserIdXml(await res.text());
       if (!raw) return null;
@@ -89,7 +96,7 @@ export function makeFallbackIdentify(opts: {
       displayName: found.user,
     });
     const s = await opts.sessions.create(id, ip, req.headers['user-agent'] ?? null);
-    reply.setCookie(SESSION_COOKIE, s.token, cookieOptions(opts.env));
+    reply.setCookie(SESSION_COOKIE, s.token, cookieOptions(opts.env, await opts.sessions.ttlMs()));
     opts.log.info({ ip, subject }, 'paloalto fallback login');
     const resolved = await resolvePermissions(opts.db, id);
     return { id, displayName: found.user, sessionId: s.id, ...resolved };

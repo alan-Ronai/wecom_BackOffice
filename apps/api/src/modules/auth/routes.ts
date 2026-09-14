@@ -109,7 +109,7 @@ export default async function authRoutes(instance: FastifyInstance) {
           ip: req.ip,
         }),
       );
-      reply.setCookie(SESSION_COOKIE, s.token, cookieOptions(env));
+      reply.setCookie(SESSION_COOKIE, s.token, cookieOptions(env, await app.sessions.ttlMs()));
       reply.clearCookie(OIDC_COOKIE, { path: '/' });
       return reply.redirect(app.config.PUBLIC_URL.replace(/\/$/, '') + st.returnTo, 302);
     },
@@ -174,7 +174,7 @@ export default async function authRoutes(instance: FastifyInstance) {
           ip: req.ip,
         }),
       );
-      reply.setCookie(SESSION_COOKIE, s.token, cookieOptions(env));
+      reply.setCookie(SESSION_COOKIE, s.token, cookieOptions(env, await app.sessions.ttlMs()));
       return { ok: true as const };
     },
   );

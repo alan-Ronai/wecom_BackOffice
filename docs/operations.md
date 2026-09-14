@@ -63,12 +63,24 @@ restore → verify round trip against a throwaway container on every push that t
 ## Adding a connector
 
 See `deploy/INSTALL.md` → **WordPress connector** for the WordPress-specific walkthrough. In
-general: a connector's outbound HTTP is constrained by `CONNECTOR_HOST_ALLOWLIST` (empty = any
-public host; private/loopback/link-local addresses always refused unless the host is listed —
-this is the SSRF guard) and a `json` connector's `path` must resolve inside
-`CONNECTOR_FILE_ROOT`. Add the connector under `/admin/connectors`, **Test** before **Run**, and
-watch `GET /api/v1/admin/system` → `connectors[]` (`lastStatus`, `lastRunAt`, `conflicts`) after
-the first scheduled run.
+general: a connector's outbound HTTP is constrained by `CONNECTOR_HOST_ALLOWLIST` and a `json`
+connector's `path` must resolve inside `CONNECTOR_FILE_ROOT`. Add the connector under
+`/admin/connectors`, **Test** before **Run**, and watch `GET /api/v1/admin/system` →
+`connectors[]` (`lastStatus`, `lastRunAt`, `conflicts`) after the first scheduled run.
+
+> **`CONNECTOR_HOST_ALLOWLIST` is required for a hardened install.** Leaving it empty means
+> **any reachable host** — including private ranges and loopback. This is deliberate: the KB is
+> a LAN product and the WordPress instance normally *is* on a private address, so the allowlist
+> is the control and not the private-range check (`packages/connectors/src/guards.ts`). The only
+> thing refused unconditionally is link-local/cloud metadata (`169.254.0.0/16`, `fe80::/10`).
+> With the list empty, anyone holding `connectors.manage` can point a connector at
+> `http://127.0.0.1:11434` (the model) or at the database port and read the response back
+> through a source revision. List the hosts this installation may talk to; an entry beginning
+> with `.` matches that domain and its subdomains.
+>
+> The same list also constrains the admin identity probes — `PUT /admin/identity` and
+> `POST /admin/identity/test` refuse an `issuer` or Palo Alto `host` outside it, on the same
+> reasoning: `system.admin` is an application permission, not shell access.
 
 ## Adding a category
 

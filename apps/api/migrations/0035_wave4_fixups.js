@@ -1,28 +1,31 @@
 /**
- * W6 — the cross-lane fixups wave 4 needs once every lane is on one branch.
+ * W6 — the one cross-lane fixup wave 4 still needs once every lane is on one branch.
  *
- * 1. `notifications.kind` (0020) predates the wave 4 alert kinds, so W3's `PgNotifier` had to map
- *    `feedback`/`source` onto wave 3 kinds. Widening the check lets the real kind reach the row.
- * 2. `telemetry_events.kind` (0010) predates `view_topic` / `search_click` (spec §2.5).
- * 3. `documents_search_vector_update()` is defined three times across the tree: 0007 (plain),
- *    0023 (plain + Hebrew stopwords) and 0030 (plain + tags, no stopwords). By filename order 0030
- *    runs last, so a freshly migrated database indexes tags but keeps every Hebrew stopword. This
- *    recreates the function once more with **both** halves — title/description/search_text/tags at
- *    weights A/B/C/B, with the 0023 stopword list deleted from the vector — and re-fires the
- *    trigger so existing rows are reindexed.
+ * `documents_search_vector_update()` is defined four times across the tree: 0007 (plain),
+ * 0023 (plain + Hebrew stopwords), 0027 (plain + `kb_stopwords()`) and 0030 (plain + tags,
+ * **no** stopwords). node-pg-migrate applies files in name order, so on a freshly migrated
+ * database 0030 runs last and wins: tags reach `search_vector`, and every Hebrew stopword
+ * comes back with them. On an already-migrated database only 0030 is pending, so the same
+ * two definitions land in the opposite order and tags are the half that goes missing. Either
+ * way the two halves never coexisted.
+ *
+ * This is the single definition that carries both: title/description/tags/search_text at
+ * weights A/B/B/C, with 0027's `stable` `kb_stopwords()` deleted from the vector. The trigger
+ * itself (which 0030 already re-created to fire on `tags`) is left alone; only the function
+ * body changes, and every existing row is reindexed.
+ *
+ * The wave-4 `notifications.kind` / `telemetry_events.kind` widenings this file was originally
+ * planned to carry now live in wave 3's `0026_notification_kinds.js`.
  */
 const SEARCH_FN_TAGS_AND_STOPWORDS = `
   create or replace function documents_search_vector_update() returns trigger as $$
-  declare
-    stop text[];
   begin
-    select coalesce(array_agg(word), '{}') into stop from search_hebrew_stopwords;
     new.search_vector := ts_delete(
       setweight(to_tsvector('simple', coalesce(new.title,'')), 'A')
       || setweight(to_tsvector('simple', coalesce(new.description,'')), 'B')
       || setweight(to_tsvector('simple', coalesce(array_to_string(new.tags, ' '),'')), 'B')
       || setweight(to_tsvector('simple', coalesce(new.search_text,'')), 'C'),
-      stop
+      kb_stopwords()
     );
     return new;
   end
@@ -33,17 +36,6 @@ const SEARCH_FN_TAGS_AND_STOPWORDS = `
 const SEARCH_FN_WITH_TAGS = `create or replace function documents_search_vector_update() returns trigger as $$ begin new.search_vector := setweight(to_tsvector('simple', coalesce(new.title,'')), 'A') || setweight(to_tsvector('simple', coalesce(new.description,'')), 'B') || setweight(to_tsvector('simple', coalesce(array_to_string(new.tags, ' '),'')), 'B') || setweight(to_tsvector('simple', coalesce(new.search_text,'')), 'C'); return new; end $$ language plpgsql`;
 
 exports.up = (pgm) => {
-  pgm.dropConstraint('notifications', 'notifications_kind_check', { ifExists: true });
-  pgm.addConstraint('notifications', 'notifications_kind_check', {
-    check:
-      "kind in ('suggestion','sync','mention','review','publish','system','feedback','source')",
-  });
-
-  pgm.dropConstraint('telemetry_events', 'telemetry_events_kind_check', { ifExists: true });
-  pgm.addConstraint('telemetry_events', 'telemetry_events_kind_check', {
-    check: "kind in ('outcome','call_completed','palette','jump','view_topic','search_click')",
-  });
-
   pgm.sql(SEARCH_FN_TAGS_AND_STOPWORDS);
   pgm.sql('update documents set title = title');
 };
@@ -51,16 +43,4 @@ exports.up = (pgm) => {
 exports.down = (pgm) => {
   pgm.sql(SEARCH_FN_WITH_TAGS);
   pgm.sql('update documents set title = title');
-
-  pgm.sql("delete from telemetry_events where kind in ('view_topic','search_click')");
-  pgm.dropConstraint('telemetry_events', 'telemetry_events_kind_check', { ifExists: true });
-  pgm.addConstraint('telemetry_events', 'telemetry_events_kind_check', {
-    check: "kind in ('outcome','call_completed','palette','jump')",
-  });
-
-  pgm.sql("delete from notifications where kind in ('feedback','source')");
-  pgm.dropConstraint('notifications', 'notifications_kind_check', { ifExists: true });
-  pgm.addConstraint('notifications', 'notifications_kind_check', {
-    check: "kind in ('suggestion','sync','mention','review','publish','system')",
-  });
 };

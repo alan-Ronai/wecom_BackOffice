@@ -16,7 +16,20 @@ import { __resetUiPrefsCache } from '../src/api/hooks/uiPrefs.js';
  * throwing. Aligning the text queries with the accessibility tree keeps every assertion pointed at
  * what is actually on screen.
  */
-configure({ defaultIgnore: 'script, style, [aria-hidden="true"], [aria-hidden="true"] *' });
+/**
+ * `asyncUtilTimeout` is the budget `findBy*`/`waitFor` gets, and Testing Library's default
+ * is 1000 ms. Every screen in this app is a `React.lazy` route behind a React Query fetch,
+ * so the first assertion in a file waits for a dynamic `import()` (Vite has to transform the
+ * route module and everything it pulls in) *and* an MSW round trip. That is comfortably under
+ * a second for a warm worker and regularly over it for a cold one, which is why these specs
+ * pass file-by-file and fail in the full suite — and why the failing set moved every run.
+ * 5 s is still a real failure signal (`testTimeout` is 15 s and nothing here polls that long
+ * on success); it just stops the cold-start cost from being reported as a missing element.
+ */
+configure({
+  defaultIgnore: 'script, style, [aria-hidden="true"], [aria-hidden="true"] *',
+  asyncUtilTimeout: 5000,
+});
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {

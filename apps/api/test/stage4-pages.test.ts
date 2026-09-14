@@ -108,6 +108,9 @@ run('stage 4: field page, field rename and block page', () => {
   });
 
   it('renames a field, rewrites the references and publishes one version per document', async () => {
+    // Published first, on purpose: a rename cuts a new version for a *published* document and
+    // leaves a draft or a document in review alone — see the draft case below.
+    await post(`/api/v1/documents/${docId}/publish`, { label: 'גרסה ראשונה' });
     const before = (await get(`/api/v1/documents/${docId}`)).json().currentVersion;
     const r = await post(`/api/v1/fields/${encodeURIComponent(OLD_FIELD)}/rename`, {
       newName: NEW_FIELD,
@@ -140,6 +143,124 @@ run('stage 4: field page, field rename and block page', () => {
     const newPage = (await get(`/api/v1/fields/${encodeURIComponent(NEW_FIELD)}/page`)).json();
     expect(newPage.documents).toBe(1);
     expect(newPage.usage[0].stepKey).toBe('s1');
+  });
+
+  /**
+   * I4(c): `renameField` used to run `publishDocument` over every affected document whatever
+   * its status, so a CRM rename published drafts and documents sitting in `review` — silently
+   * bypassing the review workflow. The text still has to be rewritten; the status must not move.
+   */
+  it('rewrites a draft without publishing it', async () => {
+    const draftField = 'סטטוס חיוב';
+    await app.inject({
+      method: 'PUT',
+      url: `/api/v1/fields/${encodeURIComponent(draftField)}`,
+      headers: auth(u),
+      payload: { name: draftField, status: 'ok', path: 'CRM > חיוב' },
+    });
+    const draft = (
+      await post('/api/v1/documents', {
+        title: 'טיוטה',
+        description: '',
+        category: 'billing',
+        wave: 1,
+        priority: 'm',
+        kind: 'steps',
+      })
+    ).json();
+    await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${draft.id}/structure`,
+      headers: { ...auth(u), 'if-match': draft.etag },
+      payload: {
+        phases: [
+          {
+            id: 'p1',
+            label: 'שלב 1',
+            steps: [
+              {
+                key: 's1',
+                num: '1',
+                title: 'בדיקה',
+                blockRefs: [],
+                deps: [],
+                actions: [{ id: 'a1', text: `בדוק את ${draftField} בכרטיס` }],
+                outcomes: [{ kind: 'ok', text: '✓ סיום' }],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const beforeDoc = (await get(`/api/v1/documents/${draft.id}`)).json();
+    expect(beforeDoc.status).toBe('draft');
+
+    const r = await post(`/api/v1/fields/${encodeURIComponent(draftField)}/rename`, {
+      newName: 'מצב חיוב',
+      updateReferences: true,
+      label: 'שינוי שם',
+    });
+    expect(r.json()).toMatchObject({ updatedDocuments: 1, versionsCreated: 0 });
+    const afterDoc = (await get(`/api/v1/documents/${draft.id}`)).json();
+    expect(afterDoc.status).toBe('draft');
+    expect(afterDoc.currentVersion).toBe(beforeDoc.currentVersion);
+    expect(afterDoc.phases[0].steps[0].actions[0].text).toContain('מצב חיוב');
+  });
+
+  /**
+   * I4(b): the rewrite was a blind substring `replace()` across every step of every affected
+   * document, so a field whose name is a substring of ordinary prose corrupted it.
+   */
+  it('rewrites whole words only, and leaves text that merely contains the name alone', async () => {
+    const shortField = 'חוב';
+    await app.inject({
+      method: 'PUT',
+      url: `/api/v1/fields/${encodeURIComponent(shortField)}`,
+      headers: auth(u),
+      payload: { name: shortField, status: 'ok', path: 'CRM > חוב' },
+    });
+    const doc = (
+      await post('/api/v1/documents', {
+        title: 'גבייה',
+        description: '',
+        category: 'billing',
+        wave: 1,
+        priority: 'm',
+        kind: 'steps',
+      })
+    ).json();
+    await app.inject({
+      method: 'PUT',
+      url: `/api/v1/documents/${doc.id}/structure`,
+      headers: { ...auth(u), 'if-match': doc.etag },
+      payload: {
+        phases: [
+          {
+            id: 'p1',
+            label: 'שלב 1',
+            steps: [
+              {
+                key: 's1',
+                num: '1',
+                title: 'בדיקת חוב',
+                blockRefs: [],
+                deps: [],
+                // "חובה" contains "חוב" and must survive; the standalone "חוב" must not.
+                actions: [{ id: 'a1', text: 'חוב פתוח הוא חובה לבדיקה' }],
+                outcomes: [{ kind: 'ok', text: '✓ סיום' }],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    await post(`/api/v1/fields/${encodeURIComponent(shortField)}/rename`, {
+      newName: 'יתרת חוב',
+      updateReferences: true,
+      label: 'שינוי שם',
+    });
+    const text = (await get(`/api/v1/documents/${doc.id}`)).json().phases[0].steps[0].actions[0].text;
+    expect(text).toBe('יתרת חוב פתוח הוא חובה לבדיקה');
   });
 
   it('refuses a no-op rename and 404s on an unknown field', async () => {

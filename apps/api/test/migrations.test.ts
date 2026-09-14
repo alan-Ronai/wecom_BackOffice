@@ -219,20 +219,8 @@ run('migrations', () => {
     // only users; deliberately no FK to topics (W1's table)
     expect(fk.rows[0].n).toBe(1);
   });
-  it('0035 widens the alert and telemetry kinds and keeps both tags and Hebrew stopwords in the search vector', async () => {
-    const u = (
-      await pool.query(
-        `insert into users(subject, source, email, display_name) values ('w6-fixups','local','w6-fixups@wecom.co.il','w6') returning id`,
-      )
-    ).rows[0].id as string;
-    await expect(
-      pool.query(`insert into notifications(user_id, kind, title) values ($1,'feedback','x'),($1,'source','y')`, [u]),
-    ).resolves.toBeTruthy();
-    await expect(
-      pool.query(`insert into telemetry_events(user_id, kind) values ($1,'view_topic'),($1,'search_click')`, [u]),
-    ).resolves.toBeTruthy();
-
-    // A freshly migrated database must index tags (0030) *and* drop stopwords (0023).
+  it('0035 keeps both the tags term and the Hebrew stopword filter in the search vector', async () => {
+    // 0030 added tags but dropped 0027's stopword filter; 0035 is the one definition with both.
     await pool.query(
       `insert into documents(slug, title, description, category, wave, priority, tags)
        values ('w6-vec','מסמך על גלישה','', 'tech', 1, 'm', array['apnfix'])`,
@@ -242,9 +230,6 @@ run('migrations', () => {
     expect(vec).toMatch(/'apnfix':/);
     expect(vec).not.toMatch(/'על':/);
     await pool.query(`delete from documents where slug='w6-vec'`);
-    await pool.query('delete from telemetry_events where user_id=$1', [u]);
-    await pool.query('delete from notifications where user_id=$1', [u]);
-    await pool.query('delete from users where id=$1', [u]);
   });
   it('rolls back cleanly', async () => {
     await runner({

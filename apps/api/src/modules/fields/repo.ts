@@ -14,6 +14,14 @@ import { publishDocument } from '../documents/publish.js';
 type FieldRenameBody = z.infer<typeof FieldRenameBodySchema>;
 type FieldRenameResult = z.infer<typeof FieldRenameResultSchema>;
 
+/**
+ * The caller's category scope as a SQL predicate over the `documents` alias. `null` scopes
+ * make it a no-op. Field and block *pages* are cross-cutting read models with no document in
+ * `params.id`, so `config.scope: 'document'` cannot reach them — scope is a repo argument.
+ */
+const scopeClause = (alias: string, param: string) =>
+  `(${param}::text[] is null or exists (select 1 from document_worlds dws where dws.document_id=${alias}.id and dws.world_slug = any(${param})))`;
+
 const toField = (r: Record<string, unknown>): CrmField => ({
   name: r.name as string,
   status: r.status as CrmField['status'],
@@ -40,12 +48,13 @@ export async function getField(q: Q, name: string): Promise<CrmField | null> {
   return r.rowCount ? toField(r.rows[0]) : null;
 }
 
-export async function fieldUsage(q: Q, name: string) {
+export async function fieldUsage(q: Q, name: string, scopes: string[] | null = null) {
   const r = await q.query(
     `select d.id, d.title, array_agg(s.step_key order by s.position) keys
      from step_field_refs f join steps s on s.id=f.step_id join documents d on d.id=s.document_id
-     where f.field_name=$1 and d.deleted_at is null group by d.id, d.title order by d.title`,
-    [name],
+     where f.field_name=$1 and d.deleted_at is null and ${scopeClause('d', '$2')}
+     group by d.id, d.title order by d.title`,
+    [name, scopes],
   );
   return r.rows.map((x) => ({
     documentId: x.id as string,
@@ -97,7 +106,11 @@ export async function deleteField(tx: Tx, name: string, userId: string): Promise
  * Every step that mentions the field, with the text it is mentioned in. Block-backed
  * steps take their actions from the block, the same way `stepText` assembles them.
  */
-export async function fieldUsageRows(q: Q, name: string): Promise<FieldPage['usage']> {
+export async function fieldUsageRows(
+  q: Q,
+  name: string,
+  scopes: string[] | null = null,
+): Promise<FieldPage['usage']> {
   const r = await q.query(
     `select d.id, d.title, d.category, s.step_key, s.num, s.title step_title,
             concat_ws(' · ', s.title, coalesce(
@@ -107,9 +120,9 @@ export async function fieldUsageRows(q: Q, name: string): Promise<FieldPage['usa
        from step_field_refs r
        join steps s on s.id = r.step_id
        join documents d on d.id = s.document_id and d.deleted_at is null
-      where r.field_name = $1
+      where r.field_name = $1 and ${scopeClause('d', '$2')}
       order by d.title, s.position`,
-    [name],
+    [name, scopes],
   );
   return r.rows.map((x) => ({
     documentId: x.id as string,
@@ -151,10 +164,14 @@ export function fieldAlerts(field: CrmField): FieldPage['alerts'] {
   return out;
 }
 
-export async function fieldPage(q: Q, name: string): Promise<FieldPage | null> {
+export async function fieldPage(
+  q: Q,
+  name: string,
+  scopes: string[] | null = null,
+): Promise<FieldPage | null> {
   const field = await getField(q, name);
   if (!field) return null;
-  const [usage, history] = await Promise.all([fieldUsageRows(q, name), fieldHistory(q, name)]);
+  const [usage, history] = await Promise.all([fieldUsageRows(q, name, scopes), fieldHistory(q, name)]);
   return {
     field,
     usage,
@@ -166,39 +183,77 @@ export async function fieldPage(q: Q, name: string): Promise<FieldPage | null> {
 
 /* ── Stage 4: field rename ──────────────────────────────────────────────── */
 
-/** Columns whose free text can carry a CRM field name, scoped to one document set. */
+/**
+ * Columns whose free text can carry a CRM field name, narrowed to the *steps* that actually
+ * reference it (`$1` is a step-id array from `step_field_refs`) and rewritten with a
+ * word-boundary regex rather than a blind substring `replace()`.
+ *
+ * Both narrowings matter. `replace()` across every step of every affected document rewrote any
+ * occurrence of the string anywhere — so renaming a field whose name is a substring of another
+ * field, or of ordinary prose ("חוב" inside "חובה"), silently corrupted unrelated text and was
+ * not idempotent under overlapping names. `step_field_refs` is the derived table
+ * `recomputeDerived` maintains from exactly the same text, so a step in it is a step that
+ * really mentions the field.
+ *
+ * `$2` is a `\y…\y` pattern built by `boundedPattern` and `$3` the replacement.
+ */
 const REWRITES = [
-  `update steps set title = replace(title, $2, $3), description = replace(description, $2, $3),
-          hint = replace(hint, $2, $3), script = replace(script, $2, $3)
-     where document_id = any($1)`,
-  `update step_actions a set text = replace(a.text, $2, $3)
-     from steps s where s.id = a.step_id and s.document_id = any($1)`,
-  `update step_outcomes o set text = replace(o.text, $2, $3)
-     from steps s where s.id = o.step_id and s.document_id = any($1)`,
-  `update step_branches b set question = replace(b.question, $2, $3)
-     from steps s where s.id = b.step_id and s.document_id = any($1)`,
-  `update step_branch_options o set label = replace(o.label, $2, $3), text = replace(o.text, $2, $3)
-     from step_branches b join steps s on s.id = b.step_id
-    where b.id = o.branch_id and s.document_id = any($1)`,
+  `update steps set title = regexp_replace(title, $2, $3, 'g'),
+          description = regexp_replace(description, $2, $3, 'g'),
+          hint = regexp_replace(hint, $2, $3, 'g'),
+          script = regexp_replace(script, $2, $3, 'g')
+     where id = any($1)`,
+  `update step_actions a set text = regexp_replace(a.text, $2, $3, 'g') where a.step_id = any($1)`,
+  `update step_outcomes o set text = regexp_replace(o.text, $2, $3, 'g') where o.step_id = any($1)`,
+  `update step_branches b set question = regexp_replace(b.question, $2, $3, 'g')
+     where b.step_id = any($1)`,
+  `update step_branch_options o set label = regexp_replace(o.label, $2, $3, 'g'),
+          text = regexp_replace(o.text, $2, $3, 'g')
+     from step_branches b where b.id = o.branch_id and b.step_id = any($1)`,
 ];
+
+/** Every regex metacharacter, so a field name is matched literally. */
+const escapeRe = (s: string) => s.replace(/[\\^$.|?*+()[\]{}]/g, '\\$&');
+
+/**
+ * `\y` is PostgreSQL's word boundary: it fires between a word character and a non-word one, and
+ * Hebrew letters are word characters under a UTF-8 collation, so `\yחוב\y` matches the field
+ * "חוב" and leaves "חובה" alone.
+ */
+const boundedPattern = (name: string) => `\\y${escapeRe(name)}\\y`;
+
+/** In a `regexp_replace` replacement only a backslash is special; `&` and `$` are literal. */
+const escapeReplacement = (s: string) => s.replace(/\\/g, '\\\\');
 
 /**
  * Renames a CRM field: the new name becomes the live field, the old one stays behind as
- * `renamed -> newName` so nothing dangles, and (when `updateReferences`) every step text in
- * the documents that used it is rewritten and republished — one version per document.
+ * `renamed -> newName` so nothing dangles, and (when `updateReferences`) the step text that
+ * references it is rewritten.
+ *
+ * `scopes` is the caller's `user.worldScopes`. A rename is a *write* counterpart to the
+ * read leak C1 fixed: `fields.edit` alone used to let a narrowly scoped editor rewrite step
+ * text in every category. The rewrite now covers only documents the caller can open; the
+ * catalogue rename itself is global, because a field is one object and leaving it renamed for
+ * some readers and not others would be worse than either answer.
+ *
+ * A document that was not published stays unpublished. The old code ran `publishDocument` over
+ * every affected document regardless of status, so a rename silently published drafts and
+ * documents sitting in `review` — bypassing the workflow stage 5 exists to enforce.
+ * `versionsCreated` counts the versions that were actually cut.
  */
 export async function renameField(
   tx: Tx,
   name: string,
   body: FieldRenameBody,
   userId: string | null,
+  scopes: string[] | null = null,
 ): Promise<{ result: FieldRenameResult; affected: string[] }> {
   const old = await getField(tx, name);
   if (!old) throw httpError(404, 'NOT_FOUND', 'השדה לא נמצא');
   const newName = body.newName.trim();
   if (!newName) throw httpError(400, 'BAD_REQUEST', 'שם חדש הוא שדה חובה');
   if (newName === name) throw httpError(400, 'BAD_REQUEST', 'השם החדש זהה לשם הנוכחי');
-  const affected = [...new Set((await fieldUsageRows(tx, name)).map((u) => u.documentId))];
+  const affected = [...new Set((await fieldUsageRows(tx, name, scopes)).map((u) => u.documentId))];
 
   await tx.query(
     `insert into crm_fields(name, status, path, note, created_by, updated_by)
@@ -214,13 +269,27 @@ export async function renameField(
 
   let versionsCreated = 0;
   if (body.updateReferences && affected.length) {
-    for (const sql of REWRITES) await tx.query(sql, [affected, name, newName]);
+    // The steps that carry the reference, not every step of every affected document.
+    const steps = (
+      await tx.query<{ id: string }>(
+        `select distinct s.id from step_field_refs r
+           join steps s on s.id = r.step_id
+          where r.field_name = $1 and s.document_id = any($2)`,
+        [name, affected],
+      )
+    ).rows.map((r) => r.id);
+    const params = [steps, boundedPattern(name), escapeReplacement(newName)];
+    if (steps.length) for (const sql of REWRITES) await tx.query(sql, params);
     for (const id of affected) {
       const doc = await getDocument(tx, id);
       if (!doc) continue;
       await recomputeDerived(tx, doc);
-      await publishDocument(tx, id, { actorId: userId, label: body.label });
-      versionsCreated++;
+      // Only a document that was already published gets a new published version; a draft or a
+      // document in review keeps its status and simply carries the new text.
+      if (doc.status === 'published') {
+        await publishDocument(tx, id, { actorId: userId, label: body.label });
+        versionsCreated++;
+      }
     }
   }
   const field = (await getField(tx, newName))!;

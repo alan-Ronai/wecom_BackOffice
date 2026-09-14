@@ -640,7 +640,10 @@ export default async function routes(app: FastifyInstance) {
       const user = requireUser(req);
       const { id } = req.params as { id: string };
       if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
-      const items = await inboundFor(app.db, { kind: 'document', key: id });
+      // `config.scope` above gates the *subject* document; the inbound titles are other
+      // documents, so they carry the caller's world scope — and, for a reader, the
+      // published-only visibility rule (W2) — of their own.
+      const items = await inboundFor(app.db, { kind: 'document', key: id }, user.worldScopes);
       if (canReadUnpublished(user)) return { items };
       const ids = [...new Set(items.map((i) => i.documentId))];
       const ok = new Set(

@@ -52,7 +52,13 @@ run('POST /sync/links/:id/sync', () => {
     app = await buildL6TestApp({
       pool: db.pool,
       databaseUrl: db.url,
-      testUser: { id: userId, permissions: ['connectors.manage', 'sources.manage', 'docs.publish'] },
+      // `docs.read` is the floor the route now declares in `config.requires`: every default role
+      // that holds `sources.manage` or `docs.publish` holds it too (`permissions.ts`), so it
+      // gates nobody out and makes the route visible to a static sweep of `config.requires`.
+      testUser: {
+        id: userId,
+        permissions: ['docs.read', 'connectors.manage', 'sources.manage', 'docs.publish'],
+      },
       revisions,
       documents: sqlDocumentsService(db.pool),
       enqueue: async () => 'job-1',
@@ -101,7 +107,9 @@ run('POST /sync/links/:id/sync', () => {
       databaseUrl: db.url,
       testUser: {
         id: (await db.pool.query("select id from users where subject='sync-link'")).rows[0].id,
-        permissions: ['connectors.manage'],
+        // Past the declared `docs.read` floor, so what is asserted below is the handler's
+        // per-direction check and not the route-level gate.
+        permissions: ['docs.read', 'connectors.manage'],
       },
       revisions,
       documents: sqlDocumentsService(db.pool),
@@ -120,6 +128,26 @@ run('POST /sync/links/:id/sync', () => {
     });
     expect(push.statusCode).toBe(403);
     expect(push.json().details).toMatchObject({ permission: 'docs.publish' });
+
+    // …and the declared floor is real: without `docs.read` the auth layer refuses before the
+    // handler runs, so the permission is not visible only in handler code.
+    const anonymous = await buildL6TestApp({
+      pool: db.pool,
+      databaseUrl: db.url,
+      testUser: {
+        id: (await db.pool.query("select id from users where subject='sync-link'")).rows[0].id,
+        permissions: ['connectors.manage', 'sources.manage', 'docs.publish'],
+      },
+      revisions,
+      documents: sqlDocumentsService(db.pool),
+    });
+    const floored = await anonymous.inject({
+      method: 'POST',
+      url: `/api/v1/sync/links/${importLink.id}/sync`,
+      payload: { direction: 'import' },
+    });
+    expect(floored.statusCode).toBe(403);
+    await anonymous.close();
     await noPerm.close();
   });
 
