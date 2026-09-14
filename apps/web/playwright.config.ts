@@ -13,8 +13,10 @@ const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:5174';
 export default defineConfig({
   testDir: 'e2e',
   // `e2e/real/` is the no-mocks suite; it needs a real API and is driven by `pnpm e2e:real`
-  // through `playwright.real.config.ts`. Running it here would point it at the msw build.
-  testIgnore: /e2e\/real\//,
+  // through `playwright.real.config.ts`. `e2e/compose/` needs the whole Compose stack and is
+  // driven by `pnpm e2e:compose` through `playwright.compose.config.ts`. Running either here
+  // would point it at the msw build.
+  testIgnore: /e2e\/(real|compose)\//,
   globalSetup: './e2e/fixtures/oidc-issuer.ts',
   use: { baseURL, locale: 'he-IL', viewport: { width: 1400, height: 860 } },
   retries: process.env.CI ? 1 : 0,

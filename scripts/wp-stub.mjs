@@ -9,7 +9,14 @@
  *
  * Run it with `tsx`, not bare `node`: the stub lives under `test/` and is deliberately not part
  * of the package's build output, so the `.ts` import has to be transformed on the fly.
+ *
+ * `WP_STUB_PUBLIC_PORT=<port>` additionally puts a plain TCP forwarder in front of it on
+ * `WP_STUB_PUBLIC_HOST` (default `0.0.0.0`) and prints `WP_STUB_PUBLIC_URL=<url>`. `startWpStub`
+ * binds `127.0.0.1` — right for an in-process unit test, and unreachable from another container,
+ * which is what `pnpm e2e:compose` needs. The forwarder lives here rather than in the stub
+ * because the stub is shared with the connector unit tests and is not this lane's to change.
  */
+import net from 'node:net';
 import { startWpStub } from '../packages/connectors/test/helpers/wpStub.ts';
 
 const stub = await startWpStub([
@@ -25,7 +32,28 @@ const stub = await startWpStub([
 
 console.log(`WP_STUB_URL=${stub.url}`);
 
+const publicPort = Number(process.env.WP_STUB_PUBLIC_PORT ?? 0);
+const publicHost = process.env.WP_STUB_PUBLIC_HOST ?? '0.0.0.0';
+const stubPort = Number(new URL(stub.url).port);
+let forwarder = null;
+if (publicPort) {
+  forwarder = net.createServer((client) => {
+    const upstream = net.connect(stubPort, '127.0.0.1');
+    // A half-open pipe would leave the peer waiting for a response that can never come.
+    const drop = () => {
+      client.destroy();
+      upstream.destroy();
+    };
+    client.on('error', drop);
+    upstream.on('error', drop);
+    client.pipe(upstream).pipe(client);
+  });
+  await new Promise((r) => forwarder.listen(publicPort, publicHost, r));
+  console.log(`WP_STUB_PUBLIC_URL=http://${publicHost}:${publicPort}`);
+}
+
 const stop = () => {
+  forwarder?.close();
   void stub.close().then(() => process.exit(0));
 };
 process.on('SIGTERM', stop);

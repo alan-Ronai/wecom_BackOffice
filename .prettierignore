@@ -11,3 +11,4 @@ apps/web/public/mockServiceWorker.js
 # and rewriting them here would collide with that lane
 deploy/docker-compose.yml
 deploy/docker-compose.ci.yml
+deploy/docker-compose.e2e.yml
