@@ -11,9 +11,10 @@
  * `state.drafts`, …) and is reset between tests by `setup.ts`.
  */
 import { http, HttpResponse, type RequestHandler } from 'msw';
-import type { Document, Note, Suggestion } from '@wecom/shared';
+import { PreferencesSchema, type Document, type Note, type Suggestion } from '@wecom/shared';
 import * as fixtures from './fixtures.js';
 import { fx } from './fixtures.js';
+import { resetStage45, stage45Handlers } from './stage45.js';
 import type { TrashItem } from '../../src/api/types.js';
 
 const B = '/api/v1';
@@ -53,6 +54,7 @@ export const state: State = initial();
 
 export function resetState(): void {
   Object.assign(state, initial());
+  resetStage45();
 }
 
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
@@ -460,8 +462,12 @@ export const handlers: RequestHandler[] = [
   }),
 
   http.get(`${B}/me/preferences`, () => HttpResponse.json(state.preferences)),
+  // The route validates with `PreferencesPutSchema`, and zod **strips** unknown keys — so the
+  // mock strips them too. Without this the QOL preferences (density, saved view, last-seen map)
+  // would appear to round-trip in tests while being dropped in production.
   http.put(`${B}/me/preferences`, async ({ request }) => {
-    state.preferences = (await request.json()) as typeof state.preferences;
+    const body = (await request.json()) as Record<string, unknown>;
+    state.preferences = PreferencesSchema.parse(body);
     return HttpResponse.json(state.preferences);
   }),
 
@@ -513,6 +519,9 @@ export const handlers: RequestHandler[] = [
     );
   }),
   http.get(`${B}/system/health`, () => HttpResponse.json(fx.health)),
+
+  /* Stage 4–5 routes, typed from the zod contract — see `test/msw/stage45.ts`. */
+  ...stage45Handlers,
 ];
 
 /** Override `/auth/me` for permission tests. */

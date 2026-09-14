@@ -23,6 +23,14 @@ export const keys = {
   sources: ['sources'] as const,
   revision: (id: string, rev: string) => ['revision', id, rev] as const,
   suggestions: (q: unknown = '*') => ['suggestions', q] as const,
+  /* stage 4–5 (typed from the zod contract — see `src/api/stage45.ts`) */
+  notifications: (q: unknown = '*') => ['notifications', q] as const,
+  mentionable: (q: string) => ['mentionable', q] as const,
+  comments: (id: string) => ['comments', id] as const,
+  reviews: (q: unknown = '*') => ['reviews', q] as const,
+  views: ['views'] as const,
+  templates: ['templates'] as const,
+  presence: (id: string) => ['presence', id] as const,
   admin: {
     users: (q: unknown = '*') => ['admin', 'users', q] as const,
     roles: ['admin', 'roles'] as const,
