@@ -12,8 +12,33 @@
  *    scope would have silently stopped matching. The join table is that FK, and two triggers
  *    keep it and the array column from drifting apart.
  *
+ * 3. `asset_refs` (B-M15) — the join table the asset gc was supposed to read. Wave 4 got as far
+ *    as one regexp pass per HTML row instead of an assets × versions cross product; the row it
+ *    parked was "a real join table maintained on save". It is maintained by triggers rather than
+ *    by the four write paths, which is both cheaper and stricter: no future writer can forget,
+ *    and a bulk `update` cannot slip past.
+ *
  * `down` reverses everything so `migrations.test.ts`'s full rollback stays green.
  */
+
+/** Same capture the gc used to run inline: the `src` the sanitizer keeps, as a strict uuid. */
+const ASSET_REF_RE =
+  '/api/v1/assets/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
+
+/**
+ * Every column an asset can be referenced from: `[owner_kind, table, ...path into the row]`.
+ *
+ * `drafts` is on the list and has to stay on it. §5.1 autosaves in-progress source HTML there
+ * every 3 s and an image is uploaded the moment it is pasted, long before "שמור גרסה" writes a
+ * version — an editor who pasted screenshots on Monday and saved the following week would
+ * otherwise lose them to Sunday's run, permanently, because `assets` is the only copy.
+ */
+const OWNERS = [
+  ['document', 'documents', 'body_html'],
+  ['source_document', 'source_documents', 'html'],
+  ['source_document_version', 'source_document_versions', 'html'],
+  ['draft', 'drafts', 'payload', 'html'],
+];
 
 exports.up = (pgm) => {
   // ── 1. webhook replay protection (I7) ──────────────────────────────────
@@ -116,9 +141,87 @@ exports.up = (pgm) => {
              after update of slug on worlds
              for each row when (old.slug is distinct from new.slug)
              execute function worlds_slug_renamed()`);
+
+  // ── 3. asset_refs (B-M15) ──────────────────────────────────────────────
+  pgm.createTable(
+    'asset_refs',
+    {
+      asset_id: { type: 'uuid', notNull: true, references: 'assets', onDelete: 'cascade' },
+      owner_kind: { type: 'text', notNull: true },
+      // Deliberately not a foreign key: it addresses one of four tables. Every one of them
+      // cascade-deletes its rows, and the `after delete` trigger below clears the refs with
+      // them, so nothing is left dangling.
+      owner_id: { type: 'uuid', notNull: true },
+    },
+    { constraints: { primaryKey: ['owner_kind', 'owner_id', 'asset_id'] } },
+  );
+  pgm.addConstraint('asset_refs', 'asset_refs_owner_kind_check', {
+    check: `owner_kind in (${OWNERS.map(([k]) => `'${k}'`).join(', ')})`,
+  });
+  // The gc asks "is this asset referenced by anything", which reads asset-first.
+  pgm.createIndex('asset_refs', 'asset_id', { name: 'asset_refs_asset_id_index' });
+
+  pgm.sql(`create function asset_refs_ids(html text) returns uuid[] as $$
+             select coalesce(array_agg(distinct m[1]::uuid), '{}'::uuid[])
+               from regexp_matches(coalesce(html, ''), '${ASSET_REF_RE}', 'g') m
+           $$ language sql immutable`);
+
+  /*
+   * One trigger function for all four owners. `tg_argv[0]` is the owner kind and the rest is a
+   * path into `to_jsonb(new)` — `body_html` for a document, `payload`/`html` for a draft — which
+   * is what lets a single function serve columns that are not even the same type.
+   *
+   * The insert joins `assets` rather than trusting the extracted ids: HTML can outlive the image
+   * it points at, and a blind insert would then fail the editor's save with a 23503.
+   */
+  pgm.sql(`create function asset_refs_sync() returns trigger as $$
+             declare h text; j jsonb;
+             begin
+               if tg_op = 'DELETE' then
+                 delete from asset_refs
+                  where owner_kind = tg_argv[0] and owner_id = old.id;
+                 return old;
+               end if;
+               j := to_jsonb(new);
+               if array_length(tg_argv, 1) = 2 then
+                 h := j ->> tg_argv[1];
+               else
+                 h := j -> tg_argv[1] ->> tg_argv[2];
+               end if;
+               delete from asset_refs
+                where owner_kind = tg_argv[0] and owner_id = new.id;
+               insert into asset_refs(asset_id, owner_kind, owner_id)
+                 select a.id, tg_argv[0], new.id
+                   from unnest(asset_refs_ids(h)) i join assets a on a.id = i
+               on conflict do nothing;
+               return new;
+             end $$ language plpgsql`);
+
+  for (const [kind, table, ...path] of OWNERS) {
+    const args = [kind, ...path].map((a) => `'${a}'`).join(', ');
+    pgm.sql(`create trigger ${table}_asset_refs_trg
+               after insert or delete or update of ${path[0]} on ${table}
+               for each row execute function asset_refs_sync(${args})`);
+  }
+
+  // Backfill from the HTML that is already stored — the same extraction the gc used to do at
+  // run time, done once here instead of on every weekly pass.
+  for (const [kind, table, ...path] of OWNERS) {
+    const col = path.length === 1 ? path[0] : `${path[0]}->>'${path[1]}'`;
+    pgm.sql(`insert into asset_refs(asset_id, owner_kind, owner_id)
+               select a.id, '${kind}', t.id
+                 from ${table} t, unnest(asset_refs_ids(t.${col})) i
+                 join assets a on a.id = i
+             on conflict do nothing`);
+  }
 };
 
 exports.down = (pgm) => {
+  for (const [, table] of OWNERS)
+    pgm.sql(`drop trigger if exists ${table}_asset_refs_trg on ${table}`);
+  pgm.sql('drop function if exists asset_refs_sync()');
+  pgm.dropTable('asset_refs');
+  pgm.sql('drop function if exists asset_refs_ids(text)');
   pgm.sql('drop trigger if exists worlds_slug_renamed_trg on worlds');
   pgm.sql('drop function if exists worlds_slug_renamed()');
   pgm.sql('drop trigger if exists user_roles_sync_worlds_trg on user_roles');

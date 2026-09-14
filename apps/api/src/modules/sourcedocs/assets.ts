@@ -117,33 +117,25 @@ export async function getAsset(
   };
 }
 
-/** The `src` the sanitizer keeps, as a capture. A strict UUID, so the `::uuid` cast is safe. */
-const ASSET_REF_RE = '/api/v1/assets/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
-const refs = (table: string, col: string) =>
-  `select distinct (regexp_matches(coalesce(${col}, ''), '${ASSET_REF_RE}', 'g'))[1]::uuid id from ${table}`;
-
 /**
  * Deletes assets nothing references any more.
  *
- * **`drafts` is a reference.** §5.1 autosaves in-progress source HTML into `drafts` under
- * `source:<documentId>` every 3 s, and an image is uploaded to `/assets` the moment it is
- * pasted — long before "שמור גרסה" writes a version. The 24-hour floor only bought a day, so
- * an editor who pasted screenshots on Monday and saved the version the following week lost
- * them to Sunday's run, permanently: `assets` is the only copy.
+ * B-M15: the references come from `asset_refs`, which `0045` maintains with a trigger on each of
+ * the four columns an image can be referenced from. Wave 4 got as far as one regexp pass per HTML
+ * row per run — better than the assets × versions cross product it replaced, but still a full
+ * scan of the source corpus every week, and still a computation of something the database could
+ * simply have known. Now the gc reads an index.
  *
- * Ids are extracted once per row and compared as uuids, rather than correlating every asset
- * against every HTML row with `like '%' || a.id || '%'` (assets × versions).
+ * **`drafts` is one of the four, and has to stay one.** §5.1 autosaves in-progress source HTML
+ * into `drafts` under `source:<documentId>` every 3 s, and an image is uploaded to `/assets` the
+ * moment it is pasted — long before "שמור גרסה" writes a version. The 24-hour floor only bought
+ * a day, so an editor who pasted screenshots on Monday and saved the version the following week
+ * lost them to Sunday's run, permanently: `assets` is the only copy.
  */
 export async function gcUnreferencedAssets(q: Q): Promise<number> {
   const r = await q.query(`
-    with referenced as (
-      ${refs('source_document_versions', 'html')}
-      union ${refs('source_documents', 'html')}
-      union ${refs('documents', 'body_html')}
-      union ${refs('drafts', "payload->>'html'")}
-    )
     delete from assets a
      where a.created_at < now() - interval '1 day'
-       and not exists (select 1 from referenced r where r.id = a.id)`);
+       and not exists (select 1 from asset_refs r where r.asset_id = a.id)`);
   return r.rowCount ?? 0;
 }
