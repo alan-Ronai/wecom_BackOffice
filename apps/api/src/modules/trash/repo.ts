@@ -13,14 +13,27 @@ const purgeAt = (deletedAt: Date | string, days: number) =>
 
 const emptyImpact = { brokenLinks: 0, documents: [] as { id: string; title: string }[] };
 
-export async function listTrash(q: Q, days: number): Promise<TrashItem[]> {
+/**
+ * A-M12: the trash was the last unscoped document read model in the package — any `docs.read`
+ * user got the titles and doc types of every deleted document in every world. Scope is a
+ * membership intersection like everywhere else. Blocks and fields are catalogue entries with no
+ * world of their own, so they are unfiltered, as they are on every other page.
+ */
+export async function listTrash(
+  q: Q,
+  days: number,
+  worldScopes: readonly string[] | null = null,
+): Promise<TrashItem[]> {
   const items: TrashItem[] = [];
 
   const docs = await q.query(
     `select d.id, d.title, d.category, d.doc_type, d.current_version, d.deleted_at, u.display_name deleted_by,
             (select count(*)::int from steps s where s.document_id=d.id) steps
      from documents d left join users u on u.id=d.deleted_by
-     where d.deleted_at is not null order by d.deleted_at desc`,
+     where d.deleted_at is not null
+       and ($1::text[] is null or exists (select 1 from document_worlds dw where dw.document_id = d.id and dw.world_slug = any($1)))
+     order by d.deleted_at desc`,
+    [worldScopes ? [...worldScopes] : null],
   );
   for (const d of docs.rows) {
     const links = await q.query(

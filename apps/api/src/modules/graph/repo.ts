@@ -242,12 +242,20 @@ export async function loadGraph(q: Q, filter: GraphFilter = {}): Promise<GraphDa
       'explicit',
     );
 
-  // A block, field, source or script is only in the graph because documents use it. When the
-  // documents that used it are out of the caller's scope, every edge to it has already been
-  // dropped above — keeping the bare node would still disclose its label *and* let the BFS in
-  // `selectGraph` walk through it, so it goes too. Unscoped callers keep the old behaviour,
-  // where an unused catalogue entry is a legitimate isolated node.
-  if (scopes) {
+  /**
+   * A block, field, source or script is only in the graph because documents use it. When the
+   * documents that used it are outside the caller's boundary, every edge to it has already
+   * been dropped above — keeping the bare node would still disclose its label *and* let the
+   * BFS in `selectGraph` walk through it, so it goes too. A caller with no boundary at all
+   * keeps the old behaviour, where an unused catalogue entry is a legitimate isolated node.
+   *
+   * `!readUnpublished` is part of the gate, not just `scopes`. W4 gives every source document
+   * a `sources` row titled after its document, so an unscoped *reader* was being handed
+   * `source:<id>` nodes labelled with the titles of drafts. Found by the wave-4 rows added to
+   * `scope-leak.test.ts`; the status half of the boundary needs the same treatment as the
+   * world half.
+   */
+  if (scopes || !readUnpublished) {
     const touched = new Set<string>();
     for (const e of edges) {
       touched.add(e.from);
