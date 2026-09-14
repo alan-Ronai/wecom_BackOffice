@@ -49,9 +49,11 @@ import {
   IdentitySettingsSchema,
   IdentityTestResultSchema,
   RoleMatrixSchema,
+  SearchLogResponseSchema,
   SyncLinkRowSchema,
   SyncQueueResponseSchema,
   SyncRunResultSchema,
+  UsageAnalyticsSchema,
 } from '@wecom/shared';
 import { fx, D_BROWSING, SUG_1, U1 } from './fixtures.js';
 import {
@@ -121,6 +123,10 @@ describe('fixtures validate against shared schemas', () => {
     // The merge screen is only interesting when both sides moved off the base.
     expect(conflict.link.state).toBe('conflict');
     expect(conflict.theirs.paragraphs.length).toBeGreaterThan(1);
+  });
+  it('wave 4 — usage analytics and the search log', () => {
+    expect(UsageAnalyticsSchema.parse(fx.usageAnalytics).zeroResultTerms).toHaveLength(1);
+    expect(SearchLogResponseSchema.parse(fx.searchLog).total).toBe(1);
   });
 });
 
@@ -331,6 +337,11 @@ const cases: Case[] = [
     POST(`${B}/sync/links/${LINK_CONFLICT}/resolve`, { resolution: 'ours' }),
     SyncLinkRowSchema,
   ],
+
+  /* ── wave 4: usage analytics (W5) ──────────────────────────────────────── */
+  ['GET /analytics/usage', GET(`${B}/analytics/usage`), UsageAnalyticsSchema],
+  ['GET /analytics/usage?world=', GET(`${B}/analytics/usage?world=billing`), UsageAnalyticsSchema],
+  ['GET /analytics/search-log', GET(`${B}/analytics/search-log`), SearchLogResponseSchema],
 ];
 
 describe('msw handlers answer the published response envelopes', () => {

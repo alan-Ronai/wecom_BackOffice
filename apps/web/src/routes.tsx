@@ -31,6 +31,7 @@ import { IdentityPage } from './components/admin/IdentityPage.js';
 import { ConnectorsPage } from './components/admin/ConnectorsPage.js';
 import { ConnectorWizard } from './components/admin/ConnectorWizard.js';
 import { SystemPage } from './components/admin/SystemPage.js';
+import { AnalyticsPage } from './components/analytics/AnalyticsPage.js';
 
 /** Routes mirror the legacy hashes one-to-one (spec §5). */
 export const routeObjects: RouteObject[] = [
@@ -73,6 +74,8 @@ export const routeObjects: RouteObject[] = [
       { path: 'sync', element: <SyncQueuePage /> },
       { path: 'sync/parity', element: <ParityPage /> },
       { path: 'sync/conflicts/:id', element: <ConflictPage /> },
+      // W5. The sidebar entry that leads here is W6's mount; the route stands on its own.
+      { path: 'analytics', element: <AnalyticsPage /> },
       {
         path: 'admin',
         element: <AdminLayout />,

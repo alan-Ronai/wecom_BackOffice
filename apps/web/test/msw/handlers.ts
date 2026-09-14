@@ -608,6 +608,16 @@ export const handlers: RequestHandler[] = [
   }),
   http.get(`${B}/system/health`, () => HttpResponse.json(fx.health)),
 
+  // Wave 4 · usage analytics (W5). `?world=` narrows to that world's items; the fixture has none
+  // outside `tech`, so a filtered request answers with the item tables empty.
+  http.get(`${B}/analytics/usage`, ({ request }) => {
+    const world = new URL(request.url).searchParams.get('world');
+    return HttpResponse.json(
+      world ? { ...fx.usageAnalytics, itemViews: [], topItems: [] } : fx.usageAnalytics,
+    );
+  }),
+  http.get(`${B}/analytics/search-log`, () => HttpResponse.json(fx.searchLog)),
+
   // Stage 4 — connected data (`test/msw/stage4.ts`), kept in its own module so the two stages
   // can be reviewed apart. Registered last; the patterns are disjoint from everything above.
   ...stage4Handlers,
