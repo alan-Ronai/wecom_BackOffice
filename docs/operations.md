@@ -373,10 +373,16 @@ Requirements: Docker with compose v2, `openssl`, `curl`, `lsof`, a Chromium for 
 (`pnpm --filter @wecom/web exec playwright install chromium`), and free TCP ports 8443, 8080, 8186,
 8085, 8444, 8445 and 8446 — the first two are hard-coded in `docker-compose.ci.yml`, because
 compose concatenates `ports` across overlay files instead of replacing them. Roughly 6 GB of disk
-for the images, the Ollama layer and the two models — `qwen2.5:0.5b` (~400 MB) and, since the
+for the images, the Ollama layer and the two models — `qwen2.5:0.5b` (~397 MB) and, since the
 embedding spec needs a model whose vectors the column accepts, `nomic-embed-text` (~274 MB rather
-than `all-minilm`'s ~46 MB). Both are cached in the gate's `ollama` volume between runs, so the
-extra pull is paid once per `down -v`.
+than `all-minilm`'s ~46 MB).
+
+**Both models are re-downloaded on every run.** The gate's preflight does `down -v`, which
+destroys its `ollama` volume, and that is deliberate: a volume carrying yesterday's models would
+satisfy the "both configured tags are pulled" assertion without `ollama-pull` having run at all —
+which is exactly the W-3 bug. So budget ~671 MB of download per run; the wait in
+`scripts/e2e-compose.mjs` allows 30 minutes for it, and a slow link is the usual reason a cold run
+sits on *4. the model pull*.
 
 ### How the gate plays a LAN client
 

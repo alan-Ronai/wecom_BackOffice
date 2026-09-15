@@ -397,7 +397,17 @@ async function main() {
       spawnSync('docker', ['inspect', '-f', '{{.State.Status}}', pullId], {
         encoding: 'utf8',
       }).stdout?.trim() === 'exited',
-    { timeoutMs: 900_000, everyMs: 5_000 },
+    /**
+     * 30 minutes, doubled from 15. Preflight's `down -v` destroys the `ollama` volume — which is
+     * deliberate and load-bearing: a cached volume would satisfy the two-tag assertion below
+     * without `ollama-pull` having done anything, which is precisely the W-3 bug — so **both
+     * models are fetched from scratch on every run**. That is now ~671 MB rather than ~443 MB,
+     * because `EMBED_MODEL` moved to the 768-dimensional `nomic-embed-text` so the embedding path
+     * can actually store a vector (deploy/e2e.env). The old budget was ~30 s per 10 MB of
+     * headroom; on a 1–4 MB/s link the larger pull ran past it and the gate failed here with the
+     * stack healthy and nothing wrong with it.
+     */
+    { timeoutMs: 1_800_000, everyMs: 5_000 },
   );
   const pullCode = spawnSync('docker', ['inspect', '-f', '{{.State.ExitCode}}', pullId], {
     encoding: 'utf8',
