@@ -1,6 +1,7 @@
 export type PaneMode = 'work' | 'source' | 'split';
 
-const MODES: { id: PaneMode; label: string; needsSource: boolean }[] = [
+/** Exported so A-6's overflow menu offers the same three modes under the same three labels. */
+export const PANE_MODES: { id: PaneMode; label: string; needsSource: boolean }[] = [
   { id: 'work', label: 'תצוגת עבודה', needsSource: false },
   { id: 'source', label: 'מקור', needsSource: true },
   { id: 'split', label: 'מפוצל', needsSource: true },
@@ -18,7 +19,7 @@ export function PaneModeToggle({
 }) {
   return (
     <div className="seg" role="group" aria-label="מצב תצוגה">
-      {MODES.map((m) => (
+      {PANE_MODES.map((m) => (
         <button
           key={m.id}
           type="button"

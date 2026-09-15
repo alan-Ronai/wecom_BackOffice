@@ -39,8 +39,11 @@ import { useTopicView } from '../../api/hooks/taxonomy.js';
 import { StatusChip } from '../governance/StatusChip.js';
 import { SourceReviewBadge } from '../governance/SourceReviewBadge.js';
 import { UnavailablePage } from '../governance/UnavailablePage.js';
-import { FeedbackButton } from '../feedback/FeedbackButton.js';
-import { PaneModeToggle, type PaneMode } from '../source/PaneModeToggle.js';
+import { FEEDBACK_TITLE, FeedbackButton, useFeedbackDialog } from '../feedback/FeedbackButton.js';
+import { PANE_MODES, PaneModeToggle, type PaneMode } from '../source/PaneModeToggle.js';
+import { OverflowMenu, type OverflowItem } from '../ui/OverflowMenu.js';
+import { usePalette } from '../palette/paletteStore.js';
+import { useMediaQuery } from '../../lib/useMediaQuery.js';
 import { SourcePane } from '../source/SourcePane.js';
 import { SyncStateBadge } from '../source/SyncStateBadge.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
@@ -168,6 +171,25 @@ export function ArticlePage() {
     track({ kind: 'call_completed', documentId: doc.id });
   }, [doc, steps.length, call.done, track]);
   const [panelMobile, setPanelMobile] = useState(false);
+  /**
+   * A-6. Above every early return, because it is a hook — the topbar's shape is decided here and
+   * consumed far below, after the loading and error branches.
+   */
+  const narrowTopbar = useMediaQuery('(max-width: 480px)');
+  const palette = usePalette();
+  /**
+   * The same dialog the topbar's `FeedbackButton` opens, so the overflow entry attaches the same
+   * auto-context. `doc` can still be undefined here — this is above the loading branch — so the
+   * fields it fills in are read defensively; by the time anything can call it, the render below
+   * has already proved `doc` exists.
+   */
+  const openFeedback = useFeedbackDialog({
+    documentId: doc?.id ?? '',
+    documentVersion: doc?.currentVersion ?? 0,
+    documentTitle: doc?.title,
+    docType: doc?.docType,
+    worldSlug: doc?.category,
+  });
   const [jumpBuf, setJumpBuf] = useState<string | null>(null);
   const jumpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewed = useRef<string>('');
@@ -523,6 +545,48 @@ export function ArticlePage() {
    */
   const hint = active ? nextHint(active, steps) : null;
 
+  const applyPaneMode = (m: PaneMode) => {
+    setPaneMode(m);
+    savePrefs.mutate({
+      ...(prefs.data ?? {
+        theme: null,
+        font: 'plex',
+        panel: true,
+        callMode: true,
+        sidebarExpanded: false,
+      }),
+      paneMode: m,
+    });
+  };
+
+  /**
+   * A-6. The same actions the wide topbar shows, as menu items.
+   *
+   * The palette leads, because it is the one thing here with no other way in on a phone: `Ctrl K`
+   * needs a keyboard, and the sidebar's search row is behind the hamburger. Everything below it is
+   * reachable some other way; losing the palette would have made the phone layout strictly worse
+   * than the one it replaces.
+   */
+  const overflowItems: OverflowItem[] = [
+    { label: '🔍 חיפוש מהיר', run: () => palette.open() },
+    { label: `💬 ${FEEDBACK_TITLE}`, run: openFeedback },
+    ...PANE_MODES.map((m) => ({
+      label: m.label,
+      group: 'pane',
+      checked: effectivePane === m.id,
+      disabled: m.needsSource && !hasSource,
+      run: () => applyPaneMode(m.id),
+    })),
+    { label: '🖨 הדפסה', run: () => window.print() },
+    {
+      label: pinned ? '★ מוצמד' : '☆ הצמד',
+      run: () => togglePin.mutate({ id: doc.id, pinned: !pinned }),
+    },
+    ...(can('docs.edit', doc) ? [{ label: '✏️ ערוך', run: () => go(`/edit/${doc.id}`) }] : []),
+    { label: `🕓 v${doc.currentVersion}`, run: () => go(`/history/${doc.id}`) },
+    { label: 'קשרים', run: () => setPanelMobile((v) => !v) },
+  ];
+
   return (
     <>
       <PrintFrame doc={doc} steps={steps.length} />
@@ -592,47 +656,46 @@ export function ArticlePage() {
               </span>
             ) : null}
           </span>
-          <FeedbackButton
-            documentId={doc.id}
-            documentVersion={doc.currentVersion}
-            documentTitle={doc.title}
-            docType={doc.docType}
-            worldSlug={doc.category}
-          />
-          <PaneModeToggle
-            value={effectivePane}
-            hasSource={hasSource}
-            onChange={(m) => {
-              setPaneMode(m);
-              savePrefs.mutate({
-                ...(prefs.data ?? {
-                  theme: null,
-                  font: 'plex',
-                  panel: true,
-                  callMode: true,
-                  sidebarExpanded: false,
-                }),
-                paneMode: m,
-              });
-            }}
-          />
-          <button className="btn sm" title="Ctrl P" onClick={() => window.print()}>
-            🖨 הדפסה
-          </button>
-          <button className="btn sm" onClick={() => togglePin.mutate({ id: doc.id, pinned: !pinned })}>
-            {pinned ? '★ מוצמד' : '☆ הצמד'}
-          </button>
-          {can('docs.edit', doc) ? (
-            <button className="btn sm" title="E" onClick={() => go(`/edit/${doc.id}`)}>
-              ✏️ ערוך
-            </button>
-          ) : null}
-          <button className="btn sm" title="H" onClick={() => go(`/history/${doc.id}`)}>
-            🕓 v{doc.currentVersion}
-          </button>
-          <button className="btn sm hamburger" onClick={() => setPanelMobile((v) => !v)}>
-            קשרים
-          </button>
+          {/*
+            A-6. At 390 px these eleven controls wrapped the topbar to 190 px — about a fifth of a
+            phone screen of chrome before step 1 of the call. Below 480 px they collapse into one
+            `⋯`; the call pill stays out of it, because the timer and the call-mode switch are the
+            two things an agent looks at *during* the thing this page exists for.
+
+            Rendered as one or the other rather than both-with-`display:none`, so a phone gets one
+            copy of each control in the tab order and in the accessibility tree, not two.
+          */}
+          {narrowTopbar ? (
+            <OverflowMenu label="פעולות נוספות" items={overflowItems} />
+          ) : (
+            <>
+              <FeedbackButton
+                documentId={doc.id}
+                documentVersion={doc.currentVersion}
+                documentTitle={doc.title}
+                docType={doc.docType}
+                worldSlug={doc.category}
+              />
+              <PaneModeToggle value={effectivePane} hasSource={hasSource} onChange={applyPaneMode} />
+              <button className="btn sm" title="Ctrl P" onClick={() => window.print()}>
+                🖨 הדפסה
+              </button>
+              <button className="btn sm" onClick={() => togglePin.mutate({ id: doc.id, pinned: !pinned })}>
+                {pinned ? '★ מוצמד' : '☆ הצמד'}
+              </button>
+              {can('docs.edit', doc) ? (
+                <button className="btn sm" title="E" onClick={() => go(`/edit/${doc.id}`)}>
+                  ✏️ ערוך
+                </button>
+              ) : null}
+              <button className="btn sm" title="H" onClick={() => go(`/history/${doc.id}`)}>
+                🕓 v{doc.currentVersion}
+              </button>
+              <button className="btn sm hamburger" onClick={() => setPanelMobile((v) => !v)}>
+                קשרים
+              </button>
+            </>
+          )}
         </div>
       </div>
 
