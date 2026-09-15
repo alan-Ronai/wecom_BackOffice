@@ -1520,3 +1520,110 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .ed-body-head { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
 .ed-body-head .lbl { font-weight: 600; }
 .ed-body-html textarea { font-family: var(--mono); font-size: 12px; direction: ltr; }
+
+/* wave 5 — V4a (the learner's surface: my learning, the briefing reader, the quiz player).
+   V4a could not touch this file from its worktree, so V6 writes its rules — existing tokens only,
+   no new variables, and every box inherits the page's RTL direction. */
+.banner {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 14px; border: 1px solid var(--border); background: var(--surface);
+  border-radius: var(--r); font-size: 12.5px; color: var(--text);
+}
+.banner .btn { margin-inline-start: auto; }
+.banner-amber { border-color: var(--warn-border); background: var(--warn-bg); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.learning-refresh { margin: 0 0 12px; }
+
+.learning-page { display: grid; gap: 16px; }
+.learning-section { display: grid; gap: 8px; }
+.learning-section > h2 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.learning-card {
+  display: grid; gap: 6px; padding: 12px 14px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-sm);
+}
+.learning-card:hover { border-color: var(--border-2); }
+.learning-card-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.learning-card-title { font-weight: 600; font-size: 13px; line-height: 1.4; }
+.learning-card-meta {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 11.5px; color: var(--muted);
+}
+.learning-card.overdue { border-inline-start: 3px solid var(--red); }
+
+.briefing, .quiz { display: grid; gap: 14px; max-width: 760px; }
+.briefing-intro, .quiz-intro { display: grid; gap: 6px; }
+.briefing-entry {
+  display: grid; gap: 8px; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
+}
+.briefing-note {
+  margin: 0; padding: 8px 12px; background: var(--surface-2);
+  border-inline-start: 3px solid var(--border-2); border-radius: 0 var(--r) var(--r) 0;
+  font-size: 12.5px; line-height: 1.7; overflow-wrap: anywhere;
+}
+.briefing-foot, .quiz-nav {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  border-top: 1px solid var(--border); padding-top: 10px;
+}
+.quiz-progress { font-size: 11.5px; color: var(--muted); margin-inline-end: auto; }
+.quiz-q {
+  display: grid; gap: 8px; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
+}
+.quiz-q > legend, .quiz-q > .stem { font-weight: 600; font-size: 13px; }
+.quiz-q label { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; }
+/* The `order` kind: a numbered list the learner moves with the same ↑/↓ the builders use. */
+.quiz-order, .quiz-order-review { margin: 0; padding-inline-start: 22px; display: grid; gap: 6px; }
+.quiz-order-row { font-size: 12.5px; }
+.quiz-order-row .quiz-order-text { margin-inline-end: 8px; }
+.quiz-order-row button {
+  min-width: 26px; padding: 2px 6px; margin-inline-start: 4px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r);
+}
+.quiz-order-row button:disabled { opacity: 0.4; }
+.quiz-result { display: grid; gap: 8px; padding: 14px; border-radius: var(--r-md); }
+.quiz-result.pass { background: var(--ok-bg); border: 1px solid var(--ok-border); }
+.quiz-result.fail { background: var(--warn-bg); border: 1px solid var(--warn-border); }
+.quiz-review { display: grid; gap: 8px; }
+.quiz-review .ok { color: var(--ok); }
+.quiz-review .bad { color: var(--red-dark); }
+
+/* The article panel's "פריטי למידה" block (V6's own mount). */
+.learning-panel-sec { display: grid; gap: 4px; }
+.learning-panel-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.learning-panel-list a { cursor: pointer; font-size: 12.5px; }
+
+@media (max-width: 900px) {
+  .briefing, .quiz { max-width: none; }
+}
+
+/* wave 5 — V4b (learning manager, builders, assign, gaps, workflow settings) */
+.learning-dashboard { display: grid; gap: 12px; margin-bottom: 14px; }
+.learning-dashboard .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.learning-dashboard .stat.warn b { color: var(--red); }
+.failed-questions ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.learning-manage .grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.item-editor { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; }
+.item-editor .side { display: grid; gap: 12px; align-content: start; }
+.builder-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.builder-list > li { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 12px 14px; display: grid; gap: 8px; }
+.builder-list .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.question-editor .options { display: grid; gap: 6px; }
+.question-editor .option { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.doc-picker { position: relative; }
+.doc-picker .results { position: absolute; inset-inline: 0; top: 100%; z-index: 5; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow); max-height: 280px; overflow: auto; }
+.doc-picker .results button { display: block; width: 100%; text-align: start; padding: 8px 10px; background: none; border: 0; cursor: pointer; color: var(--text); }
+.doc-picker .results button:hover, .doc-picker .results button:focus-visible { background: var(--bg-2); outline: none; }
+.assign-dialog fieldset { border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; margin: 0 0 10px; }
+.assign-dialog .checks { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.gaps-page .gap-list { display: grid; gap: 10px; }
+.gaps-page .gap { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.gaps-page .score { font-size: 22px; font-weight: 700; color: var(--red); }
+.gaps-page .evidence { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0 0; font-size: 12px; }
+.gaps-page .evidence > div { display: flex; gap: 4px; }
+.gaps-page .evidence dt { color: var(--muted); }
+.gaps-page .evidence dt::after { content: ':'; }
+.gaps-page .evidence dd { margin: 0; }
+.workflow-section .form label { display: grid; gap: 4px; }
+.workflow-section .form label.row { display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 900px) { .item-editor { grid-template-columns: 1fr; } .gaps-page .gap { grid-template-columns: 1fr; } }

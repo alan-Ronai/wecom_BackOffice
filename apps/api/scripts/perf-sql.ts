@@ -16,7 +16,7 @@ import { search } from '../src/modules/search/repo.js';
 import { startTestDb } from '../test/helpers/db.js';
 import { seedPerfCorpus } from './perf-seed.js';
 import { buildQueryMix, summarize, type PerfQuery } from './perf-mix.js';
-import { isStepsStatement, rewriteStepsToUnion } from './perf-rewrite.js';
+import { isStepsStatement, isUnionForm, rewriteStepsToUnion, rewriteUnionToLegacy } from './perf-rewrite.js';
 
 const args = process.argv.slice(2);
 const argNum = (name: string, def: number): number => {
@@ -72,20 +72,37 @@ async function main() {
     }
     current = null;
     if (!captured.length) throw new Error('captured no `steps` statement — has repo.ts changed shape?');
-    const probe = rewriteStepsToUnion(captured[0].sql);
+    /**
+     * The proposal landed in V6, so `repo.ts` now issues the union form. The A/B is the same
+     * comparison read the other way round: the captured statement is the candidate and the
+     * baseline is reconstructed from it. Both bind one parameter per word and reference it five
+     * times, so one params array drives both, and the row-identity check is unchanged.
+     */
+    const landed = isUnionForm(captured[0].sql);
+    const pair = (sql: string): { base: string; cand: string; groups: number } => {
+      if (landed) {
+        const legacy = rewriteUnionToLegacy(sql);
+        return { base: legacy.sql, cand: sql, groups: legacy.groups };
+      }
+      const union = rewriteStepsToUnion(sql);
+      return { base: sql, cand: union.sql, groups: union.groups };
+    };
+    const probe = pair(captured[0].sql);
     if (!probe.groups)
-      throw new Error('the rewrite matched no `or` group — repo.ts no longer renders the shape it targets');
+      throw new Error('matched no word group — repo.ts no longer renders either shape this targets');
     console.log(
-      `perf-sql: captured ${captured.length} steps statements, ${probe.groups} word group(s) rewritten`,
+      `perf-sql: captured ${captured.length} steps statements (${
+        landed ? 'union form, baseline reconstructed' : 'legacy form, rewrite applied'
+      }), ${probe.groups} word group(s)`,
     );
 
     // Correctness first: a faster query that answers differently is not a candidate.
     console.log('perf-sql: verifying the rewrite returns identical rows...');
     let mismatches = 0;
     for (const c of captured) {
-      const rewritten = rewriteStepsToUnion(c.sql).sql;
+      const { base, cand: rewritten } = pair(c.sql);
       const [a, b] = await Promise.all([
-        db.pool.query(c.sql, c.params as never),
+        db.pool.query(base, c.params as never),
         db.pool.query(rewritten, c.params as never),
       ]);
       if (rowKey(a) !== rowKey(b)) {
@@ -105,9 +122,9 @@ async function main() {
     console.log(`perf-sql: timing ${ITERATIONS} iterations over ${captured.length} queries...`);
     for (let i = 0; i < ITERATIONS; i++) {
       for (const c of captured) {
-        const rewritten = rewriteStepsToUnion(c.sql).sql;
+        const { base, cand: rewritten } = pair(c.sql);
         let t0 = performance.now();
-        await db.pool.query(c.sql, c.params as never);
+        await db.pool.query(base, c.params as never);
         cur.push(performance.now() - t0);
         t0 = performance.now();
         await db.pool.query(rewritten, c.params as never);
@@ -120,8 +137,8 @@ async function main() {
     console.log('');
     console.log(pad('steps statement', 32) + pad('n', 8) + pad('p50 ms', 10) + pad('p95 ms', 10) + 'max ms');
     for (const [name, s] of [
-      ['current (string_agg ilike or)', a],
-      ['candidate (union of arms)', b],
+      ['baseline (string_agg ilike or)', a],
+      ['landed (union of arms)', b],
     ] as const)
       console.log(
         pad(name, 32) +
@@ -149,8 +166,8 @@ async function main() {
       }
     }
     for (const [name, sql] of [
-      ['CURRENT', worst.sql],
-      ['CANDIDATE', rewriteStepsToUnion(worst.sql).sql],
+      ['BASELINE', pair(worst.sql).base],
+      ['LANDED', pair(worst.sql).cand],
     ] as const) {
       const r = await db.pool.query(`explain (analyze, buffers) ${sql}`, worst.params as never);
       console.log('');

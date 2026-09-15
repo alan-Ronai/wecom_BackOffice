@@ -44,9 +44,52 @@ const ESCAPE = " escape '\\'";
 /** Start of one word's `or` group, as `wordClause` renders it for the `steps` column list. */
 const GROUP_HEAD = '(s.title ilike ';
 
-/** Only the `steps` group joins `steps` to `phases`; nothing else in `search()` does. */
+/** Start of one word's union group, as `repo.ts` renders it since the proposal landed. */
+const UNION_HEAD = 's.id in (select s1.id from steps s1 where s1.title ilike ';
+
+/** Only the `steps` group joins `steps` to `documents`; nothing else in `search()` does. */
 export const isStepsStatement = (sql: string): boolean =>
-  sql.includes('from steps s join documents d') && sql.includes(AGG_COL);
+  sql.includes('from steps s join documents d') && (sql.includes(AGG_COL) || sql.includes(UNION_HEAD));
+
+/** True once `repo.ts` emits the union form — i.e. the proposal below has landed. */
+export const isUnionForm = (sql: string): boolean => sql.includes(UNION_HEAD);
+
+/**
+ * The inverse of `rewriteStepsToUnion`: the pre-proposal five-way `or`, reconstructed from the
+ * union form `repo.ts` now emits.
+ *
+ * The proposal landed in V6, so the A/B this file exists for can no longer be "current → candidate".
+ * It is the same comparison read the other way: the statement the code issues is the candidate,
+ * and the baseline is derived from it. Parameter numbering is untouched — both forms bind one
+ * parameter per word and reference it five times — so one params array drives both.
+ */
+export function rewriteUnionToLegacy(sql: string): { sql: string; groups: number } {
+  let out = '';
+  let rest = sql;
+  let groups = 0;
+  for (;;) {
+    const at = rest.indexOf(UNION_HEAD);
+    if (at < 0) break;
+    const patStart = at + UNION_HEAD.length;
+    const escAt = rest.indexOf(ESCAPE, patStart);
+    if (escAt < 0) break;
+    const p = rest.slice(patStart, escAt);
+    const tail = `where b1.title ilike ${p}${ESCAPE})`;
+    const tailAt = rest.indexOf(tail, escAt);
+    if (tailAt < 0) break;
+    const end = tailAt + tail.length;
+    out +=
+      rest.slice(0, at) +
+      `(s.title ilike ${p}${ESCAPE}` +
+      ` or coalesce(s.description,'') ilike ${p}${ESCAPE}` +
+      ` or ${AGG_COL} ilike ${p}${ESCAPE}` +
+      ` or coalesce(s.script,'') ilike ${p}${ESCAPE}` +
+      ` or coalesce(b.title,'') ilike ${p}${ESCAPE})`;
+    rest = rest.slice(end);
+    groups++;
+  }
+  return { sql: out + rest, groups };
+}
 
 export interface RewriteOptions {
   /**

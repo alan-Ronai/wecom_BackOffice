@@ -33,6 +33,7 @@ import { inboundFor } from '../graph/repo.js';
 import { clearSourceReview } from './sourceReview.js';
 import { updateEmbedding } from '../search/repo.js';
 import { resolveFeedback } from '../feedback/repo.js'; // W3: close reports with the published version
+import { publishAndFlag } from './publishWithFlag.js'; // V2: knowledge refresh on publish (A-C2)
 
 const Params = z.object({ id: IdSchema });
 
@@ -352,11 +353,19 @@ export default async function routes(app: FastifyInstance) {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
         if (!hasScope(user, before.worlds)) throw forbidden();
-        const { doc, version } = await repo.publishDocument(tx, id, {
-          actorId: user.id,
-          label: body.label,
-          markPartial: body.markPartial,
-        });
+        // V2: knowledge refresh — `publishAndFlag` pairs the publish with §1.5's change flag, so a
+        // significant change fans out refresh assignments from every editorial path, not just this one.
+        const { doc, version, changeFlag } = await publishAndFlag(
+          tx,
+          { notifier: app.notifier, events: app.events },
+          {
+            doc: id,
+            actorId: user.id,
+            label: body.label,
+            markPartial: body.markPartial,
+            significantChange: body.significantChange,
+          },
+        );
         if (body.resolveFeedbackIds?.length) {
           const closed = await resolveFeedback(tx, body.resolveFeedbackIds, id, version, user.id);
           for (const fid of closed)
@@ -379,7 +388,7 @@ export default async function routes(app: FastifyInstance) {
           tx,
           makeEvent('document.published', { documentId: id, version, actorId: user.id }),
         );
-        return { document: doc, version, auditId };
+        return { document: doc, version, auditId, changeFlag };
       });
       await pushOnPublish(app, req, id, user.id);
       // Best-effort, outside the transaction: a model outage must never fail a publish.

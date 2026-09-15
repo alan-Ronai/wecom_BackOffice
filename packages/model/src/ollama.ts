@@ -1,5 +1,12 @@
-import type { ModelClient, ProposalContext, ProposedSuggestion } from './contract.js';
+import type {
+  GeneratedQuestion,
+  ModelClient,
+  ProposalContext,
+  ProposedSuggestion,
+  QuestionContext,
+} from './contract.js';
 import { buildMessages, parseProposals, RESPONSE_FORMAT } from './prompt.js';
+import { buildQuestionMessages, parseQuestions, QUESTIONS_RESPONSE_FORMAT } from './questions.js';
 import { enforceSectionCards } from './sections.js';
 
 export interface OllamaOptions {
@@ -95,6 +102,51 @@ export class OllamaModel implements ModelClient {
     const items = await this.o.fallback.proposeChanges(ctx);
     this.lastRun = { used: 'fallback', attempts: MAX_ATTEMPTS, ms: Date.now() - started, error: lastError };
     return items;
+  }
+
+  /**
+   * Wave 5 (V1). Same shape as `proposeChanges` minus the fallback: there is no deterministic
+   * question generator in this package, so a failure throws and the api falls back to its own
+   * rules and reports `source: 'rules'`.
+   */
+  async generateQuestions(ctx: QuestionContext): Promise<GeneratedQuestion[]> {
+    const started = Date.now();
+    const messages = buildQuestionMessages(ctx);
+    let lastError = '';
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const r = await this.req('/api/chat', {
+          model: this.o.model,
+          stream: false,
+          format: QUESTIONS_RESPONSE_FORMAT,
+          options: { temperature: 0.2, num_ctx: 8192 },
+          messages:
+            attempt === 1
+              ? messages
+              : [
+                  ...messages,
+                  {
+                    role: 'user',
+                    content: 'התשובה הקודמת לא הייתה JSON תקין (' + lastError + '). החזר JSON תקין בלבד.',
+                  },
+                ],
+        });
+        if (!r.ok) {
+          lastError = 'http ' + r.status;
+          continue;
+        }
+        const data = (await r.json()) as { message?: { content?: string } };
+        const parsed = parseQuestions(data.message?.content ?? '');
+        if (parsed.ok) {
+          this.lastRun = { used: 'ollama', attempts: attempt, ms: Date.now() - started };
+          return parsed.items;
+        }
+        lastError = parsed.error;
+      } catch (e) {
+        lastError = (e as Error).message;
+      }
+    }
+    throw new Error('model failed: ' + lastError);
   }
 
   async embed(text: string): Promise<number[]> {

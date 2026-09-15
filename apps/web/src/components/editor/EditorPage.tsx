@@ -21,6 +21,7 @@ import {
 import { useCan } from '../../api/hooks/me.js';
 import { ApiError } from '../../api/unwrap.js';
 import { PRI } from '../../lib/constants.js';
+import { counted, learningItems, refreshes } from '../../lib/count.js';
 import { ago, download } from '../../lib/format.js';
 import { useHotkeys } from '../../lib/keys.js';
 import { allSteps } from '../../lib/steps.js';
@@ -62,6 +63,7 @@ import { MetadataPanel, type MetadataValue } from './MetadataPanel.js';
 import { OwnerFields } from '../governance/OwnerFields.js';
 import { ImportExportButtons } from '../source/ImportExportButtons.js';
 import { PublishFeedbackPicker } from '../feedback/PublishFeedbackPicker.js';
+import { useChangePreview } from '../../api/hooks/learning.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 
 /**
@@ -151,28 +153,56 @@ function BodyEditor({
   );
 }
 
+const SIGNIFICANT = 'שינוי מהותי – דרוש רענון';
+
 function PublishBody({
   documentId,
   defaultLabel,
   onLabel,
   onIds,
+  onSignificant,
   onSubmit,
 }: {
   documentId: string | null;
   defaultLabel: string;
   onLabel: (v: string) => void;
   onIds: (v: string[]) => void;
+  /** `known` is false while the preview is still in flight and the editor has not overridden it. */
+  onSignificant: (v: boolean, known: boolean) => void;
   onSubmit: () => void;
 }) {
   const LABEL = 'מה השתנה? (מופיע בהיסטוריית הגרסאות)';
   const [label, setLabel] = useState(defaultLabel);
   const [ids, setIds] = useState<string[]>([]);
+  /**
+   * Wave 5 §1.5. The detector decides on the server either way; the checkbox states its verdict in
+   * advance (`GET /documents/:id/change-preview`) so the editor confirms or overrides a reading
+   * rather than guessing one. Unticking it is a real override — the publish body then carries
+   * `significantChange: false` and no refresh is created.
+   *
+   * Which is exactly why an unticked box is only an override once there is something to override:
+   * while the request is in flight the box is unticked because nothing is known yet, and sending
+   * that as an explicit `false` silently suppressed the refreshes the detector wanted to create.
+   * Until the preview lands, or the editor ticks the box themselves, the flag is not sent at all
+   * and the server's own verdict stands.
+   */
+  const preview = useChangePreview(documentId ?? undefined);
+  const [significant, setSignificant] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const previewed = preview.data?.significant ?? false;
+  const known = touched || preview.isSuccess;
+  useEffect(() => {
+    if (!touched) setSignificant(previewed);
+  }, [previewed, touched]);
   useEffect(() => {
     onLabel(label);
   }, [label, onLabel]);
   useEffect(() => {
     onIds(ids);
   }, [ids, onIds]);
+  useEffect(() => {
+    onSignificant(significant, known);
+  }, [significant, known, onSignificant]);
   return (
     <div className="form" style={{ display: 'grid', gap: 10 }}>
       <label>
@@ -191,6 +221,28 @@ function PublishBody({
           }}
         />
       </label>
+      {documentId ? (
+        <label className="check-row">
+          <input
+            type="checkbox"
+            aria-label={SIGNIFICANT}
+            checked={significant}
+            disabled={preview.isPending}
+            onChange={(e) => {
+              setTouched(true);
+              setSignificant(e.target.checked);
+            }}
+          />
+          {SIGNIFICANT}
+          <span className="small muted">
+            {preview.isPending
+              ? 'בודק אם השינוי מהותי…'
+              : previewed && preview.data?.affectedItems
+                ? `זוהה שינוי בתוצאה או בהסתעפות · ${counted(preview.data.affectedItems, learningItems, 'מושפע', 'מושפעים')}`
+                : 'מבטל השלמות של תדריכים ושאלונים שמבוססים על המסמך ויוצר משימות רענון'}
+          </span>
+        </label>
+      ) : null}
       {/* Renders nothing when the item has no open reports, so mounting it is unconditional. */}
       {documentId ? <PublishFeedbackPicker documentId={documentId} value={ids} onChange={setIds} /> : null}
     </div>
@@ -498,7 +550,13 @@ export function EditorPage() {
     }
     const partial = checks.some(([, t]) => t.includes('ריק'));
     const nextV = (published.data?.currentVersion ?? 0) + 1;
-    const box = { label: isNew ? 'פריט ידע חדש' : '', ids: [] as string[] };
+    const box = {
+      label: isNew ? 'פריט ידע חדש' : '',
+      ids: [] as string[],
+      significant: false,
+      /** Only a landed preview or an editor's own tick makes the flag worth sending. */
+      significantKnown: false,
+    };
     const ok = await new Promise<boolean>((resolve) => {
       let dispose = () => {};
       const submit = () => {
@@ -513,6 +571,10 @@ export function EditorPage() {
             defaultLabel={box.label}
             onLabel={(v) => (box.label = v)}
             onIds={(v) => (box.ids = v)}
+            onSignificant={(v, known) => {
+              box.significant = v;
+              box.significantKnown = known;
+            }}
             onSubmit={submit}
           />
         ),
@@ -581,13 +643,25 @@ export function EditorPage() {
     }
     // `targetId` — not `id` — so creating a knowledge item actually publishes the new document
     // instead of POSTing to the literal path segment `new`.
-    const { version } = await publish.mutateAsync({
+    const result = await publish.mutateAsync({
       id: targetId,
       label: label || 'פורסם',
       markPartial: partial,
       ...(box.ids.length ? { resolveFeedbackIds: box.ids } : {}),
+      // Sent for an existing document once the answer is *known*: the checkbox is an explicit yes
+      // or an explicit no, and only silence lets the detector's own verdict stand. Silence is the
+      // right answer while the preview is still in flight — confirming the dialog that fast would
+      // otherwise send a loading state as "not significant" and suppress the refreshes.
+      ...(isNew || !box.significantKnown ? {} : { significantChange: box.significant }),
     });
-    toast(`פורסם v${version} · הכרטיס בספרייה עודכן`, 'ok');
+    const { version } = result;
+    const flag = result.changeFlag;
+    toast(
+      flag?.significant
+        ? `פורסם v${version} · שינוי מהותי: ${counted(flag.refreshAssignments, refreshes, 'נוצר', 'נוצרו')}`
+        : `פורסם v${version} · הכרטיס בספרייה עודכן`,
+      'ok',
+    );
     go(`/doc/${targetId}`);
   };
 

@@ -55,6 +55,25 @@ export const keys = {
   feedbackItem: (id: string) => ['feedback', 'item', id] as const,
   feedbackAnalytics: (q: unknown = '*') => ['feedback', 'analytics', q] as const,
   docFeedback: (id: string) => ['docFeedback', id] as const,
+  /**
+   * wave 5 — learning (V4a's learner keys and V4b's manager keys in one block). Every key starts
+   * with `'learning'`, which is what lets one prefix invalidation drop the whole surface when a
+   * `learning.*` event arrives over SSE.
+   */
+  learning: {
+    my: ['learning', 'my'] as const,
+    player: (assignmentId: string) => ['learning', 'player', assignmentId] as const,
+    doc: (documentId: string) => ['learning', 'doc', documentId] as const,
+    items: (q: unknown = '*') => ['learning', 'items', q] as const,
+    item: (id: string) => ['learning', 'item', id] as const,
+    versions: (id: string) => ['learning', 'versions', id] as const,
+    completion: (id: string) => ['learning', 'completion', id] as const,
+    dashboard: (world: string = '*') => ['learning', 'dashboard', world] as const,
+    audienceOptions: ['learning', 'audienceOptions'] as const,
+    changePreview: (documentId: string) => ['learning', 'changePreview', documentId] as const,
+  },
+  /* wave 5 — knowledge gaps (V4b) */
+  gaps: (q: unknown = '*') => ['gaps', q] as const,
   admin: {
     users: (q: unknown = '*') => ['admin', 'users', q] as const,
     roles: ['admin', 'roles'] as const,
@@ -67,6 +86,8 @@ export const keys = {
     matrix: ['admin', 'roles', 'matrix'] as const,
     identity: ['admin', 'identity'] as const,
     system: ['admin', 'system'] as const,
+    /* wave 5 — V4b */
+    workflow: ['admin', 'workflow'] as const,
   },
   /* wave 4 — usage analytics (W5) */
   analytics: {

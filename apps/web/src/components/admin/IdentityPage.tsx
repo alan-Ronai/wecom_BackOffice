@@ -5,6 +5,7 @@ import { useCan } from '../../api/hooks/me.js';
 import type { IdentityProvider, IdentitySettings, IdentitySettingsPut } from '../../api/stage5.js';
 import { useToast } from '../ui/Toast.js';
 import { Chip, LoadError } from '../ui/index.js';
+import { WorkflowSettingsSection } from './WorkflowSettingsSection.js';
 
 /** The local edit buffer. Secrets are `null` until typed — see `SecretField`. */
 interface Draft {
@@ -343,6 +344,10 @@ export function IdentityPage() {
           </div>
         </div>
       </section>
+
+      {/* wave 5 (V4b): the approver switch and the learning/gap thresholds. It owns its own card
+          and its own read of `GET /admin/workflow`, which is `docs.read` — only Save is admin. */}
+      <WorkflowSettingsSection />
     </>
   );
 }

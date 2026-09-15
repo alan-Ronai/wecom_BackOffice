@@ -48,6 +48,34 @@ export const notes = (n: number): string => plural(n, { one: 'הערה אחת', 
 export const users = (n: number): string =>
   plural(n, { one: 'משתמש אחד', two: 'שני משתמשים', many: '# משתמשים' });
 
+/* wave 5 — the nouns the learning surface counts. */
+
+/** שאלה — a quiz question (feminine). */
+export const questions = (n: number): string =>
+  plural(n, { one: 'שאלה אחת', two: 'שתי שאלות', many: '# שאלות' });
+
+/** פריט — an entry in a briefing. The same noun as `items`, counted on a different screen. */
+export const entries = (n: number): string => items(n);
+
+/** פריט למידה — a briefing or a quiz, where the bare "פריט" would mean a knowledge item. */
+export const learningItems = (n: number): string =>
+  plural(n, { one: 'פריט למידה אחד', two: 'שני פריטי למידה', many: '# פריטי למידה' });
+
+/** הקצאה — one item assigned to one person (feminine). */
+export const assignments = (n: number): string =>
+  plural(n, { one: 'הקצאה אחת', two: 'שתי הקצאות', many: '# הקצאות' });
+
+/** רענון — a refresh assignment raised by a significant change. */
+export const refreshes = (n: number): string =>
+  plural(n, { one: 'רענון אחד', two: 'שני רענונים', many: '# רענונים' });
+
+/** פער — a knowledge gap. */
+export const gaps = (n: number): string => plural(n, { one: 'פער אחד', two: 'שני פערים', many: '# פערים' });
+
+/** ניסיון — one attempt at a quiz. */
+export const attempts = (n: number): string =>
+  plural(n, { one: 'ניסיון אחד', two: 'שני ניסיונות', many: '# ניסיונות' });
+
 /**
  * A count followed by a word that has to agree with it.
  *

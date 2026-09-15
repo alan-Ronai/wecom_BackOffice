@@ -5,6 +5,7 @@ import {
   percentile,
   QUERY_CLASSES,
   summarize,
+  MIN_PREFIX_CHARS,
 } from '../../scripts/perf-mix.js';
 
 /**
@@ -75,7 +76,10 @@ describe('perf-mix query mix', () => {
     for (const m of mix.filter((x) => x.cls === 'single')) expect(m.q.split(/\s+/)).toHaveLength(1);
     for (const m of mix.filter((x) => x.cls === 'two-word')) expect(m.q.split(/\s+/)).toHaveLength(2);
     for (const m of mix.filter((x) => x.cls === 'stopword')) expect(m.q.split(/\s+/)).toHaveLength(3);
-    for (const m of mix.filter((x) => x.cls === 'prefix')) expect(m.q.length).toBeGreaterThanOrEqual(2);
+    // Three, not two: `pg_trgm` cannot index a shorter pattern and the palette never sends one
+    // (`MIN_SEARCH_CHARS`), so a two-character prefix made the load gate red by construction.
+    for (const m of mix.filter((x) => x.cls === 'prefix'))
+      expect(m.q.length).toBeGreaterThanOrEqual(MIN_PREFIX_CHARS);
     for (const m of mix.filter((x) => x.cls === 'world-filtered')) expect(m.world).toBeTruthy();
     for (const m of mix.filter((x) => x.cls !== 'world-filtered')) expect(m.world).toBeUndefined();
   });

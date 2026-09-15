@@ -46,6 +46,8 @@ import { usePalette } from '../palette/paletteStore.js';
 import { useMediaQuery } from '../../lib/useMediaQuery.js';
 import { SourcePane } from '../source/SourcePane.js';
 import { SyncStateBadge } from '../source/SyncStateBadge.js';
+import { RefreshBanner } from '../learning/RefreshBanner.js';
+import { LearningBadge } from '../learning/LearningBadge.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 import type { FieldInfo } from '../../lib/format.js';
 
@@ -469,6 +471,9 @@ export function ArticlePage() {
               edit the item can act on, and it is the half of the loop the source-review flag
               deliberately does not cover. */}
           {can('docs.edit', doc) ? <SyncStateBadge documentId={doc.id} /> : null}
+          {/* wave 5 (V4a): how many published briefings/quizzes teach this document. Manager
+              information — the component gates itself on `learning.manage`. */}
+          <LearningBadge documentId={doc.id} />
           {(doc.tags ?? []).map((t) => (
             <span
               key={t}
@@ -528,6 +533,9 @@ export function ArticlePage() {
           <SourceReviewBadge doc={doc} />
         </div>
       ) : null}
+      {/* wave 5 (V4a): the reader's own refresh obligation for *this* document. The component
+          gates itself on `learning.read` and renders nothing when nothing is owed. */}
+      <RefreshBanner documentId={doc.id} />
       {paneBody}
     </>
   );

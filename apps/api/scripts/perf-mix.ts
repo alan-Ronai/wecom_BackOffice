@@ -78,6 +78,15 @@ const VERBS = ['בדיקת', 'טיפול', 'פתיחת', 'סגירת', 'עדכו
  */
 const STOPWORDS = ['של', 'את', 'על', 'עם', 'זה', 'כל', 'יש', 'לא', 'מה', 'אם'];
 
+/**
+ * `apps/web`'s `MIN_SEARCH_CHARS`. Duplicated rather than imported: this script must not pull the
+ * web package into the API's dependency graph, and the number is the product's contract with the
+ * palette, not an implementation detail of either side.
+ */
+export const MIN_PREFIX_CHARS = 3;
+/** Nouns long enough to cut a `MIN_PREFIX_CHARS` prefix that is still a prefix and not the word. */
+const PREFIX_NOUNS = NOUNS.filter((n) => n.length > MIN_PREFIX_CHARS);
+
 export const WORLDS = ['sim', 'tech', 'billing', 'plans', 'intl', 'ops'] as const;
 
 /** Deterministic PRNG (same generator `load-fixture.ts` uses), so a mix is reproducible. */
@@ -104,9 +113,19 @@ export function buildQueryMix(perClass = 40, seed = 1337): PerfQuery[] {
   for (let i = 0; i < perClass; i++) {
     out.push({ cls: 'single', q: pick(rng, NOUNS) });
     out.push({ cls: 'two-word', q: `${pick(rng, VERBS)} ${pick(rng, NOUNS)}` });
-    // The palette searches on every keystroke: the last word is a prefix of a real one.
-    const whole = pick(rng, NOUNS);
-    const cut = Math.max(2, Math.min(whole.length - 1, 2 + Math.floor(rng() * 3)));
+    /**
+     * The palette searches as the user types, but only from `MIN_SEARCH_CHARS` (3) on — below
+     * that `isSearchable` sends nothing and the palette answers from local hits. The generator
+     * used to issue two-character prefixes, which `pg_trgm` cannot index at all, so the `prefix`
+     * class was over the 500 ms budget *by construction* and the gate was permanently red. A
+     * gate that is always red stops being read, and the shortest prefix the product actually
+     * sends is three characters.
+     */
+    const whole = pick(rng, PREFIX_NOUNS);
+    const cut = Math.max(
+      MIN_PREFIX_CHARS,
+      Math.min(whole.length - 1, MIN_PREFIX_CHARS + Math.floor(rng() * 3)),
+    );
     out.push({ cls: 'prefix', q: whole.slice(0, cut) });
     out.push({
       cls: 'stopword',

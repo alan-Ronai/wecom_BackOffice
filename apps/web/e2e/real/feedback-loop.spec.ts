@@ -90,7 +90,13 @@ test('W4-E2E-1 feedback travels from an agent to a closed status linked to a pub
   await l.getByRole('button', { name: /פרסם v/ }).click();
   const pub = l.getByRole('dialog', { name: /פרסום v/ });
   await pub.getByLabel(/מה השתנה/).fill('תיקון הסף בעקבות משוב');
-  await pub.getByRole('checkbox').first().check();
+  // Wave 5 put a second checkbox in this dialog (the significant-change flag), so the report is
+  // ticked inside its own group rather than by being the only checkbox there.
+  await pub
+    .getByRole('group', { name: 'לסגור משובים פתוחים עם הגרסה הזו?' })
+    .getByRole('checkbox')
+    .first()
+    .check();
   await pub.getByRole('button', { name: 'אישור' }).click();
   const published = l.getByText(/פורסם v\d+/);
   await expect(published).toBeVisible({ timeout: 20_000 });

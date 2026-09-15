@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useReviewDecision, useReviews, type ReviewRow } from '../../api/hooks/collab.js';
 import { useCan, useMe } from '../../api/hooks/me.js';
+import { ApiError } from '../../api/unwrap.js';
 import { useDocument } from '../../api/hooks/documents.js';
 import { cat } from '../../lib/constants.js';
 import { ago, fmtDate } from '../../lib/format.js';
@@ -44,6 +45,12 @@ function ReviewCard({
    * your own document back to draft publishes nothing and is a withdrawal.
    */
   const isRequester = !!me.data && me.data.user.id === row.requestedBy;
+  /**
+   * Wave 5 §11. With `requireApprover` on, only an `approver` may decide; the API answers 403
+   * `APPROVER_REQUIRED`. V3 puts the answer on the row itself (`canApprove`) so the queue does not
+   * have to re-derive it from roles — the row knows whether *this* caller may decide.
+   */
+  const needsApprover = row.canApprove === false && !isRequester;
 
   return (
     <div className="tcard review-card">
@@ -80,12 +87,19 @@ function ReviewCard({
             <button
               className="btn xs primary"
               aria-label={`אשר ופרסם את ${row.title}`}
-              disabled={isRequester}
-              title={isRequester ? 'ביקשת את הבדיקה — נדרש אישור של גורם אחר' : undefined}
+              disabled={isRequester || needsApprover}
+              title={
+                isRequester
+                  ? 'ביקשת את הבדיקה — נדרש אישור של גורם אחר'
+                  : needsApprover
+                    ? 'אישור דורש תפקיד מאשר'
+                    : undefined
+              }
               onClick={() => onDecide(row, 'approve')}
             >
               ✓ אשר ופרסם
             </button>
+            {needsApprover ? <span className="small muted">אישור דורש תפקיד מאשר</span> : null}
             <button
               className="btn xs danger"
               aria-label={`דרוש שינויים ב-${row.title}`}
@@ -118,7 +132,18 @@ export function ReviewsPage() {
         row.note ?? '',
       );
       if (label == null) return;
-      await decide.mutateAsync({ documentId: row.documentId, decision, label: label || 'אושר בסקירה' });
+      try {
+        await decide.mutateAsync({ documentId: row.documentId, decision, label: label || 'אושר בסקירה' });
+      } catch (e) {
+        // The row's `canApprove` already disables the button; this covers the race where the
+        // setting is switched on while the queue is open, so the refusal reads as a rule and not
+        // as a failure.
+        if (e instanceof ApiError && e.code === 'APPROVER_REQUIRED') {
+          toast('נדרש תפקיד מאשר כדי לאשר ולפרסם מסקירה', 'warn');
+          return;
+        }
+        throw e;
+      }
       toast('אושר ופורסם', 'ok');
       return;
     }

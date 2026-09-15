@@ -101,6 +101,15 @@ function invalidate(qc: QueryClient, ev: Event): void {
       // The save may have raised the source-review flag, which lives on the document.
       void qc.invalidateQueries({ queryKey: keys.doc(id) });
     }
+  } else if (ev.name.startsWith('learning.')) {
+    // Every learning key starts with 'learning' — my assignments, the player, per-document state.
+    void qc.invalidateQueries({ queryKey: ['learning'] });
+    void qc.invalidateQueries({ queryKey: ['notifications'] });
+    const docId = (ev.payload as { documentId?: string }).documentId;
+    if (docId) void qc.invalidateQueries({ queryKey: keys.doc(docId) });
+  } else if (ev.name === 'gap.detected') {
+    void qc.invalidateQueries({ queryKey: ['gaps'] });
+    void qc.invalidateQueries({ queryKey: ['notifications'] });
   } else if (ev.name === 'taxonomy.changed') {
     // The sidebar, the facets and the topic pages all read these three roots.
     void qc.invalidateQueries({ queryKey: ['worlds'] });

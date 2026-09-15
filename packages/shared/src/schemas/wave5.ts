@@ -420,3 +420,43 @@ export type GapsResponse = z.infer<typeof GapsResponseSchema>;
 export type GapDismissBody = z.infer<typeof GapDismissBodySchema>;
 export type GapResolveBody = z.infer<typeof GapResolveBodySchema>;
 export type GapDetectResult = z.infer<typeof GapDetectResultSchema>;
+
+/* ── V1 additions (append-only) ─────────────────────────────────────────── */
+/** V1 preview: the player payload without an assignment (managers previewing a draft or published item). */
+export const LearningPreviewSchema = PlayerItemSchema.omit({ assignment: true });
+export type LearningPreview = z.infer<typeof LearningPreviewSchema>;
+/**
+ * Response of `POST /learning/items/:id/publish`. The item itself is returned alongside the new
+ * version number: the builder re-renders the item it just published (status, pinned
+ * `sourceVersions`, the effective `passMark` the workflow settings filled in) without a second GET.
+ */
+export const LearningPublishResponseSchema = z.object({
+  item: LearningItemSchema,
+  version: z.number().int(),
+});
+export type LearningPublishResponse = z.infer<typeof LearningPublishResponseSchema>;
+
+/* ── V2 additive: dashboard query ────────────────────────────────────────── */
+/** Querystring of `GET /learning/dashboard`; the manager's world scope narrows it further. */
+export const LearningDashboardQuerySchema = z.object({ world: z.string().optional() });
+export type LearningDashboardQuery = z.infer<typeof LearningDashboardQuerySchema>;
+
+/* ── V6 additive: the two integration routes ─────────────────────────────── */
+/**
+ * `GET /documents/:id/change-preview` — the verdict the detector would reach if the working
+ * document were published now, so the publish dialog can pre-tick "שינוי מהותי" instead of asking
+ * the editor to guess. No `refreshAssignments`: nothing is created until the publish itself.
+ */
+export const ChangePreviewSchema = ChangeFlagSchema.omit({ refreshAssignments: true });
+export type ChangePreview = z.infer<typeof ChangePreviewSchema>;
+/**
+ * `GET /learning/audience-options` — what the assign dialog needs to build an audience, behind
+ * `learning.manage` alone. `GET /admin/roles` would have done, but it requires `roles.manage`, so
+ * a lead who may assign learning could not see the role list; this exposes names and labels only,
+ * never the permission grants behind them.
+ */
+export const AudienceOptionsSchema = z.object({
+  roles: z.array(z.object({ name: z.string(), label: z.string() })),
+  worlds: z.array(z.object({ slug: z.string(), name: z.string() })),
+});
+export type AudienceOptions = z.infer<typeof AudienceOptionsSchema>;

@@ -23,6 +23,7 @@ import { httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
 import { canReadUnpublished, visibleStatusSql, visibleWhere } from '../../lib/visibility.js';
 import type { ReqUser } from '../../lib/user.js';
+import { getDocumentSyncState } from '../connectors/document-sync-state.js';
 
 export type Q = pg.Pool | Tx;
 
@@ -785,16 +786,29 @@ export async function publishDocument(
    * clearing "the source moved, an editor must look" is the opposite of what the flag means.
    */
   const humanPublish = (opts.kind ?? 'published') === 'published' && opts.actorId !== null;
+  /**
+   * E-1: a human publish closes the editorial loop, but only if nothing is still owed to the
+   * remote. While a sync link is `conflict` or `pending_push` the flag is not stale editorial
+   * state — it is a live "the source and the item disagree" that publishing does not settle — so
+   * the flag is kept and its reason restated from the current link state rather than cleared.
+   */
+  const sync = humanPublish ? await getDocumentSyncState(tx, id) : null;
+  const keepFlag = sync !== null && sync.flagReason !== null;
   await tx.query(
     `update documents set current_version=$2, status=$3, updated_by=$4, updated_at=now(), etag=gen_random_uuid()::text,
-            published_at=now()${
-              humanPublish
-                ? `, approver_id=$4,
+            published_at=now()${humanPublish ? ', approver_id=$4' : ''}${
+              humanPublish && !keepFlag
+                ? `,
             source_review_needed=false, source_review_reason=null, source_review_at=null`
+                : ''
+            }${
+              keepFlag
+                ? `,
+            source_review_needed=true, source_review_reason=$5, source_review_at=now()`
                 : ''
             }
       where id=$1`,
-    [id, version, status, opts.actorId],
+    keepFlag ? [id, version, status, opts.actorId, sync.flagReason] : [id, version, status, opts.actorId],
   );
   const published = (await getDocument(tx, id))!;
   const sourceVersion =

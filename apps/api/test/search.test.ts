@@ -152,6 +152,35 @@ run('search', () => {
     expect((await hits('חוב של צוללת')).items.map((x: { id: string }) => x.id)).not.toContain(c.id);
   });
 
+  /**
+   * `docs/perf.md` proposal 2: `pg_trgm` cannot index a pattern under three characters and the
+   * Hebrew function words are two, so one of them in a query used to force a sequential scan of
+   * `steps` while filtering nothing (`של` matches inside `שלב` and `שלום`). The conjunction now
+   * drops them, exactly as 0027 dropped them from the ranking side — so a phrase with a stopword
+   * answers the same hits as the phrase without it, rather than fewer.
+   */
+  it('GET /search drops Hebrew stopwords from the ilike conjunction', async () => {
+    const step = async (q: string) =>
+      (
+        (
+          await app.inject({
+            method: 'GET',
+            url: '/api/v1/search?q=' + encodeURIComponent(q) + '&types=steps',
+            headers: auth(u),
+          })
+        ).json() as { groups: { hits: { documentId: string; stepKey: string }[] }[] }
+      ).groups[0]?.hits.map((h) => h.documentId + '#' + h.stepKey) ?? [];
+
+    // The step seeded above reads "פתח את כרטיס חוב של לקוח ובדוק יתרה".
+    const withStopword = await step('חוב של לקוח');
+    expect(withStopword.length).toBeGreaterThan(0);
+    expect(withStopword).toEqual(await step('חוב לקוח'));
+    // An all-stopword query keeps today's behaviour instead of degenerating into "match all".
+    expect(await step('של את')).not.toEqual([]);
+    // And the conjunction still excludes a word that is genuinely absent.
+    expect(await step('חוב של צוללת')).toEqual([]);
+  });
+
   it('returns nothing for an empty query and reindexes', async () => {
     const empty = (await app.inject({ method: 'GET', url: '/api/v1/search?q=', headers: auth(u) })).json();
     expect(empty.groups).toEqual([]);
