@@ -411,7 +411,10 @@
                           "learning.manage",
                           "learning.publish",
                           "gaps.read",
-                          "gaps.manage"
+                          "gaps.manage",
+                          "ai.ask",
+                          "ai.chat",
+                          "ai.manage"
                         ]
                       }
                     },
@@ -1044,7 +1047,10 @@
                                 "learning.manage",
                                 "learning.publish",
                                 "gaps.read",
-                                "gaps.manage"
+                                "gaps.manage",
+                                "ai.ask",
+                                "ai.chat",
+                                "ai.manage"
                               ]
                             }
                           }
@@ -1121,7 +1127,10 @@
                         "learning.manage",
                         "learning.publish",
                         "gaps.read",
-                        "gaps.manage"
+                        "gaps.manage",
+                        "ai.ask",
+                        "ai.chat",
+                        "ai.manage"
                       ]
                     }
                   }
@@ -1190,7 +1199,10 @@
                           "learning.manage",
                           "learning.publish",
                           "gaps.read",
-                          "gaps.manage"
+                          "gaps.manage",
+                          "ai.ask",
+                          "ai.chat",
+                          "ai.manage"
                         ]
                       }
                     },
@@ -1261,7 +1273,10 @@
                               "learning.manage",
                               "learning.publish",
                               "gaps.read",
-                              "gaps.manage"
+                              "gaps.manage",
+                              "ai.ask",
+                              "ai.chat",
+                              "ai.manage"
                             ]
                           },
                           "resource": {
@@ -1326,7 +1341,10 @@
                                 "learning.manage",
                                 "learning.publish",
                                 "gaps.read",
-                                "gaps.manage"
+                                "gaps.manage",
+                                "ai.ask",
+                                "ai.chat",
+                                "ai.manage"
                               ]
                             }
                           },
@@ -1410,7 +1428,10 @@
                         "learning.manage",
                         "learning.publish",
                         "gaps.read",
-                        "gaps.manage"
+                        "gaps.manage",
+                        "ai.ask",
+                        "ai.chat",
+                        "ai.manage"
                       ]
                     }
                   }
@@ -1486,7 +1507,10 @@
                           "learning.manage",
                           "learning.publish",
                           "gaps.read",
-                          "gaps.manage"
+                          "gaps.manage",
+                          "ai.ask",
+                          "ai.chat",
+                          "ai.manage"
                         ]
                       }
                     },
@@ -29135,6 +29159,95 @@
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "affects": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "document",
+                                    "block",
+                                    "field",
+                                    "topic"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "why": {
+                                  "type": "string",
+                                  "default": ""
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "id",
+                                "title"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "default": []
+                          },
+                          "promptVersion": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "model": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "editDiff": {
+                            "type": "object",
+                            "properties": {
+                              "rows": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "rowId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "op": {
+                                      "type": "string",
+                                      "enum": [
+                                        "keep",
+                                        "edit",
+                                        "remove"
+                                      ]
+                                    },
+                                    "before": {
+                                      "type": "string"
+                                    },
+                                    "after": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "rowId",
+                                    "op"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "default": []
+                              }
+                            },
+                            "additionalProperties": false,
+                            "nullable": true
+                          },
+                          "appliedParts": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "nullable": true
                           }
                         },
                         "required": [
@@ -30527,6 +30640,95 @@
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "affects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document",
+                              "block",
+                              "field",
+                              "topic"
+                            ]
+                          },
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "why": {
+                            "type": "string",
+                            "default": ""
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "id",
+                          "title"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    },
+                    "promptVersion": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "model": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "editDiff": {
+                      "type": "object",
+                      "properties": {
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "rowId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "op": {
+                                "type": "string",
+                                "enum": [
+                                  "keep",
+                                  "edit",
+                                  "remove"
+                                ]
+                              },
+                              "before": {
+                                "type": "string"
+                              },
+                              "after": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "rowId",
+                              "op"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "default": []
+                        }
+                      },
+                      "additionalProperties": false,
+                      "nullable": true
+                    },
+                    "appliedParts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -31899,6 +32101,95 @@
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "affects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document",
+                              "block",
+                              "field",
+                              "topic"
+                            ]
+                          },
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "why": {
+                            "type": "string",
+                            "default": ""
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "id",
+                          "title"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    },
+                    "promptVersion": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "model": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "editDiff": {
+                      "type": "object",
+                      "properties": {
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "rowId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "op": {
+                                "type": "string",
+                                "enum": [
+                                  "keep",
+                                  "edit",
+                                  "remove"
+                                ]
+                              },
+                              "before": {
+                                "type": "string"
+                              },
+                              "after": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "rowId",
+                              "op"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "default": []
+                        }
+                      },
+                      "additionalProperties": false,
+                      "nullable": true
+                    },
+                    "appliedParts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -33271,6 +33562,95 @@
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "affects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document",
+                              "block",
+                              "field",
+                              "topic"
+                            ]
+                          },
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "why": {
+                            "type": "string",
+                            "default": ""
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "id",
+                          "title"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    },
+                    "promptVersion": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "model": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "editDiff": {
+                      "type": "object",
+                      "properties": {
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "rowId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "op": {
+                                "type": "string",
+                                "enum": [
+                                  "keep",
+                                  "edit",
+                                  "remove"
+                                ]
+                              },
+                              "before": {
+                                "type": "string"
+                              },
+                              "after": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "rowId",
+                              "op"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "default": []
+                        }
+                      },
+                      "additionalProperties": false,
+                      "nullable": true
+                    },
+                    "appliedParts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -35280,6 +35660,95 @@
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "affects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document",
+                              "block",
+                              "field",
+                              "topic"
+                            ]
+                          },
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "why": {
+                            "type": "string",
+                            "default": ""
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "id",
+                          "title"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    },
+                    "promptVersion": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "model": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "editDiff": {
+                      "type": "object",
+                      "properties": {
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "rowId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "op": {
+                                "type": "string",
+                                "enum": [
+                                  "keep",
+                                  "edit",
+                                  "remove"
+                                ]
+                              },
+                              "before": {
+                                "type": "string"
+                              },
+                              "after": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "rowId",
+                              "op"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "default": []
+                        }
+                      },
+                      "additionalProperties": false,
+                      "nullable": true
+                    },
+                    "appliedParts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "nullable": true
                     }
                   },
                   "required": [

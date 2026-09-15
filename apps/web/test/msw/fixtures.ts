@@ -853,6 +853,9 @@ export const suggestions: Suggestion[] = [
     confidence: 0.96,
     rationale: 'ערך מספרי שונה בפסקה 4.8',
     status: 'pending',
+    // Wave 6 (X0): `affects` has a default, so it is present on every parsed suggestion.
+    // X1 fills it from the graph; X4a is what renders the chips.
+    affects: [],
     createdAt: T,
   },
 ];

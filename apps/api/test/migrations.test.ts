@@ -498,6 +498,64 @@ run('migrations', () => {
     await pool.query('delete from users where id=$1', [u.rows[0].id]);
   });
 
+  /**
+   * Wave 6 (X0). The role grants are checked exhaustively against `DEFAULT_ROLES` above; what
+   * is asserted here is the part that test cannot see — that the three permissions are three,
+   * that an agent can ask but not chat, and that the settings history table and its four
+   * seeded rows exist, because `getAiSettings` reads all four in one `= any($1)`.
+   */
+  it('seeds the wave 6 AI permissions, the settings rows and the version table (0050)', async () => {
+    const p = await pool.query(
+      "select name, resource from permissions where name in ('ai.ask','ai.chat','ai.manage') order by 1",
+    );
+    expect(p.rows.map((r) => [r.name, r.resource])).toEqual([
+      ['ai.ask', 'ai'],
+      ['ai.chat', 'ai'],
+      ['ai.manage', 'ai'],
+    ]);
+    const rp = await pool.query(
+      `select r.name role, rp.permission from role_permissions rp join roles r on r.id=rp.role_id
+       where rp.permission like 'ai.%' order by 1,2`,
+    );
+    const grants = rp.rows.map((x) => x.role + ':' + x.permission);
+    expect(grants).toEqual(
+      expect.arrayContaining([
+        'agent:ai.ask',
+        'editor:ai.ask',
+        'editor:ai.chat',
+        'lead:ai.chat',
+        'admin:ai.manage',
+      ]),
+    );
+    expect(grants).not.toContain('agent:ai.chat');
+    expect(grants).not.toContain('editor:ai.manage');
+    // The approver publishes; it never talks to the copilot.
+    expect(grants.filter((g) => g.startsWith('approver:'))).toEqual([]);
+
+    const settings = await pool.query("select key from app_settings where key like 'ai.%' order by 1");
+    expect(settings.rows.map((r) => r.key)).toEqual(['ai.brief', 'ai.limits', 'ai.models', 'ai.style']);
+
+    const u = await pool.query(
+      `insert into users(subject, source, display_name) values ('w6-ai','local','w6') returning id`,
+    );
+    await pool.query(
+      `insert into ai_setting_versions(key, version, value, updated_by) values ('ai.brief', 1, '{"text":"רונאי"}'::jsonb, $1)`,
+      [u.rows[0].id],
+    );
+    // One row per (key, version): a concurrent double save must not record two version 1s.
+    await expect(
+      pool.query(`insert into ai_setting_versions(key, version, value) values ('ai.brief', 1, '{}'::jsonb)`),
+    ).rejects.toThrow(/ai_setting_versions_key_version_key|duplicate key/);
+    // Deleting the author keeps the history — the text behind a stamped prompt version stays.
+    await pool.query('delete from users where id=$1', [u.rows[0].id]);
+    const kept = await pool.query(
+      `select updated_by from ai_setting_versions where key='ai.brief' and version=1`,
+    );
+    expect(kept.rowCount).toBe(1);
+    expect(kept.rows[0].updated_by).toBeNull();
+    await pool.query(`delete from ai_setting_versions where key='ai.brief'`);
+  });
+
   it('rolls back cleanly', async () => {
     await runner({
       databaseUrl: c.getConnectionUri(),

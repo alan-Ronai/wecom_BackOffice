@@ -18,6 +18,8 @@ export const QUEUES = {
   learningResolveAudiences: 'learning.resolve_audiences', // V2: nightly re-resolve audiences → assignments
   learningReminders: 'learning.reminders', // V2: due-soon / overdue reminders
   gapsDetect: 'gaps.detect', // V3: nightly gap heuristics
+  aiEval: 'ai.eval', // X1: offline evaluation run over the committed case set
+  aiReindex: 'ai.reindex', // X1: re-embed every document after an EMBED_MODEL change
 } as const;
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 

@@ -6,3 +6,4 @@ export * from './api.js';
 export * from './stage45.js';
 export * from './wave4.js';
 export * from './wave5.js';
+export * from './wave6.js';

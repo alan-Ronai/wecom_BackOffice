@@ -30,6 +30,8 @@ export const EVENTS = [
   'gap.detected',
   // pipeline fan-out — a sync link that already points elsewhere is kept, never re-pointed.
   'sync.link_skipped',
+  // Wave 6 — AI copilot. Appended, never reordered.
+  'ai.message',
 ] as const;
 export type EventName = (typeof EVENTS)[number];
 
@@ -143,6 +145,13 @@ const payloads = {
     documentId: IdSchema,
     skippedDocumentId: IdSchema,
   }),
+  /* ── Wave 6: AI copilot ──────────────────────────────────────────────── */
+  /**
+   * One assistant message finished streaming. Fan-out is **per user** (`userId`), like
+   * `notification.created`: a transcript is the author's, and a chat pane open in another
+   * tab is the only thing that needs to know a message landed.
+   */
+  'ai.message': z.object({ conversationId: IdSchema, messageId: IdSchema, userId: IdSchema }),
 } as const;
 export type EventPayloads = { [K in EventName]: z.infer<(typeof payloads)[K]> };
 

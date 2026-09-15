@@ -32,7 +32,21 @@ describe('permissions', () => {
       'learning.publish',
       'gaps.read',
       'gaps.manage',
+      'ai.ask',
+      'ai.chat',
+      'ai.manage',
     ]);
+  });
+  it('wave 6 grants: ai.ask from agent, ai.chat from editor, ai.manage admin only', () => {
+    expect(DEFAULT_ROLES.agent).toContain('ai.ask');
+    expect(DEFAULT_ROLES.agent).not.toContain('ai.chat');
+    expect(DEFAULT_ROLES.editor).toEqual(expect.arrayContaining(['ai.ask', 'ai.chat']));
+    expect(DEFAULT_ROLES.editor).not.toContain('ai.manage');
+    expect(DEFAULT_ROLES.lead).toEqual(expect.arrayContaining(['ai.ask', 'ai.chat']));
+    expect(DEFAULT_ROLES.lead).not.toContain('ai.manage');
+    expect(DEFAULT_ROLES.admin).toEqual(expect.arrayContaining(['ai.ask', 'ai.chat', 'ai.manage']));
+    // The approver signs off on content; it never talks to the copilot (spec §1.6 of wave 5).
+    expect(DEFAULT_ROLES.approver).not.toContain('ai.ask');
   });
   it('wave 5 grants and the approver role', () => {
     expect(DEFAULT_ROLES.agent).toContain('learning.read');
