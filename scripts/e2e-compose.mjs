@@ -475,16 +475,31 @@ async function main() {
     .map((l) => l.trim().split(/\s+/)[0])
     .filter(Boolean);
   const envText = readFileSync(ENV_SOURCE, 'utf8');
-  for (const key of ['MODEL_NAME', 'EMBED_MODEL']) {
-    const tag = envText.match(new RegExp(`^${key}=(.*)$`, 'm'))?.[1]?.trim();
-    if (!tag) throw new Error(`deploy/e2e.env sets no ${key} — the W-3 coverage needs both`);
+  const envValue = (key) => envText.match(new RegExp(`^${key}=(.*)$`, 'm'))?.[1]?.trim();
+  /**
+   * Wave 6 (X1): the assertion is over the *slots the API will ask for*, not over two key names.
+   * `MODEL_TIER` and the per-slot overrides decide those, and `deploy/ollama-pull.sh` resolves
+   * them the same way — so a tiered stack that pulled `MODEL_NAME` instead would look installed
+   * and 404 on every generation call. `MODEL_NAME` and `EMBED_MODEL` stay required (the W-3
+   * coverage); the two generation slots are asserted whenever the env file sets them.
+   */
+  for (const key of ['MODEL_NAME', 'EMBED_MODEL', 'SUGGEST_MODEL', 'CHAT_MODEL']) {
+    const tag = envValue(key);
+    if (!tag) {
+      if (key === 'MODEL_NAME' || key === 'EMBED_MODEL')
+        throw new Error(`deploy/e2e.env sets no ${key} — the W-3 coverage needs both`);
+      continue;
+    }
+    // Compared literally: `nomic-embed-text` and `nomic-embed-text:latest` are different rows in
+    // `ollama list`, and the whole point of this gate is that the configured string is the one
+    // that got pulled.
     if (!present.includes(tag))
       throw new Error(
         `${key}='${tag}' is not in \`ollama list\` (${present.join(', ') || 'nothing'}) — ` +
           'deploy/ollama-pull.sh did not pull it',
       );
   }
-  console.log(`✓ both configured model tags are pulled: ${present.join(', ')}`);
+  console.log(`✓ every configured model slot is pulled: ${present.join(', ')}`);
 
   console.log('\n── 5. health through nginx ──────────────────────────────────');
   /**
