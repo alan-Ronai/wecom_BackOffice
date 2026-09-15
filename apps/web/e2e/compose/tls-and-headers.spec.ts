@@ -110,3 +110,46 @@ test('plain HTTP is redirected to HTTPS rather than served', async ({ request, b
   expect(res.status()).toBe(301);
   expect(res.headers()['location']).toMatch(/^https:\/\/.*\/library$/);
 });
+
+/**
+ * W-4 / W-5 — the two things the CSP was quietly refusing, seen from a browser.
+ *
+ * The assertions above are about the *headers*. These are about what the policy does to the page,
+ * which is where the walkthrough's only two console errors lived and which no `curl` can see: the
+ * pre-paint theme stamp was an inline `<script>` under `script-src 'self'` and had never run in
+ * production (so a dark-mode user got the light→dark flash it exists to prevent), and the
+ * stylesheet's `@import url('https://fonts.googleapis.com/…')` was refused by both
+ * `style-src 'self' 'unsafe-inline'` and `font-src 'self'` — and, on a LAN VM with no route off
+ * the network, would not have loaded either way.
+ *
+ * Asserted here rather than in a unit test because "the CSP does not block it" is a statement
+ * about the deployed nginx, and this is the only suite that has one.
+ */
+test('the page paints under the CSP: the theme is stamped and nothing is blocked', async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({ baseURL, ignoreHTTPSErrors: true });
+  const page = await context.newPage();
+  const violations: string[] = [];
+  page.on('console', (m) => {
+    const text = m.text();
+    if (/Content Security Policy|Refused to (load|execute|apply)/i.test(text)) violations.push(text);
+  });
+  // Every request the document makes, so a third-party font host cannot come back unnoticed.
+  const hosts = new Set<string>();
+  page.on('request', (r) => hosts.add(new URL(r.url()).host));
+
+  try {
+    await page.goto('/', { waitUntil: 'networkidle' });
+    // The stamp ran: it is what `useUiPrefs` would otherwise only get to after `/me/preferences`.
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
+      .toMatch(/^(light|dark)$/);
+    expect(violations, violations.join('\n')).toEqual([]);
+    // First paint reaches the origin and nowhere else — no fonts.googleapis.com, no CDN.
+    expect([...hosts]).toEqual([new URL(baseURL!).host]);
+  } finally {
+    await context.close();
+  }
+});
