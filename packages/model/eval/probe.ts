@@ -11,12 +11,14 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { buildMessages, parseProposals, RESPONSE_FORMAT } from '../src/prompt.js';
+import { flatResponseFormat, parseFlatProposals } from '../src/flat.js';
 import { contextForCase, EVAL_CASES_DIR, loadCases, scoreCase } from '../src/eval.js';
 
 const arg = (n: string) => {
   const i = process.argv.indexOf('--' + n);
   return i >= 0 ? process.argv[i + 1] : undefined;
 };
+const flag = (n: string) => process.argv.includes('--' + n);
 
 const url = arg('url') ?? 'http://localhost:11434';
 const tag = arg('model') ?? 'qwen2.5:3b-instruct-q4_K_M';
@@ -40,8 +42,12 @@ for (const c of cases) {
     body: JSON.stringify({
       model: tag,
       stream: false,
-      format: RESPONSE_FORMAT,
-      options: { temperature: temp, num_ctx: numCtx },
+      format: flag('flat') ? flatResponseFormat(ctx) : RESPONSE_FORMAT,
+      options: {
+        temperature: temp,
+        num_ctx: numCtx,
+        ...(arg('num-predict') ? { num_predict: Number(arg('num-predict')) } : {}),
+      },
       messages,
     }),
   });
@@ -51,7 +57,7 @@ for (const c of cases) {
     eval_count?: number;
   };
   const raw = data.message?.content ?? '';
-  const parsed = parseProposals(raw);
+  const parsed = flag('flat') ? parseFlatProposals(ctx, raw) : parseProposals(raw);
   const report = {
     case: c.id,
     tag,

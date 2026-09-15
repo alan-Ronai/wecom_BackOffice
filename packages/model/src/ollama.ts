@@ -10,6 +10,7 @@ import type {
   ToolCall,
 } from './contract.js';
 import { buildMessages, parseProposals, RESPONSE_FORMAT } from './prompt.js';
+import { flatResponseFormat, parseFlatProposals } from './flat.js';
 import { buildQuestionMessages, parseQuestions, QUESTIONS_RESPONSE_FORMAT } from './questions.js';
 import { enforceSectionCards } from './sections.js';
 
@@ -26,6 +27,16 @@ export interface OllamaOptions {
    * described in a system message and the model is asked to answer with a JSON envelope.
    */
   supportsTools?: boolean;
+  /**
+   * review/wave6-ai-quality, experiment (a). Hand the model the flat, enum-typed, fully-required
+   * schema built from *this* context (`flat.ts`) instead of the envelope whose `payload` is an
+   * unconstrained `{ type: 'object' }`, and re-inflate the discriminated union in code.
+   */
+  flatSchema?: boolean;
+  /** Sampling overrides for experiment (d); the shipped defaults are used when absent. */
+  temperature?: number;
+  numPredict?: number;
+  numCtx?: number;
 }
 
 const randomId = () => 'call_' + crypto.randomUUID().slice(0, 8);
@@ -158,8 +169,12 @@ export class OllamaModel implements ModelClient {
         const r = await this.req('/api/chat', {
           model: this.o.model,
           stream: false,
-          format: RESPONSE_FORMAT,
-          options: { temperature: 0.1, num_ctx: 8192 },
+          format: this.o.flatSchema ? flatResponseFormat(ctx) : RESPONSE_FORMAT,
+          options: {
+            temperature: this.o.temperature ?? 0.1,
+            num_ctx: this.o.numCtx ?? 8192,
+            ...(this.o.numPredict ? { num_predict: this.o.numPredict } : {}),
+          },
           messages:
             attempt === 1
               ? messages
@@ -176,7 +191,8 @@ export class OllamaModel implements ModelClient {
           continue;
         }
         const data = (await r.json()) as { message?: { content?: string } };
-        const parsed = parseProposals(data.message?.content ?? '');
+        const content = data.message?.content ?? '';
+        const parsed = this.o.flatSchema ? parseFlatProposals(ctx, content) : parseProposals(content);
         if (parsed.ok) {
           this.lastRun = { used: 'ollama', attempts: attempt, ms: Date.now() - started };
           // The prompt asks for one card per section, but the section rule is an invariant of

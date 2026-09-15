@@ -37,7 +37,17 @@ async function main(): Promise<void> {
   const model: ModelClient =
     useRules || !tag
       ? new RuleBasedModel()
-      : new OllamaModel({ url, model: tag, embedModel: embed, timeoutMs: EVAL_TIMEOUT_MS });
+      : new OllamaModel({
+          url,
+          model: tag,
+          embedModel: embed,
+          timeoutMs: EVAL_TIMEOUT_MS,
+          /* review/wave6-ai-quality experiment levers; absent = the shipped behaviour. */
+          flatSchema: flag('flat'),
+          ...(arg('temp') ? { temperature: Number(arg('temp')) } : {}),
+          ...(arg('num-predict') ? { numPredict: Number(arg('num-predict')) } : {}),
+          ...(arg('num-ctx') ? { numCtx: Number(arg('num-ctx')) } : {}),
+        });
 
   const cases: EvalCase[] = loadCases(dir);
   const rows: Record<string, string | number>[] = [];
