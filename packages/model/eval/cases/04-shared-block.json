@@ -1,0 +1,51 @@
+{
+  "id": "04-shared-block",
+  "title": "שינוי בפסקה שממופה לשלב מבלוק משותף",
+  "source": { "title": "נהלי SIM" },
+  "diffs": [
+    {
+      "ref": "2.3",
+      "kind": "changed",
+      "before": "בצע ריענון SIM בקונסולה והמתן דקה.",
+      "after": "בצע ריענון SIM בקונסולה והמתן 90 שניות. אם אין קליטה — בקש אתחול מכשיר.",
+      "similarity": 0.66
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "22222222-2222-4222-8222-222222222222",
+      "documentTitle": "אין קליטה",
+      "stepKey": "s3",
+      "stepNum": "3",
+      "stepTitle": "ריענון SIM",
+      "anchor": "2.3",
+      "actions": ["בצע ריענון SIM בקונסולה", "המתן דקה"],
+      "blockId": "44444444-4444-4444-8444-444444444444"
+    }
+  ],
+  "blocks": [
+    {
+      "id": "44444444-4444-4444-8444-444444444444",
+      "title": "ריענון SIM",
+      "actions": ["בצע ריענון SIM בקונסולה", "המתן דקה"]
+    }
+  ],
+  "fields": [],
+  "impact": {
+    "documents": [],
+    "blocks": [
+      { "id": "44444444-4444-4444-8444-444444444444", "title": "ריענון SIM", "usedBy": 9 }
+    ],
+    "fields": [],
+    "topics": [],
+    "related": []
+  },
+  "expected": [
+    {
+      "type": "update-block",
+      "targetDocumentId": "22222222-2222-4222-8222-222222222222",
+      "targetStepKey": "s3",
+      "mustContain": ["90"]
+    }
+  ]
+}

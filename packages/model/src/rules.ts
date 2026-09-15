@@ -1,6 +1,7 @@
 import { similarity } from '@wecom/shared';
 import type { ModelClient, ProposalContext, ProposedSuggestion } from './contract.js';
 import { isNewSourcePath, sectionCards } from './sections.js';
+import { confidenceFor } from './calibration.js';
 
 const sentences = (t: string) =>
   t
@@ -55,7 +56,7 @@ export class RuleBasedModel implements ModelClient {
             targetStepKey: s.stepKey,
             targetBlockId: null,
             payload: { type: 'deprecate-step', reason: 'הפסקה ' + d.ref + ' נמחקה במסמך המקור' },
-            confidence: 0.7,
+            confidence: confidenceFor('deprecate-step', 0.7),
             rationale: 'הפסקה נמחקה במקור.',
           });
         continue;
@@ -99,7 +100,7 @@ export class RuleBasedModel implements ModelClient {
             priority: 'm',
             phases: [{ id: 'p1', label: 'שלבי הטיפול', steps }],
           },
-          confidence: Math.min(0.85, 0.5 + steps.length * 0.05),
+          confidence: confidenceFor('new-card', Math.min(0.85, 0.5 + steps.length * 0.05)),
           rationale: 'פסקה חדשה ' + d.ref + ' ללא שלב מקושר.',
         });
         continue;
@@ -124,7 +125,7 @@ export class RuleBasedModel implements ModelClient {
             targetStepKey: s.stepKey,
             targetBlockId: s.blockId,
             payload: { type: 'update-block', actions },
-            confidence: 0.75,
+            confidence: confidenceFor('update-block', 0.75),
             rationale: 'הפסקה ממופה לבלוק משותף "' + b.title + '".',
           });
         } else {
@@ -136,7 +137,7 @@ export class RuleBasedModel implements ModelClient {
             targetStepKey: s.stepKey,
             targetBlockId: null,
             payload: { type: 'update-step', addActions: added, patch: {} },
-            confidence: added.length ? 0.8 : 0.55,
+            confidence: confidenceFor('update-step', added.length ? 0.8 : 0.55),
             rationale:
               'הפסקה ' + d.ref + ' שונתה; משפיע על שלב ' + s.stepNum + ' ב"' + s.documentTitle + '".',
           });
