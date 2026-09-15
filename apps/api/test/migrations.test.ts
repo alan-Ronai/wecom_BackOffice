@@ -296,6 +296,8 @@ run('migrations', () => {
        where t.relname='knowledge_gaps' and c.conname='knowledge_gaps_kind_check'`,
     );
     expect(chk.rows[0].def).toContain('zero_results');
+  });
+
   /**
    * Post-pilot M6. Every trigram index 0044 adds has to be one the planner can actually choose,
    * because a GIN index that is never read is pure write amplification on the ingest path. The
