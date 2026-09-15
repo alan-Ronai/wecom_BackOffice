@@ -201,9 +201,7 @@ export const trustProxySetting = (config: Config): TrustProxySetting => {
     let addr = ipaddr.parse(address);
     if (addr.kind() === 'ipv6' && (addr as ipaddr.IPv6).isIPv4MappedAddress())
       addr = (addr as ipaddr.IPv6).toIPv4Address();
-    return subnets.some(
-      (net) => net !== null && net[0].kind() === addr.kind() && addr.match(net as never),
-    );
+    return subnets.some((net) => net !== null && net[0].kind() === addr.kind() && addr.match(net as never));
   };
 };
 

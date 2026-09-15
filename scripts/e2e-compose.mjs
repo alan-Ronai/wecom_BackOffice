@@ -15,24 +15,29 @@
  *   5. `apps/web/e2e/compose/` through nginx on https://localhost:8443
  *
  * ── how a browser on this machine arrives "from the LAN" ──────────────────────────────────────
- * The trusted subnet is 10.44.0.0/16 (`PALOALTO_SUBNETS` in deploy/e2e.env), and a browser on the
- * host reaches nginx from the docker bridge gateway, which is not in it. nginx forwards
- * `X-Forwarded-For $proxy_add_x_forwarded_for` — the client's own header with the connecting
- * address appended — and `TRUST_PROXY` names the bridge networks, so Fastify resolves `req.ip` to
- * the left-most address the bridge did not add. A context that sets `X-Forwarded-For: 10.44.0.7`
- * therefore reaches the API as a LAN client, which is exactly what a client one hop further out
- * would look like on the VM.
+ * It doesn't. It connects *through* something that is.
  *
- * Two consequences, both deliberate:
- *   - the *untrusted* case needs no such trick. A plain browser arrives as the bridge gateway,
- *     genuinely outside the trusted subnet, and the last test in `compose/lan-identity.spec.ts`
- *     asserts on that real address — no header anywhere.
- *   - a client that can reach nginx can therefore choose the `req.ip` the firewall is asked
- *     about, and become any user the firewall maps. That is a property of the shipped nginx.conf
- *     (`X-Forwarded-For $proxy_add_x_forwarded_for` preserves what the client sent), not of this
- *     gate; it is written up in docs/operations.md under "Trusting X-Forwarded-For". The day the
- *     deployment stops behaving this way, `lan-identity.spec.ts` goes red and wants rewriting
- *     around a client container with an address on the trusted network instead.
+ * deploy/nginx.conf sets `X-Forwarded-For $remote_addr` — it replaces the header rather than
+ * appending to it — so `req.ip` is the address the connection to nginx actually came from and no
+ * header a browser sends can change it. (It used to append, and `lan-identity.spec.ts` used to
+ * exploit that by setting `X-Forwarded-For: 10.44.0.7` from the host. That was also how a real
+ * client on the pilot LAN could have become any user the firewall maps; the note about it in
+ * docs/operations.md is now a description of a fix.)
+ *
+ * So the gate gives itself real addresses. `deploy/docker-compose.e2e.yml` declares two extra
+ * networks — `lan` (10.44.0.0/24, inside the /16 `PALOALTO_SUBNETS` names) and `offsite`
+ * (198.51.100.0/24) — attaches nginx to both, and runs three one-file containers of
+ * `scripts/lan-forwarder.mjs`, each pinned to a fixed address and publishing 443 to the host:
+ *
+ *   https://localhost:8444  →  10.44.0.7      the LAN user the firewall maps
+ *   https://localhost:8445  →  10.44.0.9      on the LAN, unknown to the firewall
+ *   https://localhost:8446  →  198.51.100.7   off the LAN entirely
+ *   https://localhost:8443  →  the docker bridge gateway, i.e. this machine as it really is
+ *
+ * A Playwright context simply picks a `baseURL`. nginx sees the forwarder's address as
+ * `$remote_addr`, writes exactly that into `X-Forwarded-For`, and the API identifies the request
+ * the way it would identify an agent's laptop. Nothing forges a header anywhere in this gate —
+ * and one spec asserts that a browser which tries to is still seen as what it is.
  *
  * Usage: pnpm e2e:compose [-- --grep <pattern>]
  *   KEEP_STACK=1        leave the stack up afterwards (`docker compose -p wecom-kb-e2e ps`)
@@ -71,6 +76,14 @@ const HTTPS_PORT = 8443;
 const HTTP_PORT = 8080;
 const PANOS_PORT = 8186; // the stub's control plane, published for the specs
 const WP_PORT = 8085; // the WordPress stub, published so a spec can edit a post "in WordPress"
+/**
+ * The simulated clients — see the header comment. Each is a `lan-forwarder` container with a
+ * fixed address on a compose network, so the port a browser opens decides the address nginx (and
+ * therefore `req.ip`) sees. The values must match deploy/e2e.env, which is what publishes them.
+ */
+const LAN_CLIENT_PORT = 8444;
+const LAN_UNKNOWN_CLIENT_PORT = 8445;
+const OFFSITE_CLIENT_PORT = 8446;
 const BASE_URL = `https://localhost:${HTTPS_PORT}`;
 
 export const ADMIN_EMAIL = 'e2e-compose-admin@wecom.co.il';
@@ -213,6 +226,9 @@ function assertPortsFree() {
     ['nginx http', HTTP_PORT],
     ['paloalto stub control', PANOS_PORT],
     ['wordpress stub', WP_PORT],
+    ['lan client', LAN_CLIENT_PORT],
+    ['lan client (unknown address)', LAN_UNKNOWN_CLIENT_PORT],
+    ['offsite client', OFFSITE_CLIENT_PORT],
   ]) {
     const r = spawnSync('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' });
     const pids = (r.stdout ?? '').trim().split('\n').filter(Boolean);
@@ -232,6 +248,9 @@ function teardown() {
     console.log(
       `\nKEEP_STACK=1 — leaving the stack up:\n` +
         `  app        ${BASE_URL}\n` +
+        `  as a LAN client   https://localhost:${LAN_CLIENT_PORT} (arrives as ${LAN.ip})\n` +
+        `  …unknown to it    https://localhost:${LAN_UNKNOWN_CLIENT_PORT} (${LAN_UNKNOWN_IP})\n` +
+        `  …from offsite     https://localhost:${OFFSITE_CLIENT_PORT} (${OFFSITE_IP})\n` +
         `  admin      ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}\n` +
         `  firewall   http://127.0.0.1:${PANOS_PORT}/_control/state\n` +
         `  wordpress  http://127.0.0.1:${WP_PORT}/wp-json/wp/v2/posts/101\n` +
@@ -323,6 +342,19 @@ async function main() {
     'the Palo Alto stub answers',
     () => !!curlJson(`http://127.0.0.1:${PANOS_PORT}/_control/state`).mappings,
   );
+  // The simulated clients. Each must reach the *API* through nginx, not merely accept a socket:
+  // a forwarder whose upstream name does not resolve answers and then closes, which would
+  // otherwise surface four specs later as a navigation failure.
+  for (const [label, port] of [
+    ['10.44.0.7 (the LAN user)', LAN_CLIENT_PORT],
+    ['10.44.0.9 (on the LAN, unknown)', LAN_UNKNOWN_CLIENT_PORT],
+    ['198.51.100.7 (offsite)', OFFSITE_CLIENT_PORT],
+  ])
+    await waitFor(
+      `a client at ${label} reaches the API through nginx`,
+      () => curlJson(`https://localhost:${port}/api/v1/system/health`).db === true,
+      { timeoutMs: 60_000 },
+    );
 
   console.log('\n── 6. seed, admin, and the LAN user ─────────────────────────');
   composeOrThrow(['exec', '-T', 'api', 'pnpm', '--filter', '@wecom/api', 'seed']);
@@ -405,6 +437,11 @@ async function main() {
         E2E_LAN_ROLE: LAN.role,
         E2E_LAN_UNKNOWN_IP: LAN_UNKNOWN_IP,
         E2E_OFFSITE_IP: OFFSITE_IP,
+        // The four front doors. Which one a context opens *is* the address it arrives from;
+        // there is no header involved. See the header comment.
+        E2E_LAN_BASE_URL: `https://localhost:${LAN_CLIENT_PORT}`,
+        E2E_LAN_UNKNOWN_BASE_URL: `https://localhost:${LAN_UNKNOWN_CLIENT_PORT}`,
+        E2E_OFFSITE_BASE_URL: `https://localhost:${OFFSITE_CLIENT_PORT}`,
         // As the api container reaches it, and as the host does — the connector is configured
         // with the first and the spec edits "WordPress" through the second.
         E2E_WP_URL: 'http://wp:8085',
