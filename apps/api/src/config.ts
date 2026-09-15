@@ -52,9 +52,17 @@ export const BaseConfigSchema = z.object({
   /** Base directory a `json` connector's `path` must stay inside (path-traversal guard). */
   CONNECTOR_FILE_ROOT: z.string().default('/data/connectors'),
   /**
-   * Comma-separated host allowlist for outbound connector HTTP (WordPress `baseUrl`).
-   * Empty means "any public host"; private, loopback and link-local ranges are always
-   * refused unless listed here explicitly.
+   * Comma-separated host allowlist for outbound connector HTTP (WordPress `baseUrl`), and for
+   * the admin identity probes. Three settings, and they differ:
+   *
+   * - **empty** — unrestricted; only link-local/metadata is refused. The dev/test shape; the
+   *   production guard below refuses to start with it.
+   * - **`*`** — any *public* host. Loopback, RFC1918 private space, carrier-grade NAT,
+   *   link-local and IPv6 unique-local are refused, so the written-down open setting cannot
+   *   reach the model on `127.0.0.1:11434` or the database port.
+   * - **a list** — exactly those hosts, whatever range they are in (`.example.com` matches the
+   *   domain and its subdomains). This is how a LAN install admits its own machines, and it
+   *   wins over `*`.
    */
   CONNECTOR_HOST_ALLOWLIST: z.string().default(''),
   /**
@@ -124,19 +132,20 @@ export const ConfigSchema = BaseConfigSchema.superRefine((c, ctx) => {
       message: 'CONNECTOR_KEY is still the all-zero default — set it (`openssl rand -hex 32`)',
     });
   /**
-   * §5 / item 18: an empty allowlist means "any public host", so a connector with a
-   * `baseUrl` an editor typed — or one an attacker who reached the connector API supplied — is
-   * an outbound request to anywhere the VM can see. The link-local/metadata refusal in
-   * `@wecom/connectors`' guards is unconditional, but nothing else is. A deployment must decide
-   * this explicitly, exactly as it must decide SESSION_SECRET. `*` is the written-down way to say
-   * "yes, really, any public host".
+   * §5 / item 18: an empty allowlist is unrestricted, so a connector with a `baseUrl` an editor
+   * typed — or one an attacker who reached the connector API supplied — is an outbound request
+   * to anywhere the VM can see, the model and the database port included. The link-local/metadata
+   * refusal in `@wecom/connectors`' guards is unconditional, but nothing else is. A deployment
+   * must decide this explicitly, exactly as it must decide SESSION_SECRET. `*` is the
+   * written-down way to say "any public host" — and it is exactly that: private and loopback
+   * ranges stay refused unless a deployment names them.
    */
   if (!c.CONNECTOR_HOST_ALLOWLIST.trim())
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['CONNECTOR_HOST_ALLOWLIST'],
       message:
-        'CONNECTOR_HOST_ALLOWLIST is empty, which allows outbound connector requests to any public host — list the connector hosts (e.g. `wp.wecom.local`), or set it to `*` to accept that risk deliberately',
+        'CONNECTOR_HOST_ALLOWLIST is empty, which allows outbound connector requests to any host the VM can reach, private ranges and loopback included — list the connector hosts (e.g. `wp.wecom.local`), or set it to `*` for any public host',
     });
   /**
    * `req.ip` gates the Palo Alto subnet allowlist, the per-IP auth rate-limit buckets and the
