@@ -11,8 +11,9 @@ import type {
 } from './contract.js';
 import { buildMessages, parseProposals, RESPONSE_FORMAT } from './prompt.js';
 import { flatResponseFormat, parseFlatProposals } from './flat.js';
+import { applyGuards } from './guard.js';
 import { buildQuestionMessages, parseQuestions, QUESTIONS_RESPONSE_FORMAT } from './questions.js';
-import { enforceSectionCards } from './sections.js';
+import { enforceSectionCards, isNewSourcePath } from './sections.js';
 
 export interface OllamaOptions {
   url: string;
@@ -35,6 +36,12 @@ export interface OllamaOptions {
   flatSchema?: boolean;
   /** review/wave6-ai-quality, experiment (b): `propose-v4` instead of the shipped `propose-v3`. */
   promptVersion?: string;
+  /**
+   * review/wave6-ai-quality, experiment (e): decide the two context-determined types in code
+   * (`guard.ts`) instead of hoping the model applies rules 1 and 3, and hold the section-card
+   * invariant even when the model's answer was unusable.
+   */
+  guards?: boolean;
   /** Sampling overrides for experiment (d); the shipped defaults are used when absent. */
   temperature?: number;
   numPredict?: number;
@@ -199,9 +206,21 @@ export class OllamaModel implements ModelClient {
           this.lastRun = { used: 'ollama', attempts: attempt, ms: Date.now() - started };
           // The prompt asks for one card per section, but the section rule is an invariant of
           // the pipeline, not a request: hold it whatever the model returned.
-          return enforceSectionCards(ctx, parsed.items);
+          const items = enforceSectionCards(ctx, parsed.items);
+          return this.o.guards ? applyGuards(ctx, items) : items;
         }
         lastError = parsed.error;
+        /**
+         * review/wave6-ai-quality, experiment (e). On the new-source path the cards are the
+         * *rule engine's* anyway (`enforceSectionCards` discards the model's `new-card`s), so a
+         * model answer that will not parse costs nothing there — every observed failure of case
+         * `06` was the whole revision going to the fallback because the model wrote
+         * `update-step` for a source that has no steps yet.
+         */
+        if (this.o.guards && isNewSourcePath(ctx)) {
+          this.lastRun = { used: 'ollama', attempts: attempt, ms: Date.now() - started, error: lastError };
+          return enforceSectionCards(ctx, []);
+        }
       } catch (e) {
         lastError = (e as Error).message;
       }

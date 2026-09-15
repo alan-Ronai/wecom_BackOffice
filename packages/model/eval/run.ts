@@ -45,6 +45,7 @@ async function main(): Promise<void> {
           /* review/wave6-ai-quality experiment levers; absent = the shipped behaviour. */
           flatSchema: flag('flat'),
           ...(arg('prompt') ? { promptVersion: arg('prompt') } : {}),
+          guards: flag('guards'),
           ...(arg('temp') ? { temperature: Number(arg('temp')) } : {}),
           ...(arg('num-predict') ? { numPredict: Number(arg('num-predict')) } : {}),
           ...(arg('num-ctx') ? { numCtx: Number(arg('num-ctx')) } : {}),
