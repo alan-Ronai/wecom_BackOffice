@@ -15,9 +15,10 @@ import { useTelemetry } from '../../api/hooks/collab.js';
 import { Html } from '../Fmt.js';
 import { TypeBadge, worldShort } from '../taxonomy/TypeBadge.js';
 import { hitLabel } from './hitLabel.js';
-import { localGroups } from './localHits.js';
+import { localGroups, type LocalHit } from './localHits.js';
+import { StatusChip } from '../governance/StatusChip.js';
 import { useFocusTrap } from '../ui/useFocusTrap.js';
-import type { ListDocumentsResponse, SearchHit } from '../../api/types.js';
+import type { ListDocumentsResponse } from '../../api/types.js';
 import { results as nResults } from '../../lib/count.js';
 
 /**
@@ -54,7 +55,9 @@ interface LocalAction {
 }
 type Row =
   | { kind: 'group'; label: string }
-  | { kind: 'hit'; hit: SearchHit }
+  // `LocalHit` is a `SearchHit` with an optional `status` (M5): the rows the palette builds out of
+  // the card cache know whether the item is a draft, and a server hit simply has none.
+  | { kind: 'hit'; hit: LocalHit }
   | { kind: 'action'; action: LocalAction };
 
 const hi = (text: string, q: string): string => {
@@ -469,6 +472,9 @@ export function Palette() {
                           result and a card describe an item identically (A-2). */}
                       {label.world ? <span className="chip chip-blue">{worldShort(label.world)}</span> : null}
                       {label.docType ? <TypeBadge docType={label.docType} compact /> : null}
+                      {/* M5: a draft offered beside a published procedure must say so — the same
+                          chip the library card and the article header render. */}
+                      {h.status ? <StatusChip status={h.status} /> : null}
                       {label.item ? <span className="hit-item">{label.item}</span> : null}
                       {label.rest.length ? <span className="hit-rest">{label.rest.join(' · ')}</span> : null}
                     </div>

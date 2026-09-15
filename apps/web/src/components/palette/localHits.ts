@@ -1,4 +1,4 @@
-import type { DocumentCard } from '@wecom/shared';
+import type { DocumentCard, DocumentStatus } from '@wecom/shared';
 import type { SearchHit } from '../../api/types.js';
 
 /**
@@ -24,12 +24,32 @@ export const LOCAL_GROUP_LABELS = {
   cached: 'מסמכים שכבר נטענו',
 } as const;
 
-export interface LocalGroup {
-  label: string;
-  hits: SearchHit[];
+/**
+ * A local hit is a server hit plus the one thing the card knows and `GET /search` does not send:
+ * the item's status (M5).
+ *
+ * It is a *client-side* field, deliberately not appended to `SearchHitSchema`: the search route
+ * does not return it, and a contract field the API never fills is worse than no field. These rows
+ * are built here, from cards this client already holds, so the status is simply carried along.
+ */
+export interface LocalHit extends SearchHit {
+  status?: DocumentStatus;
 }
 
-const toHit = (c: DocumentCard): SearchHit => ({
+export interface LocalGroup {
+  label: string;
+  hits: LocalHit[];
+}
+
+/**
+ * M5 — `status` travels with the row.
+ *
+ * Without it "מסמכים שכבר נטענו" offered a draft and a published item as the same kind of thing:
+ * identical row, identical chips, and the agent on a call cannot tell that the procedure they are
+ * about to read has never been published. The cards carry the status; nothing was dropping it on
+ * purpose, so the palette renders the same `StatusChip` the library card and the article header do.
+ */
+const toHit = (c: DocumentCard): LocalHit => ({
   type: 'document',
   id: c.id,
   documentId: c.id,
@@ -41,6 +61,7 @@ const toHit = (c: DocumentCard): SearchHit => ({
   score: 0,
   ...(c.docType ? { docType: c.docType } : {}),
   ...(c.worlds[0] ? { world: c.worlds[0] } : {}),
+  ...(c.status ? { status: c.status } : {}),
 });
 
 /**
