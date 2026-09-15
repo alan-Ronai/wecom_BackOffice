@@ -438,6 +438,111 @@ run('wave 5 seams', () => {
     ).toBe(true);
   });
 
+  it('A-I3: a learner who completed the refresh is told again by the next significant publish', async () => {
+    const docId = await makeDoc('מסמך שמשתנה פעמיים');
+    const { quizId } = await seedAssignedQuiz(docId, 'שאלון שני רענונים');
+    /** Finds the agent's open assignment for this quiz, passes it, and returns its id. */
+    const passIt = async (): Promise<string> => {
+      const mine = await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agent) });
+      const open = mine.json().open.find((a: { itemId: string }) => a.itemId === quizId);
+      expect(open, mine.body).toBeTruthy();
+      const player = await app.inject({
+        method: 'GET',
+        url: `/api/v1/learning/my/${open.id}`,
+        headers: auth(agent),
+      });
+      expect(player.statusCode, player.body).toBe(200);
+      const started = await app.inject({
+        method: 'POST',
+        url: `/api/v1/learning/my/${open.id}/attempts`,
+        headers: auth(agent),
+      });
+      expect(started.statusCode, started.body).toBe(201);
+      const submitted = await app.inject({
+        method: 'PUT',
+        url: `/api/v1/learning/attempts/${started.json().attemptId}`,
+        headers: auth(agent),
+        payload: {
+          answers: [{ questionId: player.json().questions[0].id as string, optionIds: ['a'] }],
+        },
+      });
+      expect(submitted.statusCode, submitted.body).toBe(200);
+      expect(submitted.json().passed).toBe(true);
+      return open.id as string;
+    };
+    const republish = async (label: string) => {
+      const r = await app.inject({
+        method: 'POST',
+        url: `/api/v1/documents/${docId}/publish`,
+        headers: auth(lead),
+        payload: { label, significantChange: true },
+      });
+      expect(r.statusCode, r.body).toBe(200);
+      return r.json().changeFlag as { refreshAssignments: number };
+    };
+
+    await passIt(); // the original assignment
+    expect((await republish('v2')).refreshAssignments).toBe(1);
+    const refreshId = await passIt(); // …and the refresh it created
+
+    // Publish #2. The old behaviour found no `audience`/`manual` row left to invalidate and no
+    // *standing* refresh (this one is completed), so the prompt learner heard nothing.
+    expect((await republish('v3')).refreshAssignments).toBe(1);
+    const after = await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agent) });
+    const reopened = after
+      .json()
+      .open.find((a: { itemId: string; reason: string }) => a.itemId === quizId && a.reason === 'refresh');
+    expect(reopened, after.body).toBeTruthy();
+    // The same row, re-pointed at the newer reason rather than a second one stacked on it.
+    expect(reopened.id).toBe(refreshId);
+    expect(reopened.refreshReason).toContain('גרסה 3');
+    // Its attempt budget starts over, so a capped quiz's refresh would still be takeable.
+    expect(reopened.attemptsUsed).toBe(0);
+    expect(
+      (await db.pool.query(`select count(*)::int n from learning_assignments where item_id=$1`, [quizId]))
+        .rows[0].n,
+    ).toBe(2); // the original (invalidated) and the one refresh
+  });
+
+  it('A-I4: a flagged item is hidden from new assignments, and archiving withdraws the open ones', async () => {
+    const docId = await makeDoc('מסמך שיהפוך ללא תקין');
+    const { quizId } = await seedAssignedQuiz(docId, 'שאלון שיוצא משימוש');
+    // §1.8: the referenced document becomes invalid, so the item is "דורש עדכון".
+    await db.pool.query(`update documents set status='invalid' where id=$1`, [docId]);
+    const refused = await app.inject({
+      method: 'POST',
+      url: `/api/v1/learning/items/${quizId}/assign`,
+      headers: auth(lead),
+      payload: { userIds: [manager.id], dueDays: 14 },
+    });
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(refused.json().code).toBe('ITEM_NEEDS_UPDATE');
+    const audience = await app.inject({
+      method: 'POST',
+      url: `/api/v1/learning/items/${quizId}/audiences`,
+      headers: auth(lead),
+      payload: { roleNames: ['agent'], worldSlugs: [], userIds: [], dueDays: 14 },
+    });
+    expect(audience.statusCode, audience.body).toBe(409);
+
+    // …and archiving the item withdraws what is still owed instead of leaving learners on the hook.
+    expect(
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: `/api/v1/learning/items/${quizId}`,
+          headers: auth(lead),
+        })
+      ).statusCode,
+    ).toBe(204);
+    const rows = await db.pool.query(
+      `select status, invalidated_reason from learning_assignments where item_id=$1`,
+      [quizId],
+    );
+    expect(rows.rows.every((r) => r.status === 'invalidated')).toBe(true);
+    expect(rows.rows[0].invalidated_reason).toContain('ארכיון');
+  });
+
   it('GET /documents/:id/change-preview states the verdict a publish would record, and writes nothing', async () => {
     const docId = await makeDoc('תצוגה מקדימה של שינוי');
     const quiet = await app.inject({

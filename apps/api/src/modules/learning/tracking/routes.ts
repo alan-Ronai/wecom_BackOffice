@@ -26,7 +26,7 @@ import { hasScope, requireUser } from '../../../lib/user.js';
 import { getWorkflowSettings } from '../../../lib/workflowSettings.js';
 import { assertVisibleDocument } from '../../../lib/visibility.js';
 import * as repo from './repo.js';
-import { createAssignments, type TrackingDeps } from './audiences.js';
+import { createAssignments, isAssignable, type TrackingDeps } from './audiences.js';
 import { getPublishedItem } from './itemsPort.js';
 import { previewChangeFlag } from './refresh.js';
 import { worldsOfItem } from '../repo.js';
@@ -51,6 +51,17 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
       const worlds = await worldsOfItem(q, id);
       if (worlds.length && !hasScope(user, worlds)) throw forbidden();
     };
+    /**
+     * A-I4: spec §1.8 — an item whose referenced document is invalid or archived is "hidden from
+     * new assignments". `createAssignments` enforces it silently for the nightly job; a manager
+     * asking for it by hand gets told why.
+     */
+    const assertAssignable = async (q: Queryable, id: string) => {
+      if (!(await isAssignable(q, id)))
+        throw httpError(409, 'ITEM_NEEDS_UPDATE', 'הפריט מסומן "דורש עדכון" ואינו ניתן להקצאה חדשה', {
+          itemId: id,
+        });
+    };
     app.post(
       '/learning/items/:id/audiences',
       {
@@ -68,6 +79,7 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
         const body = req.body as z.infer<typeof AudienceCreateSchema>;
         return withTransaction(app.db, async (tx) => {
           await assertItemScope(tx, id, user);
+          await assertAssignable(tx, id);
           const a = await repo.createAudience(tx, deps(), id, body, user.id);
           await audit(tx, {
             actorId: user.id,
@@ -130,6 +142,7 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
         const body = req.body as z.infer<typeof AssignBodySchema>;
         return withTransaction(app.db, async (tx) => {
           await assertItemScope(tx, id, user);
+          await assertAssignable(tx, id);
           const pub = await getPublishedItem(tx, id);
           if (!pub) throw notFound('פריט הלמידה');
           // A-I1: and the recipients. Scoping the item alone still let a `billing` manager hand a

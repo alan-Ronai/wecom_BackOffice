@@ -33,6 +33,7 @@ import { hasScope, requireUser } from '../../lib/user.js';
 import { getDocument } from '../documents/repo.js';
 import * as repo from './repo.js';
 import { generateQuestions } from './generate.js';
+import { invalidateForArchivedItem } from './tracking/repo.js'; // A-I4: archiving withdraws the obligation
 
 const Params = z.object({ id: IdSchema });
 const NOT_FOUND = 'פריט הלמידה';
@@ -196,13 +197,23 @@ export default async function learningRoutes(app: FastifyInstance) {
           const archive = item.status === 'published';
           if (archive) await repo.archiveItem(tx, id, user.id);
           else await repo.softDeleteItem(tx, id, user.id);
+          /**
+           * A-I4: and the open assignments go with it. Archiving used to leave them `open`, so
+           * learners kept owing an item that no longer exists for anyone else and the reminder
+           * job kept nagging them about it. Completed rows are history and stay.
+           */
+          const withdrawn = await invalidateForArchivedItem(
+            tx,
+            id,
+            archive ? 'פריט הלמידה הועבר לארכיון' : 'פריט הלמידה נמחק',
+          );
           await audit(tx, {
             actorId: user.id,
             action: archive ? 'learning.archive' : 'learning.delete',
             entityType: 'learning_item',
             entityId: id,
             before: { status: item.status },
-            after: { status: archive ? 'archived' : 'deleted' },
+            after: { status: archive ? 'archived' : 'deleted', withdrawnAssignments: withdrawn },
             requestId: req.id,
             ip: req.ip,
           });

@@ -30,10 +30,20 @@ import { createAssignments, resolveAudience, type TrackingDeps } from './audienc
 import { gradeAttempt, type AnswerInput } from './scoring.js';
 
 /* ── row mapping ──────────────────────────────────────────────────────────── */
+/**
+ * `t.started_at >= a.assigned_at` scopes the attempt budget to the current cycle (A-I3).
+ *
+ * A refresh assignment a second significant publish re-opens moves `assigned_at` forward; without
+ * this the attempts of the *previous* cycle would still count, and a quiz with `maxAttempts` set
+ * would hand the learner a refresh they answer `ATTEMPTS_EXHAUSTED` to. Every other assignment is
+ * created once and never moves, so its attempts all start after `assigned_at` and nothing changes.
+ * `last_score` takes the same window for the same reason: the previous cycle's score is not this
+ * assignment's result any more.
+ */
 const ASSIGNMENT_SELECT = `
   select a.*, i.kind, i.title, i.world_slug, i.estimated_minutes, i.pass_mark, i.max_attempts,
-         (select count(*)::int from learning_attempts t where t.assignment_id=a.id and t.finished_at is not null) attempts_used,
-         (select t.score from learning_attempts t where t.assignment_id=a.id and t.finished_at is not null order by t.attempt_no desc limit 1) last_score
+         (select count(*)::int from learning_attempts t where t.assignment_id=a.id and t.finished_at is not null and t.started_at >= a.assigned_at) attempts_used,
+         (select t.score from learning_attempts t where t.assignment_id=a.id and t.finished_at is not null and t.started_at >= a.assigned_at order by t.attempt_no desc limit 1) last_score
     from learning_assignments a join learning_items i on i.id=a.item_id`;
 
 const toAssignment = (r: Record<string, unknown>): Assignment => ({
@@ -573,6 +583,21 @@ export async function documentLearning(
         }
       : null,
   };
+}
+
+/**
+ * A-I4, second half. `DELETE /learning/items/:id` on a published item archives it, and left its
+ * open assignments `open`: learners kept owing an archived item and the reminder job kept nagging
+ * them about it. Archiving withdraws the obligation, with a reason, the same way a significant
+ * publish does. Completed and already-invalidated rows are history and are left alone.
+ */
+export async function invalidateForArchivedItem(tx: Tx, itemId: string, reason: string): Promise<number> {
+  const r = await tx.query(
+    `update learning_assignments set status='invalidated', invalidated_at=now(), invalidated_reason=$2
+      where item_id=$1 and status in ('open','overdue')`,
+    [itemId, reason],
+  );
+  return r.rowCount ?? 0;
 }
 
 /** Idempotent: open assignments past due become overdue. Returns how many changed. */

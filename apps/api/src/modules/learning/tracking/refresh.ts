@@ -84,25 +84,71 @@ export async function applyChangeFlag(
         where item_id=$1 and item_version=$2 and reason='refresh' and status in ('open','overdue')`,
       [it.itemId, it.itemVersion],
     );
+    /**
+     * A-I3 — the person who did the training promptly was the one who stopped being told.
+     *
+     * A user whose original assignment was invalidated by significant publish #1, and who then
+     * *completed* the resulting refresh, is in neither set above at publish #2: there is no
+     * `audience`/`manual` row left to invalidate, and their refresh row is `completed`, not
+     * standing. They fell out of `userIds` and got nothing.
+     *
+     * The row is re-opened rather than replaced, because `learning_assignments` is unique on
+     * `(item_id, user_id, item_version, reason)` — inserting a second refresh for the same item
+     * version is not possible, and is not the intent either: the user owes exactly one refresh,
+     * now for a newer reason. `assigned_at` moves with it, which is what starts a fresh attempt
+     * budget (see `ASSIGNMENT_SELECT`) so a capped quiz's refresh is actually takeable.
+     */
+    const reopened = await tx.query(
+      `update learning_assignments
+          set status='open', completed_at=null, reminded_at=null, assigned_at=now(),
+              due_at=now() + ($3::int || ' days')::interval, refresh_reason=$4
+        where item_id=$1 and item_version=$2 and reason='refresh' and status='completed'
+        returning id, user_id`,
+      [it.itemId, it.itemVersion, settings.learning.refreshDueDays, reason],
+    );
     const userIds = [...new Set([...inv.rows, ...standing.rows].map((r) => r.user_id as string))];
-    if (!userIds.length) continue;
+    if (!userIds.length && !reopened.rowCount) continue;
     const pub = await getPublishedItem(tx, it.itemId);
     if (!pub) continue;
-    const r = await createAssignments(tx, deps, {
-      item: pub.item,
-      userIds,
-      reason: 'refresh',
-      dueDays: settings.learning.refreshDueDays,
-      refreshReason: reason,
-      actorId: i.actorId,
-    });
-    refreshAssignments += r.assigned;
+    if (userIds.length) {
+      const r = await createAssignments(tx, deps, {
+        item: pub.item,
+        userIds,
+        reason: 'refresh',
+        dueDays: settings.learning.refreshDueDays,
+        refreshReason: reason,
+        actorId: i.actorId,
+      });
+      refreshAssignments += r.assigned;
+    }
     // Re-point any refresh already standing for this item version at the newest reason.
     await tx.query(
       `update learning_assignments set refresh_reason=$3
         where item_id=$1 and item_version=$2 and reason='refresh' and status in ('open','overdue')`,
       [it.itemId, it.itemVersion, reason],
     );
+    // A re-opened refresh is a refresh this publish handed out, so it counts and it is announced.
+    // `createAssignments` cannot do it: its upsert sees the existing row and skips.
+    for (const row of reopened.rows) {
+      const assignmentId = row.id as string;
+      const userId = row.user_id as string;
+      refreshAssignments += 1;
+      users.add(userId);
+      await deps.events.publish(
+        tx,
+        makeEvent('learning.assigned', { assignmentId, userId, itemId: it.itemId }),
+      );
+      if (userId !== i.actorId)
+        await deps.notifier.notify({
+          userIds: [userId],
+          kind: 'learning',
+          title: 'רענון ידע נדרש: ' + pub.item.title,
+          body: reason,
+          href: `/learning/${assignmentId}`,
+          entityType: 'learning_assignment',
+          entityId: assignmentId,
+        });
+    }
     for (const u of userIds) users.add(u);
   }
   await deps.events.publish(
