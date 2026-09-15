@@ -16,6 +16,44 @@ set -euo pipefail
 : "${EMBED_MODEL:=}"
 : "${OLLAMA_BIN:=ollama}"
 
+# ── wave 6 (X1): the tier and the two generation slots ────────────────────────────────────────
+# `MODEL_TIER=n` selects a whole row of the tier table and the API resolves it at boot
+# (`apps/api/src/lib/modelSlots.ts`). This script has to resolve the *same* row or a clean install
+# at a tier finishes with the wrong tags in `ollama list`: the API would ask Ollama for
+# `dictalm2.0-instruct:7b-q4_K_M` and find `qwen2.5:3b-instruct-q4_K_M`, with nothing but a
+# per-request 404 to say so. The table below therefore mirrors `MODEL_TIER_PRESETS`
+# (`packages/shared/src/schemas/wave6.ts`) — change them together.
+: "${MODEL_TIER:=}"
+: "${SUGGEST_MODEL:=}"
+: "${CHAT_MODEL:=}"
+tier_slot() { # <tier> <suggest|chat|embed>
+  case "$1:$2" in
+    0:suggest|0:chat) echo 'qwen2.5:3b-instruct-q4_K_M' ;;
+    0:embed) echo 'nomic-embed-text' ;;
+    1:suggest|1:chat) echo 'dictalm2.0-instruct:7b-q4_K_M' ;;
+    2:suggest) echo 'gemma3:12b-it-q4_K_M' ;;
+    2:chat) echo 'dictalm2.0-instruct:7b-q4_K_M' ;;
+    3:suggest) echo 'gemma3:27b-it-q4_K_M' ;;
+    3:chat) echo 'gemma3:12b-it-q4_K_M' ;;
+    4:suggest|4:chat) echo 'gemma3:27b-it-q4_K_M' ;;
+    [1-4]:embed) echo 'bge-m3' ;;
+    *) echo '' ;;
+  esac
+}
+# Precedence, identical to `resolveModelSlots`: an explicit slot env → the tier preset →
+# MODEL_NAME (generation) / whatever EMBED_MODEL says. EMBED_MODEL is the one exception the api
+# also makes: its zod default is `nomic-embed-text`, so a tier overrides exactly that value.
+if [ -n "$MODEL_TIER" ]; then
+  [ -n "$SUGGEST_MODEL" ] || SUGGEST_MODEL=$(tier_slot "$MODEL_TIER" suggest)
+  [ -n "$CHAT_MODEL" ] || CHAT_MODEL=$(tier_slot "$MODEL_TIER" chat)
+  if [ -z "$EMBED_MODEL" ] || [ "$EMBED_MODEL" = 'nomic-embed-text' ]; then
+    tier_embed=$(tier_slot "$MODEL_TIER" embed)
+    [ -n "$tier_embed" ] && EMBED_MODEL=$tier_embed
+  fi
+fi
+: "${SUGGEST_MODEL:=$MODEL_NAME}"
+: "${CHAT_MODEL:=$MODEL_NAME}"
+
 # `ollama/ollama` ships neither curl nor wget any more (checked against the `latest` image,
 # 2026-09), and this script runs *inside* that image as the `ollama-pull` service. The old
 # unconditional `curl -fsS … >/dev/null 2>&1` swallowed the "command not found" along with every
@@ -53,15 +91,31 @@ present() { # <tag> → prints yes|no
   fi
 }
 
-# Both tags the deployment configures, de-duplicated: a deployment that embeds with its generation
-# model (or leaves EMBED_MODEL empty) must not pull the same thing twice or pull an empty string.
-wanted=("$MODEL_NAME")
+# Every tag the deployment configures, de-duplicated in slot order: a deployment whose two
+# generation slots are the same tag (every tier but 2 and 3), or that embeds with its generation
+# model, or that leaves EMBED_MODEL empty, must not pull the same thing twice or an empty string.
+wanted=()
+add_slot() { # <slot name> <tag>
+  local slot=$1 tag=$2 have
+  if [ -z "$tag" ]; then
+    echo "$slot: no tag configured — skipping"
+    return 0
+  fi
+  for have in ${wanted[@]+"${wanted[@]}"}; do
+    if [ "$have" = "$tag" ]; then
+      echo "$slot: $tag (already queued by an earlier slot — one pull covers both)"
+      return 0
+    fi
+  done
+  echo "$slot: $tag"
+  wanted+=("$tag")
+}
+add_slot suggest "$SUGGEST_MODEL"
+add_slot chat "$CHAT_MODEL"
 if [ -z "$EMBED_MODEL" ]; then
   echo "EMBED_MODEL is not set — no embedding model to pull, search will rank lexically"
-elif [ "$EMBED_MODEL" = "$MODEL_NAME" ]; then
-  echo "EMBED_MODEL is the same tag as MODEL_NAME ($MODEL_NAME) — one pull covers both"
 else
-  wanted+=("$EMBED_MODEL")
+  add_slot embed "$EMBED_MODEL"
 fi
 
 for tag in "${wanted[@]}"; do

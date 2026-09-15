@@ -205,6 +205,88 @@ Categories are a closed enum, not a database table, so adding one touches code, 
    regenerated `docs/api/openapi.json`.
 6. Run `pnpm typecheck` — a category enum change is caught everywhere it's used at compile time.
 
+## Model tiers (wave 6)
+
+A *tier* is one number that selects a whole row of models: the suggestion slot, the chat slot,
+the embedder and its width. It exists so that moving the VM up a size is an environment change
+and a reindex rather than a deploy. `MODEL_TIER_PRESETS`
+(`packages/shared/src/schemas/wave6.ts`) is the single definition; `resolveModelSlots`
+(`apps/api/src/lib/modelSlots.ts`) applies it.
+
+| Tier | VM | suggest | chat | embed |
+|---|---|---|---|---|
+| 0 | 4 vCPU / 16 GB | `qwen2.5:3b-instruct-q4_K_M` | same | `nomic-embed-text` (768) |
+| 1 | 4 vCPU / 16 GB | `dictalm2.0-instruct:7b-q4_K_M` (fallback `aya-expanse:8b-q4_K_M`) | same | `bge-m3` (1024) |
+| 2 | 8 vCPU / 32 GB | `gemma3:12b-it-q4_K_M` | `dictalm2.0-instruct:7b-q4_K_M` | `bge-m3` |
+| 3 | 16 vCPU / 64 GB | `gemma3:27b-it-q4_K_M` | `gemma3:12b-it-q4_K_M` | `bge-m3` |
+| 4 | + GPU 24 GB | `gemma3:27b-it-q4_K_M` | same | `bge-m3` |
+
+Precedence for every slot is **explicit env → tier preset → today's defaults** (`MODEL_NAME` for
+both generation slots, `nomic-embed-text`/768 for the embedder). `EMBED_MODEL` and
+`EMBED_DIMENSION` carry defaults, so they count as explicit only when they differ from that
+legacy pair — an install that wants `nomic-embed-text` under a tier sets `MODEL_TIER=0`, which is
+what `deploy/ci.env` and `deploy/e2e.env` do.
+
+Three places resolve a tier and they must agree: the API, `deploy/ollama-pull.sh` (so a clean
+install pulls the tags the API will ask for) and `deploy/smoke.sh` (so the check is on those
+tags). Changing a preset means changing all three.
+
+### Changing the tier
+
+1. Edit `deploy/.env`: `MODEL_TIER`, and — if the new tier's embedder differs from the running
+   one — `EMBED_MODEL` and `EMBED_DIMENSION` **in the same edit**. Per-slot overrides
+   (`SUGGEST_MODEL`, `CHAT_MODEL`) beat the preset and are how you pin a fallback tag.
+2. `docker compose -f deploy/docker-compose.yml up -d ollama-pull` — it resolves the same tier
+   and pulls every slot's tag, de-duplicated, skipping what the volume already has. Its last line
+   names what the volume now holds.
+3. `docker compose -f deploy/docker-compose.yml up -d api`.
+4. `POST /api/v1/admin/ai/models/test` with `{"slot":"suggest"}`, then `"chat"`, then `"embed"`
+   (`ai.manage`). Each answers `reachable`, the tag, its size and either `tokensPerSec` or the
+   `dims` the embedder actually returns. This is the check that proves a tag exists *before*
+   anyone waits on a 404 from a real request.
+5. **If the embedder changed**, `POST /api/v1/admin/ai/reindex` (queue `ai.reindex`). Search
+   ranks lexically until it finishes, and the job refuses outright if the embedder's width does
+   not match the column — which is the case worth knowing about immediately.
+
+### Changing the embedder on a live database
+
+`documents.embedding`'s width is not a number typed into a migration any more: migration
+`0051_wave6_embeddings_affects.js` builds the column at whatever `EMBED_DIMENSION`/`MODEL_TIER`
+resolve to, using exactly the precedence the API's boot check uses. The two therefore cannot
+disagree on a fresh install — but on an existing one the column was already built, and changing
+the configuration alone will stop the API booting (it names both numbers).
+
+Rebuilding the column is a **maintenance window**, not a rolling change:
+
+```
+docker compose -f deploy/docker-compose.yml stop api
+docker compose -f deploy/docker-compose.yml run --rm api pnpm --filter @wecom/api migrate down 1
+docker compose -f deploy/docker-compose.yml run --rm api pnpm --filter @wecom/api migrate up
+docker compose -f deploy/docker-compose.yml up -d api
+```
+
+The down/up pair drops and recreates `documents.embedding` and `step_embeddings` — **every stored
+vector is lost**, which is unavoidable: vectors of different widths, from different models, are
+not convertible. Nothing else in the two tables is data anyone typed. Then run `ai.reindex`
+(step 5 above) and let it finish before judging search quality.
+
+### Evaluating a tier
+
+`POST /api/v1/admin/ai/eval` runs the committed Hebrew case set
+(`packages/model/eval/cases/*.json`, eight cases) against the configured suggestion model and
+records a row; `GET /api/v1/admin/ai/eval/runs` lists the last 50 with `hitTarget`, `hitType`
+and `contentOverlap` per run, alongside the model tag and the prompt version
+(`v3.<brief>.<style>`). The same set runs offline from a developer machine:
+
+```
+pnpm --filter @wecom/model eval --rules
+pnpm --filter @wecom/model eval --model dictalm2.0-instruct:7b-q4_K_M --embed bge-m3 --out run.json
+```
+
+`--rules` scores the deterministic fallback, which is the floor a tier has to beat. The eval
+client is built **without** the rule-based fallback on purpose: a run where the model timed out
+must show up as a failure, not as the rule engine's numbers under the model's name.
+
 ## Model upgrade
 
 `MODEL_NAME` (chat/suggestions) and `EMBED_MODEL` (search vector re-rank) are Ollama model tags.
@@ -263,10 +345,16 @@ To upgrade:
    whether the vector reached the row. `apps/web/e2e/compose/embedding.spec.ts` asserts both on
    every run of the Compose gate.
 5. **If `EMBED_MODEL` changed**, every stored `documents.embedding` was computed with the old
-   model and is no longer comparable to new query embeddings. Rebuild them: trigger the
-   `search.reindex` job (its schedule, or `POST` the job manually if your ops tooling exposes
-   that) — it recomputes both derived search text and, when a model with `embed` is configured,
-   every document's embedding (`apps/api/src/modules/search/repo.ts#reindexAll`).
+   model and is no longer comparable to new query embeddings. Rebuild them with
+   `POST /api/v1/admin/ai/reindex` (`ai.manage`, queue `ai.reindex`): it re-embeds every document
+   and every step, in batches, resumable from an `updated_at` watermark, and refuses to write
+   anything at all when the embedder's width does not match the column. `search.reindex` also
+   re-embeds as a side effect of recomputing derived text
+   (`apps/api/src/modules/search/repo.ts#reindexAll`), but `ai.reindex` is the one to use after a
+   model change — it is the job that checks the width first.
+
+   If the *width* changed too, the column has to be rebuilt before any of this: see
+   **Model tiers → Changing the embedder on a live database** above.
 6. Prune the old model once you've confirmed the new one is working:
    `docker compose -f deploy/docker-compose.yml exec ollama ollama rm <old-tag>`.
 

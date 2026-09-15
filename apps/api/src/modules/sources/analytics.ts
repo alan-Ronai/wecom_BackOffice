@@ -1,6 +1,5 @@
 import type { SuggestionAnalytics, SuggestionAnalyticsQuery } from '@wecom/shared';
 import type { Queryable } from '../../lib/sql.js';
-import { hasColumn } from '../feedback/repo.js';
 import { TtlCache } from '../usage/cache.js';
 
 /**
@@ -18,8 +17,8 @@ import { TtlCache } from '../usage/cache.js';
  * - Remainder suggestions (`parent_id` set) count as suggestions in their own right — they are
  *   decisions the editor still owes — so `total` includes them.
  *
- * `model` and `prompt_version` are X1's 0051 columns. Until that migration lands both bucket
- * under `'—'`, so this lane is green on a database that has only 0053.
+ * `model` and `prompt_version` are X1's 0051 columns; a row written before that migration (or by
+ * the rule-based fallback) buckets under `'—'`.
  */
 const cache = new TtlCache<SuggestionAnalytics>(60_000);
 
@@ -53,10 +52,6 @@ export async function suggestionAnalytics(
   const hit = cache.get(key);
   if (hit) return hit;
 
-  const [hasModel, hasPrompt] = await Promise.all([
-    hasColumn(q, 'suggestions', 'model'),
-    hasColumn(q, 'suggestions', 'prompt_version'),
-  ]);
   const params: unknown[] = [];
   const p = (v: unknown) => {
     params.push(v);
@@ -76,8 +71,10 @@ export async function suggestionAnalytics(
     count(*) filter (where ${EDITED})::int edited,
     count(*) filter (where g.status='rejected')::int rejected,
     count(*) filter (where g.status='pending')::int pending`;
-  const modelExpr = hasModel ? `coalesce(g.model, '${UNKNOWN}')` : `'${UNKNOWN}'`;
-  const promptExpr = hasPrompt ? `coalesce(g.prompt_version, '${UNKNOWN}')` : `'${UNKNOWN}'`;
+  // X6: X1's 0051 is on this branch, so the columns exist; a row generated before it still
+  // buckets under `'—'` through the `coalesce`.
+  const modelExpr = `coalesce(g.model, '${UNKNOWN}')`;
+  const promptExpr = `coalesce(g.prompt_version, '${UNKNOWN}')`;
 
   const [totals, byType, bySource, byModel, byPrompt] = await Promise.all([
     q.query(

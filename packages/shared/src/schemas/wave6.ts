@@ -483,6 +483,23 @@ export const EvalExpectationSchema = z.object({
 export type EvalExpectation = z.infer<typeof EvalExpectationSchema>;
 
 /**
+ * X1, additive: the impact set a case is scored *with*. `ImpactSet` is a `@wecom/model`
+ * interface rather than a schema (the api computes it, nothing posts it), but a committed case
+ * has to carry one or a §1.6 expectation — "the rationale names the other document" — would be
+ * asking the model about a document it was never shown. Same shape, validated for the fixtures.
+ */
+export const EvalImpactSchema = z.object({
+  documents: z.array(z.object({ id: z.string(), title: z.string(), why: z.string() })).default([]),
+  blocks: z
+    .array(z.object({ id: z.string(), title: z.string(), usedBy: z.number().int().nonnegative() }))
+    .default([]),
+  fields: z.array(z.object({ name: z.string(), usedBy: z.number().int().nonnegative() })).default([]),
+  topics: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
+  related: z.array(z.object({ id: z.string(), title: z.string(), similarity: z.number() })).default([]),
+});
+export type EvalImpact = z.infer<typeof EvalImpactSchema>;
+
+/**
  * A committed fixture (`packages/model/eval/cases/*.json`), not a database row: the eval set
  * is reviewed like code and scored across model tiers and prompt versions.
  */
@@ -496,6 +513,8 @@ export const EvalCaseSchema = z.object({
     .array(z.object({ id: IdSchema, title: z.string(), actions: z.array(z.string()).default([]) }))
     .default([]),
   fields: z.array(z.object({ name: z.string(), status: z.string() })).default([]),
+  /** X1, additive: what the change reaches, as the pipeline would have computed it. */
+  impact: EvalImpactSchema.optional(),
   expected: z.array(EvalExpectationSchema).default([]),
 });
 export type EvalCase = z.infer<typeof EvalCaseSchema>;

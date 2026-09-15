@@ -8,9 +8,11 @@ import { purgeTelemetry } from '../modules/dashboards/repo.js';
 import { purgeDashboardCache } from '../modules/dashboards/cache.js';
 import { purgeWebhookNonces } from '../modules/connectors/nonces.js';
 import { reindexAll } from '../modules/search/repo.js';
+import { startAiJobs } from './ai.js'; // X1: ai.reindex + ai.eval
 
-/** Publish `job.failed` so the system screen and SSE clients see a failed background run. */
-async function reportFailure(app: FastifyInstance, jobName: string, err: unknown) {
+/** Publish `job.failed` so the system screen and SSE clients see a failed background run.
+ * Exported (wave 6, X1) so `jobs/ai.ts` reports its two workers the same way. */
+export async function reportFailure(app: FastifyInstance, jobName: string, err: unknown) {
   app.log.error({ err, jobName }, 'job failed');
   if (!app.events.listening) return;
   try {
@@ -82,6 +84,9 @@ export async function startJobs(app: FastifyInstance): Promise<void> {
       throw err;
     }
   });
+
+  // X1: the two admin-triggered AI workers (nothing scheduled — both contend for the CPU slot).
+  await startAiJobs(app);
 
   try {
     await boss.schedule(QUEUES.trashPurge, '0 3 * * *', {}, { tz: 'Asia/Jerusalem' });

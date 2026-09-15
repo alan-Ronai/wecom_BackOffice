@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { readdir } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import pg from 'pg';
 import { runner } from 'node-pg-migrate';
 import { DEFAULT_ROLES, PERMISSIONS } from '@wecom/shared';
@@ -600,6 +601,32 @@ run('migrations', () => {
     await expect(
       pool.query("insert into ai_conversations(kind, user_id) values ('nope', gen_random_uuid())"),
     ).rejects.toThrow(/ai_conversations_kind_check|violates/);
+  });
+
+  it('0051 rebuilds documents.embedding to the resolved width, adds step_embeddings, suggestion provenance and ai_eval_runs', async () => {
+    // The same resolver the migration and `resolveModelSlots` use: explicit env → tier → 768.
+    const require = createRequire(import.meta.url);
+    const { resolveEmbedDimension } = require('../migrations/0051_wave6_embeddings_affects.js') as {
+      resolveEmbedDimension: (env: NodeJS.ProcessEnv) => number;
+    };
+    const dim = resolveEmbedDimension(process.env);
+    const col = await pool.query(
+      `select atttypmod from pg_attribute where attrelid='documents'::regclass and attname='embedding' and not attisdropped`,
+    );
+    expect(col.rows[0].atttypmod).toBe(dim);
+    const se = await pool.query(
+      `select atttypmod from pg_attribute where attrelid='step_embeddings'::regclass and attname='embedding' and not attisdropped`,
+    );
+    expect(se.rows[0].atttypmod).toBe(dim);
+    const cols = await pool.query(
+      `select column_name, column_default from information_schema.columns where table_name='suggestions' and column_name in ('affects','prompt_version','model') order by 1`,
+    );
+    expect(cols.rows.map((r) => r.column_name)).toEqual(['affects', 'model', 'prompt_version']);
+    expect(cols.rows[0].column_default).toContain("'[]'");
+    const runs = await pool.query(`select to_regclass('ai_eval_runs') r`);
+    expect(runs.rows[0].r).toBe('ai_eval_runs');
+    const idx = await pool.query(`select indexname from pg_indexes where tablename='step_embeddings'`);
+    expect(idx.rows.map((r) => r.indexname)).toContain('step_embeddings_document_idx');
   });
 
   it('rolls back cleanly', async () => {

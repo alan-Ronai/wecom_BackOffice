@@ -1,0 +1,42 @@
+{
+  "id": "05-field-renamed",
+  "title": "שם שדה CRM שונה בטקסט המקור",
+  "source": { "title": "נהלי SIM" },
+  "diffs": [
+    {
+      "ref": "2.7",
+      "kind": "changed",
+      "before": "עדכן את השדה \"sim block lbl\" לערך \"לא חסום\".",
+      "after": "עדכן את השדה \"sim status\" לערך \"לא חסום\".",
+      "similarity": 0.88
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "22222222-2222-4222-8222-222222222222",
+      "documentTitle": "אין קליטה",
+      "stepKey": "s7",
+      "stepNum": "7",
+      "stepTitle": "עדכון סטטוס SIM ב-CRM",
+      "anchor": "2.7",
+      "actions": ["CRM ← sim block lbl ← לא חסום"]
+    }
+  ],
+  "blocks": [],
+  "fields": [{ "name": "sim block lbl", "status": "ok" }],
+  "impact": {
+    "documents": [],
+    "blocks": [],
+    "fields": [{ "name": "sim block lbl", "usedBy": 4 }],
+    "topics": [],
+    "related": []
+  },
+  "expected": [
+    {
+      "type": "field-alert",
+      "targetDocumentId": "22222222-2222-4222-8222-222222222222",
+      "targetStepKey": "s7",
+      "mustContain": ["sim status"]
+    }
+  ]
+}

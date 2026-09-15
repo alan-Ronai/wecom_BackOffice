@@ -1,11 +1,20 @@
 import type pg from 'pg';
 import { similarity, stripFmt, paragraphText, type Paragraph } from '@wecom/shared';
-import type { LinkedStep } from '@wecom/model';
+import type { LinkedStep, ModelClient } from '@wecom/model';
+import { embedMany } from './embeddings.js';
 
 const anchor = (ref: string) => ref.replace(/^§/, '');
 
 /** Minimum similarity for an automatic paragraph → step mapping proposal. */
 export const MAP_THRESHOLD = 0.6;
+
+/**
+ * Wave 6 (X1), spec §1.10. Minimum cosine for an *embedding*-based mapping. Higher than
+ * `MAP_THRESHOLD` because cosine over a multilingual embedder is generous — two unrelated
+ * support paragraphs in Hebrew sit around 0.6 — and a wrong mapping is worse than none: it
+ * anchors a step to the wrong paragraph and every later revision proposes against it.
+ */
+export const EMBED_MAP_THRESHOLD = 0.78;
 
 export interface MappingProposal {
   ref: string;
@@ -16,7 +25,11 @@ export interface MappingProposal {
 
 /** Keeps `document_links(derived_from_source)` and `steps.source_ref` in sync with a source. */
 export class MappingService {
-  constructor(private readonly pool: pg.Pool) {}
+  constructor(
+    private readonly pool: pg.Pool,
+    /** Wave 6 (X1): embedding-based mapping when the model can embed; trigram otherwise. */
+    private readonly model: ModelClient | null = null,
+  ) {}
 
   /** Every step anchored to a paragraph of this source, with the actions the model should see. */
   async linkedSteps(sourceId: string): Promise<LinkedStep[]> {
@@ -45,6 +58,15 @@ export class MappingService {
 
   /** First-import helper: best-matching step per paragraph among documents not yet linked here. */
   async proposeInitialMapping(sourceId: string, paragraphs: Paragraph[]): Promise<MappingProposal[]> {
+    /**
+     * Wave 6 (X1): cosine over `step_embeddings` first. Trigram similarity compares *characters*,
+     * so a paragraph that says the same thing in different words mapped to nothing and the whole
+     * revision came back as `new-card`s. The embedding pass falls through to trigram whenever the
+     * model cannot embed, the vectors are missing (a fresh 0051 column before `ai.reindex`) or
+     * nothing cleared the threshold — the pre-wave-6 behaviour, unchanged.
+     */
+    const embedded = await this.embeddingMapping(sourceId, paragraphs);
+    if (embedded.length) return embedded;
     const r = await this.pool.query(
       `select d.id as document_id, s.step_key, s.title,
           coalesce((select string_agg(text, ' ' order by position) from step_actions a where a.step_id=s.id), '') as actions
@@ -62,6 +84,39 @@ export class MappingService {
           best = { documentId: s.document_id, stepKey: s.step_key, score };
       }
       if (best) out.push({ ref: p.ref, ...best });
+    }
+    return out;
+  }
+
+  /** The embedding half of `proposeInitialMapping`; `[]` means "nothing to say, use trigram". */
+  private async embeddingMapping(sourceId: string, paragraphs: Paragraph[]): Promise<MappingProposal[]> {
+    if (!this.model?.embed || !paragraphs.length) return [];
+    const texts = paragraphs.map((p) => stripFmt(paragraphText(p)));
+    let vecs: number[][] = [];
+    try {
+      vecs = await embedMany(this.model, texts);
+    } catch {
+      return [];
+    }
+    if (vecs.length !== paragraphs.length) return [];
+    const out: MappingProposal[] = [];
+    for (let i = 0; i < paragraphs.length; i++) {
+      const best = await this.pool.query(
+        `select e.document_id, s.step_key, 1 - (e.embedding <=> $1::vector) as score
+           from step_embeddings e join steps s on s.id = e.step_id
+           join documents d on d.id = e.document_id and d.deleted_at is null
+          where not exists (select 1 from document_links l where l.from_document_id=d.id and l.to_source_id=$2)
+          order by e.embedding <=> $1::vector limit 1`,
+        [JSON.stringify(vecs[i]), sourceId],
+      );
+      const b = best.rows[0];
+      if (b && Number(b.score) >= EMBED_MAP_THRESHOLD)
+        out.push({
+          ref: paragraphs[i].ref,
+          documentId: b.document_id as string,
+          stepKey: b.step_key as string,
+          score: Number(b.score),
+        });
     }
     return out;
   }

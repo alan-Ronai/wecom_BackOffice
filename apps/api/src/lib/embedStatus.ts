@@ -17,8 +17,13 @@ import type { EmbedStatus } from '@wecom/shared';
  * `expected 768 dimensions, not 384` inside a caught block nobody reads.
  */
 
-/** The migration that created `documents.embedding`, named in the boot-time error. */
-export const EMBEDDING_COLUMN_MIGRATION = 'apps/api/migrations/0003_content.js';
+/**
+ * The migration that owns `documents.embedding`'s width, named in the boot-time error.
+ * Wave 6 (X1): 0003 created it as `vector(768)`; 0051 rebuilds it at the *configured* width
+ * (the same `resolveModelSlots(config).embedDimension` the boot check compares against), so
+ * the file an operator has to re-run after changing the embedder is this one.
+ */
+export const EMBEDDING_COLUMN_MIGRATION = 'apps/api/migrations/0051_wave6_embeddings_affects.js';
 
 /** Just enough of a pino logger to warn; keeps this unit testable without building an app. */
 export interface WarnLogger {
@@ -143,9 +148,44 @@ export function instrumentEmbedding<T extends ModelClient>(
     tracker.recordOk(vec.length);
     return vec;
   };
+  /**
+   * Wave 6 (X1). `ai.reindex` embeds in batches, and a batch that escaped this wrapper would
+   * be the one path that re-creates the silent failure this module exists to end — tens of
+   * thousands of wrong-width vectors written by a job whose whole purpose is the width.
+   * One bad vector anywhere in the batch fails the batch: they all come from the same model.
+   */
+  const embedBatch = model.embedBatch
+    ? async (texts: string[]): Promise<number[][]> => {
+        let vecs: number[][];
+        try {
+          vecs = await model.embedBatch!(texts);
+        } catch (err) {
+          tracker.recordError(err instanceof Error ? err.message : String(err));
+          throw err;
+        }
+        const bad = vecs.find((v) => v.length !== tracker.expected);
+        if (bad) {
+          const mismatch = new EmbedDimensionMismatchError(tracker.model, bad.length, tracker.expected);
+          log.warn(
+            {
+              embedModel: tracker.model,
+              dimension: bad.length,
+              expected: tracker.expected,
+              migration: EMBEDDING_COLUMN_MIGRATION,
+            },
+            mismatch.message,
+          );
+          tracker.recordError(mismatch.message, bad.length);
+          throw mismatch;
+        }
+        if (vecs.length) tracker.recordOk(vecs[0].length);
+        return vecs;
+      }
+    : undefined;
   return new Proxy(model, {
     get(target, prop, receiver) {
       if (prop === 'embed') return embed;
+      if (prop === 'embedBatch' && embedBatch) return embedBatch;
       return Reflect.get(target, prop, receiver);
     },
   });
@@ -194,7 +234,8 @@ export async function assertEmbeddingDimension(
         `(set by ${EMBEDDING_COLUMN_MIGRATION}). An embedding of ${expected} dimensions cannot be ` +
         `stored in a ${column}-dimension column, and the write is swallowed rather than raised, so ` +
         `the stack would run with search silently ranking lexically. Configure EMBED_DIMENSION=${column} ` +
-        `together with an EMBED_MODEL of that width, or migrate the column to vector(${expected}).`,
+        `together with an EMBED_MODEL of that width (or a MODEL_TIER whose preset is that pair), ` +
+        `or re-run ${EMBEDDING_COLUMN_MIGRATION} so the column becomes vector(${expected}).`,
     );
   }
   return column;

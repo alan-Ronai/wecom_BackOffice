@@ -117,6 +117,53 @@ describe('embedStatus: the embedding path stops being silent', () => {
     expect(tracker.snapshot().lastOk).toBeNull();
   });
 
+  /**
+   * Wave 6 (X1): `ai.reindex` is the one caller that embeds in batches, and it is also the one
+   * whose whole purpose is the vector width. A batch that escaped the wrapper would re-create
+   * the exact silent failure this module exists to end, at tens of thousands of rows.
+   */
+  describe('embedBatch', () => {
+    const batchModel = (widths: number[]): ModelClient => ({
+      ...modelOf(768),
+      embedBatch: async () => widths.map((w) => new Array(w).fill(0.1)),
+    });
+
+    it('records one ok for a batch whose every vector matches the column', async () => {
+      const tracker = new EmbedStatusTracker('bge-m3', 768);
+      const { log, warnings } = recorder();
+      const model = instrumentEmbedding(batchModel([768, 768, 768]), tracker, log);
+      await expect(model.embedBatch!(['a', 'b', 'c'])).resolves.toHaveLength(3);
+      expect(warnings).toEqual([]);
+      expect(tracker.snapshot()).toMatchObject({ dimension: 768, lastOk: true, lastError: null });
+    });
+
+    it('refuses the whole batch when any vector is the wrong width, naming that width', async () => {
+      const tracker = new EmbedStatusTracker('bge-m3', 768);
+      const { log, warnings } = recorder();
+      const model = instrumentEmbedding(batchModel([768, 1024, 768]), tracker, log);
+      await expect(model.embedBatch!(['a', 'b', 'c'])).rejects.toBeInstanceOf(EmbedDimensionMismatchError);
+      expect(warnings[0].obj).toMatchObject({ embedModel: 'bge-m3', dimension: 1024, expected: 768 });
+      expect(tracker.snapshot()).toMatchObject({ dimension: 1024, lastOk: false });
+      expect(tracker.snapshot().lastError).toContain('1024');
+    });
+
+    it('records an unreachable model without inventing a dimension', async () => {
+      const tracker = new EmbedStatusTracker('bge-m3', 768);
+      const model = instrumentEmbedding(
+        { ...modelOf(768), embedBatch: async () => Promise.reject(new Error('embed http 500')) },
+        tracker,
+        recorder().log,
+      );
+      await expect(model.embedBatch!(['a'])).rejects.toThrow('embed http 500');
+      expect(tracker.snapshot()).toMatchObject({ dimension: null, lastOk: false });
+    });
+
+    it('is absent on a client that has no embedBatch, so a caller can still feature-detect it', () => {
+      const tracker = new EmbedStatusTracker('nomic-embed-text', 768);
+      expect(instrumentEmbedding(modelOf(768), tracker, recorder().log).embedBatch).toBeUndefined();
+    });
+  });
+
   it('forwards every other member of the client through the wrapper', async () => {
     const tracker = new EmbedStatusTracker('nomic-embed-text', 768);
     const model = instrumentEmbedding(modelOf(768), tracker, recorder().log);
@@ -147,7 +194,7 @@ describe('embedStatus: the embedding path stops being silent', () => {
 
     it('refuses to boot on a disagreement, naming both numbers and the migration', async () => {
       await expect(assertEmbeddingDimension(dbOf([{ dim: 768 }]), 384)).rejects.toThrow(
-        /EMBED_DIMENSION is 384 but documents\.embedding is vector\(768\).*0003_content\.js/s,
+        /EMBED_DIMENSION is 384 but documents\.embedding is vector\(768\).*0051_wave6_embeddings_affects\.js/s,
       );
     });
 
