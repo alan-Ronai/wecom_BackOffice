@@ -38,7 +38,7 @@ export async function adminApi(page: Page, baseURL: string): Promise<APIRequestC
  */
 export async function createUser(
   request: APIRequestContext,
-  roleName: 'agent' | 'editor' | 'lead',
+  roleName: 'agent' | 'editor' | 'lead' | 'approver',
 ): Promise<Creds> {
   const roles = await request.get('/api/v1/admin/roles');
   expect(roles.ok(), await roles.text()).toBeTruthy();
