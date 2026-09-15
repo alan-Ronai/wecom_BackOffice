@@ -120,10 +120,16 @@ function FeedbackForm({
   );
 }
 
-/** Fixed entry point on every knowledge item (article header) and on every step (PRD §12). */
-export function FeedbackButton(props: FeedbackButtonProps) {
+/**
+ * Opening the dialog, without the button that usually opens it.
+ *
+ * A-6 folds the article topbar into an overflow menu on a phone, and a menu item cannot render a
+ * `FeedbackButton` — it needs to *call* it. Extracted rather than duplicated so the two entry
+ * points cannot drift in what context they attach.
+ */
+export function useFeedbackDialog(props: FeedbackButtonProps) {
   const modal = useModal();
-  const open = () => {
+  return () => {
     const dispose = modal.open({
       title: FEEDBACK_TITLE,
       /**
@@ -149,6 +155,11 @@ export function FeedbackButton(props: FeedbackButtonProps) {
       sticky: true,
     });
   };
+}
+
+/** Fixed entry point on every knowledge item (article header) and on every step (PRD §12). */
+export function FeedbackButton(props: FeedbackButtonProps) {
+  const open = useFeedbackDialog(props);
   return (
     <button
       type="button"
