@@ -210,11 +210,23 @@ export class WordPressConnector implements Connector<WpConfig> {
     const dropped: AbsorbedMedia['dropped'] = [];
     const urls = [...html.matchAll(WordPressConnector.REMOTE_IMG)].map((m) => m[3]!);
     if (!urls.length) return { html, dropped };
+    /**
+     * H2. The credentials exist to read a *private upload off this site*, and the only URL that
+     * can need them is one on this site's own origin. The HTML they are extracted from is written
+     * by WordPress authors, so before this an `<img src="https://evil/x.png">` in any post handed
+     * the site's application password — full REST API access, the whole library's worth — to
+     * whoever hosts `evil`, on the next sync, silently. With a permissive
+     * `CONNECTOR_HOST_ALLOWLIST` (`*`, or the empty value production forbids) nothing else stood
+     * in the way. Compare origins, not hosts: a credential minted for `https://wp` is not for
+     * `http://wp` either.
+     */
+    const baseOrigin = new URL(cfg.baseUrl).origin;
     const headers = this.client(cfg).mediaHeaders();
     for (const url of new Set(urls)) {
       try {
         assertAllowedHost(url, this.guards.hostAllowlist);
-        const res = await this.fetchImpl(url, { headers });
+        const sameSite = new URL(url).origin === baseOrigin;
+        const res = await this.fetchImpl(url, sameSite ? { headers } : {});
         if (!res.ok) throw new WpError(res.status, `WordPress GET media → ${res.status}`);
         const mime = (res.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
         if (!WordPressConnector.EXT[mime]) throw new Error(`unsupported media type: ${mime || 'unknown'}`);
