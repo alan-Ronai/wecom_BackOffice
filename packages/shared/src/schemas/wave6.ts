@@ -553,9 +553,7 @@ export const EvalCaseSchema = z.object({
   brief: z.string().optional(),
   style: z.string().optional(),
   /** Accepted suggestions to imitate; the harness renders them exactly as the pipeline does. */
-  examples: z
-    .array(z.object({ diff: z.string(), suggestion: z.record(z.unknown()) }))
-    .default([]),
+  examples: z.array(z.object({ diff: z.string(), suggestion: z.record(z.unknown()) })).default([]),
   maxContextChars: z.number().int().positive().optional(),
   /**
    * Empty means: **this change deserves no suggestion at all.** Six of these carry the negative

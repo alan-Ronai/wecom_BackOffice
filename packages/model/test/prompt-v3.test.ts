@@ -34,7 +34,10 @@ const base: ProposalContext = {
 describe('prompt v3 (legacy, still reachable)', () => {
   it('is versioned v3 and injects brief, architecture and style into the system message', () => {
     expect(LEGACY_PROMPT_VERSION).toBe('propose-v3');
-    const [sys, user] = buildMessages({ ...base, brief: 'wecom היא חברת סלולר', style: 'פעולה אחת בשורה' }, v3);
+    const [sys, user] = buildMessages(
+      { ...base, brief: 'wecom היא חברת סלולר', style: 'פעולה אחת בשורה' },
+      v3,
+    );
     expect(sys.role).toBe('system');
     expect(sys.content.indexOf('wecom היא חברת סלולר')).toBeLessThan(sys.content.indexOf('ארכיטקטורת הידע'));
     expect(sys.content).toContain('פעולה אחת בשורה');
@@ -51,33 +54,36 @@ describe('prompt v3 (legacy, still reachable)', () => {
   });
 
   it('renders impact and examples in the user message, within budget', () => {
-    const [, user] = buildMessages({
-      ...base,
-      impact: {
-        documents: [{ id: 'X', title: 'ניתוקים', why: 'קישור' }],
-        blocks: [{ id: 'B', title: 'ריענון SIM', usedBy: 3 }],
-        fields: [],
-        topics: [],
-        related: [],
-      },
-      examples: [
-        {
-          diff: '§2 changed: 3 → 4',
-          suggestion: {
-            anchor: '§2',
-            type: 'update-step',
-            title: 'ת',
-            targetDocumentId: 'D',
-            targetStepKey: 's2',
-            targetBlockId: null,
-            payload: { type: 'update-step', addActions: ['x'], patch: {} },
-            confidence: 0.9,
-            rationale: 'r',
-          },
+    const [, user] = buildMessages(
+      {
+        ...base,
+        impact: {
+          documents: [{ id: 'X', title: 'ניתוקים', why: 'קישור' }],
+          blocks: [{ id: 'B', title: 'ריענון SIM', usedBy: 3 }],
+          fields: [],
+          topics: [],
+          related: [],
         },
-      ],
-      maxContextChars: 6000,
-    }, v3);
+        examples: [
+          {
+            diff: '§2 changed: 3 → 4',
+            suggestion: {
+              anchor: '§2',
+              type: 'update-step',
+              title: 'ת',
+              targetDocumentId: 'D',
+              targetStepKey: 's2',
+              targetBlockId: null,
+              payload: { type: 'update-step', addActions: ['x'], patch: {} },
+              confidence: 0.9,
+              rationale: 'r',
+            },
+          },
+        ],
+        maxContextChars: 6000,
+      },
+      v3,
+    );
     expect(user.content).toContain('השפעה');
     expect(user.content).toContain('ריענון SIM');
     expect(user.content).toContain('דוגמאות מאושרות');

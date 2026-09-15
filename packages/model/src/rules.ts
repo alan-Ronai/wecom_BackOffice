@@ -14,14 +14,21 @@ const stripRef = (ref: string) => ref.replace(/^§/, '');
 
 const MAX_TITLE = 48;
 const shortTitle = (t: string) =>
-  t.replace(/\s+/g, ' ').replace(/[.:]$/, '').trim().slice(0, MAX_TITLE - 1) + (t.length >= MAX_TITLE ? '…' : '');
+  t
+    .replace(/\s+/g, ' ')
+    .replace(/[.:]$/, '')
+    .trim()
+    .slice(0, MAX_TITLE - 1) + (t.length >= MAX_TITLE ? '…' : '');
 
 /**
  * The mapped step this new paragraph most likely belongs after: the nearest one whose anchor
  * sorts below the paragraph's, comparing anchors the way a document numbers them (`4.9` before
  * `4.10`), falling back to the last mapped step of the only mapped document.
  */
-const anchorKey = (ref: string) => stripRef(ref).split(/[.\-]/).map((p) => Number(p) || 0);
+const anchorKey = (ref: string) =>
+  stripRef(ref)
+    .split(/[.-]/)
+    .map((p) => Number(p) || 0);
 const below = (a: string, b: string) => {
   const [x, y] = [anchorKey(a), anchorKey(b)];
   for (let i = 0; i < Math.max(x.length, y.length); i++) {
@@ -110,7 +117,13 @@ export class RuleBasedModel implements ModelClient {
             },
             confidence: confidenceFor('new-step', 0.7),
             rationale:
-              'פסקה חדשה ' + d.ref + ' ללא שלב ממופה, אחרי שלב ' + host.stepNum + ' ב"' + host.documentTitle + '".',
+              'פסקה חדשה ' +
+              d.ref +
+              ' ללא שלב ממופה, אחרי שלב ' +
+              host.stepNum +
+              ' ב"' +
+              host.documentTitle +
+              '".',
           });
           continue;
         }

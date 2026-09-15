@@ -236,6 +236,20 @@ export class OllamaModel implements ModelClient {
           this.lastRun = { used: 'ollama', attempts: attempt, ms: Date.now() - started, error: lastError };
           return enforceSectionCards(ctx, []);
         }
+        /**
+         * Same argument, last attempt: the guards need no model. `detectFieldAlerts` reads the
+         * diffs and the known field list, so a revision whose answer would not parse still keeps
+         * the suggestions the context alone proves — rather than losing them to a fallback that
+         * happens not to look for them. Measured: `aya-expanse:8b` failed the parse on case `05`
+         * and the field rename was there to be found the whole time.
+         */
+        if (attempt === MAX_ATTEMPTS && guards) {
+          const rescued = applyGuards(ctx, []);
+          if (rescued.length) {
+            this.lastRun = { used: 'ollama', attempts: attempt, ms: Date.now() - started, error: lastError };
+            return rescued;
+          }
+        }
       } catch (e) {
         lastError = (e as Error).message;
       }

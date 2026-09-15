@@ -72,7 +72,10 @@ for (const c of cases) {
     raw,
   };
   writeFileSync(`${outDir}/${c.id}.json`, JSON.stringify(report, null, 2));
-  writeFileSync(`${outDir}/${c.id}.prompt.txt`, messages.map((m) => `### ${m.role}\n${m.content}`).join('\n\n'));
+  writeFileSync(
+    `${outDir}/${c.id}.prompt.txt`,
+    messages.map((m) => `### ${m.role}\n${m.content}`).join('\n\n'),
+  );
   console.log(
     `${c.id}  sys=${report.systemChars} user=${report.userChars} ptok=${report.promptTokens} otok=${report.outputTokens} ${report.ms}ms  parse=${parsed.ok ? 'OK' : 'FAIL'}  ${report.parseError ?? ''}`,
   );

@@ -29,9 +29,7 @@
       "stepNum": "5",
       "stepTitle": "המתנה לפני בדיקה חוזרת",
       "anchor": "2.5",
-      "actions": [
-        "המתן 30 שניות"
-      ]
+      "actions": ["המתן 30 שניות"]
     },
     {
       "documentId": "22222222-2222-4222-8222-222222222222",
@@ -40,9 +38,7 @@
       "stepNum": "7",
       "stepTitle": "עדכון סטטוס SIM ב-CRM",
       "anchor": "2.7",
-      "actions": [
-        "CRM ← sim block lbl ← לא חסום"
-      ]
+      "actions": ["CRM ← sim block lbl ← לא חסום"]
     }
   ],
   "blocks": [],
@@ -57,18 +53,14 @@
       "type": "update-step",
       "targetDocumentId": "22222222-2222-4222-8222-222222222222",
       "targetStepKey": "s5",
-      "mustContain": [
-        "45"
-      ],
+      "mustContain": ["45"],
       "mustContainAny": []
     },
     {
       "type": "field-alert",
       "targetDocumentId": "22222222-2222-4222-8222-222222222222",
       "targetStepKey": "s7",
-      "mustContain": [
-        "sim state"
-      ],
+      "mustContain": ["sim state"],
       "mustContainAny": []
     }
   ],

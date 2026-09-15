@@ -44,12 +44,7 @@
       "type": "new-card",
       "anchor": "h2-1",
       "mustContain": [],
-      "mustContainAny": [
-        [
-          "זכאות",
-          "חבילת גלישה"
-        ]
-      ]
+      "mustContainAny": [["זכאות", "חבילת גלישה"]]
     }
   ],
   "maxItems": 1,

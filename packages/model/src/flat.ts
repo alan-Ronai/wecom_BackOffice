@@ -129,8 +129,11 @@ const categoryOf = (text: string) =>
 
 const MAX_TITLE = 48;
 const shortTitle = (t: string) =>
-  t.replace(/\s+/g, ' ').replace(/[.:]$/, '').trim().slice(0, MAX_TITLE - 1) +
-  (t.length >= MAX_TITLE ? '…' : '');
+  t
+    .replace(/\s+/g, ' ')
+    .replace(/[.:]$/, '')
+    .trim()
+    .slice(0, MAX_TITLE - 1) + (t.length >= MAX_TITLE ? '…' : '');
 
 /**
  * Re-inflates the discriminated union from the flat answer. This is the half of the contract the
@@ -367,6 +370,20 @@ export function parseFlatProposals(
         s.targetDocumentId ??= via.documentId;
         s.targetStepKey ??= via.stepKey;
       }
+    }
+    /**
+     * The same back-fill from the suggestion's own **anchor**, which the grammar requires and
+     * the models get right. An id the context already holds unambiguously is not something a
+     * suggestion should be discarded for: `aya-expanse:8b` named the document and left the step
+     * as `""` on a `deprecate-step` twice in one run, and the retry never recovered it. Only
+     * applied when exactly one linked step sits on that anchor — with two there is nothing to
+     * infer and the suggestion is genuinely ambiguous.
+     */
+    const onAnchor = ctx.linkedSteps.filter((l) => l.anchor.replace(/^§/, '') === s.anchor.replace(/^§/, ''));
+    if (onAnchor.length === 1) {
+      s.targetDocumentId ??= onAnchor[0].documentId;
+      s.targetStepKey ??= onAnchor[0].stepKey;
+      if (s.type === 'update-block') s.targetBlockId ??= onAnchor[0].blockId ?? null;
     }
     const missing = missingTarget(s);
     if (missing) {

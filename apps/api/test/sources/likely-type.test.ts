@@ -52,9 +52,12 @@ describe('likelyType reaches all six suggestion types', () => {
   });
 
   it('6 — a source with nothing mapped at all is a new-card', () => {
-    expect(likelyType(diff({ ref: '2.9', kind: 'added', before: null }), ctx({ steps: new Map(), anyMapped: false }))).toBe(
-      'new-card',
-    );
+    expect(
+      likelyType(
+        diff({ ref: '2.9', kind: 'added', before: null }),
+        ctx({ steps: new Map(), anyMapped: false }),
+      ),
+    ).toBe('new-card');
   });
 
   it('the block rule wins over the removal rule, as the prompt orders them', () => {

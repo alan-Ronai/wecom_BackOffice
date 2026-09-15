@@ -51,7 +51,12 @@ export function charSimilarity(a: string, b: string): number {
 const PUNCT = /["'`״׳“”«»‚„.,;:!?()[\]{}\-–—…/\\|]+/g;
 /** Whitespace-, punctuation- and case-insensitive. Hebrew has no case; the latin tokens do. */
 export const normalisePlain = (t: string): string =>
-  t.replace(PUNCT, ' ').replace(/[\s ]+/g, ' ').trim().toLowerCase();
+  t
+    .replace(PUNCT, ' ')
+    // `\s` already covers the non-breaking space a docx paste brings with it.
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .toLowerCase();
 
 const NUMBER = /\d+(?:[.,]\d+)?/g;
 const LATIN = /[A-Za-z][A-Za-z0-9-]*/g;
@@ -157,8 +162,14 @@ export const isHeadingRef = (ref: string): boolean => HEADING_REF.test(ref.repla
 export function isReorderOnly(diffs: ParagraphDiff[]): boolean {
   const moved = diffs.filter((d) => d.kind !== 'same');
   if (!moved.length) return false;
-  const before = moved.map((d) => normalisePlain(d.before ?? '')).filter(Boolean).sort();
-  const after = moved.map((d) => normalisePlain(d.after ?? '')).filter(Boolean).sort();
+  const before = moved
+    .map((d) => normalisePlain(d.before ?? ''))
+    .filter(Boolean)
+    .sort();
+  const after = moved
+    .map((d) => normalisePlain(d.after ?? ''))
+    .filter(Boolean)
+    .sort();
   return before.length > 1 && sameMultiset(before, after);
 }
 

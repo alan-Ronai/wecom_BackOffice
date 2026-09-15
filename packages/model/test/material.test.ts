@@ -57,14 +57,18 @@ describe('materialSentences', () => {
 describe('CRM field renames', () => {
   it('names the pair when a known field is quoted out and an unknown one in', () => {
     expect(
-      renamedFields('עדכן את השדה "sim block lbl" לערך "לא חסום".', 'עדכן את השדה "sim status" לערך "לא חסום".', known),
+      renamedFields(
+        'עדכן את השדה "sim block lbl" לערך "לא חסום".',
+        'עדכן את השדה "sim status" לערך "לא חסום".',
+        known,
+      ),
     ).toEqual([{ from: 'sim block lbl', to: 'sim status' }]);
   });
 
   it('is rename-only when nothing else in the paragraph moved, and not when an instruction was added', () => {
-    expect(
-      isFieldRenameOnly('עדכן את השדה "sim block lbl".', 'עדכן את השדה "sim status".', known),
-    ).toBe(true);
+    expect(isFieldRenameOnly('עדכן את השדה "sim block lbl".', 'עדכן את השדה "sim status".', known)).toBe(
+      true,
+    );
     expect(
       isFieldRenameOnly(
         'עדכן את השדה "sim block lbl".',
@@ -121,7 +125,12 @@ describe('the rule engine proposes nothing on noise', () => {
     expect(await m.proposeChanges(ctx([diff('2.1', 'בצע  ריענון SIM.', 'בצע ריענון SIM.')]))).toEqual([]);
     expect(await m.proposeChanges(ctx([diff('2.1', 'בצע ריענון SIM', 'בצע ריענון SIM.')]))).toEqual([]);
     expect(
-      await m.proposeChanges(ctx([diff('2.1', 'ראשון ארוך יותר.', 'שני ארוך יותר.'), diff('2.2', 'שני ארוך יותר.', 'ראשון ארוך יותר.')])),
+      await m.proposeChanges(
+        ctx([
+          diff('2.1', 'ראשון ארוך יותר.', 'שני ארוך יותר.'),
+          diff('2.2', 'שני ארוך יותר.', 'ראשון ארוך יותר.'),
+        ]),
+      ),
     ).toEqual([]);
   });
 

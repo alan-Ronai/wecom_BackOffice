@@ -20,6 +20,7 @@
  */
 import type { ProposalContext, ProposedSuggestion } from './contract.js';
 import { confidenceFor } from './calibration.js';
+import { materialDiffs } from './material.js';
 
 const stripRef = (r: string) => r.replace(/^§/, '');
 
@@ -31,10 +32,7 @@ const stripRef = (r: string) => r.replace(/^§/, '');
  * model's new ones are appended, unless the model already returned a list at least as long as
  * the block's, in which case it answered with the full list and that is used as-is.
  */
-export function coerceBlockUpdates(
-  ctx: ProposalContext,
-  items: ProposedSuggestion[],
-): ProposedSuggestion[] {
+export function coerceBlockUpdates(ctx: ProposalContext, items: ProposedSuggestion[]): ProposedSuggestion[] {
   return items.map((s) => {
     if (s.type !== 'update-step' || s.payload.type !== 'update-step') return s;
     const step = ctx.linkedSteps.find(
@@ -55,8 +53,9 @@ export function coerceBlockUpdates(
         actions: texts.map((t, i) => ({ id: 'b' + (i + 1), text: t })),
       },
       confidence: confidenceFor('update-block', s.confidence),
-      rationale:
-        s.rationale.includes(block.title) ? s.rationale : `הפסקה ממופה לבלוק המשותף "${block.title}"; ` + s.rationale,
+      rationale: s.rationale.includes(block.title)
+        ? s.rationale
+        : `הפסקה ממופה לבלוק המשותף "${block.title}"; ` + s.rationale,
     } satisfies ProposedSuggestion;
   });
 }
@@ -79,10 +78,7 @@ const FIELDISH = /^[A-Za-z][A-Za-z0-9 _.-]{2,}$/;
  * whether the CRM field was really renamed, and those are two different decisions for two
  * different people.
  */
-export function detectFieldAlerts(
-  ctx: ProposalContext,
-  items: ProposedSuggestion[],
-): ProposedSuggestion[] {
+export function detectFieldAlerts(ctx: ProposalContext, items: ProposedSuggestion[]): ProposedSuggestion[] {
   const known = new Set(ctx.fields.map((f) => f.name.toLowerCase()));
   if (!known.size) return items;
   const out: ProposedSuggestion[] = [];
@@ -91,7 +87,13 @@ export function detectFieldAlerts(
       .filter((s) => s.payload.type === 'field-alert')
       .map((s) => (s.payload as { fieldName: string }).fieldName.toLowerCase()),
   );
-  const add = (d: { ref: string }, fieldName: string, issue: 'renamed' | 'unknown', title: string, why: string) => {
+  const add = (
+    d: { ref: string },
+    fieldName: string,
+    issue: 'renamed' | 'unknown',
+    title: string,
+    why: string,
+  ) => {
     if (raised.has(fieldName.toLowerCase())) return;
     raised.add(fieldName.toLowerCase());
     const step = ctx.linkedSteps.find((l) => stripRef(l.anchor) === stripRef(d.ref));
@@ -112,7 +114,9 @@ export function detectFieldAlerts(
     const beforeQ = quoted(d.before);
     const afterQ = quoted(d.after);
     const oldField = beforeQ.find((q) => known.has(q.toLowerCase()) && !afterQ.includes(q));
-    const newField = afterQ.find((q) => !known.has(q.toLowerCase()) && !beforeQ.includes(q) && FIELDISH.test(q));
+    const newField = afterQ.find(
+      (q) => !known.has(q.toLowerCase()) && !beforeQ.includes(q) && FIELDISH.test(q),
+    );
     if (oldField && newField) {
       const usedBy = ctx.impact?.fields.find((f) => f.name === oldField)?.usedBy;
       add(
@@ -144,6 +148,33 @@ export function detectFieldAlerts(
   return [...items, ...out];
 }
 
-/** Both guards, in the order the pipeline needs them (coerce first, then look for field renames). */
+/**
+ * A suggestion about a paragraph that did not materially change.
+ *
+ * `buildMessages` shows the model only `materialDiffs`, so an answer anchored anywhere else is
+ * about something the model was not shown — it re-read the source text in the linked-steps block
+ * and proposed on that. Measured over the six negative cases: `aya-expanse:8b` proposed on all
+ * six and `qwen2.5:3b` on one, in every run, however plainly the prompt asks for `[]`. Telling
+ * the model again is not a fix; the pipeline already knows which paragraphs changed.
+ *
+ * Kept deliberately narrow — the anchor has to match nothing at all in the material set. A
+ * suggestion on a real change with a mistyped anchor is still a real suggestion and survives via
+ * the `§`-insensitive compare.
+ */
+export function dropUnanchored(ctx: ProposalContext, items: ProposedSuggestion[]): ProposedSuggestion[] {
+  const material = new Set(materialDiffs(ctx.diffs).map((d) => stripRef(d.ref)));
+  if (!material.size) return [];
+  return items.filter((s) => material.has(stripRef(s.anchor)));
+}
+
+/**
+ * Every guard, in the order the pipeline needs them: drop what was invented, move a step edit
+ * into its shared block, then look for field renames. (The missing-id back-fill happens earlier,
+ * inside `parseFlatProposals`, because the parse would otherwise have discarded the suggestion
+ * before a guard could see it.)
+ *
+ * Run with `items: []` this is still useful: `detectFieldAlerts` needs no model at all, so a
+ * revision whose model answer was unusable keeps the suggestions the context alone can prove.
+ */
 export const applyGuards = (ctx: ProposalContext, items: ProposedSuggestion[]): ProposedSuggestion[] =>
-  detectFieldAlerts(ctx, coerceBlockUpdates(ctx, items));
+  detectFieldAlerts(ctx, coerceBlockUpdates(ctx, dropUnanchored(ctx, items)));

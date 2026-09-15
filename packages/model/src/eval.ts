@@ -71,15 +71,7 @@ const contains = (hay: string, needle: string) => hay.includes(normaliseHebrew(n
  * Latin tokens a Hebrew answer legitimately contains: product names, protocols and the CRM
  * vocabulary the sources themselves are written in. A case may add its own (`allowLatin`).
  */
-export const LATIN_ALLOW_LIST = [
-  'speedtest',
-  'wi-fi',
-  'wifi',
-  'sim',
-  'esim',
-  'crm',
-  'apn',
-] as const;
+export const LATIN_ALLOW_LIST = ['speedtest', 'wi-fi', 'wifi', 'sim', 'esim', 'crm', 'apn'] as const;
 
 const CJK_OR_CYRILLIC = /[Ѐ-ӿ぀-ヿ一-鿿가-힯]/;
 const LATIN_WORD = /[A-Za-z][A-Za-z0-9'-]*/g;

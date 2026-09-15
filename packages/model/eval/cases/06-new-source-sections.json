@@ -56,36 +56,19 @@
       "type": "new-card",
       "anchor": "h2-1",
       "mustContain": [],
-      "mustContainAny": [
-        [
-          "זיהוי הלקוח",
-          "זהות הלקוח"
-        ]
-      ]
+      "mustContainAny": [["זיהוי הלקוח", "זהות הלקוח"]]
     },
     {
       "type": "new-card",
       "anchor": "h2-2",
       "mustContain": [],
-      "mustContainAny": [
-        [
-          "זכאות",
-          "שדרוג"
-        ]
-      ]
+      "mustContainAny": [["זכאות", "שדרוג"]]
     },
     {
       "type": "new-card",
       "anchor": "h2-3",
-      "mustContain": [
-        "SIM"
-      ],
-      "mustContainAny": [
-        [
-          "הנפק",
-          "החלפה"
-        ]
-      ]
+      "mustContain": ["SIM"],
+      "mustContainAny": [["הנפק", "החלפה"]]
     }
   ],
   "notes": "C-I6: the expectations carried no target at all, so targets() returned true for every card and the case reported 1/1/1 for any answer that parsed. Each section anchor is the one real target a new-card has, and maxItems 3 fails a card-per-paragraph answer.",

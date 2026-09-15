@@ -32,9 +32,7 @@ const B = '44444444-4444-4444-8444-444444444444';
 const ctx: ProposalContext = {
   source: { id: 'src', title: 'נהלי SIM' },
   paragraphs: [],
-  diffs: [
-    { ref: '2.3', kind: 'changed', before: 'המתן דקה.', after: 'המתן 90 שניות.', similarity: 0.7 },
-  ],
+  diffs: [{ ref: '2.3', kind: 'changed', before: 'המתן דקה.', after: 'המתן 90 שניות.', similarity: 0.7 }],
   linkedSteps: [
     {
       documentId: D,
@@ -129,10 +127,20 @@ describe('parseFlatProposals', () => {
     expect(r.ok && r.errors).toHaveLength(1);
   });
 
-  it('refuses an id the model invented even though the grammar allowed it', () => {
+  it('refuses an id the model invented, and back-fills the real one from the anchor', () => {
     const r = parseFlatProposals(
       ctx,
       answer(flat({ targetDocumentId: '99999999-9999-4999-8999-999999999999' })),
+    );
+    // The hallucination never survives; §2.3 has exactly one linked step, so the id it should
+    // have copied is not in doubt and the suggestion is repaired rather than discarded.
+    expect(r.ok && r.items[0].targetDocumentId).toBe(D);
+  });
+
+  it('discards a suggestion whose anchor names no step it could have meant', () => {
+    const r = parseFlatProposals(
+      ctx,
+      answer(flat({ anchor: '§9.9', targetDocumentId: '', targetStepKey: '' })),
     );
     expect(r.ok).toBe(false);
   });
@@ -143,7 +151,9 @@ describe('parseFlatProposals', () => {
   });
 
   it('names the missing field so the retry can quote it in Hebrew (C-I7)', () => {
-    const r = parseFlatProposals(ctx, answer(flat({ targetStepKey: '' })));
+    // An anchor with no linked step of its own, so nothing can be back-filled and the model
+    // really does have to be asked again.
+    const r = parseFlatProposals(ctx, answer(flat({ anchor: '§9.9', targetStepKey: '' })));
     expect(r.ok).toBe(false);
     expect(!r.ok && r.error).toContain('targetStepKey');
     expect(repairHint(!r.ok ? r.error : '')).toContain('מפתח השלב');
@@ -170,7 +180,13 @@ describe('the context budget is in tokens (C-I4)', () => {
     const big = 'א'.repeat(6000);
     const [, msg] = buildMessages({
       ...ctx,
-      impact: { documents: [{ id: 'X', title: 'ניתוקים חוזרים', why: 'w' }], blocks: [], fields: [], topics: [], related: [] },
+      impact: {
+        documents: [{ id: 'X', title: 'ניתוקים חוזרים', why: 'w' }],
+        blocks: [],
+        fields: [],
+        topics: [],
+        related: [],
+      },
       examples: [{ diff: big, suggestion: accepted }],
       maxContextTokens: 2200,
     });

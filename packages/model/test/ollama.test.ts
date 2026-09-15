@@ -115,16 +115,21 @@ describe('OllamaModel', () => {
     await new OllamaModel({ url: s.url, model: 'm', legacyEnvelope: true }).proposeChanges(ctx);
     const [flat, envelope] = s.calls
       .filter((c) => c.path === '/api/chat')
-      .map((c) => (c.body as { format: { properties: { suggestions: { items: { required: string[] } } } } }).format);
+      .map(
+        (c) =>
+          (c.body as { format: { properties: { suggestions: { items: { required: string[] } } } } }).format,
+      );
     expect(flat.properties.suggestions.items.required).toContain('targetBlockId');
     expect(envelope.properties.suggestions.items.required).toContain('payload');
   });
 
   it('replays its own answer and names the field in Hebrew on the one retry (C-I7)', async () => {
-    const s = await startOllamaStub({ chat: [
+    const s = await startOllamaStub({
+      chat: [
         JSON.stringify({ suggestions: [{ type: 'update-step', targetDocumentId: D, targetStepKey: '' }] }),
         good,
-      ] });
+      ],
+    });
     stop = s.close;
     await new OllamaModel({ url: s.url, model: 'm' }).proposeChanges(ctx);
     const retry = s.calls.filter((c) => c.path === '/api/chat')[1].body as {

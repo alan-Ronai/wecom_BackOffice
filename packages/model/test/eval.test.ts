@@ -51,7 +51,9 @@ const caseOf = (over: Partial<EvalCase> = {}, mustContain: string[] = ['6']): Ev
     notes: '',
     allowLatin: [],
     examples: [],
-    expected: [{ type: 'update-step', targetDocumentId: target, targetStepKey: 's8', mustContain, mustContainAny: [] }],
+    expected: [
+      { type: 'update-step', targetDocumentId: target, targetStepKey: 's8', mustContain, mustContainAny: [] },
+    ],
     ...over,
   }) as EvalCase;
 
@@ -97,7 +99,11 @@ describe('eval scoring', () => {
   it('matches a Hebrew phrase across its prefix clitics (mustContainAny)', () => {
     expect(normaliseHebrew('הניתוקים ובמסמך')).toBe('ניתוקים מסמך');
     const c = caseOf(
-      { expected: [{ type: 'update-step', targetStepKey: 's8', mustContain: [], mustContainAny: [['ניתוקים חוזרים']] }] as never },
+      {
+        expected: [
+          { type: 'update-step', targetStepKey: 's8', mustContain: [], mustContainAny: [['ניתוקים חוזרים']] },
+        ] as never,
+      },
       [],
     );
     // "בניתוקים החוזרים" is the same phrase; a plain substring test scored it zero.

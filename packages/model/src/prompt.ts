@@ -26,7 +26,8 @@ export const PROMPT_VERSION = 'propose-v4';
  * Nothing selects it by default; `test/prompt.test.ts` pins that the path still parses.
  */
 export const LEGACY_PROMPT_VERSION = 'propose-v3';
-const readPrompt = (v: string) => readFileSync(fileURLToPath(new URL(`../prompts/${v}.md`, import.meta.url)), 'utf8');
+const readPrompt = (v: string) =>
+  readFileSync(fileURLToPath(new URL(`../prompts/${v}.md`, import.meta.url)), 'utf8');
 export const SYSTEM_PROMPT = readPrompt(PROMPT_VERSION);
 
 export interface PromptOptions {
@@ -85,7 +86,8 @@ export const estimateTokens = (text: string): number => Math.ceil(text.length / 
 export const DEFAULT_MAX_CONTEXT_TOKENS = Math.floor(DEFAULT_MAX_CONTEXT_CHARS / DEFAULT_CHARS_PER_TOKEN);
 export function promptTokenBudget(ctx: ProposalContext): number {
   if (ctx.maxContextTokens && ctx.maxContextTokens > 0) return ctx.maxContextTokens;
-  if (ctx.maxContextChars && ctx.maxContextChars > 0) return Math.floor(ctx.maxContextChars / charsPerToken());
+  if (ctx.maxContextChars && ctx.maxContextChars > 0)
+    return Math.floor(ctx.maxContextChars / charsPerToken());
   return DEFAULT_MAX_CONTEXT_TOKENS;
 }
 
@@ -295,7 +297,8 @@ export function buildMessages(
    * the diffs and the linked steps. Both messages count: the system message is 3,661 characters
    * of it before the user message starts.
    */
-  const size = (optional: string[]) => estimateTokens(sys) + estimateTokens([...head, ...optional, ...tail].join('\n'));
+  const size = (optional: string[]) =>
+    estimateTokens(sys) + estimateTokens([...head, ...optional, ...tail].join('\n'));
   let optional = [...withImpact, ...withExamples];
   if (size(optional) > budget) optional = [...withImpact];
   if (size(optional) > budget) optional = [];
@@ -386,7 +389,8 @@ export function parseProposals(
    */
   for (const [i, s] of r.data.suggestions.entries()) {
     const p = SuggestionPayloadSchema.safeParse(s.payload);
-    if (!p.success) return { ok: false, error: `suggestions.${i}.payload: ${p.error.issues[0]?.message ?? 'invalid'}` };
+    if (!p.success)
+      return { ok: false, error: `suggestions.${i}.payload: ${p.error.issues[0]?.message ?? 'invalid'}` };
   }
   return { ok: true, items: r.data.suggestions as ProposedSuggestion[] };
 }

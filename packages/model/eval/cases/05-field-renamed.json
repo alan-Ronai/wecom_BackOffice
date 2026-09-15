@@ -21,9 +21,7 @@
       "stepNum": "7",
       "stepTitle": "עדכון סטטוס SIM ב-CRM",
       "anchor": "2.7",
-      "actions": [
-        "CRM ← sim block lbl ← לא חסום"
-      ]
+      "actions": ["CRM ← sim block lbl ← לא חסום"]
     }
   ],
   "blocks": [],
@@ -50,14 +48,8 @@
       "type": "field-alert",
       "targetDocumentId": "22222222-2222-4222-8222-222222222222",
       "targetStepKey": "s7",
-      "mustContain": [
-        "sim status"
-      ],
-      "mustContainAny": [
-        [
-          "sim block lbl"
-        ]
-      ]
+      "mustContain": ["sim status"],
+      "mustContainAny": [["sim block lbl"]]
     }
   ],
   "notes": "C-I5: prompt.ts's superRefine documents that a field-alert needs no target, and it does not - but detectFieldAlerts fills the document and step from the linkedStep on the same anchor, so asserting them is fair. The paragraph's only material change is the field name, so the field-alert is the WHOLE answer: maxItems 1 fails an engine that also raises an update-step for the same fact.",
