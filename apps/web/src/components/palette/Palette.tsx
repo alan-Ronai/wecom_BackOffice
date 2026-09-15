@@ -325,7 +325,24 @@ export function Palette() {
   };
 
   let selIdx = -1;
-  const stat = `${nResults(data?.total ?? selectable.length)} ב-${data?.files ?? 0} קבצים · ${Math.max(1, Math.round(data?.tookMs ?? 1))}ms`;
+  /**
+   * M4 — the footer states what the search said, and says nothing when there was no search.
+   *
+   * Below `MIN_SEARCH_CHARS` there is no response to report, and the line was inventing one out of
+   * whatever was to hand: `selectable.length` (which counts the local *actions* as results), `0`
+   * files, and a `1ms` that no query ever took. A measurement nobody measured is worse than no
+   * measurement — an operator reading "7 תוצאות ב-0 קבצים · 1ms" has been told the corpus was
+   * searched and holds nothing.
+   *
+   * So the server's row is the server's numbers, and below the threshold it is a plain count of
+   * the local rows — hits only, never the actions — or nothing at all when there are none.
+   */
+  const localHitCount = rows.reduce((n, r) => n + (r.kind === 'hit' ? 1 : 0), 0);
+  const stat = data
+    ? `${nResults(data.total)} ב-${data.files} קבצים · ${Math.max(1, Math.round(data.tookMs))}ms`
+    : localHitCount
+      ? nResults(localHitCount)
+      : '';
 
   return (
     <div
@@ -467,7 +484,7 @@ export function Palette() {
           <span>↵ פתיחה</span>
           <span>Tab סוג תוצאה</span>
           <span>Ctrl ↵ בלשונית</span>
-          <span className="stat">{stat}</span>
+          {stat ? <span className="stat">{stat}</span> : null}
         </div>
       </div>
     </div>
