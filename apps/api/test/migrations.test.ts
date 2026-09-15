@@ -556,6 +556,26 @@ run('migrations', () => {
     await pool.query(`delete from ai_setting_versions where key='ai.brief'`);
   });
 
+  it('0052: creates the AI chat tables with their constraints', async () => {
+    const t = await pool.query(
+      "select table_name from information_schema.tables where table_schema='public' and table_name like 'ai\\_%' order by 1",
+    );
+    expect(t.rows.map((r) => r.table_name)).toEqual([
+      'ai_conversations',
+      'ai_message_feedback',
+      'ai_messages',
+      'ai_proposed_edits',
+      'ai_setting_versions',
+    ]);
+    const u = await pool.query(
+      "select conname from pg_constraint where conrelid='ai_messages'::regclass and contype='u'",
+    );
+    expect(u.rows.map((r) => r.conname)).toContain('ai_messages_conversation_id_seq_key');
+    await expect(
+      pool.query("insert into ai_conversations(kind, user_id) values ('nope', gen_random_uuid())"),
+    ).rejects.toThrow(/ai_conversations_kind_check|violates/);
+  });
+
   it('rolls back cleanly', async () => {
     await runner({
       databaseUrl: c.getConnectionUri(),
