@@ -58,7 +58,12 @@ test('W6-E2E-1 the chat proposes a source edit, the editor accepts it, and a par
 
   const overlay = e.getByRole('region', { name: 'עריכות מוצעות במסמך' });
   await expect(overlay).toBeVisible({ timeout: 60_000 });
-  await overlay.getByRole('button', { name: 'קבל הכל' }).click();
+  /*
+   * Per hunk, not "קבל הכל": the tri-state row is the thing spec §1.3 is about, and "קבל הכל"
+   * short-circuits straight to the decision. Marking one hunk and then confirming exercises the
+   * path a real editor takes and the `{ accept: [...], reject: [...] }` body it produces.
+   */
+  await overlay.getByRole('button', { name: 'קבל', exact: true }).first().click();
   await overlay.getByRole('button', { name: /אשר החלטות/ }).click();
 
   // Durable: a new source version whose html carries the text the chat proposed.
