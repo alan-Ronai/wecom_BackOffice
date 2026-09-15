@@ -16,12 +16,21 @@ describe('/gaps', () => {
     expect(within(items[0]!).getByRole('heading', { name: /"esim"/ })).toBeInTheDocument();
     // The evidence the heuristic fired on is on the card, not behind a click.
     expect(within(items[0]!).getByText(/lastTerms/)).toBeInTheDocument();
+    // Without `docs.edit` the shortcut is not a link into an editor this reader cannot open.
+    expect(within(items[0]!).queryByRole('link', { name: 'צור פריט' })).toBeNull();
+    expect(within(items[0]!).getByText('צור פריט')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByRole('button', { name: 'דחה' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'הרץ זיהוי עכשיו' })).toBeNull();
+  });
+
+  it('offers the editor shortcut, pre-filled, to someone who may edit', async () => {
+    server.use(withMe({ roles: ['editor'], permissions: ['docs.read', 'docs.edit', 'gaps.read'] }));
+    renderWithProviders(<App />, { route: '/gaps' });
+    const items = await screen.findAllByRole('article');
     expect(within(items[0]!).getByRole('link', { name: 'צור פריט' })).toHaveAttribute(
       'href',
       expect.stringContaining('/edit/new?title=esim'),
     );
-    expect(screen.queryByRole('button', { name: 'דחה' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'הרץ זיהוי עכשיו' })).toBeNull();
   });
 
   it('dismisses with a reason, resolves to a document, and runs detection', async () => {

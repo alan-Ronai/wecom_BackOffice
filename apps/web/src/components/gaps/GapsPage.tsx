@@ -44,6 +44,12 @@ export function GapsPage() {
   const world = sp.get('world') ?? undefined;
   const mayRead = can('gaps.read');
   const mayManage = can('gaps.manage');
+  /**
+   * The two actions that open the editor need `docs.edit` — `gaps.read` alone is a lead-adjacent
+   * reader, and sending them to `/edit/new` lands them on a screen they cannot use. Same rule as
+   * the library's own edit affordances.
+   */
+  const mayEdit = can('docs.edit');
   const gaps = useGaps({ kind, status, world }, mayRead);
   const worlds = useWorlds();
   const dismiss = useDismissGap();
@@ -102,6 +108,10 @@ export function GapsPage() {
         : g.topicId
           ? `/topic/${g.topicId}`
           : '/library';
+  /** A reader without `docs.edit` is shown the item instead of an editor they cannot open. */
+  const readerHref = (g: Gap) =>
+    g.documentId ? `/doc/${g.documentId}` : g.topicId ? `/topic/${g.topicId}` : '/library';
+  const opensEditor = (g: Gap) => g.suggestedAction === 'create' || !!g.documentId;
 
   return (
     <div className="page gaps-page">
@@ -204,9 +214,21 @@ export function GapsPage() {
               ) : null}
             </div>
             <div className="row-actions">
-              <Link className="btn sm primary" to={actionHref(g)}>
-                {ACTION_LABEL[g.suggestedAction]}
-              </Link>
+              {opensEditor(g) && !mayEdit ? (
+                g.suggestedAction === 'create' ? (
+                  <span className="btn sm" aria-disabled="true" title="נדרשת הרשאת עריכת פריטי ידע">
+                    {ACTION_LABEL[g.suggestedAction]}
+                  </span>
+                ) : (
+                  <Link className="btn sm" to={readerHref(g)}>
+                    הצג פריט
+                  </Link>
+                )
+              ) : (
+                <Link className="btn sm primary" to={actionHref(g)}>
+                  {ACTION_LABEL[g.suggestedAction]}
+                </Link>
+              )}
               {mayManage && g.status === 'open' ? (
                 <>
                   <button type="button" className="btn sm" onClick={() => doResolve(g)}>
