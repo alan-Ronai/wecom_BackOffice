@@ -103,7 +103,15 @@ export class ScriptedChatModel implements ModelClient {
       );
 
     // ── the conversation itself ──────────────────────────────────────────────
-    const toolTurn = messages.some((m) => m.role === 'tool');
+    /*
+     * A tool *turn* is the orchestrator calling back with results, which is the case where the
+     * conversation ends in a tool message. X6: this read `messages.some(...)`, so from the second
+     * user turn onwards in any conversation that had ever used a tool, every message took this
+     * branch — no intent was evaluated, no tool was called, and the reply was always the generic
+     * "לפי שלב 1, זו התשובה.". W6-E2E-2's refused-write stage is what caught it: the write was
+     * never attempted, so the gate never got to refuse it.
+     */
+    const toolTurn = messages.at(-1)?.role === 'tool';
     if (toolTurn) {
       const last = lastOfRole(messages, 'tool')?.content ?? '';
       if (last.includes('"ok":false'))

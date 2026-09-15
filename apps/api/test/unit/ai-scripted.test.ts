@@ -92,6 +92,24 @@ describe('ScriptedChatModel', () => {
     expect(refine.toolCalls[0]).toMatchObject({ name: 'refine_suggestion', args: { suggestionId: SUG } });
   });
 
+  /**
+   * X6: a tool turn is the orchestrator calling *back* with results — the conversation ends in a
+   * tool message. Treating "the history contains a tool message" as a tool turn meant every user
+   * message after the first one in a conversation that had used a tool skipped the intent rules
+   * entirely.
+   */
+  it('evaluates the intent again on a second user turn that follows a tool turn', async () => {
+    const messages: ChatMessage[] = [
+      { role: 'system', content: system },
+      { role: 'user', content: 'מה עושים כשאין גלישה?' },
+      { role: 'tool', toolCallId: 'x', content: '{"ok":true,"data":{}}' },
+      { role: 'assistant', content: 'לפי שלב 1, זו התשובה.' },
+      { role: 'user', content: 'שנה את "הישן" ל"החדש"' },
+    ];
+    const r = await m.chat({ messages });
+    expect(r.toolCalls[0]).toMatchObject({ name: 'propose_source_edit' });
+  });
+
   it('says הבנתי. to anything else, and streams it', async () => {
     const tokens: string[] = [];
     const r = await m.chat({ messages: turn('שלום'), onToken: (t) => tokens.push(t) });
