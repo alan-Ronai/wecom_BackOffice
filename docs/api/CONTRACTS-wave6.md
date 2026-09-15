@@ -188,7 +188,6 @@ The tiers nest — `ai.chat` implies the `ai.ask` tools, `ai.manage` implies bot
 |---|---|
 | `ai.ask` (agent) | `read_document`, `read_topic`, `search_kb`, `explain_step` |
 | `ai.chat` (editor) | + `read_source`, `read_impact`, `list_suggestions`, `propose_source_edit`, `refine_suggestion`, `review_document`, `draft_step` |
-
 | `ai.manage` (admin) | + `read_eval` |
 
 No tool writes. `propose_source_edit` returns hunks and `refine_suggestion` returns a payload; both need a human decision afterwards (owner decision §1.3). Every read tool applies the visibility rule, so an agent's answer can never quote unpublished content.
@@ -216,7 +215,6 @@ Routes: `/workspace/:id` (X4a) · `/admin/ai` (X4b).
 Two web-side gates are worth stating because they are not the route's own:
 
 - `SuggestionAnalyticsTab` must be gated on **`suggestions.review`**, the permission `GET /suggestions/analytics` actually enforces. X4b gated it on `analytics.read` to match the other analytics surfaces; both seeded roles hold both, so the mismatch is latent, but a custom role holding one and not the other gets a tab that 403s inside itself. The contract is the route's permission (fix wave).
-- The admin transcript browser's `feedback` filter is applied in the browser: `ConversationsQuerySchema` has `userId`, `documentId`, `from` and `to`, and no feedback field.
 - The admin transcript browser has **no** `feedback` filter. `ConversationsQuerySchema` has `userId`, `documentId`, `from` and `to` and no feedback field, and the list row carries no message-level rating to filter on in the browser either, so the control was removed in the X6 fix wave rather than left changing only the query key. A rating is shown per message inside a transcript; filtering the list by one needs the field on the route first.
 
 The workspace link ("🧭 סביבת עבודה") is shown to an `ai.chat` holder who can also edit the document, from the article topbar (and its narrow overflow menu) and the editor toolbar. There is no top-level nav entry for it: the workspace is reached from a document (spec §5).
