@@ -98,11 +98,7 @@ export function QuestionEditor({
           ))}
         </select>
       </label>
-      <div
-        className="options"
-        role="group"
-        aria-label={q.kind === 'order' ? 'סדר נכון' : 'אפשרויות'}
-      >
+      <div className="options" role="group" aria-label={q.kind === 'order' ? 'סדר נכון' : 'אפשרויות'}>
         {q.kind === 'order' ? (
           <p className="small muted">הסדר כאן הוא הסדר הנכון; הנציג מתבקש לשחזר אותו בנגן.</p>
         ) : null}

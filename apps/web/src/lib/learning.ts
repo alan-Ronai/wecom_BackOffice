@@ -9,7 +9,7 @@ export const KIND_LABEL: Record<Assignment['kind'], string> = { briefing: 'תד�
  * three lists with them — briefing entries, quiz questions, and the learner's own answer to an
  * `order` question. One implementation so the player and the builders cannot disagree.
  */
-export const move = <T,>(xs: readonly T[], i: number, dir: -1 | 1): T[] => {
+export const move = <T>(xs: readonly T[], i: number, dir: -1 | 1): T[] => {
   const j = i + dir;
   if (i < 0 || i >= xs.length || j < 0 || j >= xs.length) return [...xs];
   const n = [...xs];

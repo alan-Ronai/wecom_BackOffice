@@ -70,8 +70,7 @@ export const refreshes = (n: number): string =>
   plural(n, { one: 'רענון אחד', two: 'שני רענונים', many: '# רענונים' });
 
 /** פער — a knowledge gap. */
-export const gaps = (n: number): string =>
-  plural(n, { one: 'פער אחד', two: 'שני פערים', many: '# פערים' });
+export const gaps = (n: number): string => plural(n, { one: 'פער אחד', two: 'שני פערים', many: '# פערים' });
 
 /** ניסיון — one attempt at a quiz. */
 export const attempts = (n: number): string =>

@@ -34,7 +34,9 @@ const orderQuiz = (): PlayerItem => {
 const rows = (scope: HTMLElement): (string | null)[] =>
   within(scope)
     .getAllByRole('listitem')
-    .map((li) => li.querySelector('.quiz-order-text, .quiz-order-review-text')?.textContent ?? li.textContent);
+    .map(
+      (li) => li.querySelector('.quiz-order-text, .quiz-order-review-text')?.textContent ?? li.textContent,
+    );
 
 /** Hands the player a new payload object for the same assignment, the way a refetch would. */
 function Refetching({ payloads }: { payloads: PlayerItem[] }) {

@@ -19,8 +19,7 @@ const problem = (q: QuizQuestion): string | null => {
   if (q.options.length < 2) return 'לכל שאלה נדרשות לפחות שתי אפשרויות';
   if (!q.options.every((o) => o.text.trim())) return 'לכל אפשרות נדרש טקסט';
   // An `order` question has no answer key: its own order is the answer.
-  if (q.kind !== 'order' && !q.options.some((o) => o.correct))
-    return 'לכל שאלה נדרשת לפחות תשובה נכונה אחת';
+  if (q.kind !== 'order' && !q.options.some((o) => o.correct)) return 'לכל שאלה נדרשת לפחות תשובה נכונה אחת';
   return null;
 };
 
