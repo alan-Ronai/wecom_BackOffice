@@ -246,7 +246,15 @@ What holds this in place:
 
 - `deploy/nginx-check.sh` fails if the production config mentions `$proxy_add_x_forwarded_for`
   outside a comment, or if any `location` with a `proxy_pass` is missing
-  `proxy_set_header X-Forwarded-For $remote_addr;`.
+  `proxy_set_header X-Forwarded-For $remote_addr;`. The same script reads the live
+  `Content-Security-Policy` off a running container and holds it to two things: `script-src`,
+  `style-src` and `font-src` must each allow `'self'` (the theme script and the self-hosted
+  Hebrew web fonts are same-origin files — drop `'self'` and they are blocked, with the only
+  evidence in a browser console), and `script-src` must carry neither `'unsafe-inline'` nor
+  `'unsafe-eval'`. The browser names `'unsafe-inline'` in the violation it prints, and taking
+  that suggestion would re-admit every injected inline script; the inline script goes in a file
+  instead. `style-src` keeps its `'unsafe-inline'` for React's inline `style` attributes, which
+  is the documented exception and is not asserted against.
 - `deploy/smoke.sh` sends seven `POST /auth/local` attempts from the VM, each with a different
   forged `X-Forwarded-For`, and insists on a 429. The route is rate-limited to five a minute per
   `req.ip`, so seven 401s would mean each forged address got its own bucket — i.e. the API was

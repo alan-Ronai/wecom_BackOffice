@@ -160,10 +160,72 @@ for path in / /assets/x.js /api/v1/system/health /api/v1/events; do
   done
   [ "$missing" = 0 ] && echo "security headers ok: $path"
 done
-rm -rf "$root"
 [ "$fail" = 0 ] || exit 1
 
 echo "nginx security headers ok (/, /assets/*, /api/*, = /api/v1/events)"
+
+# ── what the CSP must allow, and what it must never allow ─────────────────────────────────────
+# The grep above matches a *prefix* of the header, so it says nothing about the directives after
+# `script-src 'self'`. Two things have to hold, and they pull in opposite directions.
+#
+# It must admit the app's own scripts, styles and fonts. The walkthrough found the deployed app
+# logging a CSP violation on every page load for its pre-paint theme script (W-4) and for a Google
+# Fonts `@import` (W-5): the theme stamp never ran, and the Hebrew typography the design assumes
+# was never what a user saw. The app lane's fix for both is to become same-origin — the script
+# moves into a file Vite emits, the fonts are self-hosted under `apps/web/public/fonts/` — and
+# that fix only works if `script-src`, `style-src` and `font-src` each keep `'self'`. Losing one
+# would break the page silently, with the evidence only in a browser console nobody has open.
+#
+# And it must not be "fixed" the other way. The browser offers `'unsafe-inline'` in the very error
+# message, and adding it to `script-src` re-admits every injected inline script — which is most of
+# what a CSP is for, given the app has a `dangerouslySetInnerHTML`. So that is asserted absent,
+# here, where a future edit trying the easy fix meets a red check with a reason.
+#
+# `style-src` keeps its `'unsafe-inline'`: React writes inline `style` attributes and there is no
+# same-origin alternative. That is a deliberate, documented exception (see
+# nginx-security-headers.conf) and is not what W-4 is about, so it is not asserted against.
+csp=$(curl -kI -sS "$base/" | tr -d '\r' | sed -n 's/^[Cc]ontent-[Ss]ecurity-[Pp]olicy:[[:space:]]*//p' | head -1)
+[ -n "$csp" ] || { echo "nginx-check FAILED: GET / returned no Content-Security-Policy" >&2; exit 1; }
+
+# One directive's value, by name, out of the `a 'self'; b 'self' x` list.
+csp_directive() { printf '%s' "$csp" | tr ';' '\n' | sed -n "s/^[[:space:]]*$1[[:space:]]\{1,\}//p" | head -1; }
+
+csp_fail=0
+# script-src/style-src/font-src each fall back to default-src when absent, so an explicit
+# `default-src 'self'` satisfies the requirement — read the fallback the way a browser does.
+default_src=$(csp_directive default-src)
+for d in script-src style-src font-src; do
+  value=$(csp_directive "$d")
+  [ -n "$value" ] || value=$default_src
+  case "$value" in
+    *"'self'"*) ;;
+    *)
+      echo "nginx-check FAILED: the CSP's $d is \"${value:-(absent, and no default-src)}\" — it does not" >&2
+      echo "  allow 'self'. The app's own script, stylesheet and font files are served from this" >&2
+      echo "  origin; without 'self' the page loads with the theme script blocked and the Hebrew" >&2
+      echo "  web fonts refused, and the only evidence is a browser console (walkthrough W-4/W-5)." >&2
+      csp_fail=1 ;;
+  esac
+done
+
+script_src=$(csp_directive script-src)
+[ -n "$script_src" ] || script_src=$default_src
+for bad in "'unsafe-inline'" "'unsafe-eval'"; do
+  case "$script_src" in
+    *"$bad"*)
+      echo "nginx-check FAILED: the CSP's script-src contains $bad." >&2
+      echo "  The browser suggests 'unsafe-inline' by name when it blocks an inline script, and" >&2
+      echo "  taking that suggestion re-admits every injected one — which is most of what this" >&2
+      echo "  header is for. The inline script belongs in a file served from this origin instead;" >&2
+      echo "  'self' already covers it." >&2
+      csp_fail=1 ;;
+  esac
+done
+[ "$csp_fail" = 0 ] || exit 1
+echo "CSP ok: 'self' scripts, styles and fonts are allowed; script-src has no 'unsafe-inline'/'unsafe-eval'"
+
+# The static server root is only needed by the assertions above.
+rm -rf "$root"
 
 # ── live: the settings above are in effect, not merely present ─────────────────
 # A directive in the wrong context, or one a future nginx quietly stops honouring, still greps.
