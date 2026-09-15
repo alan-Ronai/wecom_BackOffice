@@ -34,7 +34,7 @@ const cases = loadCases(fileURLToPath(EVAL_CASES_DIR)).filter(
 
 for (const c of cases) {
   const ctx = contextForCase(c);
-  const messages = buildMessages(ctx);
+  const messages = buildMessages(ctx, { version: arg('prompt') });
   const started = Date.now();
   const r = await fetch(url + '/api/chat', {
     method: 'POST',

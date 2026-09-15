@@ -33,6 +33,8 @@ export interface OllamaOptions {
    * unconstrained `{ type: 'object' }`, and re-inflate the discriminated union in code.
    */
   flatSchema?: boolean;
+  /** review/wave6-ai-quality, experiment (b): `propose-v4` instead of the shipped `propose-v3`. */
+  promptVersion?: string;
   /** Sampling overrides for experiment (d); the shipped defaults are used when absent. */
   temperature?: number;
   numPredict?: number;
@@ -162,7 +164,7 @@ export class OllamaModel implements ModelClient {
 
   async proposeChanges(ctx: ProposalContext): Promise<ProposedSuggestion[]> {
     const started = Date.now();
-    const messages = buildMessages(ctx);
+    const messages = buildMessages(ctx, { version: this.o.promptVersion });
     let lastError = '';
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {

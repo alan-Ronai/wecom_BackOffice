@@ -44,6 +44,7 @@ async function main(): Promise<void> {
           timeoutMs: EVAL_TIMEOUT_MS,
           /* review/wave6-ai-quality experiment levers; absent = the shipped behaviour. */
           flatSchema: flag('flat'),
+          ...(arg('prompt') ? { promptVersion: arg('prompt') } : {}),
           ...(arg('temp') ? { temperature: Number(arg('temp')) } : {}),
           ...(arg('num-predict') ? { numPredict: Number(arg('num-predict')) } : {}),
           ...(arg('num-ctx') ? { numCtx: Number(arg('num-ctx')) } : {}),
@@ -77,7 +78,8 @@ async function main(): Promise<void> {
   console.table(rows);
   const summary = {
     model: model.name,
-    promptVersion: PROMPT_VERSION,
+    promptVersion: arg('prompt') ?? PROMPT_VERSION,
+    schema: flag('flat') ? 'flat' : 'envelope',
     embedModel: embed ?? '',
     cases: cases.length,
     hitTarget: Number(total.hitTarget.toFixed(3)),

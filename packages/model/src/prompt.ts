@@ -13,8 +13,30 @@ import { groupSections, isNewSourcePath } from './sections.js';
  * the user message carries the change's impact set and accepted examples of the same types.
  * The JSON envelope is unchanged, so nothing downstream of `parseProposals` moved. */
 export const PROMPT_VERSION = 'propose-v3';
-const promptPath = fileURLToPath(new URL(`../prompts/${PROMPT_VERSION}.md`, import.meta.url));
-export const SYSTEM_PROMPT = readFileSync(promptPath, 'utf8');
+const readPrompt = (v: string) => readFileSync(fileURLToPath(new URL(`../prompts/${v}.md`, import.meta.url)), 'utf8');
+export const SYSTEM_PROMPT = readPrompt(PROMPT_VERSION);
+
+/**
+ * review/wave6-ai-quality, experiment (b). `propose-v4` is v3 restructured for a 3B: the task
+ * first, an ordered decision list (stop at the first rule that matches) instead of six
+ * independent bullets, one compact example **per type in the flat answer shape**, and an
+ * explicit "copy the key exactly" rule. The architecture brief is dropped from the system
+ * message on this path — it is background a 3B cannot act on, and it was 40% of the tokens.
+ */
+export interface PromptOptions {
+  /** `propose-v3` (shipped) or `propose-v4` (experiment b). */
+  version?: string;
+  /** Prepend `architecture-v1`. Default true for v3, false for v4. */
+  architecture?: boolean;
+}
+const promptCache = new Map<string, string>();
+const promptFor = (v: string): string => {
+  const hit = promptCache.get(v);
+  if (hit !== undefined) return hit;
+  const text = v === PROMPT_VERSION ? SYSTEM_PROMPT : readPrompt(v);
+  promptCache.set(v, text);
+  return text;
+};
 
 /**
  * The knowledge architecture the platform is built on (spec §1.7): worlds, topics, the seven
@@ -36,12 +58,14 @@ const MAX_IMPACT_CHARS = 4000;
  * one part that says *who the company is*; the task rules come last because a model weights the
  * end of a system message most and those are the rules it is graded on.
  */
-function systemMessage(ctx: ProposalContext): string {
+function systemMessage(ctx: ProposalContext, opts: PromptOptions = {}): string {
+  const version = opts.version ?? PROMPT_VERSION;
+  const withArch = opts.architecture ?? version === PROMPT_VERSION;
   return [
     ctx.brief?.trim(),
-    ARCHITECTURE_PROMPT.trim(),
+    withArch ? ARCHITECTURE_PROMPT.trim() : '',
     ctx.style?.trim() ? 'סגנון הבית:\n' + ctx.style.trim() : '',
-    SYSTEM_PROMPT.trim(),
+    promptFor(version).trim(),
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -100,7 +124,11 @@ export const RESPONSE_FORMAT = {
 
 const stripAnchor = (ref: string) => ref.replace(/^§/, '');
 
-export function buildMessages(ctx: ProposalContext): { role: 'system' | 'user'; content: string }[] {
+export function buildMessages(
+  ctx: ProposalContext,
+  opts: PromptOptions = {},
+): { role: 'system' | 'user'; content: string }[] {
+  const v4 = (opts.version ?? PROMPT_VERSION) !== PROMPT_VERSION;
   const diffs = ctx.diffs
     .filter((d) => d.kind !== 'same')
     .map(
@@ -108,12 +136,25 @@ export function buildMessages(ctx: ProposalContext): { role: 'system' | 'user'; 
         `- §${stripAnchor(d.ref)} ${d.kind}: לפני: ${JSON.stringify(d.before ?? '')} אחרי: ${JSON.stringify(d.after ?? '')}`,
     )
     .join('\n');
-  const steps = ctx.linkedSteps
-    .map(
-      (s) =>
-        `- anchor §${stripAnchor(s.anchor)}: documentId=${s.documentId} ("${s.documentTitle}") stepKey=${s.stepKey} מספר ${s.stepNum} "${s.stepTitle}"${s.blockId ? ` blockId=${s.blockId}` : ''} פעולות: ${JSON.stringify(s.actions)}`,
-    )
-    .join('\n');
+  /**
+   * v4 numbers the candidates and puts the two copyable ids first on the line, because that is
+   * what the model is asked to copy; v3's line buries `stepKey=` behind the document title.
+   */
+  const steps = v4
+    ? ctx.linkedSteps
+        .map(
+          (s, i) =>
+            `${i + 1}. §${stripAnchor(s.anchor)} → targetDocumentId="${s.documentId}" targetStepKey="${s.stepKey}"` +
+            (s.blockId ? ` targetBlockId="${s.blockId}"` : '') +
+            ` — שלב ${s.stepNum} "${s.stepTitle}" במסמך "${s.documentTitle}", פעולות: ${JSON.stringify(s.actions)}`,
+        )
+        .join('\n')
+    : ctx.linkedSteps
+        .map(
+          (s) =>
+            `- anchor §${stripAnchor(s.anchor)}: documentId=${s.documentId} ("${s.documentTitle}") stepKey=${s.stepKey} מספר ${s.stepNum} "${s.stepTitle}"${s.blockId ? ` blockId=${s.blockId}` : ''} פעולות: ${JSON.stringify(s.actions)}`,
+        )
+        .join('\n');
   const blocks = ctx.blocks
     .map((b) => `- blockId=${b.id} "${b.title}" פעולות: ${JSON.stringify(b.actions)}`)
     .join('\n');
@@ -145,7 +186,7 @@ export function buildMessages(ctx: ProposalContext): { role: 'system' | 'user'; 
     .map((e, i) => `דוגמה ${i + 1} — שינוי: ${e.diff}\nהצעה מאושרת: ${JSON.stringify(e.suggestion)}`)
     .join('\n\n');
   const budget = ctx.maxContextChars ?? DEFAULT_MAX_CONTEXT_CHARS;
-  const sys = systemMessage(ctx);
+  const sys = systemMessage(ctx, opts);
   const head = [
     `מסמך מקור: ${ctx.source.title}`,
     ...(ctx.source.singleDocument ? ['(פריט מרוחק יחיד — כרטיס אחד בלבד, phase לכל סעיף)'] : []),
@@ -156,7 +197,11 @@ export function buildMessages(ctx: ProposalContext): { role: 'system' | 'user'; 
     'שינויים:',
     diffs || '- אין',
     '',
-    'שלבים ממופים (linkedSteps):',
+    v4
+      ? ctx.linkedSteps.length
+        ? 'שלבים ממופים — העתק את המזהים מהשורה המתאימה בדיוק כפי שהם:'
+        : 'שלבים ממופים: אין אף שלב ממופה במקור הזה — כל הצעה היא new-card עם מזהים ריקים.'
+      : 'שלבים ממופים (linkedSteps):',
     steps || '- אין',
     '',
     'בלוקים משותפים:',
