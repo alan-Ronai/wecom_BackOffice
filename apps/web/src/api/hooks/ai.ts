@@ -56,7 +56,7 @@ export const useCreateConversation = () => {
 export function useConversationFor(
   kind: ConversationKind,
   documentId: string,
-  opts: { enabled?: boolean } = {},
+  opts: { enabled?: boolean; sourceRevisionId?: string } = {},
 ) {
   const enabled = opts.enabled ?? true;
   const list = useConversations({ documentId, kind, mine: true }, enabled);
@@ -68,7 +68,12 @@ export function useConversationFor(
   return {
     conversation,
     isPending: enabled ? list.isPending : false,
-    create: (): Promise<Conversation> => create.mutateAsync({ kind, documentId }),
+    create: (): Promise<Conversation> =>
+      create.mutateAsync({
+        kind,
+        documentId,
+        ...(opts.sourceRevisionId ? { sourceRevisionId: opts.sourceRevisionId } : {}),
+      }),
   };
 }
 

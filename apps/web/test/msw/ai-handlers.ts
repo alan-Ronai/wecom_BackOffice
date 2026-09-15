@@ -25,6 +25,8 @@ const T = '2026-09-15T09:00:00.000Z';
 export const CONV_1 = 'e0000000-0000-4000-8000-000000000001';
 export const MSG_1 = 'e0000000-0000-4000-8000-000000000101';
 export const MSG_2 = 'e0000000-0000-4000-8000-000000000102';
+/** The id the scripted reply seals with — deliberately not in the seeded transcript. */
+export const MSG_3 = 'e0000000-0000-4000-8000-000000000103';
 export const PE_1 = 'e0000000-0000-4000-8000-000000000201';
 export const SUG_AFFECTS = 'e0000000-0000-4000-8000-000000000301';
 export const DOC_1 = fx.docBrowsing.id;
@@ -108,7 +110,7 @@ export const DEFAULT_SCRIPT: ChatEvent[] = [
     baseSourceVersion: BASE_SOURCE_VERSION,
     ops: sampleProposedEdits().ops,
   },
-  { type: 'done', messageId: MSG_2, tokensIn: 812, tokensOut: 96, latencyMs: 4200 },
+  { type: 'done', messageId: MSG_3, tokensIn: 812, tokensOut: 96, latencyMs: 4200 },
 ];
 
 export const suggestionWithAffects = (): Suggestion => ({
