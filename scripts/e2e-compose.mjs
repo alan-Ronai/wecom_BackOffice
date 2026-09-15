@@ -69,7 +69,7 @@ const ENV_BACKUP = join(DEPLOY, '.env.before-e2e');
 const PROJECT = process.env.E2E_COMPOSE_PROJECT ?? 'wecom-kb-e2e';
 
 /**
- * Fixed, not configurable: `deploy/docker-compose.ci.yml` hard-codes 8443/8080, and compose
+ * Fixed, not configurable: `deploy/e2e.env` pins WEB_HTTPS_PORT/WEB_HTTP_PORT to 127.0.0.1:8443/8080, and compose
  * concatenates `ports` across overlay files rather than replacing them — a second mapping would
  * publish the stack twice instead of moving it.
  */
@@ -300,7 +300,7 @@ function assertPortsFree() {
     ],
     {
       intro: 'ports already in use — the pilot stack, or a leftover run:',
-      remedy: '  stop whatever holds them (the ports are fixed by deploy/docker-compose.ci.yml) and retry',
+      remedy: '  stop whatever holds them (the ports are fixed by deploy/e2e.env) and retry',
     },
   );
 }
