@@ -5,6 +5,7 @@ import { getDocument, recomputeDerived, type Q } from '../documents/repo.js';
 import { htmlToText } from '../scripts/html.js';
 import { LIKE_ESCAPE, likeEscape, withTransaction } from '../../lib/sql.js';
 import { visibleWhere } from '../../lib/visibility.js';
+import { refreshStepEmbeddings } from '../sources/embeddings.js';
 
 /** Hebrew category labels, mirroring the legacy `KB.CATS`. */
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -462,6 +463,9 @@ export async function reindexAll(pool: pg.Pool, model?: ModelClient | null): Pro
     n++;
     // On the pool, after the commit: the text it embeds is the text that was just written.
     await updateEmbedding(pool, id, model);
+    // Wave 6 (X1): the same pass keeps `step_embeddings` (0051) current, which is what
+    // paragraph→step mapping reads. Unchanged steps are skipped by their text hash.
+    await refreshStepEmbeddings(pool, id, model);
   }
   return n;
 }
