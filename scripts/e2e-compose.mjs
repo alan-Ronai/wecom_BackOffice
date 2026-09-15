@@ -205,8 +205,8 @@ function assertNoLeftoverEnvBackup() {
  * a run is hard-killed that file stays at `deploy/.env`, and nothing about the resulting stack
  * looks wrong from the outside — so the file says what it is, and `deploy/smoke.sh` refuses to
  * certify a stack configured from it unless `WECOM_E2E_RUNNER=1` is set, which only this script
- * sets. (Follow-up for the backend lane: the API's own production config check should refuse to
- * boot on `NODE_ENV=production` together with this key, which is never a real deployment.)
+ * sets, and the API's own production config check refuses to boot on `NODE_ENV=production`
+ * together with this key unless `WECOM_E2E_RUNNER=1` reaches it (docker-compose.e2e.yml sets it).
  */
 const E2E_SENTINEL = 'WECOM_E2E_STACK';
 const SENTINEL_RE = /^[ \t]*WECOM_E2E_STACK[ \t]*=[ \t]*1[ \t]*$/m;

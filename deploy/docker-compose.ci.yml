@@ -13,6 +13,8 @@ services:
     volumes:
       - ./certs/cert.pem:/etc/nginx/certs/cert.pem:ro
       - ./certs/key.pem:/etc/nginx/certs/key.pem:ro
-    ports: ["8443:443", "8080:80"]
+    # Loopback only: the CI/e2e stack carries repo-known credentials and must not answer on the
+    # host's other interfaces. The pilot install (docker-compose.yml) publishes on all interfaces.
+    ports: ["127.0.0.1:8443:443", "127.0.0.1:8080:80"]
   backup:
     profiles: ["never"]

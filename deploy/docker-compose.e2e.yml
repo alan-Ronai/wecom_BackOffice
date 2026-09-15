@@ -69,6 +69,9 @@ services:
   api:
     # The fallback client is constructed at boot from these, so they have to be right before the
     # first request rather than settable later (see deploy/e2e.env for the values and why).
+    # WECOM_E2E_RUNNER is what lets the API accept deploy/e2e.env's WECOM_E2E_STACK=1 sentinel in
+    # NODE_ENV=production; a stack started any other way from that file refuses to boot.
+    environment: { WECOM_E2E_RUNNER: "1" }
     depends_on:
       db: { condition: service_healthy }
       ollama: { condition: service_healthy }

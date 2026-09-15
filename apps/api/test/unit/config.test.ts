@@ -35,6 +35,13 @@ describe('ConfigSchema', () => {
    * TRUST_PROXY meant "trust every X-Forwarded-For" in production. Both are decisions a
    * deployment has to write down, like SESSION_SECRET — not defaults to arrive at by omission.
    */
+  it('refuses to run the e2e configuration as a deployment', () => {
+    // deploy/e2e.env carries WECOM_E2E_STACK=1; only scripts/e2e-compose.mjs sets the runner key.
+    expect(() => loadConfig({ ...prod, WECOM_E2E_STACK: '1' })).toThrow(/WECOM_E2E_STACK/);
+    expect(() => loadConfig({ ...prod, WECOM_E2E_STACK: '1', WECOM_E2E_RUNNER: '1' })).not.toThrow();
+    expect(() => loadConfig({ ...base, NODE_ENV: 'test', WECOM_E2E_STACK: '1' })).not.toThrow();
+  });
+
   it('requires CONNECTOR_HOST_ALLOWLIST and TRUST_PROXY in production', () => {
     expect(() => loadConfig({ ...prod, CONNECTOR_HOST_ALLOWLIST: '' })).toThrow(/CONNECTOR_HOST_ALLOWLIST/);
     expect(() => loadConfig({ ...prod, CONNECTOR_HOST_ALLOWLIST: '   ' })).toThrow(

@@ -21,6 +21,14 @@ const boolEnv = (def: boolean) =>
 
 export const BaseConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  /**
+   * `deploy/e2e.env` marks itself with `WECOM_E2E_STACK=1` so a `deploy/.env` left behind by a
+   * killed `pnpm e2e:compose` run is recognisable as the e2e configuration (committed secrets,
+   * Palo Alto stub) rather than a deployment's. `scripts/e2e-compose.mjs` sets
+   * `WECOM_E2E_RUNNER=1` on the api container; nothing else does.
+   */
+  WECOM_E2E_STACK: z.string().optional(),
+  WECOM_E2E_RUNNER: z.string().optional(),
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().min(1),
   SESSION_SECRET: z.string().min(16).default(DEV_SESSION_SECRET),
@@ -133,6 +141,13 @@ export const ConfigSchema = BaseConfigSchema.superRefine((c, ctx) => {
       message: `TRUST_PROXY is not usable — ${trust}. Write \`true\`, \`false\`, or a comma-separated list of addresses, CIDRs (\`172.16.0.0/12\`) and proxy-addr keywords (\`loopback\`, \`linklocal\`, \`uniquelocal\`).`,
     });
   if (c.NODE_ENV !== 'production') return;
+  if (c.WECOM_E2E_STACK?.trim() === '1' && c.WECOM_E2E_RUNNER?.trim() !== '1')
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['WECOM_E2E_STACK'],
+      message:
+        'WECOM_E2E_STACK=1 is set: this is the e2e configuration (deploy/e2e.env — committed secrets, stubbed firewall), not a deployment. A killed `pnpm e2e:compose` run leaves it at deploy/.env; restore deploy/.env from deploy/.env.before-e2e (or rewrite it from deploy/.env.example) before starting the stack',
+    });
   if (c.SESSION_SECRET === DEV_SESSION_SECRET)
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
