@@ -140,7 +140,11 @@ expect=(
 )
 
 fail=0
-for path in / /assets/x.js /api/v1/system/health; do
+# `= /api/v1/events` last, and it is not redundant with `/api/v1/system/health`: an *exact*-match
+# location outranks the `/api/` prefix block, so it is a separate block with its own `include` —
+# and the SSE stream is the one long-lived connection the app opens. Deleting that one line would
+# leave it uncovered while every other path here still passed.
+for path in / /assets/x.js /api/v1/system/health /api/v1/events; do
   headers=$(curl -kI -sS "$base$path" | tr -d '\r' | tr 'A-Z' 'a-z')
   missing=0
   for want in "${expect[@]}"; do
@@ -155,7 +159,7 @@ done
 rm -rf "$root"
 [ "$fail" = 0 ] || exit 1
 
-echo "nginx security headers ok (/, /assets/*, /api/*)"
+echo "nginx security headers ok (/, /assets/*, /api/*, = /api/v1/events)"
 
 # ── live: the settings above are in effect, not merely present ─────────────────
 # A directive in the wrong context, or one a future nginx quietly stops honouring, still greps.

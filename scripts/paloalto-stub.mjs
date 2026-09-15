@@ -13,7 +13,8 @@
  * the query string so the credential never reaches the firewall's access log; PAN-OS itself takes
  * either, so this stub reads both and records which one was used — `GET /_control/state` reports
  * whether any call put the key in a query string, which is the assertion
- * `apps/web/e2e/compose/paloalto-identity.spec.ts` makes about the deployed API.
+ * `apps/web/e2e/compose/lan-identity.spec.ts` makes about the deployed API (`state.keyInQuery`,
+ * "the API key must travel in the POST body, never in a URL the firewall logs").
  *
  * It is deliberately a sibling of `apps/api/test/helpers/l3/paloalto.ts` (the in-process stub the
  * integration tests use) rather than a rewrite of it: that one is a TypeScript module a vitest
