@@ -15,6 +15,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "//pretest": "This package resolves @wecom/shared through its built dist, so a schema this package's tests depend on is invisible until shared is rebuilt. `pnpm -r test` builds first; a bare `pnpm --filter @wecom/model test` did not, and failed with errors that looked like this package's fault.",
+    "pretest": "pnpm --filter @wecom/shared build",
+    "pretypecheck": "pnpm --filter @wecom/shared build",
+    "preeval": "pnpm --filter @wecom/shared build",
     "test": "vitest run",
     "eval": "tsx eval/run.ts"
   },

@@ -2,7 +2,7 @@ import type { ModelClient, ProposalContext, ProposedSuggestion } from './contrac
 import { isNewSourcePath, sectionCards } from './sections.js';
 import { confidenceFor } from './calibration.js';
 import { detectFieldAlerts } from './guard.js';
-import { isCosmetic, isFieldRenameOnly, isHeadingRef, isReorderOnly, materialSentences } from './material.js';
+import { isFieldRenameOnly, isNoiseChange, isReorderOnly, materialSentences } from './material.js';
 
 const sentences = (t: string) =>
   t
@@ -66,13 +66,13 @@ export class RuleBasedModel implements ModelClient {
     for (const d of ctx.diffs) {
       if (d.kind === 'same') continue;
       /**
-       * A spelling fix, a re-spaced line, a comma, a renamed heading: real edits of the source,
-       * nothing for an editor to decide. `material.ts` keeps this conservative — a changed
-       * number, latin token or quoted string is always material, so case `01`'s threshold and
-       * case `05`'s field name are never mistaken for typography.
+       * A spelling fix, a re-spaced line, a comma, a reworded heading: real edits of the source,
+       * nothing for an editor to decide. `isNoiseChange` keeps this conservative — a changed
+       * number, latin token or quoted string is always material, *including inside a heading*,
+       * so case `01`'s threshold and case `05`'s field name are never mistaken for typography.
+       * The model is shown exactly the same set (`materialDiffs`).
        */
-      if (d.kind === 'changed' && (isHeadingRef(d.ref) || isCosmetic(d.before ?? '', d.after ?? '')))
-        continue;
+      if (isNoiseChange(d)) continue;
       const linked = ctx.linkedSteps.filter((s) => stripRef(s.anchor) === stripRef(d.ref));
       const anchor = anchorOf(d.ref);
       if (d.kind === 'removed' && linked.length) {

@@ -15,6 +15,8 @@ describe('system prompt preview', () => {
   it('marks an empty block rather than dropping its heading', () => {
     const p = buildSystemPromptPreview(sampleSettings({ style: { text: '', version: 0 } }));
     expect(p).toContain('## סגנון\n\n(ריק)');
+    // The major is the prompt *file*; it moved to v4 with the fix wave, in step with
+    // `currentPromptVersion` in the api. A label the server will never stamp is worse than none.
     expect(promptVersionOf(sampleSettings({ style: { text: '', version: 0 } }))).toBe('v4.2.0');
   });
 });

@@ -16,9 +16,13 @@ export const ARCHITECTURE_BLOCK = [
  * stamps on every suggestion and message, so an admin can read a row in the eval table or the
  * analytics breakdown and know which text produced it.
  *
- * The API derives the `v4` from `PROMPT_VERSION` (`propose-v4`) in `@wecom/model`, which the web
- * bundle does not depend on — this literal is the mirror, and it has to move with it, or the
- * preview shows an admin a version string that appears in no row they can look up.
+ * The major is the *system prompt file* (`packages/model/prompts/propose-v4.md`), so it moved to
+ * `v4` with the fix wave. On the API side `currentPromptVersion` no longer spells it out — it
+ * derives the major from `PROMPT_VERSION` in `@wecom/model` — but this is still a hand-kept
+ * mirror, because the web bundle does not depend on `@wecom/model` and the preview is rendered in
+ * the browser from the settings the admin is editing, before anything is saved, so it cannot ask
+ * the server either. A new prompt file means changing this line too, or an admin reads a version
+ * label that no stored row will ever carry.
  */
 export const promptVersionOf = (s: AiSettings): string => `v4.${s.brief.version}.${s.style.version}`;
 

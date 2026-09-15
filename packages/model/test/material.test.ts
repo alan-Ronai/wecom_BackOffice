@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { ParagraphDiff } from '@wecom/shared';
 import {
   isCosmetic,
+  isNoiseChange,
   isFieldRenameOnly,
   isReorderOnly,
   materialDiffs,
@@ -82,6 +83,26 @@ describe('CRM field renames', () => {
 const diff = (ref: string, before: string, after: string): ParagraphDiff =>
   ({ ref, kind: 'changed', before, after, similarity: 0.5 }) as ParagraphDiff;
 
+/** One mapped step on §2.1, so a change there is a real `update-step` and noise is not. */
+const ctx = (diffs: ParagraphDiff[]): ProposalContext => ({
+  source: { id: 's', title: 'נהלי SIM' },
+  paragraphs: [{ ref: '2.1', runs: [{ t: 'x' }] }],
+  diffs,
+  linkedSteps: [
+    {
+      documentId: '11111111-1111-4111-8111-111111111111',
+      documentTitle: 'אין קליטה',
+      stepKey: 's3',
+      stepNum: '3',
+      stepTitle: 'ריענון SIM',
+      anchor: '2.1',
+      actions: ['בצע ריענון SIM'],
+    },
+  ],
+  fields: [],
+  blocks: [],
+});
+
 describe('revision-level noise', () => {
   it('recognises a pure reorder', () => {
     expect(isReorderOnly([diff('1', 'ראשון.', 'שני.'), diff('2', 'שני.', 'ראשון.')])).toBe(true);
@@ -97,28 +118,30 @@ describe('revision-level noise', () => {
     ]);
     expect(out.map((d) => d.ref)).toEqual(['2.2']);
   });
+
+  /**
+   * The heading exemption used to fire before the cosmetic test, so *any* change to a heading was
+   * noise — including a changed threshold. A heading is a table of contents and a rewording of
+   * one is nothing to decide; a heading carrying a number that moved is a fact that moved.
+   */
+  it('keeps a heading whose number changed, and still drops one that was only reworded', () => {
+    expect(isNoiseChange(diff('h2-4', 'סף 5 מגה', 'סף 6 מגה'))).toBe(false);
+    expect(materialDiffs([diff('h2-4', 'סף 5 מגה', 'סף 6 מגה')]).map((d) => d.ref)).toEqual(['h2-4']);
+    expect(isNoiseChange(diff('h2-4', 'בדיקות מהירות', 'בדיקות מהירות גלישה'))).toBe(true);
+    // A latin token or a quoted name in a heading counts for the same reason a number does.
+    expect(isNoiseChange(diff('h2-5', 'בדיקת Speedtest', 'בדיקת Fast'))).toBe(false);
+  });
+
+  it('the rule engine sees the same heading change the model does', async () => {
+    const withHeading = ctx([diff('h2-4', 'סף 5 מגה', 'סף 6 מגה')]);
+    withHeading.linkedSteps[0].anchor = 'h2-4';
+    const out = await new RuleBasedModel().proposeChanges(withHeading);
+    expect(out).toHaveLength(1);
+    expect(out[0].payload.type === 'update-step' && out[0].payload.addActions.join(' ')).toContain('6');
+  });
 });
 
 describe('the rule engine proposes nothing on noise', () => {
-  const ctx = (diffs: ParagraphDiff[]): ProposalContext => ({
-    source: { id: 's', title: 'נהלי SIM' },
-    paragraphs: [{ ref: '2.1', runs: [{ t: 'x' }] }],
-    diffs,
-    linkedSteps: [
-      {
-        documentId: '11111111-1111-4111-8111-111111111111',
-        documentTitle: 'אין קליטה',
-        stepKey: 's3',
-        stepNum: '3',
-        stepTitle: 'ריענון SIM',
-        anchor: '2.1',
-        actions: ['בצע ריענון SIM'],
-      },
-    ],
-    fields: [],
-    blocks: [],
-  });
-
   it('emits nothing for a typo, whitespace, punctuation or a reorder', async () => {
     const m = new RuleBasedModel();
     expect(await m.proposeChanges(ctx([diff('2.1', 'בצע ריענוו SIM.', 'בצע ריענון SIM.')]))).toEqual([]);
