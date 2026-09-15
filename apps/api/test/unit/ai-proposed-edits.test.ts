@@ -29,12 +29,12 @@ describe('ai proposed edits (pure)', () => {
 
   it('applyOps inserts after the anchor and deletes the anchored block', () => {
     const html = '<p>א</p><p>ב</p>';
-    expect(
-      applyOps(html, [{ id: 'o', anchor: 'p-1', kind: 'insert', before: 'א', after: 'חדש' }]),
-    ).toBe('<p>א</p><p>חדש</p><p>ב</p>');
-    expect(
-      applyOps(html, [{ id: 'o', anchor: 'p-1', kind: 'delete', before: 'א', after: '' }]),
-    ).toBe('<p>ב</p>');
+    expect(applyOps(html, [{ id: 'o', anchor: 'p-1', kind: 'insert', before: 'א', after: 'חדש' }])).toBe(
+      '<p>א</p><p>חדש</p><p>ב</p>',
+    );
+    expect(applyOps(html, [{ id: 'o', anchor: 'p-1', kind: 'delete', before: 'א', after: '' }])).toBe(
+      '<p>ב</p>',
+    );
   });
 
   it('applyOps escapes model text rather than letting it inject markup', () => {
@@ -79,9 +79,7 @@ describe('ai proposed edits (pure)', () => {
       ],
       [cur[1].ref],
     );
-    expect(ops).toEqual([
-      { id: 'op-1', anchor: cur[1].ref, kind: 'replace', before: 'ב', after: 'ב1' },
-    ]);
+    expect(ops).toEqual([{ id: 'op-1', anchor: cur[1].ref, kind: 'replace', before: 'ב', after: 'ב1' }]);
   });
 
   it('acceptedOps lets a reject win over an accept and reports the status', () => {
@@ -93,9 +91,7 @@ describe('ai proposed edits (pure)', () => {
     expect(acceptedOps(ops, { accept: 'all', reject: 'all' })).toEqual([]);
     expect(acceptedOps(ops, { accept: [], reject: [] })).toEqual([]);
     expect(decisionStatus(ops, acceptedOps(ops, { accept: 'all', reject: [] }))).toBe('accepted');
-    expect(decisionStatus(ops, acceptedOps(ops, { accept: ['a'], reject: [] }))).toBe(
-      'partially_accepted',
-    );
+    expect(decisionStatus(ops, acceptedOps(ops, { accept: ['a'], reject: [] }))).toBe('partially_accepted');
     expect(decisionStatus(ops, [])).toBe('rejected');
   });
 });

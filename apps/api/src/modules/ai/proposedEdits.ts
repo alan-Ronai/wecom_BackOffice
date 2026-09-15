@@ -83,11 +83,7 @@ export function applyOps(html: string, ops: readonly ProposedEditOp[]): string {
   for (const op of ops) {
     const current = byRef.get(op.anchor);
     if (current === undefined || !same(current, op.before))
-      throw httpError(
-        409,
-        'AI_EDIT_ANCHOR',
-        `העריכה המוצעת אינה מתאימה עוד לטקסט במסמך (${op.anchor})`,
-      );
+      throw httpError(409, 'AI_EDIT_ANCHOR', `העריכה המוצעת אינה מתאימה עוד לטקסט במסמך (${op.anchor})`);
     edits.push({ ref: op.anchor, kind: op.kind, text: op.after });
   }
   return sanitizeHtml(applyParagraphEdits(html, edits));

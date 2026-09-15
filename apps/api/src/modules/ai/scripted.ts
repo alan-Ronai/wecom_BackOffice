@@ -25,9 +25,7 @@ const labelled = (text: string, label: string): string | null =>
 
 /** `"…"`, `«…»` and `'…'`, in the order they appear. */
 const quoted = (text: string): string[] =>
-  [...text.matchAll(/"([^"]{1,400})"|«([^»]{1,400})»|'([^']{1,400})'/g)].map(
-    (m) => m[1] ?? m[2] ?? m[3],
-  );
+  [...text.matchAll(/"([^"]{1,400})"|«([^»]{1,400})»|'([^']{1,400})'/g)].map((m) => m[1] ?? m[2] ?? m[3]);
 
 const lastOfRole = (messages: ChatMessage[], role: ChatMessage['role']): ChatMessage | undefined =>
   [...messages].reverse().find((m) => m.role === role);

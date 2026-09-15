@@ -95,10 +95,7 @@ const CHAT_TIMEOUT_MS = 180_000;
 export const scriptedChatRequested = (nodeEnv: string): boolean =>
   process.env.AI_TEST_SCRIPT === '1' && nodeEnv !== 'production';
 
-export async function makeChatModel(
-  config: ChatModelConfig,
-  log: FastifyBaseLogger,
-): Promise<ModelClient> {
+export async function makeChatModel(config: ChatModelConfig, log: FastifyBaseLogger): Promise<ModelClient> {
   if (scriptedChatRequested(config.NODE_ENV)) {
     log.warn('AI_TEST_SCRIPT=1 — the chat slot is the scripted stand-in, not a model');
     return new ScriptedChatModel();

@@ -124,8 +124,7 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
     const prefix = `\n\n${section.header}:\n`;
     const left = input.budgetChars - out.length - prefix.length;
     if (left < MIN_SECTION_CHARS) continue;
-    out +=
-      prefix + (section.body.length <= left ? section.body : section.body.slice(0, left - 1) + '…');
+    out += prefix + (section.body.length <= left ? section.body : section.body.slice(0, left - 1) + '…');
   }
   return out;
 }

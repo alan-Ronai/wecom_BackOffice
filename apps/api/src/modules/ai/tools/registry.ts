@@ -146,9 +146,7 @@ export const toolDef = (name: AiToolName): ToolDef<unknown> | undefined => DEFS.
 export const specsFor = (names: readonly AiToolName[]): ChatToolSpec[] =>
   AI_TOOLS.filter((t) => names.includes(t.name)).flatMap((t) => {
     const def = DEFS.get(t.name);
-    return def
-      ? [{ name: def.name, description: def.description, parameters: jsonSchemaOf(def.args) }]
-      : [];
+    return def ? [{ name: def.name, description: def.description, parameters: jsonSchemaOf(def.args) }] : [];
   });
 
 export async function runTool(

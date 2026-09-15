@@ -250,10 +250,9 @@ export const readEval = defineTool({
      */
     const present = await ctx.db.query("select to_regclass('public.ai_eval_runs') t");
     if (!present.rows[0]?.t) return { ok: true, summary: 'אין עדיין ריצות הערכה', data: { items: [] } };
-    const r = await ctx.db.query(
-      'select * from ai_eval_runs order by started_at desc limit $1',
-      [args.limit ?? 5],
-    );
+    const r = await ctx.db.query('select * from ai_eval_runs order by started_at desc limit $1', [
+      args.limit ?? 5,
+    ]);
     return { ok: true, summary: `${r.rowCount} ריצות הערכה`, data: { items: r.rows } };
   },
 });

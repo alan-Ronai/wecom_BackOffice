@@ -45,7 +45,11 @@ async function ask(ctx: ToolCtx, header: string, rules: string, user: string): P
 
 /** The first balanced-looking JSON object or array in a reply, fences and prose stripped. */
 function extractJson(text: string): unknown {
-  const body = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```$/, '').trim();
+  const body = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```$/, '')
+    .trim();
   const start = Math.min(
     ...[body.indexOf('{'), body.indexOf('[')].filter((i) => i >= 0).concat(Number.MAX_SAFE_INTEGER),
   );
@@ -147,8 +151,7 @@ export const refineSuggestion = defineTool({
       target_document_id: string | null;
       payload: SuggestionPayload;
     };
-    if (row.target_document_id && !(await visibleDocument(ctx, row.target_document_id)))
-      return NOT_FOUND;
+    if (row.target_document_id && !(await visibleDocument(ctx, row.target_document_id))) return NOT_FOUND;
     if (!ctx.model?.chat) return NO_MODEL;
 
     const reply = await ask(

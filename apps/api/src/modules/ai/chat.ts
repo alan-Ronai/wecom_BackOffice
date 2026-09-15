@@ -129,9 +129,7 @@ export class ChatOrchestrator {
       ? await this.documentFor(input.conversation.documentId, input.user, settings)
       : null;
     const source =
-      document && allowed.includes('read_source')
-        ? await getSourceDocument(this.deps.db, document.id)
-        : null;
+      document && allowed.includes('read_source') ? await getSourceDocument(this.deps.db, document.id) : null;
 
     const history = await repo.listMessages(this.deps.db, input.conversation.id);
     const system = buildSystemPrompt({

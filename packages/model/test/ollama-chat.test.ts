@@ -74,9 +74,7 @@ describe('OllamaModel.chat', () => {
       messages: { role: string; content: string }[];
     };
     expect(body.tools).toBeUndefined();
-    expect(body.messages.some((x) => x.role === 'system' && x.content.includes('tool_calls'))).toBe(
-      true,
-    );
+    expect(body.messages.some((x) => x.role === 'system' && x.content.includes('tool_calls'))).toBe(true);
     await stub.close();
   });
 
@@ -114,9 +112,7 @@ describe('OllamaModel.chat', () => {
     const body = stub.calls.find((c) => c.path === '/api/chat')!.body as {
       messages: Record<string, unknown>[];
     };
-    expect(body.messages[2].tool_calls).toEqual([
-      { function: { name: 'search_kb', arguments: { q: 'a' } } },
-    ]);
+    expect(body.messages[2].tool_calls).toEqual([{ function: { name: 'search_kb', arguments: { q: 'a' } } }]);
     expect(body.messages[3]).toMatchObject({ role: 'tool', tool_call_id: 'c1' });
     await stub.close();
   });

@@ -42,9 +42,9 @@ run('ai feedback, transcripts and export', () => {
     });
 
   it('records the participant’s rating, upserts it, and 404s everyone else', async () => {
-    expect((await feedback(assistantMessageId, { rating: 'down', note: 'לא מדויק' }, fx.editor)).statusCode).toBe(
-      204,
-    );
+    expect(
+      (await feedback(assistantMessageId, { rating: 'down', note: 'לא מדויק' }, fx.editor)).statusCode,
+    ).toBe(204);
     let detail = (await fx.get(`/api/v1/ai/conversations/${conversationId}`, fx.editor)).json();
     expect(detail.messages.at(-1).feedback).toBe('down');
 
@@ -69,13 +69,15 @@ run('ai feedback, transcripts and export', () => {
   });
 
   it('exports NDJSON with one line per conversation, carrying messages and feedback', async () => {
-    expect(
-      (await fx.get('/api/v1/admin/ai/conversations/export.jsonl', fx.editor)).statusCode,
-    ).toBe(403);
+    expect((await fx.get('/api/v1/admin/ai/conversations/export.jsonl', fx.editor)).statusCode).toBe(403);
     const r = await fx.get('/api/v1/admin/ai/conversations/export.jsonl', fx.admin);
     expect(r.statusCode).toBe(200);
     expect(r.headers['content-type']).toMatch(/application\/x-ndjson/);
-    const lines = r.body.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    const lines = r.body
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
     const mine = lines.find((l) => l.conversation.id === conversationId);
     expect(mine).toBeTruthy();
     expect(mine.messages.map((m: { role: string }) => m.role)).toEqual(['user', 'assistant']);

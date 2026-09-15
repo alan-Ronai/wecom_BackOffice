@@ -163,8 +163,7 @@ export default function aiRoutes(deps: AiRouteDeps) {
       async (req, reply) => {
         const user = requireUser(req);
         const conversation = await ownConversation(req.params.id, user, true);
-        if (conversation.userId !== user.id)
-          throw httpError(403, 'FORBIDDEN', 'אפשר לכתוב רק בשיחה שלך');
+        if (conversation.userId !== user.id) throw httpError(403, 'FORBIDDEN', 'אפשר לכתוב רק בשיחה שלך');
         if (conversation.kind !== 'article' && !hasPerm(user, 'ai.chat'))
           throw httpError(403, 'FORBIDDEN', 'אין לך הרשאה לשיחה מסוג זה', { permission: 'ai.chat' });
 
@@ -266,7 +265,13 @@ export default function aiRoutes(deps: AiRouteDeps) {
       '/admin/ai/conversations/export.jsonl',
       {
         config: { requires: ['ai.manage'] },
-        schema: { tags: ['ai'], querystring: ConversationsQuerySchema, hide: true },
+        schema: {
+          tags: ['ai'],
+          querystring: ConversationsQuerySchema,
+          // NDJSON written straight to the socket; the declared body is the stream itself.
+          produces: ['application/x-ndjson'],
+          response: { 200: z.string() },
+        },
       },
       async (req, reply) => {
         const query = req.query;
@@ -374,10 +379,7 @@ async function decide(
       throw e;
     }
     // The claim above already moved the row out of `proposed`; this only stamps the result.
-    await tx.query('update ai_proposed_edits set resulting_source_version=$2 where id=$1', [
-      id,
-      s.version,
-    ]);
+    await tx.query('update ai_proposed_edits set resulting_source_version=$2 where id=$1', [id, s.version]);
     await audit(tx, {
       actorId: user.id,
       action: 'ai.proposed_edits.apply',

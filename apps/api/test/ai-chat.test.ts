@@ -1,11 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import {
-  AiSettingsSchema,
-  DEFAULT_ROLES,
-  PERMISSIONS,
-  toolsFor,
-  type ChatEvent,
-} from '@wecom/shared';
+import { AiSettingsSchema, DEFAULT_ROLES, PERMISSIONS, toolsFor, type ChatEvent } from '@wecom/shared';
 import { integration } from './helpers/db.js';
 import { auth, makeUser, type TestUser } from './helpers/fixtures.js';
 import { makeAiFixture, SECRET } from './helpers/ai/fixture.js';
@@ -151,8 +145,7 @@ function runRepoTests() {
     expect((await repo.listMessages(db.pool, c.id, other.id))[0].feedback).toBe('up');
 
     const rows: string[] = [];
-    for await (const row of repo.exportCursor(db.pool, { userId: user.id }))
-      rows.push(row.conversation.id);
+    for await (const row of repo.exportCursor(db.pool, { userId: user.id })) rows.push(row.conversation.id);
     expect(rows).toContain(c.id);
 
     expect(await withTransaction(db.pool, (tx) => repo.softDeleteConversation(tx, c.id))).toBe(true);
@@ -279,9 +272,7 @@ function runToolTests() {
         text: m[2],
       }));
       return chatResult(
-        blocks
-          .map((b, i) => `§${b.ref}\n${i === 0 ? 'החלף את הסים ובדוק תקינות.' : b.text}`)
-          .join('\n\n'),
+        blocks.map((b, i) => `§${b.ref}\n${i === 0 ? 'החלף את הסים ובדוק תקינות.' : b.text}`).join('\n\n'),
       );
     });
     const r = await runTool(mkCtx(admin, model), allowed(admin), {
@@ -293,17 +284,19 @@ function runToolTests() {
     expect((r as { proposedEdits?: unknown[] }).proposedEdits).toEqual([
       expect.objectContaining({ kind: 'replace', after: 'החלף את הסים ובדוק תקינות.' }),
     ]);
-    const src = await fx.db.pool.query(
-      'select current_version from source_documents where document_id=$1',
-      [fx.techDoc],
-    );
+    const src = await fx.db.pool.query('select current_version from source_documents where document_id=$1', [
+      fx.techDoc,
+    ]);
     expect(src.rows[0].current_version).toBe(1); // untouched
   });
 
   it('propose_source_edit fails closed when the model ignores the format', async () => {
     const { admin } = users();
     const r = await runTool(
-      mkCtx(admin, fakeChat(() => chatResult('בטח, שיניתי הכול!'))),
+      mkCtx(
+        admin,
+        fakeChat(() => chatResult('בטח, שיניתי הכול!')),
+      ),
       allowed(admin),
       { id: 'c6', name: 'propose_source_edit', args: { documentId: fx.techDoc, instruction: 'תקן' } },
     );
@@ -331,9 +324,9 @@ function runToolTests() {
       args: { suggestionId: fx.suggestionId, instruction: 'x' },
     });
     expect(ok.ok).toBe(true);
-    expect(
-      (ok as { refined?: { editedPayload: { type: string } } }).refined?.editedPayload.type,
-    ).toBe('update-step');
+    expect((ok as { refined?: { editedPayload: { type: string } } }).refined?.editedPayload.type).toBe(
+      'update-step',
+    );
     // A refinement is a proposal: the stored row is untouched.
     const row = await fx.db.pool.query('select edited_payload from suggestions where id=$1', [
       fx.suggestionId,
@@ -505,9 +498,7 @@ function runRouteTests() {
   });
 
   it('stops after MAX_TOOL_ROUNDS and still ends with done', async () => {
-    aiChatHolder.swap(
-      fakeChat(() => chatResult('', [{ id: 'l', name: 'search_kb', args: { q: 'APN' } }])),
-    );
+    aiChatHolder.swap(fakeChat(() => chatResult('', [{ id: 'l', name: 'search_kb', args: { q: 'APN' } }])));
     const c = await newConversation('editor', fx.editor);
     const ev = parseSseFrames((await send(c.json().id, 'לולאה', fx.editor)).body);
     expect(ev.filter((e) => e.type === 'tool_call').length).toBe(MAX_TOOL_ROUNDS);
@@ -541,9 +532,7 @@ function runRouteTests() {
   it('403s an agent opening an editor conversation and 404s a conversation of another user', async () => {
     expect((await newConversation('editor', fx.agent)).statusCode).toBe(403);
     const mine = await newConversation('editor', fx.editor);
-    expect(
-      (await fx.get(`/api/v1/ai/conversations/${mine.json().id}`, fx.otherEditor)).statusCode,
-    ).toBe(404);
+    expect((await fx.get(`/api/v1/ai/conversations/${mine.json().id}`, fx.otherEditor)).statusCode).toBe(404);
     expect((await send(mine.json().id, 'שלום', fx.otherEditor)).statusCode).toBe(404);
   });
 
@@ -560,9 +549,7 @@ function runRouteTests() {
     await newConversation('editor', fx.otherEditor);
     const mine = await fx.get('/api/v1/ai/conversations?page=1&pageSize=50', fx.editor);
     expect(mine.statusCode).toBe(200);
-    expect(
-      (mine.json().items as { userId: string }[]).every((c) => c.userId === fx.editor.id),
-    ).toBe(true);
+    expect((mine.json().items as { userId: string }[]).every((c) => c.userId === fx.editor.id)).toBe(true);
   });
 
   it('429s past ai.limits.chatPerUserPerHour', async () => {

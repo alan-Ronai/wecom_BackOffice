@@ -52,8 +52,7 @@ export async function makeAiFixture(): Promise<AiFixture> {
 
   const post = (url: string, payload: unknown, u: TestUser = admin) =>
     app.inject({ method: 'POST', url, headers: auth(u), payload });
-  const get = (url: string, u: TestUser = editor) =>
-    app.inject({ method: 'GET', url, headers: auth(u) });
+  const get = (url: string, u: TestUser = editor) => app.inject({ method: 'GET', url, headers: auth(u) });
 
   const makeDoc = async (title: string, category: string) => {
     const r = await post('/api/v1/documents', {
@@ -70,9 +69,8 @@ export async function makeAiFixture(): Promise<AiFixture> {
   };
 
   const putStructure = async (id: string, stepTitle: string, actionText: string) => {
-    const etag = (
-      await app.inject({ method: 'GET', url: `/api/v1/documents/${id}`, headers: auth(admin) })
-    ).headers.etag as string;
+    const etag = (await app.inject({ method: 'GET', url: `/api/v1/documents/${id}`, headers: auth(admin) }))
+      .headers.etag as string;
     const r = await app.inject({
       method: 'PUT',
       url: `/api/v1/documents/${id}/structure`,
@@ -130,11 +128,8 @@ export async function makeAiFixture(): Promise<AiFixture> {
    * what `refine_suggestion` is under test for is the second model call and its validation, not
    * the proposal engine that made the row.
    */
-  const revision = (
-    await db.pool.query(
-      'select id from source_revisions order by imported_at desc limit 1',
-    )
-  ).rows[0].id as string;
+  const revision = (await db.pool.query('select id from source_revisions order by imported_at desc limit 1'))
+    .rows[0].id as string;
   const suggestionId = (
     await db.pool.query(
       `insert into suggestions(source_revision_id, anchor, type, title, target_document_id, target_step_key, payload, confidence, rationale)

@@ -26,8 +26,7 @@ export type Q = Queryable;
 
 type Row = Record<string, unknown>;
 
-const iso = (v: unknown): string =>
-  v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString();
+const iso = (v: unknown): string => (v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString());
 const isoOrNull = (v: unknown): string | null => (v === null || v === undefined ? null : iso(v));
 
 const toConversation = (r: Row): Conversation => ({
@@ -146,10 +145,11 @@ export async function listConversations(
     query.to ?? null,
   ];
   const total = await q.query(`select count(*)::int n from ai_conversations c ${where}`, params);
-  const r = await q.query(
-    `${CONVERSATION_SELECT} ${where} order by c.updated_at desc limit $6 offset $7`,
-    [...params, query.pageSize, (query.page - 1) * query.pageSize],
-  );
+  const r = await q.query(`${CONVERSATION_SELECT} ${where} order by c.updated_at desc limit $6 offset $7`, [
+    ...params,
+    query.pageSize,
+    (query.page - 1) * query.pageSize,
+  ]);
   return { items: r.rows.map(toConversation), total: total.rows[0].n as number };
 }
 
@@ -179,10 +179,9 @@ export async function softDeleteConversation(tx: Tx, id: string): Promise<boolea
  */
 export async function nextSeq(tx: Tx, conversationId: string): Promise<number> {
   await tx.query('select id from ai_conversations where id=$1 for update', [conversationId]);
-  const r = await tx.query(
-    'select coalesce(max(seq),0)+1 as n from ai_messages where conversation_id=$1',
-    [conversationId],
-  );
+  const r = await tx.query('select coalesce(max(seq),0)+1 as n from ai_messages where conversation_id=$1', [
+    conversationId,
+  ]);
   return Number(r.rows[0].n);
 }
 
@@ -309,10 +308,7 @@ export async function getProposedEdits(q: Q, id: string): Promise<ProposedEdits 
 }
 
 /** The conversation behind a proposal, for the decide route's owner check. */
-export async function conversationOfProposedEdits(
-  q: Q,
-  id: string,
-): Promise<Conversation | null> {
+export async function conversationOfProposedEdits(q: Q, id: string): Promise<Conversation | null> {
   const r = await q.query(
     `select m.conversation_id from ai_proposed_edits p join ai_messages m on m.id = p.message_id where p.id = $1`,
     [id],

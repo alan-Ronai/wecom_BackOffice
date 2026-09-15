@@ -34,9 +34,7 @@ run('ai proposed edits', () => {
             ref: m[1],
             text: m[2],
           }));
-          return chatResult(
-            blocks.map((b, i) => `§${b.ref}\n${rewrite(b.text, i)}`).join('\n\n'),
-          );
+          return chatResult(blocks.map((b, i) => `§${b.ref}\n${rewrite(b.text, i)}`).join('\n\n'));
         }
         return messages.some((m) => m.role === 'tool')
           ? chatResult('הצעתי שינוי.')
@@ -57,8 +55,7 @@ run('ai proposed edits', () => {
       payload: { content: 'קצר את הפסקה הראשונה' },
     });
     const frame = parseSseFrames(r.body).find((e) => e.type === 'proposed_edits') as
-      | Extract<ChatEvent, { type: 'proposed_edits' }>
-      | undefined;
+      Extract<ChatEvent, { type: 'proposed_edits' }> | undefined;
     if (!frame) throw new Error('no proposed_edits frame: ' + r.body);
     return { frame, conversationId: c.json().id as string };
   };
@@ -73,10 +70,9 @@ run('ai proposed edits', () => {
 
   const sourceRow = async () =>
     (
-      await fx.db.pool.query(
-        'select current_version, html from source_documents where document_id=$1',
-        [fx.techDoc],
-      )
+      await fx.db.pool.query('select current_version, html from source_documents where document_id=$1', [
+        fx.techDoc,
+      ])
     ).rows[0] as { current_version: number; html: string };
 
   it('the proposal frame carries the base version and writes nothing on its own', async () => {
@@ -92,8 +88,8 @@ run('ai proposed edits', () => {
   it('accepting everything saves one new source version, audits it and re-ingests', async () => {
     const before = await sourceRow();
     const { frame } = await propose((t, i) => (i === 1 ? 'בדוק חסימה מהירה.' : t));
-    const revisionsBefore = (await fx.db.pool.query('select count(*)::int n from source_revisions'))
-      .rows[0].n as number;
+    const revisionsBefore = (await fx.db.pool.query('select count(*)::int n from source_revisions')).rows[0]
+      .n as number;
 
     const r = await decide(frame.proposedEditsId, { accept: 'all', reject: [] });
     expect(r.statusCode).toBe(200);
@@ -107,9 +103,10 @@ run('ai proposed edits', () => {
     expect(after.html).toContain('בדוק חסימה מהירה.');
     expect(after.html).toContain('הצע חבילה נוספת'); // the untouched paragraph survived
 
-    const row = await fx.db.pool.query('select status, resulting_source_version from ai_proposed_edits where id=$1', [
-      frame.proposedEditsId,
-    ]);
+    const row = await fx.db.pool.query(
+      'select status, resulting_source_version from ai_proposed_edits where id=$1',
+      [frame.proposedEditsId],
+    );
     expect(row.rows[0].status).toBe('accepted');
     expect(row.rows[0].resulting_source_version).toBe(after.current_version);
 
@@ -121,8 +118,8 @@ run('ai proposed edits', () => {
     expect(audit.rows[0].after).toMatchObject({ proposedEditsId: frame.proposedEditsId });
     expect(audit.rows[0].after.messageId).toBeTruthy();
 
-    const revisionsAfter = (await fx.db.pool.query('select count(*)::int n from source_revisions'))
-      .rows[0].n as number;
+    const revisionsAfter = (await fx.db.pool.query('select count(*)::int n from source_revisions')).rows[0]
+      .n as number;
     expect(revisionsAfter).toBeGreaterThan(revisionsBefore);
   });
 
@@ -187,9 +184,11 @@ run('ai proposed edits', () => {
   it('404s a non-owner editor and 403s an agent', async () => {
     // The SOURCE_MOVED case above replaced the source with a single paragraph, so index 0 is it.
     const { frame } = await propose((t, i) => (i === 0 ? 'של מישהו אחר.' : t));
-    expect((await decide(frame.proposedEditsId, { accept: 'all', reject: [] }, fx.otherEditor)).statusCode).toBe(
-      404,
+    expect(
+      (await decide(frame.proposedEditsId, { accept: 'all', reject: [] }, fx.otherEditor)).statusCode,
+    ).toBe(404);
+    expect((await decide(frame.proposedEditsId, { accept: 'all', reject: [] }, fx.agent)).statusCode).toBe(
+      403,
     );
-    expect((await decide(frame.proposedEditsId, { accept: 'all', reject: [] }, fx.agent)).statusCode).toBe(403);
   });
 });
