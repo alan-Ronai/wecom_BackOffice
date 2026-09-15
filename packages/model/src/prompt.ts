@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { IdSchema, SuggestionPayloadSchema, SuggestionSchema, SuggestionTypeSchema } from '@wecom/shared';
 import type { ProposalContext, ProposedSuggestion } from './contract.js';
 import { groupSections, isNewSourcePath } from './sections.js';
+import { toFlatExample } from './flat.js';
 
 /** Bump together with a new `prompts/<version>.md` file; stored on every run for reproducibility.
  * v2 (pipeline-fanout): a brand-new source is proposed as one card per SECTION, and a single
@@ -241,9 +242,18 @@ export function buildMessages(
    * those there is nothing to propose at all.
    */
   const impactText = ctx.impact ? formatImpactForPrompt(ctx.impact) : '';
+  /**
+   * C-I3: an accepted example is rendered in the shape the model is being asked to answer in.
+   * On v4 that is the flat shape (`toFlatExample`); the legacy path still shows the envelope,
+   * because there the envelope is what it is being graded on.
+   */
   const examplesText = (ctx.examples ?? [])
     .slice(0, 3)
-    .map((e, i) => `דוגמה ${i + 1} — שינוי: ${e.diff}\nהצעה מאושרת: ${JSON.stringify(e.suggestion)}`)
+    .map(
+      (e, i) =>
+        `דוגמה ${i + 1} — שינוי: ${e.diff}\nהצעה מאושרת: ` +
+        JSON.stringify(v4 ? toFlatExample(e.suggestion) : e.suggestion),
+    )
     .join('\n\n');
   const budget = promptTokenBudget(ctx);
   const sys = systemMessage(ctx, opts);

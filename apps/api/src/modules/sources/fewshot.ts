@@ -10,6 +10,11 @@ import type { FewShotExample, ProposedSuggestion } from '@wecom/model';
  * `source_revisions.meta->'diffs'` is written by `processRevision`, so revisions from before
  * wave 6 have no diff text and fall back to the anchor alone. That is still a usable example:
  * the suggestion JSON is the part the model is asked to imitate.
+ *
+ * C-I3: the row's payload is the *nested* stored shape. `buildMessages` renders it through
+ * `toFlatExample` before it reaches the model, because on `propose-v4` the answer shape is flat
+ * and an example in the wrong shape teaches the wrong grammar. Which types can be retrieved at
+ * all is decided by `proposal.ts`'s `likelyType`, which now reaches all six.
  */
 export async function fewShotExamples(
   q: Pick<pg.Pool, 'query'>,

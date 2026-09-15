@@ -2,6 +2,7 @@ import { similarity } from '@wecom/shared';
 import type { ModelClient, ProposalContext, ProposedSuggestion } from './contract.js';
 import { isNewSourcePath, sectionCards } from './sections.js';
 import { confidenceFor } from './calibration.js';
+import { detectFieldAlerts } from './guard.js';
 
 const sentences = (t: string) =>
   t
@@ -144,6 +145,15 @@ export class RuleBasedModel implements ModelClient {
         }
       }
     }
-    return out;
+    /**
+     * A CRM field rename is decidable from the context without reading Hebrew — a known field
+     * name is quoted in `before` and an unknown one takes its place in `after` — and the X1
+     * report lists "the rule engine never detects a renamed field" as one of its three real
+     * limits. The detector already existed for the model path (`guard.ts`); running it here too
+     * costs nothing and raises the deterministic floor the model has to beat, which is the only
+     * honest way to read any of these numbers. Measured: hit-type 0.750 → 0.875 on the eight
+     * committed cases (case `05` was the one the engine could not see).
+     */
+    return detectFieldAlerts(ctx, out);
   }
 }

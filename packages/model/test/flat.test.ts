@@ -13,9 +13,10 @@ import {
   promptTokenBudget,
   PROMPT_VERSION,
   repairHint,
+  toFlatExample,
   RESPONSE_FORMAT,
 } from '../src/index.js';
-import type { ProposalContext } from '../src/index.js';
+import type { ProposalContext, ProposedSuggestion } from '../src/index.js';
 
 /**
  * The fix wave's default generation path (findings C-C1…C-C5, C-I2, C-I4, C-I7).
@@ -62,6 +63,19 @@ const flat = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const answer = (...items: Record<string, unknown>[]) => JSON.stringify({ suggestions: items });
+
+/** One accepted suggestion in the stored (nested) shape, as `fewshot.ts` hands it over. */
+const accepted: ProposedSuggestion = {
+  anchor: '§2.3',
+  type: 'update-block',
+  title: 'ריענון SIM: המתנה 90 שניות',
+  targetDocumentId: D,
+  targetStepKey: 's3',
+  targetBlockId: B,
+  payload: { type: 'update-block', actions: [{ id: 'b1', text: 'המתן 90 שניות' }] },
+  confidence: 0.9,
+  rationale: 'הבלוק משותף',
+};
 
 describe('the flat response format (C-C1, C-C2, C-C3)', () => {
   const schema = flatResponseFormat(ctx) as {
@@ -157,11 +171,32 @@ describe('the context budget is in tokens (C-I4)', () => {
     const [, msg] = buildMessages({
       ...ctx,
       impact: { documents: [{ id: 'X', title: 'ניתוקים חוזרים', why: 'w' }], blocks: [], fields: [], topics: [], related: [] },
-      examples: [{ diff: big, suggestion: { ...(JSON.parse(answer(flat())).suggestions[0] as never) } }],
+      examples: [{ diff: big, suggestion: accepted }],
       maxContextTokens: 2200,
     });
     expect(msg.content).not.toContain('דוגמאות מאושרות');
     expect(msg.content).toContain('§2.3');
+  });
+});
+
+describe('few-shot examples are rendered in the answer shape (C-I3)', () => {
+  it('flattens a stored nested payload into the flat shape the model answers in', () => {
+    expect(toFlatExample(accepted)).toEqual({
+      anchor: '§2.3',
+      type: 'update-block',
+      title: 'ריענון SIM: המתנה 90 שניות',
+      targetDocumentId: D,
+      targetStepKey: 's3',
+      targetBlockId: B,
+      actions: ['המתן 90 שניות'],
+      rationale: 'הבלוק משותף',
+    });
+  });
+
+  it('shows the flat shape on v4 and the stored envelope on the legacy path', () => {
+    const withExample = { ...ctx, examples: [{ diff: '§2.3 changed', suggestion: accepted }] };
+    expect(buildMessages(withExample)[1].content).not.toContain('"payload"');
+    expect(buildMessages(withExample, { version: LEGACY_PROMPT_VERSION })[1].content).toContain('"payload"');
   });
 });
 

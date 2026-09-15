@@ -7,9 +7,49 @@ import { ImpactService } from './impact.js';
 import { fewShotExamples } from './fewshot.js';
 import { getAiSettings } from '../../lib/aiSettings.js';
 
-/** The suggestion type a diff of this shape is most likely to produce — the few-shot filter. */
-const likelyType = (d: ParagraphDiff, mapped: Set<string>): string =>
-  d.kind === 'removed' ? 'deprecate-step' : mapped.has(d.ref.replace(/^§/, '')) ? 'update-step' : 'new-card';
+/**
+ * The suggestion type a diff of this shape is most likely to produce — the few-shot filter.
+ *
+ * C-I3: this used to return only `deprecate-step`, `update-step` or `new-card`, and it is the
+ * `types` filter handed to `fewShotExamples`. So `update-block`, `new-step` and `field-alert` —
+ * which are exactly the three types the models get wrong — could never have an example
+ * retrieved for them, however many had been accepted. The list below is `propose-v4`'s ordered
+ * decision list, stop-at-the-first-match, so the examples a revision is shown are the ones for
+ * the rules it is about to be asked to apply.
+ */
+export interface LikelyTypeContext {
+  /** anchor (no `§`) → the step it maps to, if any. */
+  steps: Map<string, { blockId?: string | null }>;
+  /** Any mapped step at all: without one, rule 6 (`new-card`) is the only reachable branch. */
+  anyMapped: boolean;
+  /** Known CRM field names, lower-cased — rule 3 needs the *old* name to be one of them. */
+  knownFields: Set<string>;
+}
+
+/** Every `"…"` / «…» / '…' run — how both the docx and the WordPress sources quote a field name. */
+const QUOTED = /["«'׳"]([^"«»'׳"]{2,60})["»'׳"]/g;
+const quoted = (text: string): string[] => [...text.matchAll(QUOTED)].map((m) => m[1].trim());
+
+/** A known field name quoted in `before` and replaced by an unknown one in `after`. */
+const looksLikeFieldRename = (d: ParagraphDiff, known: Set<string>): boolean => {
+  if (d.kind !== 'changed' || !d.before || !d.after || !known.size) return false;
+  const b = quoted(d.before);
+  const a = quoted(d.after);
+  return (
+    b.some((q) => known.has(q.toLowerCase()) && !a.includes(q)) &&
+    a.some((q) => !known.has(q.toLowerCase()) && !b.includes(q))
+  );
+};
+
+export const likelyType = (d: ParagraphDiff, c: LikelyTypeContext): string => {
+  const step = c.steps.get(d.ref.replace(/^§/, ''));
+  if (step?.blockId) return 'update-block';
+  if (d.kind === 'removed' && step) return 'deprecate-step';
+  if (looksLikeFieldRename(d, c.knownFields)) return 'field-alert';
+  if (step) return 'update-step';
+  if (d.kind === 'added' && c.anyMapped) return 'new-step';
+  return 'new-card';
+};
 
 /** Assembles everything the model is allowed to see for one revision. */
 export class ProposalService {
@@ -75,8 +115,12 @@ export class ProposalService {
             ),
           ]
         : [];
-      const mapped = new Set(linkedSteps.map((s) => s.anchor.replace(/^§/, '')));
-      const types = [...new Set(diffs.filter((d) => d.kind !== 'same').map((d) => likelyType(d, mapped)))];
+      const likelyCtx: LikelyTypeContext = {
+        steps: new Map(linkedSteps.map((s) => [s.anchor.replace(/^§/, ''), { blockId: s.blockId }])),
+        anyMapped: linkedSteps.length > 0,
+        knownFields: new Set(fields.map((f) => f.name.toLowerCase())),
+      };
+      const types = [...new Set(diffs.filter((d) => d.kind !== 'same').map((d) => likelyType(d, likelyCtx)))];
       const examples = await fewShotExamples(this.pool, {
         sourceId: revision.sourceId,
         worldSlugs,

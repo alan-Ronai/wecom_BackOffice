@@ -216,6 +216,54 @@ const missingTarget = (s: ProposedSuggestion): string | null => {
   return null;
 };
 
+/* ── C-I3: an accepted suggestion, rendered back into the answer shape ───── */
+
+/**
+ * `fewshot.ts` returns the *stored* suggestion, whose payload is the nested discriminated union.
+ * Showing that to a model that is being graded on the flat shape teaches it the wrong grammar —
+ * the example is the most imitated part of the prompt, so an example in the wrong shape is worse
+ * than no example. This is `toPayload` run backwards: one accepted suggestion as the model is
+ * expected to write it, empty strings and all.
+ */
+export function toFlatExample(s: ProposedSuggestion): Record<string, unknown> {
+  const p = s.payload;
+  const base: Record<string, unknown> = {
+    anchor: s.anchor,
+    type: s.type,
+    title: s.title,
+    targetDocumentId: s.targetDocumentId ?? NONE,
+    targetStepKey: s.targetStepKey ?? NONE,
+    targetBlockId: s.targetBlockId ?? NONE,
+    actions: [] as string[],
+    rationale: s.rationale,
+  };
+  /** `fewshot.ts` casts a stored `jsonb` column to this type, so a row can be anything. */
+  if (!p || typeof p !== 'object') return base;
+  switch (p.type) {
+    case 'update-step':
+      base.actions = p.addActions;
+      break;
+    case 'update-block':
+      base.actions = p.actions.map((a) => a.text);
+      break;
+    case 'deprecate-step':
+      base.reason = p.reason;
+      break;
+    case 'field-alert':
+      base.fieldName = p.fieldName;
+      base.issue = p.issue;
+      break;
+    case 'new-step':
+      base.actions = p.actions;
+      base.afterStepKey = p.afterStepKey ?? NONE;
+      break;
+    case 'new-card':
+      base.actions = p.phases.flatMap((ph) => ph.steps.flatMap((st) => st.actions.map((a) => a.text)));
+      break;
+  }
+  return base;
+}
+
 /* ── C-I7: a repair turn a Hebrew-instructed 3B can act on ───────────────── */
 
 /**
