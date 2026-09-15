@@ -35,7 +35,7 @@ describe('assign and completion', () => {
       worldSlugs: ['intl'],
       dueDays: 10,
     });
-    expect(await screen.findByText(/הוקצה ל-12 משתמשים/)).toBeInTheDocument();
+    expect(await screen.findByText('הוקצה ל-12 משתמשים')).toBeInTheDocument();
   });
 
   it('assigns individuals picked from the people search', async () => {

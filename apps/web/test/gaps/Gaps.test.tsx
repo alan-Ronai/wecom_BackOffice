@@ -35,7 +35,7 @@ describe('/gaps', () => {
     await waitFor(async () => expect(await screen.findAllByRole('article')).toHaveLength(1));
     await userEvent.click(screen.getByRole('button', { name: 'הרץ זיהוי עכשיו' }));
     await waitFor(() => expect(learningState.detectRuns).toBe(1));
-    expect(await screen.findByText(/זוהו 1/)).toBeInTheDocument();
+    expect(await screen.findByText('פער אחד זוהה · שני פערים עודכנו')).toBeInTheDocument();
   });
 
   it('resolves a gap against the document that closes it', async () => {

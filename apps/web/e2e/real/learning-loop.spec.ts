@@ -100,7 +100,8 @@ test('W5-E2E-1 a quiz is built, assigned, passed, refreshed after a significant 
   await expect.poll(() => worldBoxes.count()).toBeGreaterThan(0);
   await worldBoxes.first().check();
   await assign.getByRole('button', { name: 'הקצה לקהל' }).click();
-  await expect(l.getByText(/הוקצה ל-[1-9]\d* משתמשים/)).toBeVisible();
+  // The count goes through `lib/count.ts`, so one user reads "משתמש אחד" and two read "שני משתמשים".
+  await expect(l.getByText(/הוקצה ל-(משתמש אחד|שני משתמשים|[1-9]\d* משתמשים)/)).toBeVisible();
 
   /* 3. the agent passes it in the player ------------------------------------ */
   /*
@@ -155,7 +156,7 @@ test('W5-E2E-1 a quiz is built, assigned, passed, refreshed after a significant 
   const significant = pub.getByRole('checkbox', { name: 'שינוי מהותי – דרוש רענון' });
   await significant.check();
   await pub.getByRole('button', { name: 'אישור' }).click();
-  await expect(l.getByText(/רענונים נוצרו/)).toBeVisible({ timeout: 30_000 });
+  await expect(l.getByText(/(רענון אחד נוצר|רענונים נוצרו)/)).toBeVisible({ timeout: 30_000 });
 
   await a.goto(`/doc/${doc!.id}`);
   await expect(a.getByRole('status', { name: 'רענון ידע נדרש' })).toBeVisible({ timeout: 30_000 });

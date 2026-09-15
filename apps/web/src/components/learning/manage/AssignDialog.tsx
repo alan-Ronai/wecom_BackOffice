@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMentionable } from '../../../api/hooks/collab.js';
 import { useAssignUsers, useAudienceOptions, useCreateAudience } from '../../../api/hooks/learningManage.js';
+import { users as nUsers } from '../../../lib/count.js';
 import { useDebounced } from '../../../lib/useDebounced.js';
 import { useToast } from '../../ui/Toast.js';
 import { useFocusTrap } from '../../ui/useFocusTrap.js';
@@ -112,7 +113,7 @@ export function AssignDialog({ itemId, onClose }: { itemId: string; onClose: () 
               void createAudience
                 .mutateAsync({ roleNames, worldSlugs, userIds: [], dueDays })
                 .then((a) => {
-                  toast(`הוקצה ל-${a.resolvedUsers} משתמשים`, 'ok');
+                  toast(`הוקצה ל-${nUsers(a.resolvedUsers)}`, 'ok');
                   onClose();
                 })
                 .catch(() => toast('ההקצאה נכשלה', 'warn'))
@@ -165,7 +166,7 @@ export function AssignDialog({ itemId, onClose }: { itemId: string; onClose: () 
               void assign
                 .mutateAsync({ userIds: picked.map((p) => p.id), dueDays })
                 .then((r) => {
-                  toast(`הוקצה ל-${r.assigned} משתמשים`, 'ok');
+                  toast(`הוקצה ל-${nUsers(r.assigned)}`, 'ok');
                   onClose();
                 })
                 .catch(() => toast('ההקצאה נכשלה', 'warn'))

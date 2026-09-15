@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 're
 import { Link } from 'react-router-dom';
 import type { AttemptResult, PlayerItem } from '@wecom/shared';
 import { useStartAttempt, useSubmitAttempt } from '../../api/hooks/learning.js';
+import { questions as countQuestions } from '../../lib/count.js';
 import { move } from '../../lib/learning.js';
 import { Button, LoadError } from '../ui/index.js';
 
@@ -131,7 +132,7 @@ export function QuizPlayer({ item }: { item: PlayerItem }) {
       <div className="quiz quiz-intro">
         {item.item.description ? <p>{item.item.description}</p> : null}
         <p>
-          {questions.length} שאלות · ציון עובר {passMarkOf(item)}
+          {countQuestions(questions.length)} · ציון עובר {passMarkOf(item)}
           {item.item.estimatedMinutes ? ` · כ-${item.item.estimatedMinutes} דק׳` : ''}
         </p>
         <p className="muted">{attemptsLeftLabel(initialLeft)}</p>

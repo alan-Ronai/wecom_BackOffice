@@ -20,6 +20,7 @@ import {
 import { useCan } from '../../api/hooks/me.js';
 import { ApiError } from '../../api/unwrap.js';
 import { PRI } from '../../lib/constants.js';
+import { counted, learningItems, refreshes } from '../../lib/count.js';
 import { ago, download } from '../../lib/format.js';
 import { useHotkeys } from '../../lib/keys.js';
 import { allSteps } from '../../lib/steps.js';
@@ -236,7 +237,7 @@ function PublishBody({
             {preview.isPending
               ? 'בודק אם השינוי מהותי…'
               : previewed && preview.data?.affectedItems
-                ? `זוהה שינוי בתוצאה או בהסתעפות · ${preview.data.affectedItems} פריטי למידה מושפעים`
+                ? `זוהה שינוי בתוצאה או בהסתעפות · ${counted(preview.data.affectedItems, learningItems, 'מושפע', 'מושפעים')}`
                 : 'מבטל השלמות של תדריכים ושאלונים שמבוססים על המסמך ויוצר משימות רענון'}
           </span>
         </label>
@@ -619,7 +620,7 @@ export function EditorPage() {
     const flag = result.changeFlag;
     toast(
       flag?.significant
-        ? `פורסם v${version} · שינוי מהותי: ${flag.refreshAssignments} רענונים נוצרו`
+        ? `פורסם v${version} · שינוי מהותי: ${counted(flag.refreshAssignments, refreshes, 'נוצר', 'נוצרו')}`
         : `פורסם v${version} · הכרטיס בספרייה עודכן`,
       'ok',
     );

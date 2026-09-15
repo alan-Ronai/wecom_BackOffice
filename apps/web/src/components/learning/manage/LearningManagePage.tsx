@@ -8,6 +8,7 @@ import {
 } from '../../../api/hooks/learningManage.js';
 import { useCan } from '../../../api/hooks/me.js';
 import { useWorlds } from '../../../api/hooks/taxonomy.js';
+import { counted, entries, questions, users } from '../../../lib/count.js';
 import { ago } from '../../../lib/format.js';
 import { Hamburger } from '../../shell/MobileDrawer.js';
 import { useModal } from '../../ui/Modal.js';
@@ -189,8 +190,8 @@ export function LearningManagePage() {
             </div>
             <div className="title">{c.title}</div>
             <div className="desc">
-              {c.kind === 'quiz' ? `${c.questionCount} שאלות` : `${c.entryCount} פריטים`} · {c.assignedUsers}{' '}
-              הוקצו
+              {c.kind === 'quiz' ? questions(c.questionCount) : entries(c.entryCount)} ·{' '}
+              {counted(c.assignedUsers, users, 'הוקצה', 'הוקצו')}
               {c.completionRate !== null ? ` · ${Math.round(c.completionRate * 100)}%` : ''} · עודכן{' '}
               {ago(c.updatedAt)}
             </div>

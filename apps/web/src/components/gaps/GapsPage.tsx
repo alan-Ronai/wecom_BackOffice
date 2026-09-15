@@ -3,6 +3,7 @@ import type { Gap } from '@wecom/shared';
 import { useDetectGaps, useDismissGap, useGaps, useResolveGap } from '../../api/hooks/gaps.js';
 import { useCan } from '../../api/hooks/me.js';
 import { useWorlds } from '../../api/hooks/taxonomy.js';
+import { counted, gaps as nGaps } from '../../lib/count.js';
 import { ago } from '../../lib/format.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { worldLabel } from '../taxonomy/TypeBadge.js';
@@ -117,7 +118,12 @@ export function GapsPage() {
             onClick={() =>
               void detect
                 .mutateAsync()
-                .then((r) => toast(`זוהו ${r.detected}, עודכנו ${r.updated}`, 'ok'))
+                .then((r) =>
+                  toast(
+                    `${counted(r.detected, nGaps, 'זוהה', 'זוהו')} · ${counted(r.updated, nGaps, 'עודכן', 'עודכנו')}`,
+                    'ok',
+                  ),
+                )
                 .catch(() => toast('הזיהוי נכשל', 'warn'))
             }
           >

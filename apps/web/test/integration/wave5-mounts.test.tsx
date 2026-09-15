@@ -128,7 +128,7 @@ describe('V6 editor mounts', () => {
     const box = await screen.findByRole('checkbox', { name: 'שינוי מהותי – דרוש רענון' });
     // The detector already decided; the editor is confirming, not guessing.
     await waitFor(() => expect(box).toBeChecked());
-    expect(screen.getByText(/2 פריטי למידה מושפעים/)).toBeInTheDocument();
+    expect(screen.getByText(/שני פריטי למידה מושפעים/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'אישור' }));
     await waitFor(() => expect(sent?.significantChange).toBe(true));
     expect(await screen.findByText(/5 רענונים נוצרו/)).toBeInTheDocument();
