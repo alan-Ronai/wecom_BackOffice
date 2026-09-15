@@ -74,7 +74,11 @@ test('W5-E2E-2 requireApprover blocks a lead and admits an approver', async ({ b
     await dialog.getByRole('button', { name: 'אישור' }).click();
     await expect(p.getByText('אושר ופורסם')).toBeVisible({ timeout: 20_000 });
   } finally {
-    // Leave the instance as the other specs expect to find it, pass or fail.
-    await api.put('/api/v1/admin/workflow', { data: { requireApprover: false } });
+    // Leave the instance as the other specs expect to find it, pass or fail — and say so if the
+    // reset itself failed: silently leaving `requireApprover` on poisons every later spec in the
+    // serial run, and the failure would surface as an unrelated 403 somewhere else. `expect.soft`
+    // reports it without replacing the real failure this `finally` may be unwinding.
+    const off = await api.put('/api/v1/admin/workflow', { data: { requireApprover: false } });
+    expect.soft(off.ok(), `requireApprover was not reset: ${await off.text()}`).toBeTruthy();
   }
 });
