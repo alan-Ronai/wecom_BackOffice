@@ -30,8 +30,11 @@ the shipped tags.
    -d ollama-pull`.)
 6. Verify: `deploy/smoke.sh https://<PUBLIC_URL host>` prints `smoke passed`. The argument is a
    whole origin, so include the port if you changed `WEB_HTTPS_PORT` away from 443
-   (`deploy/smoke.sh https://kb.wecom.local:9443`). Run it from the repository root: the script
-   looks for `deploy/.env` next to itself.
+   (`deploy/smoke.sh https://kb.wecom.local:9443`) — leave it out and every request goes to 443,
+   where nothing answers, and the only symptom is sixty rounds of `waiting for api`. A bare
+   `kb.wecom.local:9443` is taken as https, a trailing slash is ignored, and a URL with a path is
+   refused rather than quietly prefixed onto every check. Run it from the repository root: the
+   script looks for `deploy/.env` next to itself.
    The check waits for the database **and** for the exact `MODEL_NAME` tag to appear in Ollama's
    `ollama list` — not merely for Ollama to answer — so a mistyped `MODEL_NAME` fails here
    (`waiting for the model tag '<tag>' to be pulled`) instead of at the first suggestion job. It

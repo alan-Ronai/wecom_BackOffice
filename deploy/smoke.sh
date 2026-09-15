@@ -13,8 +13,31 @@
 # used to end with the embedding model missing, `model:true` in health, nothing in any log, and
 # search permanently demoted to lexical ranking. `/system/health` reports on the *generation*
 # model, so this one is asked of Ollama itself; see embed_check.
+#
+# W-7: the argument is an *origin* — scheme, host and, if it is not the scheme's default, port.
+# `https://kb.wecom.local:9443` is the spelling a deployment with WEB_HTTPS_PORT≠443 needs, and
+# dropping the port sends every request to 443, where nothing answers and the only symptom is
+# sixty rounds of `waiting for api`. Three conveniences so that the obvious spellings work rather
+# than time out: a bare `host:port` is assumed https, a trailing slash is dropped (it would build
+# `//api/v1/...`), and a path is refused outright, because silently prefixing every request with
+# it produces the same sixty rounds and a wrong reason to look for them.
 set -euo pipefail
 base=${1:-https://localhost}
+base=${base%/}
+case "$base" in
+  https://*|http://*) ;;
+  *) base="https://$base" ;;
+esac
+case "${base#*://}" in
+  '')
+    echo "smoke FAILED: '${1:-}' names no host. Pass an origin: https://kb.wecom.local:9443" >&2
+    exit 1 ;;
+  */*)
+    hostport=${base#*://}
+    echo "smoke FAILED: '${1:-}' has a path. This takes an origin — scheme, host and port, nothing" >&2
+    echo "  after it; the paths it checks are its own. Try: ${base%%://*}://${hostport%%/*}" >&2
+    exit 1 ;;
+esac
 : "${SMOKE_REQUIRE_MODEL:=true}"
 : "${SMOKE_REQUIRE_EMBED:=true}"
 
@@ -170,6 +193,12 @@ xff_check() {
   echo "  TRUST_PROXY names only the proxy hop (never 'true') with TRUST_PROXY_HOPS=1 in deploy/.env."
   exit 1
 }
+
+# Everything above is argument handling and pure functions; everything below talks to a stack.
+# `deploy/smoke-check.sh` sources this file with SMOKE_LIB_ONLY=1 to exercise the first half
+# without needing the second — `return` outside a sourced file is an error, hence the guard's
+# shape, and a direct run never sets the variable.
+if [ "${SMOKE_LIB_ONLY:-}" = "1" ]; then return 0; fi
 
 for i in $(seq 1 60); do
   body=$(curl -ksS "$base/api/v1/system/health" || true)

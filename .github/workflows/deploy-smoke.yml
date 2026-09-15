@@ -41,10 +41,15 @@ jobs:
       - name: materialize deploy/.env for compose
         run: cp deploy/ci.env deploy/.env
 
-      - name: validate nginx.conf, ollama-pull.sh, INSTALL.md
+      # smoke-check.sh covers the half of deploy/smoke.sh that this job's own smoke run cannot: how
+      # it reads its argument (this workflow always spells the origin correctly) and how it reports
+      # a backup status (this stack always has the same one). Both were operator-walkthrough
+      # findings — W-7 and W-9.
+      - name: validate nginx.conf, ollama-pull.sh, smoke.sh, INSTALL.md
         run: |
           deploy/nginx-check.sh
           deploy/ollama-pull-check.sh
+          deploy/smoke-check.sh
           deploy/install-check.sh
 
       - name: validate compose config
