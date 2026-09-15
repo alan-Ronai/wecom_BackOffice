@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { PROMPT_VERSION } from '@wecom/model';
 import { MODEL_TIER_PRESETS } from '@wecom/shared';
 import {
   currentPromptVersion,
@@ -41,7 +42,13 @@ describe('AI settings', () => {
     expect(s.style.version).toBe(0);
     expect(db.calls).toHaveLength(1); // one `= any($1)`, not four round trips
   });
-  it('the prompt version is v3 plus the two text versions', () => {
+  /**
+   * The prefix tracks `PROMPT_VERSION`, so shipping `propose-v5` restamps provenance without
+   * anyone remembering to edit a literal — the bug the fix wave left behind when `propose-v4`
+   * landed and the stamp kept saying `v3`.
+   */
+  it('the prompt version is the PROMPT_VERSION family plus the two text versions', () => {
+    expect(PROMPT_VERSION).toBe('propose-v4');
     expect(
       currentPromptVersion({
         brief: { text: 'a', version: 4 },
@@ -49,7 +56,7 @@ describe('AI settings', () => {
         models: MODEL_TIER_PRESETS[1] as never,
         limits: { chatPerUserPerHour: 60, maxContextChars: 24000 },
       } as never),
-    ).toBe('v3.4.2');
+    ).toBe('v4.4.2');
   });
   /**
    * A-I5. The models block used to be writable and displayed and read by nothing that runs:
@@ -97,7 +104,7 @@ describe('AI settings', () => {
     const db = fakeDb([{ key: 'ai.brief', value: { text: 'ישן', version: 1 } }]);
     const s = await putAiSettings(db as never, { brief: { text: 'חדש' } }, 'u1');
     expect(s.brief).toEqual({ text: 'חדש', version: 2 });
-    expect(currentPromptVersion(s)).toBe('v3.2.0');
+    expect(currentPromptVersion(s)).toBe('v4.2.0');
     const versions = written(db, 'ai_setting_versions');
     expect(versions).toHaveLength(1);
     expect(versions[0]?.values?.slice(0, 2)).toEqual(['ai.brief', 2]);

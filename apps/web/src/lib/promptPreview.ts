@@ -12,14 +12,18 @@ export const ARCHITECTURE_BLOCK = [
 ].join('\n');
 
 /**
- * The prompt version the two editable blocks add up to — the same `v3.<brief>.<style>` the API
+ * The prompt version the two editable blocks add up to — the same `v4.<brief>.<style>` the API
  * stamps on every suggestion and message, so an admin can read a row in the eval table or the
  * analytics breakdown and know which text produced it.
+ *
+ * The API derives the `v4` from `PROMPT_VERSION` (`propose-v4`) in `@wecom/model`, which the web
+ * bundle does not depend on — this literal is the mirror, and it has to move with it, or the
+ * preview shows an admin a version string that appears in no row they can look up.
  */
-export const promptVersionOf = (s: AiSettings): string => `v3.${s.brief.version}.${s.style.version}`;
+export const promptVersionOf = (s: AiSettings): string => `v4.${s.brief.version}.${s.style.version}`;
 
 /**
- * Client-side rendering of the v3 system-prompt layout, for the admin preview.
+ * Client-side rendering of the system-prompt layout, for the admin preview.
  *
  * The API assembles the real prompt (it also has the retrieved context, the impact set and the
  * few-shot examples, none of which belong in a settings screen). What this has to be honest about

@@ -2,7 +2,7 @@
  * Wave 6 (X0) — the one reader/writer for the admin-editable AI settings. Mirrors wave 5's
  * `workflowSettings.ts`: the stored JSON is a *patch*, never the full object, so every key a
  * later lane adds to `AiSettingsSchema` reads back as its default with no migration and no
- * backfill. X1 reads `brief`/`style`/`limits` to assemble the v3 prompt, X2 reads `limits`
+ * backfill. X1 reads `brief`/`style`/`limits` to assemble the system prompt, X2 reads `limits`
  * for the rate limit and the context budget, X4b serves `/admin/ai`.
  *
  * Unlike `workflow`, this lives in **four** `app_settings` rows (`ai.brief`, `ai.style`,
@@ -12,6 +12,7 @@
  * stamps onto each suggestion and each message. Without it, "the model got worse" is an
  * unanswerable question.
  */
+import { PROMPT_VERSION } from '@wecom/model';
 import {
   AI_SETTINGS_KEYS,
   AiSettingsSchema,
@@ -97,13 +98,21 @@ export async function getAiSettings(q: Queryable, slots?: ModelSlots): Promise<A
 }
 
 /**
- * The prompt version every suggestion and every message records: `v3.<brief>.<style>`.
- * v3 is the wave 6 system prompt itself (spec §1.7); the two numbers are what an admin
- * changed since. A prompt-quality regression is then attributable to a row in
+ * `propose-v4` → `v4`: the stamp carries the prompt *family*, not the file name. Derived from
+ * `PROMPT_VERSION` rather than written out, because the literal `v3` outlived the v3 prompt —
+ * the fix wave shipped `propose-v4` and every suggestion kept recording provenance for a prompt
+ * that no longer runs, which is exactly the question the stamp exists to answer.
+ */
+const PROMPT_FAMILY = PROMPT_VERSION.slice(PROMPT_VERSION.lastIndexOf('-') + 1);
+
+/**
+ * The prompt version every suggestion and every message records: `v4.<brief>.<style>`.
+ * The prefix is the wave 6 system prompt itself (spec §1.7, now `propose-v4`); the two numbers
+ * are what an admin changed since. A prompt-quality regression is then attributable to a row in
  * `ai_setting_versions` rather than to a hunch.
  */
 export const currentPromptVersion = (settings: AiSettings): string =>
-  `v3.${settings.brief.version}.${settings.style.version}`;
+  `${PROMPT_FAMILY}.${settings.brief.version}.${settings.style.version}`;
 
 /**
  * Deep-merges `patch` into the stored rows and upserts the ones that changed, returning the
