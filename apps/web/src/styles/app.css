@@ -1,6 +1,10 @@
 /* wecom KB — design tokens & components
    Brand DNA: navy #1F2E3B · wecom red #FF3D00 · IBM Plex Sans Hebrew (proposed) / Rubik (legacy) */
-@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+/* The three families are self-hosted and loaded from `src/styles/fonts.ts`, which `main.tsx`
+   imports ahead of this file. They used to arrive through an `@import url(…)` of a Google Fonts
+   stylesheet here, which the deployed CSP refused and a LAN VM could not reach in any case — so
+   the product rendered in system fallbacks everywhere (walkthrough W-5). The fallback chains
+   below stay exactly as they were: they are what renders while a face is still loading. */
 
 :root {
   --font: 'IBM Plex Sans Hebrew', Rubik, system-ui, sans-serif;
