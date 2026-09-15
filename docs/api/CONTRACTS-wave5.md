@@ -46,13 +46,13 @@ Runtime holders are wave 4's, unchanged: `app.notifier`, `app.taxonomy`, `app.us
 |---|---|---|---|---|
 | GET | `/learning/items` | `LearningItemsQuerySchema` | `LearningItemsResponseSchema` (without `learning.manage`, published only) | learning.read |
 | POST | `/learning/items` | `LearningItemCreateSchema` | `LearningItemSchema` | learning.manage |
-| GET | `/learning/items/:id` | — | `LearningItemSchema` | learning.read |
+| GET | `/learning/items/:id` | — | `LearningItemSchema`; without `learning.manage` the questions are projected through the player shape — `options[].correct` is `false` on every option and `explanation`/`generated`/`modelConf` are empty (A-C1) | learning.read |
 | PATCH | `/learning/items/:id` | `LearningItemPatchSchema` | `LearningItemSchema` | learning.manage |
 | DELETE | `/learning/items/:id` | — | 204 (soft delete) | learning.manage |
 | PUT | `/learning/items/:id/entries` | `PutEntriesBodySchema` | `LearningItemSchema` (briefing; published documents only) | learning.manage |
-| PUT | `/learning/items/:id/questions` | `PutQuestionsBodySchema` | `LearningItemSchema` (quiz) | learning.manage |
+| PUT | `/learning/items/:id/questions` | `PutQuestionsBodySchema` | `LearningItemSchema` (quiz). `kind: 'free'` is refused with 400 `UNSUPPORTED_KIND` — no surface grades free text; the schema keeps the value for a later wave. An incoming `id` is preserved, so an edit does not orphan stored attempt answers | learning.manage |
 | POST | `/learning/items/:id/generate` | `GenerateQuestionsBodySchema` | `GenerateQuestionsResponseSchema` (model + rule fallback; not saved until PUT) | learning.manage |
-| POST | `/learning/items/:id/publish` | `LearningPublishBodySchema` | `LearningVersionSchema` (snapshots `sourceVersions` = every referenced document's `current_version`) | learning.publish |
+| POST | `/learning/items/:id/publish` | `LearningPublishBodySchema` | `LearningPublishResponseSchema` `{ item, version }` (snapshots `sourceVersions` = every referenced document's `current_version`); the version history stays at `GET /learning/items/:id/versions` | learning.publish |
 | GET | `/learning/items/:id/versions` | — | `LearningVersionsResponseSchema` | learning.read |
 | GET | `/learning/items/:id/preview` | — | `PlayerItemSchema` (agent view) | learning.read |
 
@@ -73,6 +73,8 @@ Runtime holders are wave 4's, unchanged: `app.notifier`, `app.taxonomy`, `app.us
 | GET | `/learning/items/:id/completion` | — | `CompletionResponseSchema` | learning.manage, world-scoped |
 | GET | `/learning/dashboard` | `?world` | `LearningDashboardSchema` | learning.manage, world-scoped |
 | GET | `/documents/:id/learning` | — | `DocumentLearningSchema` (`refreshAssignmentId` = the caller's open refresh assignment, else null) | docs.read |
+| GET | `/documents/:id/change-preview` | — | `ChangePreviewSchema` — the verdict a publish *would* record, written by nothing | docs.publish |
+| GET | `/learning/audience-options` | — | `AudienceOptionsSchema` (role names/labels and active worlds; no permission grants) | learning.manage |
 | POST | `/documents/:id/publish` | + `PublishBodySchema.significantChange` | + `PublishResponseSchema.changeFlag` | docs.publish |
 
 A significant change invalidates the completions of every learning item referencing the document and creates refresh assignments due in `workflow.learning.refreshDueDays`, each with a `learning` notification.

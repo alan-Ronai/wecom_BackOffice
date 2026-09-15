@@ -116,6 +116,34 @@ export async function getItem(q: Q, id: string): Promise<LearningItem | null> {
   return (await assemble(q, r.rows, await needsUpdateFor(q, [id])))[0];
 }
 
+/**
+ * A-C1: the answer key never leaves the authoring view.
+ *
+ * `GET /learning/items/:id` is `learning.read`, which 0038 grants to the `agent` role, and
+ * `canSee` lets a non-manager see any *published* item — which is the state every assigned quiz
+ * is in. Returned verbatim, `LearningItemSchema.questions[].options[].correct` handed every agent
+ * `correct: true` for every question before attempt #1, and `explanation` with it. The player
+ * (`tracking/repo.playerItem`) and the preview both strip it; this route was the hole between
+ * them.
+ *
+ * The response schema stays `LearningItemSchema` so the contract shape does not fork per caller;
+ * what changes is that for a non-manager every answer-bearing field reads as its empty value —
+ * `correct: false` on every option, no `explanation`, and no authoring provenance (`generated`,
+ * `modelConf`), which is the same projection `PlayerQuestionSchema` expresses by omission.
+ */
+export function projectForLearner(item: LearningItem): LearningItem {
+  return {
+    ...item,
+    questions: item.questions.map((q) => ({
+      ...q,
+      options: q.options.map((o) => ({ ...o, correct: false })),
+      explanation: '',
+      generated: false,
+      modelConf: null,
+    })),
+  };
+}
+
 /* ── visibility & scope (spec §1.8 + world scope) ──────────────────────── */
 /** Worlds an item belongs to: its own world_slug, else the union of its referenced documents' worlds. */
 export async function worldsOfItem(q: Q, id: string): Promise<string[]> {

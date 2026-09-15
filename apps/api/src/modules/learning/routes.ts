@@ -107,7 +107,13 @@ export default async function learningRoutes(app: FastifyInstance) {
       config: { requires: ['learning.read'] },
       schema: { tags: ['learning'], params: Params, response: { 200: LearningItemSchema } },
     },
-    async (req) => visible((req.params as z.infer<typeof Params>).id, requireUser(req)),
+    async (req) => {
+      const user = requireUser(req);
+      const item = await visible((req.params as z.infer<typeof Params>).id, user);
+      // A-C1: a non-manager reads the authoring view through the player projection — no answer
+      // key, no explanation, no model provenance. Managers see the item they are building.
+      return repo.viewerOf(user).manage ? item : repo.projectForLearner(item);
+    },
   );
 
   app.patch(

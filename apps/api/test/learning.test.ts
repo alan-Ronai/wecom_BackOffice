@@ -307,6 +307,38 @@ run('learning content', () => {
     ).json();
     expect(prev.item.id).toBe(item.id);
     expect(prev.questions[0].options[0]).toEqual({ id: 'o1', text: 'חסימה' });
+    /**
+     * A-C1: and the *authoring* view is not the escape hatch. `learning.read` is the agent role's
+     * permission and a published item is visible to them, so `GET /learning/items/:id` used to
+     * hand out `correct: true` — the whole answer key, one request before attempt #1.
+     */
+    const asAgent = (
+      await app.inject({
+        method: 'GET',
+        url: `/api/v1/learning/items/${item.id}`,
+        headers: auth(agent),
+      })
+    ).json();
+    expect(asAgent.questions[0].options.map((o: { correct: boolean }) => o.correct)).toEqual([
+      false,
+      false,
+    ]);
+    expect(asAgent.questions[0].explanation).toBe('');
+    expect(asAgent.questions[0].generated).toBe(false);
+    expect(asAgent.questions[0].modelConf).toBeNull();
+    // The manager building it still sees everything.
+    const asManager = (
+      await app.inject({
+        method: 'GET',
+        url: `/api/v1/learning/items/${item.id}`,
+        headers: auth(editor),
+      })
+    ).json();
+    expect(asManager.questions[0].options.map((o: { correct: boolean }) => o.correct)).toEqual([
+      true,
+      false,
+    ]);
+    expect(asManager.questions[0].explanation).toBe('כי כן');
     // republish after editing a document bumps the pinned version
     const doc = (
       await app.inject({ method: 'GET', url: `/api/v1/documents/${pubDoc}`, headers: auth(lead) })
