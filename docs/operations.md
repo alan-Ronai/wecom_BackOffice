@@ -141,3 +141,72 @@ Loads a realistic 5,000-document fixture into a throwaway Postgres
 (`apps/api/scripts/load-fixture.ts`, also runnable standalone with `load:fixture --docs N` for
 manual poking) and prints a p50/p95 table, failing if any endpoint exceeds its threshold. Runs in
 CI (`ci.yml`'s `perf` job) on every push.
+
+## Trusting X-Forwarded-For
+
+`nginx` sets `X-Forwarded-For $proxy_add_x_forwarded_for`, which **appends** the connecting
+address to whatever the client sent rather than replacing it, and `TRUST_PROXY` then tells the API
+how far out to unwind that list. With the prescribed `TRUST_PROXY=172.16.0.0/12` (the docker
+bridge range) the API resolves `req.ip` to the left-most address the bridge did not add — which is
+right when there is a second proxy in front, and means that a client able to reach nginx directly
+can also *choose* the address the API sees, by sending an `X-Forwarded-For` of its own.
+
+What that address decides:
+
+- the Palo Alto subnet allowlist (`PALOALTO_SUBNETS`) — so a client on the LAN can ask the
+  firewall about an address other than its own, and be signed in as whoever holds it;
+- the per-IP auth rate-limit buckets;
+- the `audit_log.ip` and `sessions.ip` columns.
+
+For the pilot — one VM on a closed LAN, behind the same firewall that answers the User-ID
+lookups — this is an accepted risk rather than a hole: the attacker must already be inside, and
+can only become a user the firewall maps to an address in `PALOALTO_SUBNETS`. It stops being
+acceptable the moment the VM is reachable from a wider network. Two things to do then, in order:
+
+1. keep `TRUST_PROXY` naming the bridge (never `true`, which trusts an `X-Forwarded-For` from any
+   peer, including a client that bypasses nginx entirely);
+2. make nginx **replace** rather than append, by changing `deploy/nginx.conf`'s two
+   `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for` lines to `$remote_addr`. Do this
+   only when nothing legitimate sits in front of nginx, since it discards a real upstream proxy's
+   client address too.
+
+`pnpm e2e:compose` relies on the current behaviour to play a LAN client from a laptop (see below),
+so `apps/web/e2e/compose/lan-identity.spec.ts` is the thing that goes red when this changes.
+
+## The Compose end-to-end gate
+
+```bash
+pnpm e2e:compose               # the whole gate, ~15–25 min cold
+KEEP_STACK=1 pnpm e2e:compose  # …and leave the stack up to poke at
+E2E_SKIP_BUILD=1 pnpm e2e:compose -- --grep "firewall"   # rerun one spec against built images
+```
+
+`scripts/e2e-compose.mjs` brings up `deploy/docker-compose.yml` + `docker-compose.ci.yml` +
+`docker-compose.e2e.yml` under its own compose project (`wecom-kb-e2e`, so `down -v` can never
+touch a pilot stack), waits for `modelStatus.tagPresent` the way `deploy/smoke.sh` does, seeds the
+library, creates a break-glass admin and a LAN user, and runs `apps/web/e2e/compose/` against
+`https://localhost:8443`. It covers what neither `deploy-smoke` nor `pnpm e2e:real` can see:
+
+- TLS and the five security headers on the document, a hashed `/assets/*` bundle and an API call,
+  plus the HTTP→HTTPS redirect;
+- the **Palo Alto User-ID fallback** end to end — a browser with no session lands in the library
+  as the firewall's user with the role the deployment granted, an address the firewall cannot name
+  stays signed out, and an address outside `PALOALTO_SUBNETS` never reaches the firewall at all;
+- an editorial round trip (create → publish → search → article) through the proxy;
+- the two-way WordPress loop, with the connector's outbound call leaving the api *container* and
+  being checked against `CONNECTOR_HOST_ALLOWLIST`.
+
+Requirements: Docker with compose v2, `openssl`, `curl`, `lsof`, a Chromium for Playwright
+(`pnpm --filter @wecom/web exec playwright install chromium`), and free TCP ports 8443, 8080, 8186
+and 8085 — the first two are hard-coded in `docker-compose.ci.yml`, because compose concatenates
+`ports` across overlay files instead of replacing them. Roughly 6 GB of disk for the images, the
+Ollama layer and the small model.
+
+Two stubs stand in for systems a test machine does not have: `scripts/paloalto-stub.mjs` (the
+PAN-OS XML API, with a `/_control/*` plane the specs use to see which addresses were looked up)
+and `scripts/wp-stub.mjs` (the same WordPress fake the connector unit tests use). Everything else
+is the product. `deploy/e2e.env` holds the configuration and is copied over `deploy/.env` for the
+run; whatever was there is moved to `deploy/.env.before-e2e` and put back on the way out.
+
+In CI it is `.github/workflows/deploy-e2e.yml`: on `main`, nightly, and on demand — not on every
+pull request, where `deploy-smoke` already builds the same images.

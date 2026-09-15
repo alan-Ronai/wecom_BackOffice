@@ -1,0 +1,63 @@
+# The Compose end-to-end overlay, applied on top of docker-compose.yml *and* docker-compose.ci.yml
+# by `scripts/e2e-compose.mjs` (`pnpm e2e:compose`).
+#
+# The point of this stack is that nothing about the product is replaced: nginx terminates TLS in
+# front, the API and Postgres and Ollama are the same containers a pilot runs, and the only things
+# added are the two systems a pilot has that a test machine does not — the Palo Alto firewall whose
+# User-ID table identifies LAN clients, and a WordPress instance to sync with.
+#
+# Hand-formatted, like the other two compose files, and listed in .prettierignore for the same
+# reason.
+services:
+  ollama:
+    # Back to the production value, over docker-compose.ci.yml's 1 m. That file is tuned for a
+    # smoke test that never runs inference and does not want a model sitting in a runner's RAM;
+    # this gate imports a WordPress post through the real pipeline, and a one-minute keep-alive
+    # makes it pay the model load again between the proposer's two attempts.
+    environment: { OLLAMA_KEEP_ALIVE: 30m, OLLAMA_NUM_PARALLEL: 1, OLLAMA_MAX_LOADED_MODELS: 1 }
+
+  # The PAN-OS XML API the API's LAN fallback asks "who is at this address?". A bare node image
+  # with `scripts/paloalto-stub.mjs` bind-mounted: the stub has no dependencies precisely so that
+  # no image has to be built for it. Its control plane (/_control/*) is published to the host so a
+  # spec can decide what the firewall answers; the API talks to :8086 over the compose network.
+  paloalto:
+    image: node:22-alpine
+    command: ["node", "/paloalto-stub.mjs"]
+    environment:
+      PALOALTO_STUB_PORT: "8086"
+      PALOALTO_STUB_KEY: "${PALOALTO_API_KEY}"
+      PALOALTO_STUB_MAPPINGS: "${PALOALTO_STUB_MAPPINGS:-}"
+    volumes: ["../scripts/paloalto-stub.mjs:/paloalto-stub.mjs:ro"]
+    ports: ["${PALOALTO_STUB_HOST_PORT:-8186}:8086"]
+    # No restart policy: if the stub cannot start, the run should stop and say so rather than
+    # loop while the identity specs time out against a port nothing is listening on.
+    restart: "no"
+
+  # The WordPress stub — the same module the connector unit tests use, run by `tsx` out of the
+  # api image (which carries the whole workspace, `packages/connectors/test` included) with only
+  # the runner script bind-mounted. `WP_STUB_PUBLIC_PORT` puts a forwarder on 0.0.0.0 in front of
+  # it, because `startWpStub` itself binds 127.0.0.1 and would be unreachable from the api
+  # container. Reached as `http://wp:8085`, which is why CONNECTOR_HOST_ALLOWLIST names `wp`.
+  wp:
+    image: wecom-kb-api
+    entrypoint: ["pnpm", "--filter", "@wecom/api", "exec", "tsx", "/app/scripts/wp-stub.mjs"]
+    environment: { WP_STUB_PUBLIC_PORT: "8085" }
+    volumes: ["../scripts/wp-stub.mjs:/app/scripts/wp-stub.mjs:ro"]
+    # Published as well as reachable on the compose network: the round-trip spec has to edit a
+    # post "in WordPress" from outside the stack, the way an author would.
+    ports: ["${WP_STUB_HOST_PORT:-8085}:8085"]
+    # Ordering only: `wp` runs the image the `api` service builds.
+    depends_on: [api]
+    # …and inherits that image's HEALTHCHECK, which probes the API on :3000 and would mark this
+    # container permanently unhealthy. Nothing depends on it; switch it off rather than leave a
+    # red container in `docker compose ps` for whoever debugs a run.
+    healthcheck: { disable: true }
+    restart: "no"
+
+  api:
+    # The fallback client is constructed at boot from these, so they have to be right before the
+    # first request rather than settable later (see deploy/e2e.env for the values and why).
+    depends_on:
+      db: { condition: service_healthy }
+      ollama: { condition: service_healthy }
+      paloalto: { condition: service_started }

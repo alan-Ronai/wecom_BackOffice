@@ -75,7 +75,7 @@ Request a server certificate for `PUBLIC_URL`'s host from the internal CA (`depl
 Ask IT for an app registration: Web platform, redirect URI = `OIDC_REDIRECT_URI`, ID tokens enabled, optional claim `groups` (security groups), API permission `GroupMember.Read.All` (application, admin-consented) for the nightly sync. Put `OIDC_ISSUER` (`https://login.microsoftonline.com/<tenant-id>/v2.0`), `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` in `deploy/.env`, restart `api`, and map groups to roles in the admin UI (`/admin/groups-map`).
 
 ## Palo Alto User-ID fallback
-Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST` (firewall management address), `PALOALTO_API_KEY` (from `https://<fw>/api/?type=keygen&user=…&password=…` with a read-only admin), and `PALOALTO_SUBNETS` (comma-separated CIDRs allowed to auto-login). `PALOALTO_SCHEME` (default `https`) selects the scheme used to reach the firewall's API — leave it as `https` in every real deployment; `http` exists only so the test suite can run a local stub firewall. The API asks the firewall which user owns the caller's IP and signs that user in. Roles for such users are assigned in `/admin/users`.
+Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST` (firewall management address), `PALOALTO_API_KEY` (from `https://<fw>/api/?type=keygen&user=…&password=…` with a read-only admin), and `PALOALTO_SUBNETS` (comma-separated CIDRs allowed to auto-login). `PALOALTO_SCHEME` (default `https`) selects the scheme used to reach the firewall's API — leave it as `https` in every real deployment; `http` exists only so the test suite can run a local stub firewall. The API asks the firewall which user owns the caller's IP and signs that user in. Roles for such users are assigned in `/admin/users`. A firewall-identified user arrives with **no roles at all**, so nothing is visible until one is granted — grant it before telling agents the link works, or their first visit is an empty library. The whole path (a browser with no session landing in the library as the firewall's user, an unknown address staying signed out, and an address outside `PALOALTO_SUBNETS` never reaching the firewall) is exercised by `pnpm e2e:compose`; see "Verifying a release on the real stack" below and `docs/operations.md`.
 
 ## WordPress connector
 1. Generate the config-encryption key once and put it in `deploy/.env`: `CONNECTOR_KEY=$(openssl rand -hex 32)`. Connector configs are stored AES-256-GCM encrypted with it — rotating the key makes existing connectors unreadable, so keep it with the database backups.
@@ -89,6 +89,27 @@ Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST`
 
 ## Performance
 §11 of the design spec requires library reads under 300 ms and search under 500 ms (p95) at 5,000 documents. `apps/api/scripts/load-fixture.ts` (`pnpm --filter @wecom/api load:fixture --docs 5000`) generates a realistic fixture library directly with SQL (varied categories/waves, 5–15 steps, CRM references, shared blocks, cross-document links); `apps/api/scripts/perf-check.ts` (`pnpm --filter @wecom/api perf:check`) loads that fixture into a throwaway Postgres and measures `GET /documents`, `GET /documents/:id` and `GET /search` (Hebrew and Latin terms) against it, failing if any p95 exceeds its threshold. Both run in CI (the `build` job) on every push.
+
+## Verifying a release on the real stack
+`deploy/smoke.sh` answers "is it up?". `pnpm e2e:compose` answers "does it work?" — it builds the
+images, brings this same compose stack up under its own project name (`wecom-kb-e2e`, so it can
+never touch the pilot's volumes), and drives a browser through nginx over TLS: the security
+headers on the document and on a hashed asset, the Palo Alto fallback signing a LAN client in with
+the role it was granted, an editorial round trip (create → publish → search → article), and the
+two-way WordPress loop. Two stubs stand in for the firewall and for WordPress
+(`scripts/paloalto-stub.mjs`, `scripts/wp-stub.mjs`); everything else is the product.
+
+Run it on a build machine, not on the pilot VM — it wants Docker with compose v2, `openssl`,
+`curl`, `lsof`, a Playwright Chromium, TCP ports 8443/8080/8186/8085 free and about 6 GB of disk,
+and it takes 15–25 minutes from cold (about 8 with `E2E_SKIP_BUILD=1` on unchanged images).
+`KEEP_STACK=1` leaves it running to poke at. It is also `.github/workflows/deploy-e2e.yml`, which
+runs on `main`, nightly, and on demand. Configuration lives in `deploy/e2e.env` and is copied over
+`deploy/.env` for the duration; whatever was there is moved to `deploy/.env.before-e2e` and
+restored afterwards. Full description in `docs/operations.md`.
+
+Note that the gate plays a LAN client by sending its own `X-Forwarded-For`, which the shipped
+`nginx.conf` preserves — read `docs/operations.md`, "Trusting X-Forwarded-For", before exposing
+the VM beyond the LAN.
 
 ## Troubleshooting
 - `health` shows `db:false` → `docker compose logs db`; check `POSTGRES_PASSWORD` matches in `.env`.
