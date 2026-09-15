@@ -15,7 +15,7 @@
  * 3. `asset_refs` (B-M15) — the join table the asset gc was supposed to read. Wave 4 got as far
  *    as one regexp pass per HTML row instead of an assets × versions cross product; the row it
  *    parked was "a real join table maintained on save". It is maintained by triggers rather than
- *    by the four write paths, which is both cheaper and stricter: no future writer can forget,
+ *    by the five write paths, which is both cheaper and stricter: no future writer can forget,
  *    and a bulk `update` cannot slip past.
  *
  * `down` reverses everything so `migrations.test.ts`'s full rollback stays green.
@@ -31,13 +31,29 @@ const ASSET_REF_RE = '/api/v1/assets/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
  * every 3 s and an image is uploaded the moment it is pasted, long before "שמור גרסה" writes a
  * version — an editor who pasted screenshots on Monday and saved the following week would
  * otherwise lose them to Sunday's run, permanently, because `assets` is the only copy.
+ *
+ * `document_versions` is on the list for the same reason one step further out (post-pilot H1).
+ * `publishDocument` freezes the whole document — `bodyHtml` included — into
+ * `document_versions.snapshot`, and `restoreVersion` replays that snapshot. A document whose
+ * current `body_html` no longer names an image therefore still references it *from every frozen
+ * version that did*, and the gc must see that: without this owner the asset is unreferenced
+ * 24 hours after the edit that removed it, gets collected, and restoring v5 brings back HTML
+ * whose every `<img>` is a 404 — permanently, because `assets` is the only copy.
  */
 const OWNERS = [
   ['document', 'documents', 'body_html'],
+  ['document_version', 'document_versions', 'snapshot', 'bodyHtml'],
   ['source_document', 'source_documents', 'html'],
   ['source_document_version', 'source_document_versions', 'html'],
   ['draft', 'drafts', 'payload', 'html'],
 ];
+
+/**
+ * Owners whose watched column is never updated in place. A version row is written once and
+ * read forever, so its trigger is `after insert or delete` — an `update of snapshot` arm would
+ * only advertise a write path that does not exist.
+ */
+const APPEND_ONLY = new Set(['document_versions']);
 
 exports.up = (pgm) => {
   // ── 1. webhook replay protection (I7) ──────────────────────────────────
@@ -147,7 +163,7 @@ exports.up = (pgm) => {
     {
       asset_id: { type: 'uuid', notNull: true, references: 'assets', onDelete: 'cascade' },
       owner_kind: { type: 'text', notNull: true },
-      // Deliberately not a foreign key: it addresses one of four tables. Every one of them
+      // Deliberately not a foreign key: it addresses one of five tables. Every one of them
       // cascade-deletes its rows, and the `after delete` trigger below clears the refs with
       // them, so nothing is left dangling.
       owner_id: { type: 'uuid', notNull: true },
@@ -166,7 +182,7 @@ exports.up = (pgm) => {
            $$ language sql immutable`);
 
   /*
-   * One trigger function for all four owners. `tg_argv[0]` is the owner kind and the rest is a
+   * One trigger function for all five owners. `tg_argv[0]` is the owner kind and the rest is a
    * path into `to_jsonb(new)` — `body_html` for a document, `payload`/`html` for a draft — which
    * is what lets a single function serve columns that are not even the same type.
    *
@@ -198,8 +214,9 @@ exports.up = (pgm) => {
 
   for (const [kind, table, ...path] of OWNERS) {
     const args = [kind, ...path].map((a) => `'${a}'`).join(', ');
+    const events = APPEND_ONLY.has(table) ? 'insert or delete' : `insert or delete or update of ${path[0]}`;
     pgm.sql(`create trigger ${table}_asset_refs_trg
-               after insert or delete or update of ${path[0]} on ${table}
+               after ${events} on ${table}
                for each row execute function asset_refs_sync(${args})`);
   }
 

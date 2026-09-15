@@ -180,6 +180,13 @@ run('0045 — asset_refs (B-M15)', () => {
         [href(1)],
       )
     ).rows[0].id;
+    // H1: a version frozen before the migration existed. Its `bodyHtml` is the only thing that
+    // still names this image, and the backfill has to find it.
+    await mkAsset(7);
+    await pool.query(
+      `insert into document_versions(document_id, version, snapshot, label) values ($1, 99, $2, 'legacy')`,
+      [docId, JSON.stringify({ id: docId, title: 'מסמך', bodyHtml: href(7) })],
+    );
     await migrate(c.getConnectionUri(), 'up');
   }, 240000);
 
@@ -259,5 +266,38 @@ run('0045 — asset_refs (B-M15)', () => {
     expect(await refsOf(5)).toEqual([]);
     expect(await gcUnreferencedAssets(pool)).toBe(0);
     expect(await alive(5)).toBe(true);
+  });
+
+  /**
+   * Post-pilot H1. `publishDocument` freezes `bodyHtml` into `document_versions.snapshot` and
+   * `restoreVersion` replays it, so a frozen version is a reference exactly like the live column.
+   * Without this owner an image removed from the current body is unreferenced a day later, gets
+   * collected, and every `<img>` in the version that still names it 404s for good.
+   */
+  it('counts a frozen version snapshot as a reference, so a restore is not a wall of 404s', async () => {
+    await mkAsset(6);
+    await pool.query(
+      `insert into document_versions(document_id, version, snapshot, label)
+         values ($1, 1, $2, 'v1')`,
+      [docId, JSON.stringify({ id: docId, title: 'מסמך', bodyHtml: href(6) })],
+    );
+    expect(await refsOf(6)).toEqual(['document_version']);
+    // The live document never named it, so only the snapshot is holding it — and that is enough.
+    expect(await gcUnreferencedAssets(pool)).toBe(0);
+    expect(await alive(6)).toBe(true);
+
+    // Dropping the version releases it again: nothing references it and nothing is left dangling.
+    await pool.query(`delete from document_versions where document_id=$1 and version=1`, [docId]);
+    expect(await refsOf(6)).toEqual([]);
+    expect(await gcUnreferencedAssets(pool)).toBe(1);
+    expect(await alive(6)).toBe(false);
+  });
+
+  /**
+   * The backfill half of H1: a version frozen before 0045 ran must be found too, or the first
+   * gc pass after the deploy collects everything only old versions still point at.
+   */
+  it('backfills references out of version snapshots written before the migration', async () => {
+    expect(await refsOf(7)).toEqual(['document_version']);
   });
 });

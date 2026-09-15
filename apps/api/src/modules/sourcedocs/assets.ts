@@ -121,12 +121,12 @@ export async function getAsset(
  * Deletes assets nothing references any more.
  *
  * B-M15: the references come from `asset_refs`, which `0045` maintains with a trigger on each of
- * the four columns an image can be referenced from. Wave 4 got as far as one regexp pass per HTML
+ * the five columns an image can be referenced from. Wave 4 got as far as one regexp pass per HTML
  * row per run — better than the assets × versions cross product it replaced, but still a full
  * scan of the source corpus every week, and still a computation of something the database could
  * simply have known. Now the gc reads an index.
  *
- * **`drafts` is one of the four, and has to stay one.** §5.1 autosaves in-progress source HTML
+ * **`drafts` is one of the five, and has to stay one.** §5.1 autosaves in-progress source HTML
  * into `drafts` under `source:<documentId>` every 3 s, and an image is uploaded to `/assets` the
  * moment it is pasted — long before "שמור גרסה" writes a version. The 24-hour floor only bought
  * a day, so an editor who pasted screenshots on Monday and saved the version the following week
