@@ -55,15 +55,28 @@ test('W6-E2E-2 an agent asks and is answered, cannot make the assistant write, a
   const convId = convs.items[0].id as string;
   const conv = await (await api.get(`/api/v1/ai/conversations/${convId}`)).json();
   expect(conv.conversation.kind).toBe('article');
+  /*
+   * The model is allowed to *ask* for a write tool — it is not the thing that holds the policy,
+   * and the persisted transcript records what it asked for. What must never happen is the tool
+   * running: the server's tier gate refuses it, so no write tool result succeeds and no
+   * proposed-edit row exists. Asserting the absence of the tool *call* would have tested the
+   * model's manners instead of the gate.
+   */
+  const WRITE_TOOLS = ['propose_source_edit', 'refine_suggestion', 'draft_step'];
+  const results = conv.messages.flatMap(
+    (m: { toolResults?: { name: string; ok: boolean }[] }) => m.toolResults ?? [],
+  ) as { name: string; ok: boolean }[];
   expect(
-    conv.messages.some((m: { toolCalls?: { name: string }[] }) =>
-      m.toolCalls?.some((t) => t.name === 'propose_source_edit'),
-    ),
-    'an ai.ask caller never reaches a write tool',
-  ).toBeFalsy();
+    results.filter((r) => WRITE_TOOLS.includes(r.name)).every((r) => r.ok === false),
+    'every write tool an ai.ask caller asked for was refused',
+  ).toBeTruthy();
+  expect(
+    results.some((r) => WRITE_TOOLS.includes(r.name)),
+    'and the refusal really happened — the request reached the gate',
+  ).toBeTruthy();
   expect(
     conv.messages.every((m: { proposedEditsId?: string | null }) => !m.proposedEditsId),
-    'and no proposed-edit row was created',
+    'so no proposed-edit row was created',
   ).toBeTruthy();
 
   /* 4. feedback on an answer is recorded (§1.5) ------------------------------ */
