@@ -36,7 +36,11 @@ pnpm --filter @wecom/api perf:check [--docs 5000] [--iterations 40]
 
 What it deliberately does not do is queue. Every request has the database, the pool and the CPU to
 itself, so it measures the best case. That is the right shape for a regression gate and the wrong
-shape for a claim about production.
+shape for a claim about production — and the gap is not small. On the same 5,000-document fixture
+and with migration 0044 applied, `perf:check` reports `GET /search (hebrew)` at **p95 324 ms,
+inside its 500 ms threshold**, while `perf:load` measures the same endpoint at **p95 2,400 ms**
+with 20 clients. Both numbers are correct. `perf:check` passing is not evidence for §11's search
+claim; that is what `perf:load` is for.
 
 ## `perf:load` — the concurrent search profile
 
