@@ -91,7 +91,10 @@ describe('perf-rewrite against the real search() SQL', () => {
     expect(dropped.dropped).toBe(1);
     // One word's set survives, the stopword's becomes a no-op that still references its $n.
     expect((dropped.sql.match(/s\.id in \(/g) ?? []).length).toBe(1);
-    expect(dropped.sql).toContain('$1 is not null');
+    // The cast is load-bearing: `$1 is not null` would be that parameter's only remaining use,
+    // and Postgres answers "could not determine data type of parameter $1" for the whole
+    // statement. The first run of this without the cast failed 501 of 1,949 requests.
+    expect(dropped.sql).toContain('$1::text is not null');
     const placeholders = (sql: string) => [...new Set(sql.match(/\$\d+/g) ?? [])].sort();
     expect(placeholders(dropped.sql)).toEqual(placeholders(steps.sql));
   });

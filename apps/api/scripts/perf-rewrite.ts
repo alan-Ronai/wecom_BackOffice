@@ -104,8 +104,11 @@ export function rewriteStepsToUnion(
     if (tailAt < 0) break;
     const end = tailAt + tail.length;
     if (isStopword(p)) {
-      // Always true, and it keeps `$n` referenced so the bind arity is unchanged.
-      out += rest.slice(0, at) + `(${/\$\d+/.exec(p)?.[0]} is not null)`;
+      // Always true, and it keeps `$n` referenced so the bind arity is unchanged. The `::text`
+      // is required, not cosmetic: `$n is not null` is the only remaining use of that parameter,
+      // and with no other context Postgres cannot infer its type ("could not determine data type
+      // of parameter $n") and the whole statement fails.
+      out += rest.slice(0, at) + `(${/\$\d+/.exec(p)?.[0]}::text is not null)`;
       dropped++;
     } else {
       out +=

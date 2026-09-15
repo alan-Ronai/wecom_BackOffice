@@ -17,8 +17,10 @@
  * Usage:
  *   pnpm --filter @wecom/api perf:load [--docs 5000] [--seconds 60] [--clients 20]
  *                                      [--pool 20] [--seed 42] [--explain] [--out report.json]
- *                                      [--no-gate]
- * `docs/perf.md` documents the flags and how to read the output.
+ *                                      [--no-gate] [--compare]
+ * `docs/perf.md` documents the flags and how to read the output. One warning worth repeating
+ * here: two separate invocations of this script are not comparable — machine state moves the
+ * numbers further than the code under test does. Use `--compare` for any before/after claim.
  */
 import pg from 'pg';
 import { buildApp } from '../src/app.js';
@@ -28,7 +30,7 @@ import fakeAuth from '../test/helpers/fakeAuth.js';
 import { makeUser, auth } from '../test/helpers/fixtures.js';
 import { seedPerfCorpus } from './perf-seed.js';
 import { buildQueryMix, LatencyRecorder, QUERY_CLASSES, type PerfQuery } from './perf-mix.js';
-import { isStepsStatement, maybeRewrite } from './perf-rewrite.js';
+import { maybeRewrite } from './perf-rewrite.js';
 
 const args = process.argv.slice(2);
 const argNum = (name: string, def: number): number => {
@@ -62,6 +64,18 @@ const REWRITE_STEPS = flag('--rewrite-steps');
  * — proposal 2 in the report. Implies `--rewrite-steps`.
  */
 const DROP_STOPWORDS = flag('--drop-stopwords');
+/**
+ * Measure every configuration in one process against one warm database, in the order
+ * A B C C B A, and report each config as the mean of its two passes.
+ *
+ * This exists because separate runs of this script are not comparable on a laptop. Measured
+ * across six separate 60 s runs, throughput for *identical* configurations varied from 10 to 110
+ * req/s depending on what else the machine had been doing and whether a run followed another one
+ * closely — a 10x order effect, which is larger than any of the differences being measured. The
+ * palindrome ordering cancels it: any monotonic drift in machine speed over the sequence hits the
+ * first and last pass of each config symmetrically.
+ */
+const COMPARE = flag('--compare');
 
 /** The three query classes whose statements get an EXPLAIN (ANALYZE, BUFFERS) in the report. */
 const EXPLAIN_TOP_N = 3;
@@ -73,8 +87,21 @@ interface RecordedStatement {
   cls: string;
 }
 
-/** `search_hebrew_stopwords`, loaded once under `--drop-stopwords`; undefined otherwise. */
+/** `search_hebrew_stopwords`, loaded when any phase needs them. */
 let stopwords: ReadonlySet<string> | undefined;
+
+interface Phase {
+  name: string;
+  rewrite: boolean;
+  drop: boolean;
+}
+const PHASES: Record<string, Phase> = {
+  current: { name: 'current (main)', rewrite: false, drop: false },
+  rewrite: { name: 'proposal 1 (steps union)', rewrite: true, drop: false },
+  both: { name: 'proposal 1 + 2 (and stopword drop)', rewrite: true, drop: true },
+};
+/** The phase the pool wrapper is currently applying; swapped between phases of `--compare`. */
+let phase: Phase = PHASES.current;
 
 async function main() {
   console.log(`perf-load: starting Postgres and migrating...`);
@@ -83,17 +110,28 @@ async function main() {
   // concurrency turns the measurement into a queueing experiment on the pool rather than on the
   // query, and a production API would be sized for its own concurrency.
   const pool = new pg.Pool({ connectionString: db.url, max: POOL_MAX });
-  if (DROP_STOPWORDS)
-    stopwords = new Set(
-      (await db.pool.query('select word from search_hebrew_stopwords')).rows.map((r) => r.word as string),
-    );
-  if (REWRITE_STEPS || DROP_STOPWORDS) {
+  stopwords = new Set(
+    (await db.pool.query('select word from search_hebrew_stopwords')).rows.map((r) => r.word as string),
+  );
+  phase = COMPARE
+    ? PHASES.current
+    : DROP_STOPWORDS
+      ? PHASES.both
+      : REWRITE_STEPS
+        ? PHASES.rewrite
+        : PHASES.current;
+  {
     // Swap the statement text on its way out, one layer below `search()`. Text only: the
-    // parameters, their order and their bindings are exactly what `repo.ts` built.
+    // parameters, their order and their bindings are exactly what `repo.ts` built. A no-op for
+    // the `current` phase, so the wrapper itself is not a difference between phases.
     const original = pool.query.bind(pool) as (text: string, params?: unknown[]) => Promise<unknown>;
     (pool as unknown as { query: unknown }).query = (text: string, params?: unknown[]) =>
-      original(typeof text === 'string' ? maybeRewrite(text, { params, stopwords }) : text, params);
-    console.log(`perf-load: measuring the PROPOSED steps predicate${stopwords ? ' + stopword drop' : ''}`);
+      original(
+        typeof text === 'string' && phase.rewrite
+          ? maybeRewrite(text, { params, stopwords: phase.drop ? stopwords : undefined })
+          : text,
+        params,
+      );
   }
   try {
     console.log(`perf-load: seeding ${DOCS} documents...`);
@@ -130,38 +168,93 @@ async function main() {
     const mix = buildQueryMix(PER_CLASS, SEED);
     console.log(`perf-load: query mix = ${mix.length} queries over ${QUERY_CLASSES.length} classes`);
 
-    // Warm up: every query once, sequentially, so the run measures steady state rather than
-    // first-touch page reads and plan caching.
-    console.log('perf-load: warming up...');
-    for (const q of mix) await app.inject({ method: 'GET', url: urlFor(q), headers: headersFor(q) });
-
-    console.log(`perf-load: ${CLIENTS} concurrent clients for ${SECONDS}s (pool max ${POOL_MAX})...`);
-    const rec = new LatencyRecorder();
-    const deadline = Date.now() + SECONDS * 1000;
-    let cursor = 0;
-    let errors = 0;
-    const started = Date.now();
-    const client = async () => {
-      while (Date.now() < deadline) {
-        const q = mix[cursor++ % mix.length];
-        const t0 = performance.now();
-        const res = await app.inject({ method: 'GET', url: urlFor(q), headers: headersFor(q) });
-        const ms = performance.now() - t0;
-        if (res.statusCode !== 200) errors++;
-        else rec.record(q.cls, ms);
-      }
+    /** One warm-up sweep plus one `SECONDS` load run at whatever `phase` is currently set to. */
+    const runPhase = async (): Promise<{ rec: LatencyRecorder; errors: number; elapsed: number }> => {
+      // Warm up: every query once, sequentially, so the run measures steady state rather than
+      // first-touch page reads and plan caching.
+      for (const q of mix) await app.inject({ method: 'GET', url: urlFor(q), headers: headersFor(q) });
+      const rec = new LatencyRecorder();
+      const deadline = Date.now() + SECONDS * 1000;
+      let cursor = 0;
+      let errors = 0;
+      const started = Date.now();
+      const client = async () => {
+        while (Date.now() < deadline) {
+          const q = mix[cursor++ % mix.length];
+          const t0 = performance.now();
+          const res = await app.inject({ method: 'GET', url: urlFor(q), headers: headersFor(q) });
+          const ms = performance.now() - t0;
+          if (res.statusCode !== 200) errors++;
+          else rec.record(q.cls, ms);
+        }
+      };
+      await Promise.all(Array.from({ length: CLIENTS }, client));
+      return { rec, errors, elapsed: (Date.now() - started) / 1000 };
     };
-    await Promise.all(Array.from({ length: CLIENTS }, client));
-    const elapsed = (Date.now() - started) / 1000;
 
-    const total = rec.all().count;
-    console.log('');
+    const report1 = (p: Phase, r: { rec: LatencyRecorder; errors: number; elapsed: number }) => {
+      const n = r.rec.all().count;
+      console.log('');
+      console.log(
+        `── ${p.name}: ${n} requests in ${r.elapsed.toFixed(1)}s = ${(n / r.elapsed).toFixed(0)} req/s` +
+          (r.errors ? `  (${r.errors} non-200 responses)` : ''),
+      );
+      console.log(r.rec.table());
+    };
+
+    // `--compare` runs every configuration against this one warm database, A B C C B A, and
+    // reports each as the mean of its two passes. Separate invocations of this script are not
+    // comparable on a laptop: identical configurations measured minutes apart varied 10x.
+    const order: Phase[] = COMPARE
+      ? [PHASES.current, PHASES.rewrite, PHASES.both, PHASES.both, PHASES.rewrite, PHASES.current]
+      : [phase];
+    const passes: { phase: Phase; rec: LatencyRecorder; errors: number; elapsed: number }[] = [];
     console.log(
-      `perf-load: ${total} requests in ${elapsed.toFixed(1)}s = ${(total / elapsed).toFixed(0)} req/s` +
-        (errors ? `  (${errors} non-200 responses)` : ''),
+      `perf-load: ${CLIENTS} concurrent clients, ${SECONDS}s per phase (pool max ${POOL_MAX}), ` +
+        `${order.length} phase(s): ${order.map((p) => p.name).join(' → ')}`,
     );
-    console.log('');
-    console.log(rec.table());
+    for (const p of order) {
+      phase = p;
+      const r = await runPhase();
+      passes.push({ phase: p, ...r });
+      report1(p, r);
+    }
+    phase = order[order.length - 1];
+
+    // Merge the passes of each configuration, in input order, and print the comparison.
+    const merged = new Map<
+      string,
+      { phase: Phase; rec: LatencyRecorder; errors: number; reqs: number; secs: number }
+    >();
+    for (const p of passes) {
+      let m = merged.get(p.phase.name);
+      if (!m)
+        merged.set(
+          p.phase.name,
+          (m = { phase: p.phase, rec: new LatencyRecorder(), errors: 0, reqs: 0, secs: 0 }),
+        );
+      for (const c of p.rec.classes()) for (const ms of p.rec.samples(c)) m.rec.record(c, ms);
+      m.errors += p.errors;
+      m.reqs += p.rec.all().count;
+      m.secs += p.elapsed;
+    }
+    // The gate and the JSON report describe the *last* configuration measured, which for a single
+    // run is the one asked for and for `--compare` is `current` — the state of main, which is what
+    // a gate should be about.
+    const last = [...merged.values()][merged.size - 1];
+    const rec = last.rec;
+    const total = last.reqs;
+    const errors = [...merged.values()].reduce((a, m) => a + m.errors, 0);
+    const elapsed = last.secs;
+    if (COMPARE) {
+      console.log('');
+      console.log('perf-load: both passes of each configuration, combined');
+      for (const m of merged.values()) {
+        console.log('');
+        console.log(`── ${m.phase.name}: ${m.reqs} requests, ${(m.reqs / m.secs).toFixed(0)} req/s`);
+        console.log(m.rec.table());
+      }
+    }
     console.log('');
 
     const explains: { cls: string; ms: number; sql: string; params: unknown[]; plan: string }[] = [];
@@ -189,8 +282,17 @@ async function main() {
       requests: total,
       errors,
       throughputPerSec: total / elapsed,
+      configuration: last.phase.name,
       overall: rec.all(),
       byClass: Object.fromEntries(rec.classes().map((c) => [c, rec.stats(c)])),
+      phases: [...merged.values()].map((m) => ({
+        configuration: m.phase.name,
+        requests: m.reqs,
+        throughputPerSec: m.reqs / m.secs,
+        errors: m.errors,
+        overall: m.rec.all(),
+        byClass: Object.fromEntries(m.rec.classes().map((c) => [c, m.rec.stats(c)])),
+      })),
       explains: explains.map((e) => ({ cls: e.cls, ms: e.ms, sql: e.sql, plan: e.plan })),
     };
     if (OUT) {

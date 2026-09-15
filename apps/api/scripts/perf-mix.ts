@@ -167,6 +167,11 @@ export class LatencyRecorder {
     return [...this.byClass.keys()];
   }
 
+  /** The raw latencies for a class, so two recorders can be merged. */
+  samples(cls: string): readonly number[] {
+    return this.byClass.get(cls) ?? [];
+  }
+
   stats(cls: string): Stats {
     return summarize(this.byClass.get(cls) ?? []);
   }
