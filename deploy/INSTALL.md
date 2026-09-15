@@ -9,6 +9,15 @@ Target: one VMware VM, Ubuntu 22.04/24.04, 4 vCPU, 16 GB RAM, 80 GB disk, Docker
 4. TLS: place `cert.pem` and `key.pem` in `deploy/certs/` (see "TLS certificate").
 5. Start: `docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build`.
    First start pulls the model (~2 GB, 5–20 min on the LAN); progress: `docker compose -f deploy/docker-compose.yml logs -f ollama-pull`.
+   The `ollama-pull` service pulls **`MODEL_NAME` only** — compose does not pass it `EMBED_MODEL`
+   at all. The search re-rank model (`nomic-embed-text` by default) is therefore never pulled by
+   any step on this page, and step 6 does not check it, so pull it once by hand:
+   ```bash
+   docker compose -f deploy/docker-compose.yml exec ollama ollama pull nomic-embed-text
+   ```
+   Skip it and nothing fails: search silently falls back to lexical ranking, with no error in the
+   logs and `model:true` in health. `docker compose -f deploy/docker-compose.yml exec ollama
+   ollama list` is what tells you both tags are actually there.
 6. Verify: `deploy/smoke.sh https://<PUBLIC_URL host>` prints `smoke passed`.
    The check waits for the database **and** for the exact `MODEL_NAME` tag to appear in Ollama's
    `ollama list` — not merely for Ollama to answer — so a mistyped `MODEL_NAME` fails here

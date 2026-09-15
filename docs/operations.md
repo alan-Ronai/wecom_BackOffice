@@ -124,6 +124,19 @@ To upgrade:
 2. `docker compose -f deploy/docker-compose.yml up -d ollama-pull` — pulls the new model into the
    `ollama` volume (progress: `docker compose logs -f ollama-pull`). The old model stays
    available until you prune it.
+
+   **This pulls `MODEL_NAME` and nothing else.** `deploy/docker-compose.yml`'s `ollama-pull`
+   service passes only `MODEL_NAME` into `deploy/ollama-pull.sh`, so a changed `EMBED_MODEL` is
+   never fetched by this step — pull that one directly, and check both are there:
+
+   ```bash
+   docker compose -f deploy/docker-compose.yml exec ollama ollama pull <new-embed-tag>
+   docker compose -f deploy/docker-compose.yml exec ollama ollama list
+   ```
+
+   An `EMBED_MODEL` tag that was never pulled does not fail anything: `GET /system/health` still
+   answers `model:true` (it only looks for `MODEL_NAME`), and search quietly drops to lexical
+   ranking. `ollama list` is the only place it shows.
 3. `docker compose -f deploy/docker-compose.yml up -d api` — the API picks up the new
    `MODEL_NAME`/`EMBED_MODEL` on restart (`app.model`, `plugins/model.ts`).
 4. Confirm: `GET /api/v1/admin/system` → `modelName` reflects the new tag, `model: true`.
