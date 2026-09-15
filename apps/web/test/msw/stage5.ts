@@ -186,6 +186,19 @@ export const auditDetail: AuditEntryDetail = {
 
 /* ── connectors ───────────────────────────────────────────────────────────── */
 
+/**
+ * The WordPress entry is a **transcript** of what `describeConfigSchema` emits for
+ * `WpConfigSchema` — field for field, constraint for constraint — not a plausible-looking
+ * invention. It used to be an invention: `appPassword`, a `status` enum, a `page`/`post`
+ * default, and no `categoryMap`. None of those exist, and because the contract said
+ * `configSchema` was merely "an object", nothing could tell. That is the gap the connector
+ * wizard fell into (walkthrough W-1): the API published `{type, fields, required}`, the wizard
+ * read `properties`, and the fixture agreed with neither — so the msw tests rendered a form that
+ * no deployment ever produced while the real one rendered no fields at all.
+ *
+ * `ConnectorTypeInfoSchema` is strict now, and `test/msw/fixtures.test.ts` parses this against
+ * it, so a shape drift here is a failing test rather than a fiction.
+ */
 export const connectorTypes: ConnectorTypeInfo[] = [
   {
     id: 'wordpress',
@@ -193,37 +206,78 @@ export const connectorTypes: ConnectorTypeInfo[] = [
     capabilities: { read: true, write: true, webhooks: true, identity: false },
     configSchema: {
       type: 'object',
-      required: ['baseUrl', 'username', 'appPassword'],
+      required: ['baseUrl', 'username', 'applicationPassword', 'webhookSecret'],
+      additionalProperties: false,
       properties: {
         baseUrl: {
           type: 'string',
-          format: 'uri',
           title: 'כתובת האתר',
-          examples: ['https://help.wecom.co.il'],
+          description: 'כתובת הבסיס של אתר ה-WordPress, ללא /wp-json',
+          examples: ['https://kb.example.com'],
+          format: 'uri',
         },
-        username: { type: 'string', title: 'משתמש WordPress' },
-        appPassword: { type: 'string', writeOnly: true, title: 'סיסמת אפליקציה' },
+        username: {
+          type: 'string',
+          title: 'שם משתמש',
+          description: 'משתמש WordPress שה-Application Password שייך לו',
+          minLength: 1,
+        },
+        applicationPassword: {
+          type: 'string',
+          title: 'סיסמת אפליקציה',
+          description: 'Application Password מתוך פרופיל המשתמש ב-WordPress',
+          writeOnly: true,
+          format: 'password',
+          minLength: 1,
+        },
         postTypes: {
           type: 'array',
-          items: { type: 'string' },
           title: 'סוגי תוכן',
-          default: ['page', 'post'],
-          description: 'מופרדים בפסיק',
+          description: 'נתיבי ה-REST של סוגי התוכן לייבוא, מופרדים בפסיק',
+          examples: ['posts, pages'],
+          items: { type: 'string' },
+          minItems: 1,
+          default: ['posts'],
         },
-        status: { type: 'string', enum: ['publish', 'draft'], title: 'סטטוס בדחיפה', default: 'draft' },
-        webhookSecret: { type: 'string', writeOnly: true, title: 'סוד ה-webhook' },
+        categoryMap: {
+          type: 'object',
+          title: 'מיפוי קטגוריות',
+          description: 'קטגוריית WordPress = קטגוריה במאגר (sim, tech, billing, plans, intl, ops)',
+          additionalProperties: { type: 'string' },
+          default: {},
+        },
+        webhookSecret: {
+          type: 'string',
+          title: 'סוד ה-webhook',
+          description: 'לפחות 8 תווים; אותו ערך מוגדר בתוסף שבאתר (openssl rand -hex 16)',
+          writeOnly: true,
+          format: 'password',
+          minLength: 8,
+        },
       },
     },
   },
   {
+    /**
+     * A second type, so the wizard's type step has something to choose between and the
+     * connectors table has a row with no webhooks. Deliberately *not* one of the two the
+     * registry ships — this fixture is a deployment's answer, and a deployment may carry a
+     * connector this repo does not. Its shape still has to be the published one.
+     */
     id: 'folder',
     name: 'תיקייה ברשת',
     capabilities: { read: true, write: false, webhooks: false, identity: false },
     configSchema: {
       type: 'object',
       required: ['path'],
+      additionalProperties: false,
       properties: {
-        path: { type: 'string', title: 'נתיב תיקייה', examples: ['\\\\fs01\\kb\\procedures'] },
+        path: {
+          type: 'string',
+          title: 'נתיב תיקייה',
+          examples: ['\\\\fs01\\kb\\procedures'],
+          minLength: 1,
+        },
         recursive: { type: 'boolean', title: 'כולל תת-תיקיות', default: true },
       },
     },
@@ -243,9 +297,9 @@ const initialConnectors = (): ConnectorRow[] => [
     config: {
       baseUrl: 'https://help.wecom.co.il',
       username: 'kb-bot',
-      appPassword: '••••',
-      postTypes: ['page', 'post'],
-      status: 'draft',
+      applicationPassword: '••••',
+      postTypes: ['posts', 'pages'],
+      categoryMap: { 'sim-cards': 'sim' },
       webhookSecret: '••••',
     },
     links: 38,

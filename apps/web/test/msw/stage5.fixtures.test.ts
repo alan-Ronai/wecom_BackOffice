@@ -95,7 +95,7 @@ describe('stage-5 handlers answer the published envelopes', () => {
     // The field whose absence loaded the edit form blank and PATCHed the blank back.
     expect(body.config.baseUrl).toBe('https://help.wecom.co.il');
     // Secrets are masked on the way out, which is what lets the wizard omit them on save.
-    expect(body.config.appPassword).toBe('••••');
+    expect(body.config.applicationPassword).toBe('••••');
   });
 
   it('POST /connectors and PATCH /connectors/{id} answer that shape too', async () => {

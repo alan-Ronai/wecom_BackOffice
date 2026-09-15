@@ -77,16 +77,55 @@ run('stage 5 — connectors & sync UI', () => {
     await db.stop();
   });
 
-  it('describes the registered connector types, secrets marked as such', async () => {
+  /**
+   * W-1. This route publishes the form the connector wizard renders, and it used to publish it in
+   * a private `{type, fields, required}` dialect while the wizard read JSON Schema's
+   * `properties` — so `/admin/connectors/new` rendered no configuration fields at all and every
+   * create was a 400. Assert the published dialect, field by field: `ConnectorTypeInfoSchema` is
+   * strict now, so a route that answered the old shape would not even serialise.
+   */
+  it('describes the registered connector types as JSON Schema, secrets marked write-only', async () => {
     const r = await app.inject({ method: 'GET', url: '/api/v1/connectors/types' });
     expect(r.statusCode).toBe(200);
     const wp = r.json().items.find((t: { id: string }) => t.id === 'wordpress');
     expect(wp).toMatchObject({ name: 'WordPress', capabilities: { read: true, write: true } });
-    expect(wp.configSchema.required).toContain('baseUrl');
-    expect(wp.configSchema.fields.applicationPassword.secret).toBe(true);
-    expect(wp.configSchema.fields.baseUrl.secret).toBe(false);
-    // A field with a default is optional and its default is safe to show.
-    expect(wp.configSchema.fields.postTypes).toMatchObject({ optional: true, default: ['posts'] });
+    expect(wp.configSchema.type).toBe('object');
+    // Closed: the wizard may not invent a key the connector's schema would silently strip.
+    expect(wp.configSchema.additionalProperties).toBe(false);
+    // Every field of the type, not a subset — this is the list `deploy/INSTALL.md` walks through.
+    expect(Object.keys(wp.configSchema.properties)).toEqual([
+      'baseUrl',
+      'username',
+      'applicationPassword',
+      'postTypes',
+      'categoryMap',
+      'webhookSecret',
+    ]);
+    expect(wp.configSchema.required).toEqual(['baseUrl', 'username', 'applicationPassword', 'webhookSecret']);
+    // A secret is write-only and carries no value, ever — including a default.
+    expect(wp.configSchema.properties.applicationPassword).toMatchObject({
+      type: 'string',
+      writeOnly: true,
+      format: 'password',
+    });
+    expect(wp.configSchema.properties.applicationPassword).not.toHaveProperty('default');
+    // The constraints the form re-applies rather than discovering as a 400.
+    expect(wp.configSchema.properties.baseUrl).toMatchObject({ type: 'string', format: 'uri' });
+    expect(wp.configSchema.properties.webhookSecret.minLength).toBe(8);
+    expect(wp.configSchema.properties.postTypes).toMatchObject({
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 1,
+      default: ['posts'],
+    });
+    // A free-keyed map, which is what tells the wizard to render `key = value` rows.
+    expect(wp.configSchema.properties.categoryMap).toMatchObject({
+      type: 'object',
+      additionalProperties: { type: 'string' },
+      default: {},
+    });
+    // Labels come from the connector's own schema, so a new field arrives with its label.
+    expect(wp.configSchema.properties.baseUrl.title).toBe('כתובת האתר');
     expect(r.json().items.map((t: { id: string }) => t.id)).toContain('json');
   });
 

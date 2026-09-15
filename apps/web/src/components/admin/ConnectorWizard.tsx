@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   useConnector,
@@ -10,6 +10,9 @@ import { useCan } from '../../api/hooks/me.js';
 import {
   SECRET_MASK,
   configFields,
+  fieldError,
+  formatMap,
+  parseMap,
   webhookUrl,
   type ConfigField,
   type ConnectorTestResult,
@@ -32,6 +35,93 @@ const STEPS = ['סוג', 'הגדרות', 'בדיקת חיבור', 'תזמון'] 
 /** A masked secret coming back from the server is a placeholder, not the value. */
 const isMask = (v: unknown) => typeof v === 'string' && v.startsWith(SECRET_MASK);
 
+/** How each composite field spells itself as text, and how that text reads back. */
+const DRAFT: Record<
+  'array' | 'map' | 'json',
+  { format: (v: unknown) => string; parse: (text: string) => unknown; hint: string; rows: number }
+> = {
+  array: {
+    format: (v) => (Array.isArray(v) ? v.join(', ') : ''),
+    parse: (text) =>
+      text
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    hint: 'מופרדים בפסיק',
+    rows: 1,
+  },
+  map: {
+    format: formatMap,
+    // Unparseable text goes up as itself — see below.
+    parse: (text) => parseMap(text) ?? text,
+    hint: 'שורה לכל זוג: מפתח = ערך',
+    rows: 4,
+  },
+  json: {
+    format: (v) => (v === undefined ? '' : JSON.stringify(v, null, 2)),
+    parse: (text) => {
+      if (!text.trim()) return undefined;
+      try {
+        const parsed: unknown = JSON.parse(text);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : text;
+      } catch {
+        return text;
+      }
+    },
+    hint: 'JSON',
+    rows: 6,
+  },
+};
+
+/**
+ * The three fields whose value is not the text the operator types: a comma list (`postTypes`), a
+ * free-keyed map (`categoryMap` — `key = value` per line) and an object the wizard does not
+ * flatten.
+ *
+ * The text is **local state**. It has to be: the config holds the parsed value, and re-deriving
+ * the text from it on every keystroke reformats what is being typed. `postTypes` showed exactly
+ * that — the comma in "posts, pages" was parsed away, the input re-rendered as "posts", and the
+ * rest of the words piled onto the first one ("postspages"). What goes *up* is the parsed value
+ * while it parses and the raw text while it does not, which is how `fieldError` can say so and
+ * how a draft that is not yet an object cannot be posted as one.
+ */
+function DraftField({
+  field,
+  value,
+  onChange,
+}: {
+  field: ConfigField;
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
+  const kind = field.type as 'array' | 'map' | 'json';
+  const { format, parse, hint, rows } = DRAFT[kind];
+  const show = (v: unknown) => (typeof v === 'string' && kind !== 'array' ? v : format(v));
+  const [text, setText] = useState(() => show(value));
+  // An edit form loads its config *after* mount, so the seeded text has to catch up — but only
+  // when what arrived is not what this control already says, or every keystroke would fight it.
+  useEffect(() => {
+    if (JSON.stringify(parse(text)) !== JSON.stringify(value)) setText(show(value));
+  }, [value]);
+
+  const props = {
+    'aria-label': field.title,
+    value: text,
+    dir: kind === 'json' ? ('ltr' as const) : undefined,
+    onChange: (e: { target: { value: string } }) => {
+      setText(e.target.value);
+      onChange(parse(e.target.value));
+    },
+  };
+  return (
+    <label>
+      {field.title + (field.required ? ' *' : '')}
+      {rows > 1 ? <textarea rows={rows} {...props} /> : <input {...props} />}
+      <span className="small muted">{field.description ?? hint}</span>
+    </label>
+  );
+}
+
 function Field({
   field,
   value,
@@ -42,6 +132,9 @@ function Field({
   onChange: (v: unknown) => void;
 }) {
   const label = field.title + (field.required ? ' *' : '');
+
+  if (field.type === 'array' || field.type === 'map' || field.type === 'json')
+    return <DraftField field={field} value={value} onChange={onChange} />;
 
   if (field.type === 'boolean')
     return (
@@ -71,26 +164,6 @@ function Field({
             </option>
           ))}
         </select>
-      </label>
-    );
-
-  if (field.type === 'array')
-    return (
-      <label>
-        {label}
-        <input
-          aria-label={field.title}
-          value={Array.isArray(value) ? value.join(', ') : String(value ?? '')}
-          onChange={(e) =>
-            onChange(
-              e.target.value
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean),
-            )
-          }
-        />
-        <span className="small muted">{field.description ?? 'מופרדים בפסיק'}</span>
       </label>
     );
 
@@ -188,8 +261,20 @@ export function ConnectorWizard() {
   const type: ConnectorTypeInfo | undefined = types.data?.find((t) => t.id === typeId);
   const fields = useMemo(() => (type ? configFields(type.configSchema) : []), [type]);
 
-  const missing = fields.filter((f) => f.required && !config[f.key]);
-  const canSave = !!typeId && !!name.trim() && !missing.length;
+  /**
+   * The connector's own rules, applied per field (`fieldError`). This used to be
+   * `f.required && !config[f.key]` over a field list that was always empty, so "חסרים שדות חובה"
+   * could never fire and the wizard walked cheerfully to a 400 (walkthrough W-1).
+   */
+  const errors = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const f of fields) {
+      const message = fieldError(f, config[f.key]);
+      if (message) out.set(f.key, message);
+    }
+    return out;
+  }, [fields, config]);
+  const canSave = !!typeId && !!name.trim() && errors.size === 0;
 
   if (!can('connectors.manage'))
     return (
@@ -338,16 +423,19 @@ export function ConnectorWizard() {
               <input aria-label="שם המחבר" value={name} onChange={(e) => setName(e.target.value)} />
             </label>
             {fields.map((f) => (
-              <Field
-                key={f.key}
-                field={f}
-                value={config[f.key]}
-                onChange={(v) => setConfig((c) => ({ ...c, [f.key]: v }))}
-              />
+              <Fragment key={f.key}>
+                <Field
+                  field={f}
+                  value={config[f.key]}
+                  onChange={(v) => setConfig((c) => ({ ...c, [f.key]: v }))}
+                />
+                {errors.has(f.key) ? (
+                  <div className="field-error" role="status">
+                    {f.title}: {errors.get(f.key)}
+                  </div>
+                ) : null}
+              </Fragment>
             ))}
-            {missing.length ? (
-              <div className="field-error">חסרים שדות חובה: {missing.map((f) => f.title).join(', ')}</div>
-            ) : null}
             <button
               className="btn primary"
               style={{ alignSelf: 'flex-start' }}
