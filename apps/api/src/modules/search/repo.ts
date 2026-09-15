@@ -400,17 +400,17 @@ async function rerank(q: Q, hits: SearchHit[], text: string, model: ModelClient)
  * a title/description/step-text summary and comfortably under typical embedding-model
  * context limits.
  */
-export async function updateEmbedding(
-  q: Q,
-  id: string,
-  model: ModelClient | null | undefined,
-): Promise<boolean> {
-  if (!model?.embed) return false;
+/**
+ * The exact text `updateEmbedding` embeds for a document. Exported (wave 6, X1) so `ai.reindex`
+ * re-embeds with the same input rather than a second, drifting copy of this assembly — the whole
+ * point of that job is that every vector in the column came from one definition.
+ */
+export async function documentEmbeddingText(q: Q, id: string): Promise<string | null> {
   const r = await q.query(
     "select title, coalesce(description,'') description, coalesce(search_text,'') search_text from documents where id=$1 and deleted_at is null",
     [id],
   );
-  if (!r.rowCount) return false;
+  if (!r.rowCount) return null;
   const {
     title,
     description,
@@ -421,6 +421,16 @@ export async function updateEmbedding(
     search_text: string;
   };
   const text = [title, description, searchText].filter(Boolean).join('\n').slice(0, 8000);
+  return text || null;
+}
+
+export async function updateEmbedding(
+  q: Q,
+  id: string,
+  model: ModelClient | null | undefined,
+): Promise<boolean> {
+  if (!model?.embed) return false;
+  const text = await documentEmbeddingText(q, id);
   if (!text) return false;
   try {
     const vec = await model.embed(text);

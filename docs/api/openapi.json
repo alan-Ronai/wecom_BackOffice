@@ -3019,6 +3019,733 @@
         }
       }
     },
+    "/api/v1/admin/ai/settings": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "brief": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "default": 0
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    },
+                    "style": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "default": 0
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    },
+                    "models": {
+                      "type": "object",
+                      "properties": {
+                        "tier": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "enum": [
+                                0
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                2
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                3
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                4
+                              ]
+                            }
+                          ],
+                          "default": 1
+                        },
+                        "suggestModel": {
+                          "type": "string",
+                          "default": "dictalm2.0-instruct:7b-q4_K_M"
+                        },
+                        "chatModel": {
+                          "type": "string",
+                          "default": "dictalm2.0-instruct:7b-q4_K_M"
+                        },
+                        "embedModel": {
+                          "type": "string",
+                          "default": "bge-m3"
+                        },
+                        "embedDimension": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "default": 1024
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    },
+                    "limits": {
+                      "type": "object",
+                      "properties": {
+                        "chatPerUserPerHour": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000,
+                          "default": 60
+                        },
+                        "maxContextChars": {
+                          "type": "integer",
+                          "minimum": 1000,
+                          "maximum": 1000000,
+                          "default": 24000
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "brief": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "style": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "models": {
+                    "type": "object",
+                    "properties": {
+                      "tier": {
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "enum": [
+                              0
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              1
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              2
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              3
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              4
+                            ]
+                          }
+                        ],
+                        "default": 1
+                      },
+                      "suggestModel": {
+                        "type": "string",
+                        "default": "dictalm2.0-instruct:7b-q4_K_M"
+                      },
+                      "chatModel": {
+                        "type": "string",
+                        "default": "dictalm2.0-instruct:7b-q4_K_M"
+                      },
+                      "embedModel": {
+                        "type": "string",
+                        "default": "bge-m3"
+                      },
+                      "embedDimension": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 1024
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "limits": {
+                    "type": "object",
+                    "properties": {
+                      "chatPerUserPerHour": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000,
+                        "default": 60
+                      },
+                      "maxContextChars": {
+                        "type": "integer",
+                        "minimum": 1000,
+                        "maximum": 1000000,
+                        "default": 24000
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "brief": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "default": 0
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    },
+                    "style": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "default": 0
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    },
+                    "models": {
+                      "type": "object",
+                      "properties": {
+                        "tier": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "enum": [
+                                0
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                2
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                3
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                4
+                              ]
+                            }
+                          ],
+                          "default": 1
+                        },
+                        "suggestModel": {
+                          "type": "string",
+                          "default": "dictalm2.0-instruct:7b-q4_K_M"
+                        },
+                        "chatModel": {
+                          "type": "string",
+                          "default": "dictalm2.0-instruct:7b-q4_K_M"
+                        },
+                        "embedModel": {
+                          "type": "string",
+                          "default": "bge-m3"
+                        },
+                        "embedDimension": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "default": 1024
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    },
+                    "limits": {
+                      "type": "object",
+                      "properties": {
+                        "chatPerUserPerHour": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000,
+                          "default": 60
+                        },
+                        "maxContextChars": {
+                          "type": "integer",
+                          "minimum": 1000,
+                          "maximum": 1000000,
+                          "default": 24000
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/settings/versions": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "key",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "enum": [
+                              "ai.brief",
+                              "ai.style",
+                              "ai.models",
+                              "ai.limits"
+                            ]
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "value": {},
+                          "updatedBy": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "updatedByName": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "version",
+                          "updatedBy",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/models/test": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "slot": {
+                    "type": "string",
+                    "enum": [
+                      "suggest",
+                      "chat",
+                      "embed"
+                    ]
+                  }
+                },
+                "required": [
+                  "slot"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "slot": {
+                      "type": "string",
+                      "enum": [
+                        "suggest",
+                        "chat",
+                        "embed"
+                      ]
+                    },
+                    "tag": {
+                      "type": "string"
+                    },
+                    "reachable": {
+                      "type": "boolean"
+                    },
+                    "sizeBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "dims": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
+                    "tokensPerSec": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "slot",
+                    "tag",
+                    "reachable"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/reindex": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "since": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "additionalProperties": false,
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "queued": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "jobId": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "queued",
+                    "jobId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/eval": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "useRules": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "additionalProperties": false,
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "queued": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "jobId": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "queued",
+                    "jobId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/eval/runs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "promptVersion": {
+                            "type": "string"
+                          },
+                          "embedModel": {
+                            "type": "string"
+                          },
+                          "startedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "finishedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "cases": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "hitTarget": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "default": 0
+                          },
+                          "hitType": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "default": 0
+                          },
+                          "contentOverlap": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "default": 0
+                          },
+                          "notes": {
+                            "type": "string",
+                            "default": ""
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "model",
+                          "promptVersion",
+                          "embedModel",
+                          "startedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/documents": {
       "get": {
         "tags": [
