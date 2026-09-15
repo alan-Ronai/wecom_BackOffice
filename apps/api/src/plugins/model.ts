@@ -1,6 +1,7 @@
 import fp from 'fastify-plugin';
 import { OllamaModel, RuleBasedModel, type ModelClient } from '@wecom/model';
 import { EmbedStatusTracker, assertEmbeddingDimension, instrumentEmbedding } from '../lib/embedStatus.js';
+import { resolveModelSlots } from '../lib/modelSlots.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -30,11 +31,15 @@ const CALL_TIMEOUT_MS = 120_000;
  */
 export default fp(async (app) => {
   const rules = new RuleBasedModel();
+  // Wave 6 (X0): the generation slot's tag now comes from `resolveModelSlots` so a tier can
+  // select it (spec §6). With `MODEL_TIER` unset — the default — this is `MODEL_NAME`, so
+  // nothing about this plugin's behaviour changes. The chat slot gets its own client in X2.
+  const slots = resolveModelSlots(app.config);
   const base: ModelClient = app.config.MODEL_DISABLED
     ? rules
     : new OllamaModel({
         url: app.config.MODEL_URL,
-        model: app.config.MODEL_NAME,
+        model: slots.suggestModel,
         embedModel: app.config.EMBED_MODEL,
         timeoutMs: CALL_TIMEOUT_MS,
         fallback: rules,
@@ -47,6 +52,9 @@ export default fp(async (app) => {
   app.log.info(
     {
       model: model.name,
+      tier: slots.tier,
+      suggestModel: slots.suggestModel,
+      chatModel: slots.chatModel,
       embedModel: app.config.EMBED_MODEL,
       embedDimension: app.config.EMBED_DIMENSION,
       // null when the database could not be asked — see `readEmbeddingDimension`.

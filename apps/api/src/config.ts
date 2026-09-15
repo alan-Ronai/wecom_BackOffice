@@ -136,6 +136,22 @@ export const BaseConfigSchema = z.object({
     z.coerce.number().int().min(1).default(768),
   ),
   MODEL_DISABLED: boolEnv(false),
+  /**
+   * Wave 6 (X0). The model *tier* (spec §6): one number that selects a whole row of
+   * `MODEL_TIER_PRESETS` — suggest slot, chat slot, embedder and its width — so moving the
+   * VM up a size is an env change and a reindex, never a deploy. Unset by default, which is
+   * why nothing on main changes: `resolveModelSlots` then falls back to `MODEL_NAME` and
+   * today's embedder. `z.preprocess` for the same reason as `EMBED_DIMENSION`: `MODEL_TIER=`
+   * with nothing after it is "unset", not tier 0.
+   */
+  MODEL_TIER: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.coerce.number().int().min(0).max(4).optional(),
+  ),
+  /** Batch/queued generation. Falls back to the tier preset, then to `MODEL_NAME`. */
+  SUGGEST_MODEL: z.string().optional(),
+  /** Interactive chat (X2). Latency first, so a tier may point it at a smaller model. */
+  CHAT_MODEL: z.string().optional(),
   WATCH_DIR: z.string().optional(),
   /** Base directory a `json` connector's `path` must stay inside (path-traversal guard). */
   CONNECTOR_FILE_ROOT: z.string().default('/data/connectors'),
