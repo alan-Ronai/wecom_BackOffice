@@ -242,6 +242,33 @@ export const BackupHealthSchema = z.object({
   checkedAt: IsoDateSchema.nullable(),
 });
 
+/**
+ * Whether the *embedding* half of the model actually works, which `modelStatus` says nothing
+ * about: it describes `MODEL_NAME`, the generation tag, while the vectors in
+ * `documents.embedding` come from `EMBED_MODEL`.
+ *
+ * The failure this exists for is silent by construction. `updateEmbedding` is best-effort —
+ * it swallows every error so a model outage can never fail a publish — so an `EMBED_MODEL`
+ * whose vectors are the wrong width for the column (`all-minilm` is 384-dimensional,
+ * `documents.embedding` is `vector(768)`) stored nothing, said nothing, and left search
+ * ranking lexically for ever. The swallow stays; this is where the fact surfaces.
+ */
+export const EmbedStatusSchema = z.object({
+  /** The configured `EMBED_MODEL` — the tag the vectors are asked of. */
+  model: z.string(),
+  /** How wide the last vector the model returned was; null until an embedding is attempted. */
+  dimension: z.number().int().nullable(),
+  /** `EMBED_DIMENSION` — the width of `documents.embedding`, asserted against the column at boot. */
+  expected: z.number().int(),
+  /**
+   * True when the last embed call returned a vector of `expected` dimensions — i.e. one the
+   * column accepts. Null until an embedding is attempted (a fresh install, or `MODEL_DISABLED`).
+   */
+  lastOk: z.boolean().nullable(),
+  /** Why the last attempt did not produce a storable vector, if it did not. */
+  lastError: z.string().nullable(),
+});
+
 export const HealthResponseSchema = z.object({
   ok: z.boolean(),
   db: z.boolean(),
@@ -259,6 +286,8 @@ export const HealthResponseSchema = z.object({
    */
   lastBackupOk: z.boolean().nullable(),
   backup: BackupHealthSchema,
+  /** The embedding path's last verdict (see `EmbedStatusSchema`). */
+  embedStatus: EmbedStatusSchema,
 });
 
 export const AdminUserPatchSchema = z.object({
@@ -403,6 +432,8 @@ export type TrashItem = z.infer<typeof TrashItemSchema>;
 export type CreateNoteBody = z.infer<typeof CreateNoteBodySchema>;
 export type DraftBody = z.infer<typeof DraftBodySchema>;
 export type UpsertBlockBody = z.infer<typeof UpsertBlockBodySchema>;
+export type EmbedStatus = z.infer<typeof EmbedStatusSchema>;
+export type DocumentEmbeddingStatus = z.infer<typeof DocumentEmbeddingStatusSchema>;
 export type UpsertFieldBody = z.infer<typeof UpsertFieldBodySchema>;
 export type UpsertScriptBody = z.infer<typeof UpsertScriptBodySchema>;
 
@@ -506,3 +537,24 @@ export const DraftListSchema = z.object({
   ),
 });
 export const PreferencesPutSchema = PreferencesSchema.partial();
+
+/**
+ * `GET /documents/:id/embedding-status` — the per-document half of `EmbedStatusSchema`.
+ *
+ * Health answers "did the *model* hand back a vector the column accepts"; this answers "is
+ * there one on this row". Both are needed to prove the path end to end, because they fail
+ * independently: a model of the right width with a broken write leaves health green and the
+ * column null, and a row embedded before an `EMBED_MODEL` change keeps a vector that no
+ * longer matches what the model now returns.
+ */
+export const DocumentEmbeddingStatusSchema = z.object({
+  id: IdSchema,
+  /** `documents.embedding is not null` — an embedding has been stored for this document. */
+  hasEmbedding: z.boolean(),
+  /** `vector_dims(embedding)` of the stored vector, or null when there is none. */
+  dimension: z.number().int().nullable(),
+  /** `EMBED_DIMENSION`, repeated here so a caller can compare without a second request. */
+  expected: z.number().int(),
+  /** The configured `EMBED_MODEL` that would produce it. */
+  model: z.string(),
+});

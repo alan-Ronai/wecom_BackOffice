@@ -1,4 +1,29 @@
 name: wecom-kb
+
+# ── W-8: every container's log is capped ─────────────────────────────────────────────────────
+# Docker's default json-file driver has no `max-size` at all: a log grows until the disk is full,
+# and the first symptom is Postgres refusing writes on a pilot VM with a single partition. Six
+# services, one of them an API logging a line per request and one an Ollama logging per token,
+# all running `restart: unless-stopped` for months.
+#
+# 20 MB × 5 files is a ceiling of 100 MB per container — ~600 MB for the stack, against the
+# ~6 GB the images already take — and keeps enough history for the questions these logs get
+# asked (why did last night's backup fail, what did nginx see when the browser got a 502).
+# `max-file` counts the active file, so 5 means the current log plus four rotations.
+#
+# Both option values are quoted: compose passes logging options to the daemon as strings, and an
+# unquoted `5` is a YAML integer that some compose/daemon combinations reject outright.
+#
+# A YAML anchor rather than six copies, because six copies is how five of them end up capped and
+# the sixth — always the noisy one — does not. `deploy/compose-check.sh` asserts, through
+# `docker compose config`, that every service in this file resolves to this block; an anchor that
+# a new service forgets to reference is exactly the failure it catches.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -8,6 +33,7 @@ services:
       POSTGRES_DB: kb
     volumes: [dbdata:/var/lib/postgresql/data]
     healthcheck: { test: ["CMD-SHELL", "pg_isready -U kb -d kb"], interval: 5s, timeout: 5s, retries: 20 }
+    logging: *logging
     restart: unless-stopped
 
   ollama:
@@ -15,6 +41,7 @@ services:
     volumes: [ollama:/root/.ollama]
     environment: { OLLAMA_KEEP_ALIVE: 30m, OLLAMA_NUM_PARALLEL: 1, OLLAMA_MAX_LOADED_MODELS: 1 }
     healthcheck: { test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"], interval: 10s, timeout: 5s, retries: 30 }
+    logging: *logging
     restart: unless-stopped
 
   ollama-pull:
@@ -30,6 +57,7 @@ services:
       EMBED_MODEL: "${EMBED_MODEL:-}"
     volumes: ["./ollama-pull.sh:/ollama-pull.sh:ro"]
     depends_on: { ollama: { condition: service_healthy } }
+    logging: *logging
     restart: "no"
 
   # ── on ${COMPOSE_PROJECT_NAME} in the three `image:` tags below ──────────────────────────────
@@ -58,6 +86,7 @@ services:
       ollama: { condition: service_healthy }
     # ./backups is read-only here so `system.backup-check` can see the nightly dumps.
     volumes: [uploads:/data/uploads, ./backups:/backups:ro, watch:/data/watch]
+    logging: *logging
     restart: unless-stopped
 
   web:
@@ -68,6 +97,7 @@ services:
       - ${TLS_CERT_PATH}:/etc/nginx/certs/cert.pem:ro
       - ${TLS_KEY_PATH}:/etc/nginx/certs/key.pem:ro
     depends_on: [api]
+    logging: *logging
     restart: unless-stopped
 
   backup:
@@ -80,6 +110,7 @@ services:
       TZ: Asia/Jerusalem
     volumes: [./backups:/backups]
     depends_on: { db: { condition: service_healthy } }
+    logging: *logging
     restart: unless-stopped
 
 volumes:

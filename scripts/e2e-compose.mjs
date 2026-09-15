@@ -178,6 +178,69 @@ async function waitFor(label, check, { timeoutMs = 300_000, everyMs = 2_000 } = 
   throw new Error(`timed out waiting for ${label}${lastErr ? `: ${lastErr.message}` : ''}`);
 }
 
+/** How long the pull may make **no** progress at all before it is called stuck. */
+const PULL_STALL_MS = 300_000;
+/** A ceiling, so a pull that is crawling rather than stuck cannot hang the gate for ever. */
+const PULL_CEILING_MS = 3_600_000;
+
+/**
+ * Waits for the one-shot `ollama-pull` service, on progress rather than on a stopwatch.
+ *
+ * A flat budget cannot be sized correctly here. Preflight's `down -v` destroys the `ollama`
+ * volume — deliberately: a volume still holding yesterday's models would satisfy the two-tag
+ * assertion below without `ollama-pull` having run at all, which is the W-3 bug itself — so the
+ * full ~671 MB is fetched on every run (~397 MB for MODEL_NAME and ~274 MB for the
+ * 768-dimensional EMBED_MODEL the embedding spec needs). How long that takes is a property of
+ * the link, not of the stack: the original 15 minutes, and then 30, both expired mid-download
+ * on a throttled one, and the gate reported "timed out waiting for the model pull" about a
+ * stack with nothing whatever wrong with it.
+ *
+ * So the question asked is the right one — "is it still getting anywhere?" — using the pull's
+ * own log as the progress signal, since `ollama pull` rewrites a percentage line continuously
+ * while bytes are moving and goes silent when they are not. Five minutes of silence is stuck
+ * and is reported as stuck; a slow link is simply waited out, up to an hour.
+ */
+async function waitForPull(pullId) {
+  const status = () =>
+    spawnSync('docker', ['inspect', '-f', '{{.State.Status}}', pullId], {
+      encoding: 'utf8',
+    }).stdout?.trim();
+  // Bytes rather than content: the progress line is rewritten in place with carriage returns, so
+  // its *length* is what grows. Both streams, because ollama writes the progress bar to stderr.
+  const progress = () => {
+    const r = spawnSync('docker', ['logs', pullId], {
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+    });
+    return (r.stdout ?? '').length + (r.stderr ?? '').length;
+  };
+
+  const ceiling = Date.now() + PULL_CEILING_MS;
+  let seen = -1;
+  let movedAt = Date.now();
+  while (Date.now() < ceiling) {
+    if (status() === 'exited') {
+      console.log('✓ the model pull finished');
+      return;
+    }
+    const now = progress();
+    if (now !== seen) {
+      seen = now;
+      movedAt = Date.now();
+    } else if (Date.now() - movedAt > PULL_STALL_MS) {
+      compose(['logs', '--tail', '20', 'ollama-pull']);
+      throw new Error(
+        `the model pull has produced no output for ${PULL_STALL_MS / 60_000} minutes — it is stuck, not slow`,
+      );
+    }
+    await sleep(5_000);
+  }
+  compose(['logs', '--tail', '20', 'ollama-pull']);
+  throw new Error(
+    `the model pull is still going after ${PULL_CEILING_MS / 60_000} minutes (~671 MB on a fresh ollama volume) — the link is too slow for this gate`,
+  );
+}
+
 /* ── setup and teardown of things outside compose ─────────────────────────── */
 
 /**
@@ -360,6 +423,15 @@ async function main() {
   process.env.WECOM_E2E_RUNNER = '1';
   ensureCerts();
   swapEnv();
+  /**
+   * W-8: every service in the base compose file caps its container log. Asserted here rather
+   * than only in CI because it is the cheapest possible check — `docker compose config` renders
+   * the file and nothing is started — and because the failure it catches is a *new* service that
+   * never referenced the shared anchor, which is silent until a pilot VM's disk fills. Run after
+   * `swapEnv()` so deploy/.env is in place for the api service's `env_file:`.
+   */
+  if (spawnSync('bash', [join(DEPLOY, 'compose-check.sh')], { stdio: 'inherit' }).status !== 0)
+    throw new Error('deploy/compose-check.sh failed — see above (W-8: container logs are capped)');
   // `./backups` is bind-mounted read-only into the api container; compose would create it as
   // root, which is a surprise to find in a worktree afterwards.
   mkdirSync(join(DEPLOY, 'backups'), { recursive: true });
@@ -382,14 +454,7 @@ async function main() {
   // failure reads as itself instead of as an unexplained health timeout ten minutes later.
   const pullId = composeOut(['ps', '-aq', 'ollama-pull']);
   if (!pullId) throw new Error('the ollama-pull service did not start');
-  await waitFor(
-    'the model pull finished',
-    () =>
-      spawnSync('docker', ['inspect', '-f', '{{.State.Status}}', pullId], {
-        encoding: 'utf8',
-      }).stdout?.trim() === 'exited',
-    { timeoutMs: 900_000, everyMs: 5_000 },
-  );
+  await waitForPull(pullId);
   const pullCode = spawnSync('docker', ['inspect', '-f', '{{.State.ExitCode}}', pullId], {
     encoding: 'utf8',
   }).stdout?.trim();

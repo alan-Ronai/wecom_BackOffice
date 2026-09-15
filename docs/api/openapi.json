@@ -103,6 +103,37 @@
                         "checkedAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "embedStatus": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string"
+                        },
+                        "dimension": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "expected": {
+                          "type": "integer"
+                        },
+                        "lastOk": {
+                          "type": "boolean",
+                          "nullable": true
+                        },
+                        "lastError": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "model",
+                        "dimension",
+                        "expected",
+                        "lastOk",
+                        "lastError"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -115,7 +146,8 @@
                     "uptimeSec",
                     "lastBackupAt",
                     "lastBackupOk",
-                    "backup"
+                    "backup",
+                    "embedStatus"
                   ],
                   "additionalProperties": false
                 }
@@ -10011,6 +10043,63 @@
                   },
                   "required": [
                     "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/documents/{id}/embedding-status": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "hasEmbedding": {
+                      "type": "boolean"
+                    },
+                    "dimension": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "expected": {
+                      "type": "integer"
+                    },
+                    "model": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "hasEmbedding",
+                    "dimension",
+                    "expected",
+                    "model"
                   ],
                   "additionalProperties": false
                 }

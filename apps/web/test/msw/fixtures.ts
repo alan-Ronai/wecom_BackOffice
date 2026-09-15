@@ -1008,6 +1008,15 @@ export const health = {
   // W-9: the tri-state beside the boolean — `never` on a fresh install, `stale` when the last
   // dump has aged out, `ok` here.
   backup: { status: 'ok' as const, latestAt: T, ageHours: 8, checkedAt: T },
+  // The embedding path's verdict: `nomic-embed-text` is 768-dimensional and so is
+  // `documents.embedding`, which is the configuration deploy/.env.example ships.
+  embedStatus: {
+    model: 'nomic-embed-text',
+    dimension: 768,
+    expected: 768,
+    lastOk: true,
+    lastError: null,
+  },
 };
 
 /* ── Wave 4 — taxonomy (W1) ────────────────────────────────────────────────
