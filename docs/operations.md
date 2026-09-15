@@ -52,6 +52,33 @@ Run it:
 `deploy/backup-check.sh` (run in `deploy-smoke.yml` CI) exercises the whole backup → drop →
 restore → verify round trip against a throwaway container on every push that touches `deploy/**`.
 
+## Stopping, starting and removing the stack
+
+Nothing else on these two pages says how to turn the pilot off, so:
+
+```bash
+docker compose -f deploy/docker-compose.yml stop            # stop everything, keep the data
+docker compose -f deploy/docker-compose.yml start           # …and bring it back
+docker compose -f deploy/docker-compose.yml restart api     # one service
+docker compose -f deploy/docker-compose.yml down            # stop and remove the containers
+```
+
+`restart: unless-stopped` means a `stop` survives a VM reboot — the containers stay down until
+someone runs `start` or `up -d`. That is the usual surprise after maintenance; `docker compose
+-f deploy/docker-compose.yml ps` is the check.
+
+`down` keeps the named volumes (`dbdata`, `ollama`, `uploads`, `watch`), so it is safe: `up -d`
+afterwards comes back with the library intact.
+
+> **`down -v` deletes the database.** It removes those volumes — every document, user, session and
+> job, plus the pulled model. There is no confirmation prompt. `deploy/backups` is a bind mount on
+> the host and survives, so a `down -v` is recoverable *only* from a dump, through
+> `deploy/INSTALL.md` → Restore. Take one first (`docker compose -f deploy/docker-compose.yml exec
+> backup backup.sh`) and copy it off the VM.
+
+Decommissioning for real is `down -v` followed by deleting `deploy/backups`, `deploy/certs/*.pem`
+and `deploy/.env` — the last two are the TLS key and every secret the deployment holds.
+
 ## Rotating secrets
 
 | secret | rotate by | effect |
