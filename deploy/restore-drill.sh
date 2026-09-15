@@ -60,11 +60,31 @@ echo "restore drill: creating scratch database $scratch"
 psql "$maint_url" -v ON_ERROR_STOP=1 -q -c "create database $scratch;"
 
 echo "restore drill: restoring dump into $scratch"
-pg_restore --no-owner --no-privileges --dbname="$scratch_url" "$dump"
+# `--exit-on-error` (-e), not the default. Without it pg_restore reports every failed command and
+# then **exits 0**: a dump truncated by a full disk restored "successfully" into an empty database,
+# and this drill — the one check that is supposed to prove a backup is restorable — was green.
+pg_restore --exit-on-error --no-owner --no-privileges --dbname="$scratch_url" "$dump"
 
 count=$(psql "$scratch_url" -tAc "select count(*) from documents" 2>/dev/null || echo "ERROR")
 if [ "$count" = "ERROR" ]; then
   echo "restore-drill FAILED: restored database has no readable 'documents' table" >&2
+  exit 1
+fi
+# The zero-document failure this script's own header, deploy/INSTALL.md and docs/operations.md all
+# promise, and which was never actually coded. A pilot library is never empty, so a restored
+# `documents` table that is means the dump carried a schema and no data — which `pg_restore` alone
+# will not tell you, and which is exactly the backup you do not want to discover on the day.
+case "$count" in
+  ''|*[!0-9]*)
+    echo "restore-drill FAILED: could not read a document count out of the restored database (got '$count')" >&2
+    exit 1
+    ;;
+esac
+if [ "$count" -eq 0 ]; then
+  echo "restore-drill FAILED: $dump restored, but the 'documents' table is empty. A backup of a
+non-empty library that restores to zero documents is not a usable backup — check that pg_dump ran
+against the real database (DATABASE_URL), that the dump is not truncated (\`ls -l $dump\`), and the
+backup container's logs for the night it was written." >&2
   exit 1
 fi
 tables=$(psql "$scratch_url" -tAc "select count(*) from information_schema.tables where table_schema='public'")

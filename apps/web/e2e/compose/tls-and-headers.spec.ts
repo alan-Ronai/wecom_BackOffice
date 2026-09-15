@@ -72,6 +72,38 @@ test('the API answers through the proxy with the security headers and a request 
   expect(body.modelStatus.tagPresent, `${body.modelStatus.name} is pulled`).toBe(true);
 });
 
+test('the SSE stream carries them too — it is its own nginx location', async ({ browser, baseURL }) => {
+  // `= /api/v1/events` is an *exact* match, so it outranks the `/api/` prefix block and is what
+  // actually governs the stream. That makes it a separate location with an `include` of its own,
+  // and the same O-1 shape as `/` and `/assets/`: delete that one line and the app's only
+  // long-lived connection ships with no CSP while all three assertions above still pass.
+  //
+  // Asked without a session deliberately. With one the handler calls `reply.hijack()` and streams
+  // `text/event-stream` forever, and `apiRequestContext.get` buffers the whole body — so an
+  // authenticated request here does not return until the test times out two minutes later. Without
+  // a session the auth preHandler (`requires: ['docs.read']`) answers 401 from the same location,
+  // which is all this needs: the headers are declared `always` precisely so that an error response
+  // carries them too.
+  //
+  // `storageState` explicitly empty for the reason `lan-identity.spec.ts` spells out —
+  // `browser.newContext()` merges the project's `use` over its own options, so without this the
+  // context starts as the break-glass admin and the stream opens for real.
+  const context = await browser.newContext({
+    baseURL,
+    ignoreHTTPSErrors: true,
+    storageState: { cookies: [], origins: [] },
+  });
+  try {
+    // And a short timeout as the backstop: if this ever does open a stream again, it should say so
+    // in seconds rather than hold the suite for the full two-minute test timeout.
+    const res = await context.request.get('/api/v1/events', { timeout: 15_000 });
+    expect(res.status(), 'no session, so the stream is refused before it is hijacked').toBe(401);
+    assertSecurityHeaders(res, 'GET /api/v1/events');
+  } finally {
+    await context.close();
+  }
+});
+
 test('plain HTTP is redirected to HTTPS rather than served', async ({ request, baseURL }) => {
   const httpUrl = baseURL!.replace('https://', 'http://').replace(':8443', ':8080');
   const res = await request.get(`${httpUrl}/library`, { maxRedirects: 0 });

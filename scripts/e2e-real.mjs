@@ -32,6 +32,7 @@ import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { E2E_OIDC_CLIENT, E2E_OIDC_USER } from './e2e-oidc-issuer.mjs';
 import { runPlaywright } from './lib/playwright-run.mjs';
+import { assertPortsFree as assertFree } from './lib/ports.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -226,23 +227,25 @@ function assertPortsFetchable() {
     );
 }
 
+/**
+ * See scripts/lib/ports.mjs: `lsof`, then `ss`, then an actual bind. Shared with
+ * `scripts/e2e-compose.mjs`, which had the same guard and the same hole — a machine without
+ * `lsof` (a plain Ubuntu image, a GitHub runner) read every port as free, and the run died later
+ * as a port collision that said nothing about ports.
+ */
 function assertPortsFree() {
-  const busy = [];
-  for (const [name, port] of [
-    ['api', API_PORT],
-    ['web', WEB_PORT],
-    ['postgres', PG_PORT],
-    ...(WITH_OIDC ? [['oidc', OIDC_PORT]] : []),
-  ]) {
-    const r = spawnSync('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' });
-    const pids = (r.stdout ?? '').trim().split('\n').filter(Boolean);
-    if (pids.length) busy.push(`  :${port} (${name}) held by pid ${pids.join(', ')}`);
-  }
-  if (busy.length)
-    throw new Error(
-      `ports already in use — a previous run probably leaked a process:\n${busy.join('\n')}\n` +
-        '  kill them (or set E2E_API_PORT / E2E_WEB_PORT / E2E_PG_PORT) and retry',
-    );
+  return assertFree(
+    [
+      ['api', API_PORT],
+      ['web', WEB_PORT],
+      ['postgres', PG_PORT],
+      ...(WITH_OIDC ? [['oidc', OIDC_PORT]] : []),
+    ],
+    {
+      intro: 'ports already in use — a previous run probably leaked a process:',
+      remedy: '  kill them (or set E2E_API_PORT / E2E_WEB_PORT / E2E_PG_PORT) and retry',
+    },
+  );
 }
 
 /* ── the gate ─────────────────────────────────────────────────────────────── */
@@ -251,7 +254,7 @@ async function main() {
   const passthrough = process.argv.slice(2);
 
   assertPortsFetchable();
-  assertPortsFree();
+  await assertPortsFree();
 
   console.log('\n── 1. postgres (pgvector/pgvector:pg16) ──────────────────────');
   spawnSync('docker', ['rm', '-f', CONTAINER], { stdio: 'ignore' });

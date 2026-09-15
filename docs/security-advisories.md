@@ -4,11 +4,29 @@ The gate is `pnpm audit --prod` (production dependency tree only; dev-tool advis
 scope for what ships on the VM). Every advisory it reports must either be fixed or appear below
 with a reason and a review date. An advisory that is neither is a release blocker.
 
-Re-run after any dependency change:
+That is enforced, not merely asserted. The `audit` job in `.github/workflows/ci.yml` runs
+`pnpm audit:check` (`scripts/audit-check.mjs`) on every push and pull request, comparing what
+`pnpm audit --prod` reports against `.github/audit-allowlist.json` — the machine-readable half of
+the "Accepted, with reasons" table below. It fails on:
+
+- an advisory that is in neither place — the release blocker this document promises;
+- an allowlist entry past its `reviewBy` date, because an acceptance is a decision with a shelf
+  life and the paragraph above demands one;
+- an allowlist entry whose advisory is no longer reported, so a row cannot outlive the thing it
+  excuses (fix it, move its row to **Fixed**, delete the entry);
+- an allowlist entry whose stated reason has stopped being true — `voidIf.sourceMatches` is grepped
+  over the tracked sources, so "not reachable" is re-checked against the code rather than taken on
+  trust.
+
+Run it yourself after any dependency change; the raw audit is worth reading alongside it:
 
 ```bash
+pnpm audit:check
 pnpm audit --prod
 ```
+
+Adding an entry to `.github/audit-allowlist.json` without the row below that explains it is the one
+thing the check cannot catch. Do both, in the same commit.
 
 Last full review: **2026-09-15**, against the acceptance review's §5 dependency row (1 high,
 3 moderate on `main` at `983148e`).
@@ -25,7 +43,7 @@ Last full review: **2026-09-15**, against the acceptance review's §5 dependency
 
 | Advisory | Package | Severity | Decision |
 |---|---|---|---|
-| [GHSA-gh4j-gqv2-49f6](https://github.com/advisories/GHSA-gh4j-gqv2-49f6) — **XMLBuilder** emits unescaped comment/CDATA delimiters, so attacker-controlled values can inject XML structure | `fast-xml-parser` `^4.5.7` (`apps/api`), fixed in `>=5.7.0` | moderate | **Accepted — not reachable.** The vulnerable class is `XMLBuilder`, and this codebase never constructs XML. All three call sites import `XMLParser` only: `modules/auth/paloalto.ts` and `modules/admin/identity-settings.ts` parse the Palo Alto User-ID XML API's responses, and `modules/sources/docx.ts` parses the OOXML inside an uploaded `.docx`. `grep -rn "XMLBuilder" apps packages` returns nothing, and an import of it would have to be written deliberately. The fix is a major version (v4 → v5) that changes parser option semantics, which would need the docx and Palo Alto parsers re-verified — not a change to make inside the pilot window for an unreachable finding. **Revisit** when `apps/api` next touches XML handling, or if an `XMLBuilder` import ever appears. |
+| [GHSA-gh4j-gqv2-49f6](https://github.com/advisories/GHSA-gh4j-gqv2-49f6) — **XMLBuilder** emits unescaped comment/CDATA delimiters, so attacker-controlled values can inject XML structure | `fast-xml-parser` `^4.5.7` (`apps/api`), fixed in `>=5.7.0` | moderate | **Accepted — not reachable.** The vulnerable class is `XMLBuilder`, and this codebase never constructs XML. All three call sites import `XMLParser` only: `modules/auth/paloalto.ts` and `modules/admin/identity-settings.ts` parse the Palo Alto User-ID XML API's responses, and `modules/sources/docx.ts` parses the OOXML inside an uploaded `.docx`. `grep -rn "XMLBuilder" apps packages` returns nothing, and an import of it would have to be written deliberately. The fix is a major version (v4 → v5) that changes parser option semantics, which would need the docx and Palo Alto parsers re-verified — not a change to make inside the pilot window for an unreachable finding. **Review by 2026-12-15** (the `reviewBy` in `.github/audit-allowlist.json`; CI fails after it), and sooner if `apps/api` next touches XML handling. The "an `XMLBuilder` import ever appears" condition is no longer a promise to remember — it is the entry's `voidIf.sourceMatches`, grepped over `apps/` and `packages/` on every CI run, and the acceptance is void the moment one shows up. |
 
 ## Not in scope
 

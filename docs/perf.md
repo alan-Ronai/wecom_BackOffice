@@ -18,10 +18,15 @@ it away — nothing touches a real database. Set `TEST_DATABASE_URL` to a superu
 string on an already-running Postgres to create a fresh database there instead, which is much
 faster to iterate against.
 
-None of them run in CI or in `pnpm test`: they are minutes long and need Docker. What *does* run
-in `pnpm test` is `apps/api/test/perf/`, which unit-tests the percentile maths, the query mix and
-the SQL rewrite with no database at all — because a load report whose arithmetic is wrong is worse
-than no load report.
+`perf:check` **does** run in CI, as its own `perf` job in `.github/workflows/ci.yml` (needs
+`build`, ~2–4 min, `TESTCONTAINERS_RYUK_DISABLED=1`) — so the §11 budgets are a merge gate on every
+push, not something to remember to run. `perf:load` and `perf:sql` are not in CI: they are five to
+eight minutes each and answer questions about a *proposed* change rather than about the branch.
+
+None of the three runs in `pnpm test` — they need Docker and minutes. What *does* run there is
+`apps/api/test/perf/`, which unit-tests the percentile maths, the query mix and the SQL rewrite
+with no database at all, because a load report whose arithmetic is wrong is worse than no load
+report.
 
 ## `perf:check` — the quick gate
 
