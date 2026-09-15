@@ -181,9 +181,9 @@ Migration order reads `…0043, 0044, 0045, 0046_learning_content, 0047_learning
 | `pnpm --filter @wecom/shared test` | 79 passed / 15 files |
 | `pnpm --filter @wecom/model test` | 30 passed / 5 files |
 | `pnpm --filter @wecom/connectors test` | 49 passed / 8 files |
-| `pnpm --filter @wecom/api test` | 197 passed, 415 skipped / 99 files |
+| `pnpm --filter @wecom/api test` | 197 passed, 416 skipped / 99 files |
 | `pnpm --filter @wecom/web test --minWorkers=1 --maxWorkers=4` | 757 passed, 1 failed / 113 files — the known `wave4-mounts.test.tsx` TipTap race; green in isolation (21/21) |
-| `RUN_INTEGRATION=1 pnpm --filter @wecom/api test:int` | 612 passed / 99 files, first run, no flake |
+| `RUN_INTEGRATION=1 pnpm --filter @wecom/api test:int` | 613 passed / 99 files (612 clean on the two runs before the sanitizer commit; on the run after it `boss.test.ts` flaked and passed 1/1 in isolation) |
 | `pnpm openapi` | regenerates byte-identically; no drift to commit |
 | `apps/api/test/route-coverage.test.ts` | 4 passed |
 | `apps/web/test/source/sourcedocs-contract.test.ts` | 5 passed |
@@ -249,3 +249,13 @@ here by `perf:sql` and `perf:check`, both of which ran clean on the merged tree 
 passing every threshold *while* the box was at load 104 is the stronger of the two data points.
 `perf:load --compare` should be re-run on a quiet machine before the wave is signed off; nothing in
 wave 5 touches the search path, so it is a confirmation rather than an open question.
+
+### One defect found and fixed during the gate
+
+`learning_items.description` is rendered with `dangerouslySetInnerHTML` (`ItemPreview.tsx`) and the
+learning repo never sanitized it — wave 4's C-C2 in the wave 5 column. Fixed in 835d8a8 by
+`cleanDescription` at the repo boundary (create and patch), with an integration case in
+`learning.test.ts` asserting `<p onclick="x()">a<script>alert(1)</script></p>` reads back as
+`<p>a</p>` from both routes and from the column itself. `briefing_entries.note` and the
+`quiz_questions` columns were checked and left alone: plain text, rendered as text, React escapes
+them. Detail in `docs/wave5-merge-log.md`.

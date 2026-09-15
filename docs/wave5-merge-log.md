@@ -189,9 +189,29 @@ CSV-injection set. Dropping it would reopen exactly the hole the comment above t
 and the guard costs one regex test per cell. Left as it was; raise it again if the intent was
 something other than the injection set.
 
+### `learning_items.description` was never sanitized
+
+Found while verifying the CSP after the second main merge, fixed in 835d8a8. The column is rich
+text, `ItemPreview.tsx` renders it with `dangerouslySetInnerHTML`, and its comment already claimed
+the value was "Sanitised server-side, like every other rich-text body the app renders" — but neither
+`createItem` nor `patchItem` cleaned it. Same class as wave 4's C-C2, and resolved the same way: a
+`cleanDescription` at the repo boundary rather than in the routes, so no caller can forget, matching
+`documents/repo.ts`'s `cleanBody` and `sourcedocs/repo.ts`'s `saveSourceDocument`. It covers the
+publish snapshot for free, because `publishItem` builds its snapshot from `getItem`.
+
+`briefing_entries.note` and the `quiz_questions` columns were checked and deliberately left alone:
+they are plain text rendered as text (`{e.note}` in `BriefingReader` and `ItemPreview`, `{q.stem}` in
+the players), so React escapes them and an HTML sanitizer would only corrupt a note that mentions
+`<` or `&`.
+
+`learning.test.ts` gains a case that sends `<p onclick="x()">a<script>alert(1)</script></p>` through
+both the create and the patch route, asserts `<p>a</p>` on both, and then reads the column itself —
+the point of the ruling being that whatever reads the row next does not have to remember.
+
 ### Known flake seen on this branch
 
 `apps/web/test/integration/wave4-mounts.test.tsx` → "edits a text-kind item as a body, not as steps"
 (the TipTap race) failed once in the full web run and passed 21/21 in isolation. The two API flakes
-named in the plan (`boss.test.ts`, `sources/routes.test.ts`) did not reproduce: integration went
-612/612 on the first attempt.
+named in the plan did reproduce once each across the gate's runs: integration went 612/612 on its
+first two full runs, then `boss.test.ts` → "starts boss and round-trips a job" failed on the run
+after the sanitizer commit and passed 1/1 in isolation. `sources/routes.test.ts` never failed.
