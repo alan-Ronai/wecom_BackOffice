@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { StructuredEdit, Suggestion, SuggestionPayload } from '@wecom/shared';
 import { useFocusTrap } from '../ui/useFocusTrap.js';
 import { payloadSummary } from '../sources/SuggestionCard.js';
@@ -64,35 +64,50 @@ export function StructuredEditDrawer({
   const [state, setState] = useState<Record<string, RowState>>(() => initialState(rows, prefill, base));
   const trap = useFocusTrap<HTMLDivElement>(open);
 
+  /*
+   * The reset is a *transition* — a different suggestion, or this drawer being opened — never a
+   * refetch. `base` is a fresh object identity on every `useSuggestions` refetch (window focus,
+   * or any edit/accept elsewhere in the panel invalidating `['suggestions']`), so keying the
+   * effect on it silently threw away whatever the editor was typing. The latest rows are kept in
+   * a ref, updated by the effect *above* this one so the reset always reads the current payload.
+   */
+  const snap = useRef({ rows, prefill, base });
   useEffect(() => {
-    if (open) setState(initialState(rows, prefill, base));
-  }, [open, rows, prefill, base]);
+    snap.current = { rows, prefill, base };
+  }, [rows, prefill, base]);
+  useEffect(() => {
+    if (open) setState(initialState(snap.current.rows, snap.current.prefill, snap.current.base));
+  }, [open, suggestion.id]);
+
+  /*
+   * A row the state does not know yet — the payload was refetched while the drawer is open and
+   * gained a row — reads as "keep", which is what an untouched row is. Since the reset no longer
+   * fires on every refetch, this is the fallback that keeps such a row from being `undefined`.
+   */
+  const stateOf = (r: SuggestionRow): RowState => state[r.rowId] ?? { op: 'keep', value: r.value };
 
   const set = (row: SuggestionRow, op: Verdict) =>
     setState((s) => {
-      const next = { ...s, [row.rowId]: { ...s[row.rowId]!, op } };
+      const at = (r: SuggestionRow): RowState => s[r.rowId] ?? { op: 'keep', value: r.value };
+      const next = { ...s, [row.rowId]: { ...at(row), op } };
       // Atomic groups move together — keep-all or remove-all.
       if (row.atomic)
         for (const r of rows)
-          if (
-            r.atomic === row.atomic &&
-            r.rowId !== row.rowId &&
-            (op === 'remove' || s[r.rowId]!.op === 'remove')
-          )
-            next[r.rowId] = { ...s[r.rowId]!, op: op === 'remove' ? 'remove' : 'keep' };
+          if (r.atomic === row.atomic && r.rowId !== row.rowId && (op === 'remove' || at(r).op === 'remove'))
+            next[r.rowId] = { ...at(r), op: op === 'remove' ? 'remove' : 'keep' };
       return next;
     });
 
   const edit: StructuredEdit = {
     type: base.type,
     rows: rows
-      .filter((r) => state[r.rowId]?.op !== 'keep')
+      .filter((r) => stateOf(r).op !== 'keep')
       .map((r) =>
-        state[r.rowId]!.op === 'remove'
+        stateOf(r).op === 'remove'
           ? { rowId: r.rowId, op: 'remove' as const }
           : // X6: the typed line folds back into the row's real shape — the server substitutes a
             // row's value verbatim, so an action row has to go back as `{ id, text }`.
-            { rowId: r.rowId, op: 'edit' as const, value: structuredValue(r, state[r.rowId]!.value) },
+            { rowId: r.rowId, op: 'edit' as const, value: structuredValue(r, stateOf(r).value) },
       ),
   } as StructuredEdit;
 
@@ -120,7 +135,7 @@ export function StructuredEditDrawer({
 
       <div className="rows">
         {rows.map((row) => {
-          const st = state[row.rowId]!;
+          const st = stateOf(row);
           const options: Verdict[] = row.required ? ['keep', 'edit'] : ['keep', 'edit', 'remove'];
           return (
             <fieldset key={row.rowId} data-row={row.rowId} className={st.op === 'remove' ? 'removed' : ''}>
@@ -151,7 +166,13 @@ export function StructuredEditDrawer({
                   aria-label={`ערך חדש · ${row.label}`}
                   value={st.value}
                   onChange={(e) =>
-                    setState((s) => ({ ...s, [row.rowId]: { ...s[row.rowId]!, value: e.target.value } }))
+                    setState((s) => ({
+                      ...s,
+                      [row.rowId]: {
+                        ...(s[row.rowId] ?? { op: 'edit', value: row.value }),
+                        value: e.target.value,
+                      },
+                    }))
                   }
                 />
               ) : null}

@@ -299,6 +299,11 @@ export const aiHandlers: RequestHandler[] = [
    * as the shape the route answers, but the path is not re-registered here: two handlers on one
    * path meant whichever group came first silently decided the numbers for both lanes' tests.
    */
+  /*
+   * 404 covers both "no such suggestion" and "outside your world scope" — the route does not
+   * distinguish them, deliberately, so a caller cannot probe for the existence of a suggestion in
+   * a world they cannot see.
+   */
   http.get(`${B}/suggestions/:id`, ({ params }) => {
     const s = aiState.suggestions.find((x) => x.id === params.id);
     if (s) return HttpResponse.json(s);
