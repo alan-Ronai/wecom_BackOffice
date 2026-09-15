@@ -52,6 +52,33 @@ Run it:
 `deploy/backup-check.sh` (run in `deploy-smoke.yml` CI) exercises the whole backup → drop →
 restore → verify round trip against a throwaway container on every push that touches `deploy/**`.
 
+## Stopping, starting and removing the stack
+
+Nothing else on these two pages says how to turn the pilot off, so:
+
+```bash
+docker compose -f deploy/docker-compose.yml stop            # stop everything, keep the data
+docker compose -f deploy/docker-compose.yml start           # …and bring it back
+docker compose -f deploy/docker-compose.yml restart api     # one service
+docker compose -f deploy/docker-compose.yml down            # stop and remove the containers
+```
+
+`restart: unless-stopped` means a `stop` survives a VM reboot — the containers stay down until
+someone runs `start` or `up -d`. That is the usual surprise after maintenance; `docker compose
+-f deploy/docker-compose.yml ps` is the check.
+
+`down` keeps the named volumes (`dbdata`, `ollama`, `uploads`, `watch`), so it is safe: `up -d`
+afterwards comes back with the library intact.
+
+> **`down -v` deletes the database.** It removes those volumes — every document, user, session and
+> job, plus the pulled model. There is no confirmation prompt. `deploy/backups` is a bind mount on
+> the host and survives, so a `down -v` is recoverable *only* from a dump, through
+> `deploy/INSTALL.md` → Restore. Take one first (`docker compose -f deploy/docker-compose.yml exec
+> backup backup.sh`) and copy it off the VM.
+
+Decommissioning for real is `down -v` followed by deleting `deploy/backups`, `deploy/certs/*.pem`
+and `deploy/.env` — the last two are the TLS key and every secret the deployment holds.
+
 ## Rotating secrets
 
 | secret | rotate by | effect |
@@ -71,6 +98,13 @@ general: a connector's outbound HTTP is constrained by `CONNECTOR_HOST_ALLOWLIST
 connector's `path` must resolve inside `CONNECTOR_FILE_ROOT`. Add the connector under
 `/admin/connectors`, **Test** before **Run**, and watch `GET /api/v1/admin/system` →
 `connectors[]` (`lastStatus`, `lastRunAt`, `conflicts`) after the first scheduled run.
+
+**Creating one needs the API for now (walkthrough W-1):** the wizard's settings step renders no
+configuration fields for any connector type — `GET /connectors/types` answers
+`configSchema.fields` and the wizard reads `configSchema.properties` — so **Test** fails with
+`הגדרות המחבר אינן תקינות` and the save 400s. `deploy/INSTALL.md` → *WordPress connector* step 4
+has the `POST /api/v1/connectors` call to use instead. Everything after creation (Test, Run, the
+schedule, the webhook URL, enable/disable) works from the UI.
 
 > **`CONNECTOR_HOST_ALLOWLIST` is now required when `NODE_ENV=production`** — the API refuses to
 > start with it empty, the same way it refuses the development `SESSION_SECRET` (acceptance
@@ -124,6 +158,19 @@ To upgrade:
 2. `docker compose -f deploy/docker-compose.yml up -d ollama-pull` — pulls the new model into the
    `ollama` volume (progress: `docker compose logs -f ollama-pull`). The old model stays
    available until you prune it.
+
+   **This pulls `MODEL_NAME` and nothing else.** `deploy/docker-compose.yml`'s `ollama-pull`
+   service passes only `MODEL_NAME` into `deploy/ollama-pull.sh`, so a changed `EMBED_MODEL` is
+   never fetched by this step — pull that one directly, and check both are there:
+
+   ```bash
+   docker compose -f deploy/docker-compose.yml exec ollama ollama pull <new-embed-tag>
+   docker compose -f deploy/docker-compose.yml exec ollama ollama list
+   ```
+
+   An `EMBED_MODEL` tag that was never pulled does not fail anything: `GET /system/health` still
+   answers `model:true` (it only looks for `MODEL_NAME`), and search quietly drops to lexical
+   ranking. `ollama list` is the only place it shows.
 3. `docker compose -f deploy/docker-compose.yml up -d api` — the API picks up the new
    `MODEL_NAME`/`EMBED_MODEL` on restart (`app.model`, `plugins/model.ts`).
 4. Confirm: `GET /api/v1/admin/system` → `modelName` reflects the new tag, `model: true`.
