@@ -38,11 +38,7 @@ describe('EditorChatDock', () => {
       route: '/editor/doc-1',
     });
     await screen.findByTestId('chat-pane');
-    const onToolResult = lastProps.current?.onToolResult as (
-      n: string,
-      p: unknown,
-      id: string,
-    ) => void;
+    const onToolResult = lastProps.current?.onToolResult as (n: string, p: unknown, id: string) => void;
     onToolResult('read_impact', { anything: true }, 'm1');
     onToolResult('draft_step', { title: 'בדוק SIM', actions: ['הוצא והכנס'] }, 'm2');
     expect(onInsertStep).toHaveBeenCalledTimes(1);

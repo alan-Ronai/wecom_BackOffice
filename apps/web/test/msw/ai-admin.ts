@@ -210,10 +210,7 @@ export const resetAiAdminState = (): void => {
   aiAdminState.lastAnalyticsQuery = null;
 };
 
-const deepMerge = (
-  a: Record<string, unknown>,
-  b: Record<string, unknown>,
-): Record<string, unknown> => {
+const deepMerge = (a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> => {
   const out = { ...a };
   for (const [k, v] of Object.entries(b))
     out[k] =
@@ -279,9 +276,7 @@ export const aiAdminHandlers: RequestHandler[] = [
     if (userId) items = items.filter((c) => c.userId === userId || c.userName.includes(userId));
     if (documentId) items = items.filter((c) => c.documentId === documentId);
     if (feedback)
-      items = items.filter((c) =>
-        (aiAdminState.messages[c.id] ?? []).some((m) => m.feedback === feedback),
-      );
+      items = items.filter((c) => (aiAdminState.messages[c.id] ?? []).some((m) => m.feedback === feedback));
     return HttpResponse.json({ items, total: items.length, page: 1, pageSize: 50 });
   }),
   http.delete(`${B}/admin/ai/conversations/:id`, ({ params }) => {

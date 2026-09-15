@@ -1627,3 +1627,28 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .workflow-section .form label { display: grid; gap: 4px; }
 .workflow-section .form label.row { display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 900px) { .item-editor { grid-template-columns: 1fr; } .gaps-page .gap { grid-template-columns: 1fr; } }
+
+/* wave 6 — X4b: chat dock, ask pane, admin AI console */
+.ai-dock { position: sticky; bottom: 0; align-self: end; max-width: 420px; z-index: 5; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.ai-dock-body { width: 100%; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow); height: 60vh; display: flex; flex-direction: column; overflow: auto; }
+.ask-pane { margin-block: 12px; }
+.ask-body { border: 1px solid var(--border); border-radius: var(--r-md); padding: 8px; background: var(--surface); margin-top: 6px; }
+.ask-body p { margin-top: 6px; }
+.step-cite { text-decoration: underline dotted; color: var(--info); }
+.ai-admin .facets { margin: 14px 0; }
+.ai-admin .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+.ai-admin .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.ai-admin .settings-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.ai-admin .settings-card label { display: grid; gap: 4px; margin-bottom: 10px; }
+.ai-textarea { width: 100%; font: inherit; padding: 8px; }
+.ai-preview { white-space: pre-wrap; background: var(--surface-2); padding: 12px; border-radius: var(--r-md); max-height: 50vh; overflow: auto; font-size: 12.5px; }
+.ai-ver-text { max-width: 40ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.transcript-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.transcript { max-height: 70vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-md); padding: 8px 10px; background: var(--surface); }
+.transcript-msg { border-inline-start: 3px solid var(--border); padding: 6px 10px; margin-block: 8px; }
+.transcript-msg header { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.transcript-msg p { margin: 4px 0; white-space: pre-wrap; }
+.transcript-msg .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.transcript-msg.assistant { border-color: var(--purple); }
+.transcript-msg.user { border-color: var(--red); }
+@media (max-width: 900px) { .transcript-layout { grid-template-columns: 1fr; } .ai-dock { max-width: 100%; } }

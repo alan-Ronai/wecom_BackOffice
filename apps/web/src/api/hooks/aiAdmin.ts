@@ -34,8 +34,7 @@ export const useAiSettings = (enabled = true) =>
 export const usePutAiSettings = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (patch: AiSettingsPut) =>
-      w6(AiSettingsSchema, 'PUT', '/admin/ai/settings', { body: patch }), // X6: api.PUT
+    mutationFn: (patch: AiSettingsPut) => w6(AiSettingsSchema, 'PUT', '/admin/ai/settings', { body: patch }), // X6: api.PUT
     onSuccess: (s) => {
       // The response is the merged settings, version bumps included: seed the cache with it so the
       // "גרסה N" chip is right on the render that follows the save, not one refetch later.
@@ -55,8 +54,7 @@ export const useAiSettingVersions = (enabled = true) =>
 
 export const useTestModel = () =>
   useMutation({
-    mutationFn: (body: ModelTestBody) =>
-      w6(ModelTestResultSchema, 'POST', '/admin/ai/models/test', { body }), // X6: api.POST
+    mutationFn: (body: ModelTestBody) => w6(ModelTestResultSchema, 'POST', '/admin/ai/models/test', { body }), // X6: api.POST
   });
 
 export const useRunEval = () => {
@@ -94,8 +92,7 @@ export const useAdminConversations = (q: AdminConversationsQuery, enabled = true
   useQuery({
     queryKey: keys.ai.conversations({ admin: true, ...q }),
     enabled,
-    queryFn: () =>
-      w6(ConversationsResponseSchema, 'GET', '/admin/ai/conversations', { query: { ...q } }), // X6: api.GET
+    queryFn: () => w6(ConversationsResponseSchema, 'GET', '/admin/ai/conversations', { query: { ...q } }), // X6: api.GET
   });
 
 export const useAdminConversation = (id: string | null, enabled = true) =>

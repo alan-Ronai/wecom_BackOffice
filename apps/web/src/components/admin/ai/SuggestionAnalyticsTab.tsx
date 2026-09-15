@@ -88,11 +88,7 @@ export function SuggestionAnalyticsTab() {
         </label>
         <label>
           פילוח
-          <select
-            aria-label="פילוח"
-            value={group}
-            onChange={(e) => setGroup(e.target.value as GroupKey)}
-          >
+          <select aria-label="פילוח" value={group} onChange={(e) => setGroup(e.target.value as GroupKey)}>
             {GROUPS.map(([k, l]) => (
               <option key={k} value={k}>
                 {l}

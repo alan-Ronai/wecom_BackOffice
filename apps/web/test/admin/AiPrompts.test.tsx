@@ -24,9 +24,7 @@ describe('PromptsTab', () => {
     renderWithProviders(<PromptsTab />, { route: '/admin/ai' });
     fireEvent.click(await screen.findByRole('button', { name: 'היסטוריית גרסאות' }));
     const history = await screen.findByRole('table', { name: 'היסטוריית גרסאות' });
-    await waitFor(() =>
-      expect(history.querySelectorAll('tbody tr')).toHaveLength(3),
-    );
+    await waitFor(() => expect(history.querySelectorAll('tbody tr')).toHaveLength(3));
     expect(screen.getAllByText('תיאור החברה').length).toBeGreaterThan(1);
     expect(screen.getAllByText('נועה')).toHaveLength(3);
 

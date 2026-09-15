@@ -94,6 +94,8 @@ const AnalyticsPage = () =>
   import('./components/analytics/AnalyticsPage.js').then((m) => ({ default: m.AnalyticsPage }));
 const TaxonomyPage = () =>
   import('./components/admin/TaxonomyPage.js').then((m) => ({ default: m.TaxonomyPage }));
+/** Wave 6 (X4b): the AI console — five tabs, all of them behind `ai.manage`. */
+const AiPage = () => import('./components/admin/AiPage.js').then((m) => ({ default: m.AiPage }));
 
 /** Wave 5 (V4a): the agent's learning screens are reached deliberately, not mid-call. */
 const MyLearningPage = () =>
@@ -228,6 +230,7 @@ export const routeObjects: RouteObject[] = [
           { path: 'connectors/new', element: split(ConnectorWizard) },
           { path: 'connectors/:id', element: split(ConnectorWizard) },
           { path: 'taxonomy', element: split(TaxonomyPage) },
+          { path: 'ai', element: split(AiPage) },
           { path: 'system', element: split(SystemPage) },
         ],
       },

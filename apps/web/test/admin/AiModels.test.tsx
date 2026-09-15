@@ -10,7 +10,13 @@ import { aiAdminState } from '../msw/ai-admin.js';
 const { confirmSpy } = vi.hoisted(() => ({ confirmSpy: vi.fn(() => Promise.resolve(true)) }));
 vi.mock('../../src/components/ui/Modal.js', async (orig) => ({
   ...((await orig()) as object),
-  useModal: () => ({ confirm: confirmSpy, open: () => () => {}, close: () => {}, prompt: async () => null, count: 0 }),
+  useModal: () => ({
+    confirm: confirmSpy,
+    open: () => () => {},
+    close: () => {},
+    prompt: async () => null,
+    count: 0,
+  }),
 }));
 
 describe('ModelsTab', () => {
@@ -42,12 +48,8 @@ describe('ModelsTab', () => {
     expect(screen.getByText('שינוי ממדים דורש אינדוקס מחדש')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'שמור' }));
-    await waitFor(() =>
-      expect((aiAdminState.lastPut as { models: { tier: number } }).models.tier).toBe(0),
-    );
-    expect((aiAdminState.lastPut as { models: { embedDimension: number } }).models.embedDimension).toBe(
-      768,
-    );
+    await waitFor(() => expect((aiAdminState.lastPut as { models: { tier: number } }).models.tier).toBe(0));
+    expect((aiAdminState.lastPut as { models: { embedDimension: number } }).models.embedDimension).toBe(768);
   });
 
   it('queues a reindex once the confirmation is accepted', async () => {
