@@ -78,7 +78,7 @@ describe('rowsOf follows X3’s pinned row-id scheme', () => {
 
   it('the single-row types expose one required row each', () => {
     expect(rowsOf({ type: 'deprecate-step', reason: 'ישן' })).toEqual([
-      { rowId: 'reason', label: 'סיבה', value: 'ישן', required: true },
+      { rowId: 'reason', label: 'סיבת ההוצאה משימוש', value: 'ישן', required: true },
     ]);
     expect(rowsOf({ type: 'field-alert', fieldName: 'x', issue: 'unknown' })).toEqual([
       { rowId: 'alert', label: 'התראת שדה', value: 'x · unknown', required: true },

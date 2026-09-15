@@ -46,7 +46,7 @@ describe('<SuggestionsPanel>', () => {
     expect(rowIds).toEqual(['add-0', 'add-1', 'rep-a1', 'branch', 'out-0', 'patch-hint']);
 
     await user.click(within(dialog).getAllByRole('radio', { name: 'ערוך' })[0]!);
-    const field = within(dialog).getByRole('textbox', { name: 'ערך חדש · פעולה חדשה' });
+    const field = within(dialog).getByRole('textbox', { name: 'ערך חדש · הוראה חדשה' });
     await user.clear(field);
     await user.type(field, 'ודא ניתוק מ-Wi-Fi');
     await user.click(within(dialog).getByRole('button', { name: 'שמור עריכה' }));
@@ -112,7 +112,7 @@ describe('<SuggestionsPanel>', () => {
     expect(await screen.findByText('התקבלה הצעה מעודנת מהצ׳אט')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'פתח בעורך' }));
     const dialog = await screen.findByRole('dialog', { name: 'עריכת ההצעה' });
-    expect(within(dialog).getByRole('textbox', { name: 'ערך חדש · פעולה חדשה' })).toHaveValue('מעודן');
+    expect(within(dialog).getByRole('textbox', { name: 'ערך חדש · הוראה חדשה' })).toHaveValue('מעודן');
   });
 
   it('says so when the item has no linked source document', async () => {

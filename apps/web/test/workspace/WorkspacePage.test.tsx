@@ -127,7 +127,7 @@ describe('<WorkspacePage>', () => {
     expect(await screen.findByText('התקבלה הצעה מעודנת מהצ׳אט')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'פתח בעורך' }));
     const dialog = await screen.findByRole('dialog', { name: 'עריכת ההצעה' });
-    expect(within(dialog).getByRole('textbox', { name: 'ערך חדש · פעולה חדשה' })).toHaveValue('מעודן');
+    expect(within(dialog).getByRole('textbox', { name: 'ערך חדש · הוראה חדשה' })).toHaveValue('מעודן');
   });
 
   it('"שאל על ההצעה" pins the suggestion as the chat’s context', async () => {
