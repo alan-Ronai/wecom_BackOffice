@@ -9,9 +9,11 @@ import type {
   QuestionContext,
   ToolCall,
 } from './contract.js';
-import { buildMessages, parseProposals, RESPONSE_FORMAT } from './prompt.js';
+import { buildMessages, numCtxFor, parseProposals, RESPONSE_FORMAT } from './prompt.js';
+import { flatResponseFormat, parseFlatProposals, repairHint } from './flat.js';
+import { applyGuards } from './guard.js';
 import { buildQuestionMessages, parseQuestions, QUESTIONS_RESPONSE_FORMAT } from './questions.js';
-import { enforceSectionCards } from './sections.js';
+import { enforceSectionCards, isNewSourcePath } from './sections.js';
 
 export interface OllamaOptions {
   url: string;
@@ -26,6 +28,31 @@ export interface OllamaOptions {
    * described in a system message and the model is asked to answer with a JSON envelope.
    */
   supportsTools?: boolean;
+  /**
+   * **Legacy, off.** Go back to wave 6's nested `RESPONSE_FORMAT` envelope and its all-or-nothing
+   * `parseProposals`, for an A/B against the measured default. It scores 0.000/0.000/0.000 with
+   * 8/8 schema failures on both tiers (C-C1, C-C2, C-C4) — it exists as the control arm, not as
+   * an option anyone should select. The default path is `flat.ts`'s per-context, enum-typed,
+   * fully-required schema, re-inflated into the discriminated union in code.
+   */
+  legacyEnvelope?: boolean;
+  /** `propose-v4` (the default, `PROMPT_VERSION`) unless a caller pins an older file. */
+  promptVersion?: string;
+  /**
+   * **On by default.** The two context-determined types are decided in code (`guard.ts`) rather
+   * than hoped for from the model's reading of rules 1 and 3 — measured: hit-type 0.750 → 1.000
+   * on both tiers. Set false only to measure the model's unaided classification.
+   */
+  guards?: boolean;
+  /**
+   * Sampling. The defaults are the measured ones: `temperature: 0` (free, and it makes a run
+   * reproducible) and **no** `num_predict` — a 600-token cap truncated the six-section answer
+   * and cost 0.125 hit-target, so nothing is capped below the longest legitimate answer.
+   * `numCtx` defaults to `numCtxFor(ctx)`, sized from the *token* budget (C-I4).
+   */
+  temperature?: number;
+  numPredict?: number;
+  numCtx?: number;
 }
 
 const randomId = () => 'call_' + crypto.randomUUID().slice(0, 8);
@@ -151,24 +178,33 @@ export class OllamaModel implements ModelClient {
 
   async proposeChanges(ctx: ProposalContext): Promise<ProposedSuggestion[]> {
     const started = Date.now();
-    const messages = buildMessages(ctx);
+    const legacy = this.o.legacyEnvelope === true;
+    const guards = this.o.guards !== false;
+    const messages = buildMessages(ctx, { version: this.o.promptVersion });
     let lastError = '';
+    /** C-I7: the answer that failed, replayed as the assistant turn of the one retry. */
+    let lastAnswer = '';
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
         const r = await this.req('/api/chat', {
           model: this.o.model,
           stream: false,
-          format: RESPONSE_FORMAT,
-          options: { temperature: 0.1, num_ctx: 8192 },
+          format: legacy ? RESPONSE_FORMAT : flatResponseFormat(ctx),
+          options: {
+            /** Measured: temperature 0 costs nothing and makes a run reproducible. */
+            temperature: this.o.temperature ?? 0,
+            /** C-I4: sized from the token budget rather than pinned at 8192. */
+            num_ctx: this.o.numCtx ?? numCtxFor(ctx),
+            /** No `num_predict` by default: a cap below the longest answer truncates case 06. */
+            ...(this.o.numPredict ? { num_predict: this.o.numPredict } : {}),
+          },
           messages:
             attempt === 1
               ? messages
               : [
                   ...messages,
-                  {
-                    role: 'user',
-                    content: 'התשובה הקודמת לא הייתה JSON תקין (' + lastError + '). החזר JSON תקין בלבד.',
-                  },
+                  ...(lastAnswer ? [{ role: 'assistant', content: lastAnswer }] : []),
+                  { role: 'user', content: repairHint(lastError) },
                 ],
         });
         if (!r.ok) {
@@ -176,14 +212,44 @@ export class OllamaModel implements ModelClient {
           continue;
         }
         const data = (await r.json()) as { message?: { content?: string } };
-        const parsed = parseProposals(data.message?.content ?? '');
+        const content = data.message?.content ?? '';
+        lastAnswer = content;
+        const parsed = legacy ? parseProposals(content) : parseFlatProposals(ctx, content);
         if (parsed.ok) {
           this.lastRun = { used: 'ollama', attempts: attempt, ms: Date.now() - started };
           // The prompt asks for one card per section, but the section rule is an invariant of
           // the pipeline, not a request: hold it whatever the model returned.
-          return enforceSectionCards(ctx, parsed.items);
+          const items = enforceSectionCards(ctx, parsed.items);
+          // The guards run *after* the invariant, so a coerced `update-block` cannot be undone
+          // by the section rule and a `field-alert` is never dropped as "not a section card".
+          return guards ? applyGuards(ctx, items) : items;
         }
         lastError = parsed.error;
+        /**
+         * C-C5. On the new-source path the cards are the *rule engine's* anyway
+         * (`enforceSectionCards` discards the model's `new-card`s), so a model answer that will
+         * not parse costs nothing there — yet every observed failure of case `06` was the whole
+         * revision going to the fallback because the model wrote `update-step` for a source
+         * that has no steps yet. Hold the invariant instead of retrying for cards we discard.
+         */
+        if (isNewSourcePath(ctx)) {
+          this.lastRun = { used: 'ollama', attempts: attempt, ms: Date.now() - started, error: lastError };
+          return enforceSectionCards(ctx, []);
+        }
+        /**
+         * Same argument, last attempt: the guards need no model. `detectFieldAlerts` reads the
+         * diffs and the known field list, so a revision whose answer would not parse still keeps
+         * the suggestions the context alone proves — rather than losing them to a fallback that
+         * happens not to look for them. Measured: `aya-expanse:8b` failed the parse on case `05`
+         * and the field rename was there to be found the whole time.
+         */
+        if (attempt === MAX_ATTEMPTS && guards) {
+          const rescued = applyGuards(ctx, []);
+          if (rescued.length) {
+            this.lastRun = { used: 'ollama', attempts: attempt, ms: Date.now() - started, error: lastError };
+            return rescued;
+          }
+        }
       } catch (e) {
         lastError = (e as Error).message;
       }

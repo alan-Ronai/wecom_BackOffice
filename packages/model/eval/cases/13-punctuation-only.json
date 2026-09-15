@@ -1,0 +1,40 @@
+{
+  "id": "13-punctuation-only",
+  "title": "פיסוק בלבד — פסיק ונקודה",
+  "notes": "Punctuation. The numbers, latin tokens and quoted names are all untouched, which is exactly the test that material.ts is conservative in the right direction.",
+  "source": {
+    "title": "נהלי SIM"
+  },
+  "diffs": [
+    {
+      "ref": "2.3",
+      "kind": "changed",
+      "before": "בצע ריענון SIM בקונסולה והמתן דקה.",
+      "after": "בצע ריענון SIM בקונסולה, והמתן דקה",
+      "similarity": 0.97
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "22222222-2222-4222-8222-222222222222",
+      "documentTitle": "אין קליטה",
+      "stepKey": "s3",
+      "stepNum": "3",
+      "stepTitle": "ריענון SIM",
+      "anchor": "2.3",
+      "actions": ["בצע ריענון SIM בקונסולה", "המתן דקה"],
+      "blockId": "44444444-4444-4444-8444-444444444444"
+    }
+  ],
+  "blocks": [
+    {
+      "id": "44444444-4444-4444-8444-444444444444",
+      "title": "ריענון SIM",
+      "actions": ["בצע ריענון SIM בקונסולה", "המתן דקה"]
+    }
+  ],
+  "fields": [],
+  "expected": [],
+  "maxItems": 0,
+  "latencyBudgetMs": 30000
+}

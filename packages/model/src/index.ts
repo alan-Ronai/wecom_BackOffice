@@ -5,4 +5,7 @@ export * from './prompt.js';
 export * from './questions.js';
 export * from './calibration.js';
 export * from './eval.js';
+export * from './material.js';
+export * from './flat.js';
+export * from './guard.js';
 export * from './ollama.js';

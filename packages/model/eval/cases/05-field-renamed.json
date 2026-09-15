@@ -1,7 +1,9 @@
 {
   "id": "05-field-renamed",
   "title": "שם שדה CRM שונה בטקסט המקור",
-  "source": { "title": "נהלי SIM" },
+  "source": {
+    "title": "נהלי SIM"
+  },
   "diffs": [
     {
       "ref": "2.7",
@@ -23,11 +25,21 @@
     }
   ],
   "blocks": [],
-  "fields": [{ "name": "sim block lbl", "status": "ok" }],
+  "fields": [
+    {
+      "name": "sim block lbl",
+      "status": "ok"
+    }
+  ],
   "impact": {
     "documents": [],
     "blocks": [],
-    "fields": [{ "name": "sim block lbl", "usedBy": 4 }],
+    "fields": [
+      {
+        "name": "sim block lbl",
+        "usedBy": 4
+      }
+    ],
     "topics": [],
     "related": []
   },
@@ -36,7 +48,11 @@
       "type": "field-alert",
       "targetDocumentId": "22222222-2222-4222-8222-222222222222",
       "targetStepKey": "s7",
-      "mustContain": ["sim status"]
+      "mustContain": ["sim status"],
+      "mustContainAny": [["sim block lbl"]]
     }
-  ]
+  ],
+  "notes": "C-I5: prompt.ts's superRefine documents that a field-alert needs no target, and it does not - but detectFieldAlerts fills the document and step from the linkedStep on the same anchor, so asserting them is fair. The paragraph's only material change is the field name, so the field-alert is the WHOLE answer: maxItems 1 fails an engine that also raises an update-step for the same fact.",
+  "maxItems": 1,
+  "latencyBudgetMs": 30000
 }

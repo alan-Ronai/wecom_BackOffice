@@ -15,7 +15,15 @@ import type { EvalCase } from '@wecom/shared';
 import { RuleBasedModel } from '../src/rules.js';
 import { OllamaModel } from '../src/ollama.js';
 import { PROMPT_VERSION } from '../src/prompt.js';
-import { aggregate, contextForCase, EVAL_CASES_DIR, loadCases, scoreCase } from '../src/eval.js';
+import {
+  aggregate,
+  contextForCase,
+  EVAL_CASES_DIR,
+  languageOffences,
+  latinAllowFor,
+  loadCases,
+  scoreCase,
+} from '../src/eval.js';
 import type { ModelClient } from '../src/contract.js';
 
 const EVAL_TIMEOUT_MS = 180_000;
@@ -37,11 +45,29 @@ async function main(): Promise<void> {
   const model: ModelClient =
     useRules || !tag
       ? new RuleBasedModel()
-      : new OllamaModel({ url, model: tag, embedModel: embed, timeoutMs: EVAL_TIMEOUT_MS });
+      : new OllamaModel({
+          url,
+          model: tag,
+          embedModel: embed,
+          timeoutMs: EVAL_TIMEOUT_MS,
+          /**
+           * The measured path is the default now; these two turn *off* halves of it, so a run
+           * can still reproduce the wave-6-as-merged baseline (`--legacy-envelope --prompt
+           * propose-v3 --no-guards`) or isolate the model's unaided classification.
+           */
+          legacyEnvelope: flag('legacy-envelope'),
+          ...(flag('no-guards') ? { guards: false } : {}),
+          ...(arg('prompt') ? { promptVersion: arg('prompt') } : {}),
+          ...(arg('temp') ? { temperature: Number(arg('temp')) } : {}),
+          ...(arg('num-predict') ? { numPredict: Number(arg('num-predict')) } : {}),
+          ...(arg('num-ctx') ? { numCtx: Number(arg('num-ctx')) } : {}),
+        });
 
   const cases: EvalCase[] = loadCases(dir);
   const rows: Record<string, string | number>[] = [];
   const scores = [];
+  const latencies: number[] = [];
+  const langWords: string[] = [];
   for (const c of cases) {
     const started = Date.now();
     let items: Awaited<ReturnType<ModelClient['proposeChanges']>> = [];
@@ -53,30 +79,58 @@ async function main(): Promise<void> {
     }
     const s = scoreCase(c, items);
     scores.push(s);
+    const ms = Date.now() - started;
+    latencies.push(ms);
+    /**
+     * C-I8: the *count* goes in the table and the offending words go in the `--out` file. A
+     * language failure is only actionable if you can see what the model said — "8 failures" is a
+     * number, `champs`, `ubah`, `блок` is a reason to move a tier.
+     */
+    const offences = [
+      ...new Set(
+        items.flatMap((x) => [
+          ...languageOffences(x.title, latinAllowFor(c)),
+          ...languageOffences(x.rationale, latinAllowFor(c)),
+        ]),
+      ),
+    ];
+    if (offences.length) langWords.push(`${c.id}: ${offences.join(', ')}`);
     rows.push({
       case: c.id,
       hitTarget: Number(s.hitTarget.toFixed(2)),
       hitType: Number(s.hitType.toFixed(2)),
       overlap: Number(s.contentOverlap.toFixed(2)),
+      precision: Number(s.precision.toFixed(2)),
+      lang: s.languageFailures,
       items: items.length,
-      ms: Date.now() - started,
+      ms,
+      /** Recorded, never asserted: a tier that scores well at 90 s/case is not shippable. */
+      ...(c.latencyBudgetMs ? { budget: ms <= c.latencyBudgetMs ? 'ok' : 'over' } : {}),
       ...(error ? { error } : {}),
     });
   }
   const total = aggregate(scores);
   console.table(rows);
+  const sorted = [...latencies].sort((a, b) => a - b);
+  const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
   const summary = {
     model: model.name,
-    promptVersion: PROMPT_VERSION,
+    promptVersion: arg('prompt') ?? PROMPT_VERSION,
+    schema: flag('legacy-envelope') ? 'envelope (legacy)' : 'flat',
+    guards: !flag('no-guards'),
     embedModel: embed ?? '',
     cases: cases.length,
     hitTarget: Number(total.hitTarget.toFixed(3)),
     hitType: Number(total.hitType.toFixed(3)),
     contentOverlap: Number(total.contentOverlap.toFixed(3)),
+    precision: Number(total.precision.toFixed(3)),
+    languageFailures: total.languageFailures,
+    schemaFailures: rows.filter((r) => 'error' in r).length,
+    medianSecPerCase: Number((median / 1000).toFixed(2)),
   };
   console.log(summary);
   if (out) {
-    writeFileSync(out, JSON.stringify({ ...summary, rows }, null, 2));
+    writeFileSync(out, JSON.stringify({ ...summary, rows, languageOffences: langWords }, null, 2));
     console.log('wrote ' + out);
   }
 }

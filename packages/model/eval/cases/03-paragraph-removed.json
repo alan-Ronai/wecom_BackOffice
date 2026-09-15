@@ -1,7 +1,9 @@
 {
   "id": "03-paragraph-removed",
   "title": "פסקה נמחקה מהמקור — השלב יוצא משימוש",
-  "source": { "title": "נהלי תמיכה טכנית" },
+  "source": {
+    "title": "נהלי תמיכה טכנית"
+  },
   "diffs": [
     {
       "ref": "5.2",
@@ -31,5 +33,7 @@
       "targetStepKey": "s12",
       "mustContain": ["נמחק"]
     }
-  ]
+  ],
+  "maxItems": 1,
+  "latencyBudgetMs": 30000
 }

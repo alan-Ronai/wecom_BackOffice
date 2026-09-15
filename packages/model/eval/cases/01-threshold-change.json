@@ -1,7 +1,9 @@
 {
   "id": "01-threshold-change",
   "title": "סף מהירות גלישה שונה מ-5 ל-6 מגה",
-  "source": { "title": "נהלי תמיכה טכנית" },
+  "source": {
+    "title": "נהלי תמיכה טכנית"
+  },
   "diffs": [
     {
       "ref": "4.8",
@@ -23,7 +25,12 @@
     }
   ],
   "blocks": [],
-  "fields": [{ "name": "גלישה בארץ", "status": "ok" }],
+  "fields": [
+    {
+      "name": "גלישה בארץ",
+      "status": "ok"
+    }
+  ],
   "expected": [
     {
       "type": "update-step",
@@ -31,5 +38,7 @@
       "targetStepKey": "s8",
       "mustContain": ["6"]
     }
-  ]
+  ],
+  "maxItems": 1,
+  "latencyBudgetMs": 30000
 }

@@ -102,6 +102,94 @@ parked for the VM to settle:
 switch the default to `MODEL_TIER=0` (keeping `EMBED_MODEL=bge-m3` and `EMBED_DIMENSION=1024`
 explicitly, which `resolveModelSlots`' explicit-env precedence supports) and re-open prompt v3.
 
+> **Superseded by the fix wave below.** The 0.000 rows above were a grammar defect, not a model
+> one, and they are resolved. They are left in place because the ruling that followed from them —
+> and the reasoning behind keeping `MODEL_TIER=1` — is part of the record.
+
+## Fix wave — generation quality
+
+`review/wave6-ai-quality` reproduced both 0.000 runs exactly and found that neither model was
+failing the task. The shipped `RESPONSE_FORMAT` left `targetDocumentId`/`targetStepKey`/
+`targetBlockId` out of `required` (in a JSON-schema grammar, *skippable* — and a 3B always takes
+the short branch) and gave `payload` no properties at all, so the six-arm discriminated union was
+described only in Hebrew prose and then enforced by zod. The models were answering correctly and
+being rejected for a grammar nobody had written.
+
+**What changed** (`fix/wave6-ai`, findings C-C1…C-C5, C-I1…C-I8, C-M1/C-M3/C-M4):
+
+- `packages/model/src/flat.ts` is the default response format — flat, fully `required`, every
+  identifier an `enum` of the ids in *this* context — re-inflated into the discriminated union in
+  code. `PROMPT_VERSION` is `propose-v4`; the nested envelope survives behind
+  `OllamaOptions.legacyEnvelope` as the control arm of the A/B.
+- `temperature: 0`, no `num_predict`, `num_ctx` sized from a **token** budget (2.6 chars/token,
+  measured on this Hebrew+JSON mix) rather than a char budget compared against a token window.
+- Per-suggestion tolerant parse, an anchor back-fill for ids the context already holds, and the
+  deterministic guards (`guard.ts`) run even when the model's answer was unusable.
+- Model confidence goes through `confidenceFor`; editors were being shown `0.95` on everything.
+- The rule engine tells a change from noise (`material.ts`) and gained the two branches it never
+  had: `new-step`, and `field-alert` for an *unknown* field.
+- The harness gained a **precision** score, a **language check**, `mustContainAny` with Hebrew
+  prefix-clitic normalisation, and 14 new cases (8 → 22), six of them negative.
+
+**Machine: the same dev laptop, not the VM.** 22 committed Hebrew cases, prompt `propose-v4`, flat
+schema, guards on, `temperature: 0`, one pass per tier, no fallback.
+
+| Run | suggest model | embedder | cases | hit-target | hit-type | overlap | precision | language failures | schema failures | median s/case | Ollama RSS |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| rules floor | `RuleBasedModel` | — | 22 | **1.000** | **1.000** | 0.932 | **1.000** | 0 | 0 | <0.01 | — |
+| tier 0 | `qwen2.5:3b-instruct-q4_K_M` | `nomic-embed-text` (768) | 22 | **1.000** | **1.000** | 0.909 | 0.962 | **8** | 0 | 5.2 | ~2.4 GB |
+| tier 1 | `aya-expanse:8b-q4_K_M` | `bge-m3` (1024) | 22 | **1.000** | **1.000** | **0.977** | **1.000** | **0** | 0 | 12.2 | ~5.8 GB |
+
+Reproducible: `temperature: 0`, and three consecutive runs of each tier gave identical scores.
+
+Both tiers went from **0.000/0.000/0.000 with 8/8 schema failures** to **1.000/1.000** with none.
+The rules floor also rose (0.875/0.750/0.438 → 1.000/1.000/0.932) because the same wave fixed two
+real gaps in the deterministic engine, so the model is being measured against a harder floor than
+before, not an easier one.
+
+**Reading the three columns that still separate them:**
+
+- **Content overlap** is where the model earns its place: 0.977 (tier 1) against the rule engine's
+  0.932, and the two cases the engine cannot win are the ones that ask the rationale to name the
+  impact — the thing §1.6 is for. Tier 0 is *below* the rules floor here (0.909).
+- **Precision** is the counterweight the harness never had. Before it, a shotgun client emitting
+  one suggestion per (type × candidate) with a keyword-stuffed title scored a perfect
+  1.000/1.000/1.000 on all eight old cases. Tier 0's 0.962 is one over-proposal; tier 1 has none.
+- **Language failures** are the strongest argument in the evidence and were invisible until now.
+  `qwen2.5:3b` code-switches out of Hebrew in **8 of 22** cases and `aya-expanse:8b` in **none**.
+  The offending words are recorded per case in the `--out` file; qwen's are dominated by the
+  Indonesian `ubah` ("change"), which appears in seven of the eight, alongside bare English
+  (`string`, `proposal`) and truncated fragments (`ffects`, `zd`, `la`). This is `title` and
+  `rationale` text — what a content owner reads in the review queue — and no score saw it before.
+
+The six negative cases are worth naming separately: **both** models proposed on noise —
+`aya-expanse:8b` on all six, `qwen2.5:3b` on one — until the pipeline stopped showing them noise
+(`materialDiffs`) and started dropping answers anchored outside it (`dropUnanchored`). Asking the
+prompt more firmly fixed five of qwen's six and none of aya's. This is the failure mode that would
+have buried the pilot's review queue, and nothing in the wave-6 harness could see it.
+
+### Ruling
+
+`MODEL_TIER=1` **stays the default**, now on evidence rather than in spite of it: tier 1 beats
+tier 0 on overlap (0.977 vs 0.909), on precision (1.000 vs 0.962) and on language (0 code-switched
+cases against 8), and the plan's condition (tier 1's hit-target ≥ tier 0's) is met at 1.000 each.
+The cost is 12.2 s/case against 5.2 on this laptop.
+
+**Remaining sign-off item: the VM re-run.** These numbers are from a dev laptop; the VM is 4 vCPU
+and should be expected at roughly 3× the latency, which the queued pipeline absorbs. Run:
+
+```
+pnpm --filter @wecom/model eval --rules
+pnpm --filter @wecom/model eval --model qwen2.5:3b-instruct-q4_K_M --embed nomic-embed-text --out /tmp/tier0.json
+pnpm --filter @wecom/model eval --model aya-expanse:8b-q4_K_M      --embed bge-m3           --out /tmp/tier1.json
+```
+
+If tier 1 exceeds ~60 s/case there, fall back to `MODEL_TIER=0` while keeping `EMBED_MODEL=bge-m3`
+and `EMBED_DIMENSION=1024` explicitly — tier 0 with this fix is above the old rules floor on every
+metric, and its weaknesses (overlap, code-switching) are quality rather than correctness. The
+`--out` file records the offending words per case, so the language column is actionable on the VM
+without re-reading raw output by hand.
+
 ## Gates
 
 | Gate | Result |
@@ -130,8 +218,10 @@ message they did not send).
 
 | Item | Ruling | Cost if wrong |
 |---|---|---|
-| Tier 1 is the default on a dev-machine evaluation that does not support it | Keep `MODEL_TIER=1` (the embedder half is what 0051 and the compose gate are built on) and run both tiers on the VM before the pilot | A pilot runs generation on a model that is worse than the rule engine it falls back to — costly in review time, not in correctness, because the fallback catches a schema failure |
-| Both local models score **0.000** against `RuleBasedModel`'s 0.875, every case failing the schema | Recorded, not fixed: prompt v3 and the case set are X1's, and one 8-case run on a loaded laptop is not enough to re-open either. Production is not affected in the same way — `OllamaModel` falls back to the rule engine on a parse failure, which is what the compose gate exercises | Prompt v3 may be over-long, or under-specific about naming the target step, for a 3–8B model; the next eval run on the VM is what settles it |
+| ~~Tier 1 is the default on a dev-machine evaluation that does not support it~~ | **Resolved by the fix wave.** Tier 1 now beats tier 0 on overlap (0.977 vs 0.909), precision (1.000 vs 0.962) and language (0 vs 8 code-switched cases). `MODEL_TIER=1` stays, on evidence. The VM re-run is still owed and is the one remaining sign-off item | — |
+| ~~Both local models score **0.000**, every case failing the schema~~ | **Resolved by the fix wave.** It was a grammar defect: the three target fields were optional in `RESPONSE_FORMAT` and mandatory in the parse, and `payload` had no properties at all. Both tiers are now 1.000/1.000 with zero schema failures. See § "Fix wave — generation quality" | — |
+| Precision and the language-failure count are recorded in `ai_eval_runs.notes`, not in columns of their own | Accepted (fix wave): adding columns means a migration, an `EvalRunSchema` change and an openapi regeneration, none of which a generation-quality fix should carry. The CLI reports both, `--out` records the offending words, and the admin page shows the note | An admin sorting runs by precision has to read the note; nobody can chart it yet |
+| The model is shown only `materialDiffs`, and answers anchored outside that set are dropped | Accepted (fix wave): the pipeline, not the model, decides that a spelling fix is not a procedure change, and both tiers proposed on noise until it did. `material.ts` is conservative — a changed number, latin token or quoted string is always material | A change that is material in a way the token rules miss (a Hebrew-only word swap inside a long sentence) reaches neither the model nor the queue; the six negative cases are what would catch a regression here |
 | Chat quality is proven by the scripted client in e2e, by the eval harness otherwise | Real inference in the gate would be slow and non-deterministic; the orchestrator, the tools, the persistence and the apply path are the same code either way | A prompt regression is caught by an eval run, not by CI |
 | `ScriptedChatModel` is reachable under `NODE_ENV=production` when `WECOM_E2E_RUNNER=1` | Accepted: `e2e:real` runs the API as production on purpose, and `WECOM_E2E_RUNNER` is the marker `config.ts` already treats as "this is the e2e stack". A deployment sets neither it nor `AI_TEST_SCRIPT` | An install that sets both gets a fake chat that answers plausibly; the boot log warns |
 | `streamChat` cancels by closing the response reader rather than passing the `AbortSignal` to `fetch` | Accepted (X4a): under jsdom the app's signal is jsdom's and `fetch` is undici's, which rejects a foreign signal outright | A request cannot be aborted before headers arrive; after that the reader close ends it |

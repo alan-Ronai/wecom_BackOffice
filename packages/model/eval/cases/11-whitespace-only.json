@@ -1,6 +1,7 @@
 {
-  "id": "02-new-instruction",
-  "title": "הוראה חדשה נוספה לפסקה ממופה",
+  "id": "11-whitespace-only",
+  "title": "רווחים כפולים ושורה חדשה — אין מה להציע",
+  "notes": "Re-spacing from a copy-paste. Normalisation must swallow it whole.",
   "source": {
     "title": "נהלי תמיכה טכנית"
   },
@@ -9,8 +10,8 @@
       "ref": "4.9",
       "kind": "changed",
       "before": "הרץ בדיקת מהירות מול השרת הקרוב.",
-      "after": "הרץ בדיקת מהירות מול השרת הקרוב. ודא שהלקוח מנותק מרשת ה-Wi-Fi הביתית לפני הבדיקה.",
-      "similarity": 0.72
+      "after": "הרץ   בדיקת מהירות\n מול השרת הקרוב.",
+      "similarity": 0.99
     }
   ],
   "linkedSteps": [
@@ -26,14 +27,7 @@
   ],
   "blocks": [],
   "fields": [],
-  "expected": [
-    {
-      "type": "update-step",
-      "targetDocumentId": "11111111-1111-4111-8111-111111111111",
-      "targetStepKey": "s9",
-      "mustContain": ["Wi-Fi"]
-    }
-  ],
-  "maxItems": 1,
+  "expected": [],
+  "maxItems": 0,
   "latencyBudgetMs": 30000
 }

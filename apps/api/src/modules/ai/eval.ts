@@ -40,14 +40,25 @@ export async function runEvalCases(model: ModelClient, cases: EvalCase[]): Promi
     try {
       scores.push(scoreCase(c, await model.proposeChanges(contextForCase(c))));
     } catch (e) {
-      scores.push({ hitTarget: 0, hitType: 0, contentOverlap: 0 });
+      scores.push(scoreCase({ ...c, expected: [] }, [{} as never]));
       failures.push(`${c.id}: ${(e as Error).message}`);
     }
   }
+  const total = aggregate(scores);
+  /**
+   * C-I1/C-I8: `ai_eval_runs` has columns for three of the five scores. Rather than change a
+   * persisted contract (and the openapi surface that hangs off it) in a fix wave, precision and
+   * the language-failure count are recorded in `notes`, where the admin page already shows them.
+   * A dedicated column is a follow-up for whoever owns `docs/api`.
+   */
+  const measured = `precision ${total.precision.toFixed(3)} · כשלי שפה ${total.languageFailures}`;
   return {
-    ...aggregate(scores),
+    ...total,
     cases: cases.length,
-    notes: failures.length ? `כשלו ${failures.length} מקרים — ${failures.join(' · ')}`.slice(0, 2000) : '',
+    notes: [measured, failures.length ? `כשלו ${failures.length} מקרים — ${failures.join(' · ')}` : '']
+      .filter(Boolean)
+      .join(' · ')
+      .slice(0, 2000),
   };
 }
 

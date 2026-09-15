@@ -1,0 +1,64 @@
+{
+  "id": "15-field-unknown",
+  "title": "המקור מפנה לשדה CRM שאינו מוכר כלל",
+  "notes": "The set had no field-alert with issue=unknown: a source that names a CRM field nobody has heard of, rather than renaming one that exists. The paragraph both names the unknown field and adds an instruction, so it is two suggestions for two people - the integration owner confirms the field exists, the editor approves the new action.",
+  "source": {
+    "title": "נהלי חיוב"
+  },
+  "diffs": [
+    {
+      "ref": "3.4",
+      "kind": "changed",
+      "before": "עדכן את השדה \"billing hold\" לערך \"פעיל\" ושמור.",
+      "after": "עדכן את השדה \"billing hold\" לערך \"פעיל\", ולאחר מכן עדכן גם את \"invoice freeze flag\" לערך \"כן\".",
+      "similarity": 0.6
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "11111111-1111-4111-8111-111111111111",
+      "documentTitle": "איטיות גלישה",
+      "stepKey": "s21",
+      "stepNum": "21",
+      "stepTitle": "עדכון חיוב ב-CRM",
+      "anchor": "3.4",
+      "actions": ["CRM ← billing hold ← פעיל"]
+    }
+  ],
+  "blocks": [],
+  "fields": [
+    {
+      "name": "billing hold",
+      "status": "ok"
+    }
+  ],
+  "impact": {
+    "documents": [],
+    "blocks": [],
+    "fields": [
+      {
+        "name": "billing hold",
+        "usedBy": 6
+      }
+    ],
+    "topics": [],
+    "related": []
+  },
+  "expected": [
+    {
+      "type": "field-alert",
+      "mustContain": ["invoice freeze flag"],
+      "mustContainAny": [["לא מוכר", "אינו מוכר", "unknown", "חדש"]]
+    },
+    {
+      "type": "update-step",
+      "targetDocumentId": "11111111-1111-4111-8111-111111111111",
+      "targetStepKey": "s21",
+      "mustContain": ["invoice freeze flag"],
+      "mustContainAny": []
+    }
+  ],
+  "maxItems": 2,
+  "allowLatin": ["billing", "hold", "invoice", "freeze", "flag"],
+  "latencyBudgetMs": 30000
+}

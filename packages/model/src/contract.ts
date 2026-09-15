@@ -40,6 +40,12 @@ export interface ProposalContext {
    * it has to be told the budget — a CPU-only 7B with everything appended is a timeout.
    */
   maxContextChars?: number;
+  /**
+   * The same budget in tokens, which is the unit `num_ctx` is in (C-I4). Wins over
+   * `maxContextChars` when both are set; when neither is, `promptTokenBudget` converts the
+   * default char limit at `MODEL_CHARS_PER_TOKEN` (2.6 for this Hebrew+JSON mix).
+   */
+  maxContextTokens?: number;
 }
 
 /**
