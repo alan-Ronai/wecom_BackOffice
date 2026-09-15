@@ -27,6 +27,22 @@ export const WebhookBodySchema = z.object({
   modified_gmt: z.string(),
   /** ISO-8601 UTC instant the plugin sent the request; part of the signed payload. */
   sent_at: z.string().min(1),
+  /**
+   * A fresh random value per delivery, inside the signed body — **required of any plugin
+   * written against this contract**, and optional here only so the single release of grace
+   * `WEBHOOK_REQUIRE_NONCE=false` buys is a real one.
+   *
+   * The API's replay key is a hash of the exact signed bytes, which is what makes a captured
+   * request impossible to resend. `sent_at` has second resolution, so without this field two
+   * genuinely distinct saves of the same post inside one second are byte-identical requests,
+   * and the second is refused `409 REPLAY` — an editor's correction dropped on the floor. The
+   * `X-KB-Nonce` header mirrors this value but cannot replace it: a header sits outside the
+   * HMAC, so an attacker replaying a capture can put anything they like in it.
+   *
+   * Declaring it here is what puts it in the contract `docs/connectors.md` describes and what
+   * makes a plugin sending a non-string nonce fail loudly rather than silently.
+   */
+  nonce: z.string().min(1).optional(),
 });
 export type WebhookBody = z.infer<typeof WebhookBodySchema>;
 
