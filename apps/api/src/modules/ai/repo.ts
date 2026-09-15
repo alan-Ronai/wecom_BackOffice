@@ -79,12 +79,34 @@ const toProposedEdits = (r: Row): ProposedEdits => ({
       : Number(r.resulting_source_version),
 });
 
-const CONVERSATION_SELECT = `select c.id, c.kind, c.document_id, d.title document_title, c.source_revision_id,
+/**
+ * A-M9: the joined `document_title` is the one field of a conversation row that is not the
+ * caller's own writing, and it was joined unconditionally. A conversation's document was visible
+ * when it was created, but a later unpublish or a world-scope change must not leave the title
+ * readable in the conversation list. `viewer` narrows the join — the row still comes back, with
+ * `documentTitle: null` — and callers that are deliberately unscoped (the admin transcript
+ * browser, the JSONL export) pass none.
+ */
+export interface ConversationViewer {
+  worldScopes: readonly string[] | null;
+  readUnpublished: boolean;
+}
+
+const conversationSelect = (viewer: ConversationViewer | undefined, scopeParam: string): string =>
+  `select c.id, c.kind, c.document_id, d.title document_title, c.source_revision_id,
          c.user_id, coalesce(u.display_name, '') user_name, c.title, c.model, c.prompt_version,
          (select count(*)::int from ai_messages m where m.conversation_id = c.id) message_count,
          c.created_at, c.updated_at
     from ai_conversations c
-    left join documents d on d.id = c.document_id
+    left join documents d on d.id = c.document_id and d.deleted_at is null
+      ${!viewer || viewer.readUnpublished ? '' : `and d.status in ('published','partial')`}
+      ${
+        viewer
+          ? `and (${scopeParam}::text[] is null or exists (
+               select 1 from document_worlds dw
+                where dw.document_id = d.id and dw.world_slug = any(${scopeParam}::text[])))`
+          : ''
+      }
     left join users u on u.id = c.user_id`;
 
 /* ── conversations ───────────────────────────────────────────────────────── */
@@ -118,8 +140,15 @@ export async function createConversation(
 }
 
 /** Live conversations only: a soft-deleted transcript is gone for every caller, admin included. */
-export async function getConversation(q: Q, id: string): Promise<Conversation | null> {
-  const r = await q.query(`${CONVERSATION_SELECT} where c.id=$1 and c.deleted_at is null`, [id]);
+export async function getConversation(
+  q: Q,
+  id: string,
+  viewer?: ConversationViewer,
+): Promise<Conversation | null> {
+  const r = await q.query(
+    `${conversationSelect(viewer, '$2')} where c.id=$1 and c.deleted_at is null`,
+    viewer ? [id, viewer.worldScopes ? [...viewer.worldScopes] : null] : [id],
+  );
   return r.rowCount ? toConversation(r.rows[0]) : null;
 }
 
@@ -130,6 +159,7 @@ export async function getConversation(q: Q, id: string): Promise<Conversation | 
 export async function listConversations(
   q: Q,
   query: Omit<ConversationsQuery, 'mine' | 'userId'> & { userId: string | null },
+  viewer?: ConversationViewer,
 ): Promise<{ items: Conversation[]; total: number }> {
   const where = `where c.deleted_at is null
       and ($1::uuid is null or c.user_id = $1)
@@ -145,11 +175,15 @@ export async function listConversations(
     query.to ?? null,
   ];
   const total = await q.query(`select count(*)::int n from ai_conversations c ${where}`, params);
-  const r = await q.query(`${CONVERSATION_SELECT} ${where} order by c.updated_at desc limit $6 offset $7`, [
-    ...params,
-    query.pageSize,
-    (query.page - 1) * query.pageSize,
-  ]);
+  const r = await q.query(
+    `${conversationSelect(viewer, '$8')} ${where} order by c.updated_at desc limit $6 offset $7`,
+    [
+      ...params,
+      query.pageSize,
+      (query.page - 1) * query.pageSize,
+      ...(viewer ? [viewer.worldScopes ? [...viewer.worldScopes] : null] : []),
+    ],
+  );
   return { items: r.rows.map(toConversation), total: total.rows[0].n as number };
 }
 
@@ -358,27 +392,39 @@ const EXPORT_PAGE = 100;
  * and the route streams a line per conversation as each page arrives.
  */
 export async function* exportCursor(q: Q, filter: ExportFilter): AsyncIterable<ExportRow> {
-  let offset = 0;
+  /**
+   * A-M3: keyset pagination on `(created_at, id)`, not `limit/offset`.
+   *
+   * `created_at` alone is not unique and an offset walk has no snapshot, so a conversation
+   * created while a long export was streaming shifted every later page by one — silently
+   * skipping or duplicating rows in the file an auditor is meant to trust. The composite key is
+   * total, and every page asks for rows strictly after the last one yielded.
+   */
+  let after: { createdAt: Date; id: string } | null = null;
   for (;;) {
-    const page = await q.query(
-      `select c.id from ai_conversations c
+    const params: unknown[] = [
+      filter.userId ?? null,
+      filter.documentId ?? null,
+      filter.from ?? null,
+      filter.to ?? null,
+      EXPORT_PAGE,
+      after ? after.createdAt : null,
+      after ? after.id : null,
+    ];
+    const page: { rowCount: number | null; rows: { id: string; created_at: Date }[] } = await q.query(
+      `select c.id, c.created_at from ai_conversations c
         where c.deleted_at is null
           and ($1::uuid is null or c.user_id = $1)
           and ($2::uuid is null or c.document_id = $2)
           and ($3::timestamptz is null or c.created_at >= $3)
           and ($4::timestamptz is null or c.created_at <= $4)
-        order by c.created_at limit $5 offset $6`,
-      [
-        filter.userId ?? null,
-        filter.documentId ?? null,
-        filter.from ?? null,
-        filter.to ?? null,
-        EXPORT_PAGE,
-        offset,
-      ],
+          and ($6::timestamptz is null or (c.created_at, c.id) > ($6::timestamptz, $7::uuid))
+        order by c.created_at, c.id limit $5`,
+      params,
     );
     if (!page.rowCount) return;
-    for (const row of page.rows as { id: string }[]) {
+    for (const row of page.rows) {
+      after = { createdAt: row.created_at, id: row.id };
       const conversation = await getConversation(q, row.id);
       if (!conversation) continue;
       const messages = await listMessages(q, row.id);
@@ -398,6 +444,6 @@ export async function* exportCursor(q: Q, filter: ExportFilter): AsyncIterable<E
         })),
       };
     }
-    offset += page.rowCount;
+    if (page.rowCount < EXPORT_PAGE) return;
   }
 }

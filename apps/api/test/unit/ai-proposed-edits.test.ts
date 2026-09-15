@@ -37,6 +37,44 @@ describe('ai proposed edits (pure)', () => {
     );
   });
 
+  // A-C1. `diffToOps` anchors a run of added paragraphs to the same echoed ref, so the apply
+  // path has to advance the cursor per anchor or the run lands reversed — a silent correctness
+  // failure in an ordered procedure the reviewer already approved.
+  it('applyOps keeps the order of several inserts sharing one anchor', () => {
+    const html = '<p>א</p><p>ב</p>';
+    expect(
+      applyOps(html, [
+        { id: 'o1', anchor: 'p-1', kind: 'insert', before: 'א', after: 'שלב 1' },
+        { id: 'o2', anchor: 'p-1', kind: 'insert', before: 'א', after: 'שלב 2' },
+        { id: 'o3', anchor: 'p-1', kind: 'insert', before: 'א', after: 'שלב 3' },
+      ]),
+    ).toBe('<p>א</p><p>שלב 1</p><p>שלב 2</p><p>שלב 3</p><p>ב</p>');
+  });
+
+  it('applyOps keeps two anchors independent when both take inserts', () => {
+    const html = '<p>א</p><p>ב</p>';
+    expect(
+      applyOps(html, [
+        { id: 'o1', anchor: 'p-1', kind: 'insert', before: 'א', after: 'א1' },
+        { id: 'o2', anchor: 'p-2', kind: 'insert', before: 'ב', after: 'ב1' },
+        { id: 'o3', anchor: 'p-1', kind: 'insert', before: 'א', after: 'א2' },
+      ]),
+    ).toBe('<p>א</p><p>א1</p><p>א2</p><p>ב</p><p>ב1</p>');
+  });
+
+  it('diffToOps + applyOps round-trip a multi-paragraph addition in order', () => {
+    const html = '<p>א</p><p>ב</p>';
+    const cur = htmlToParagraphs(html);
+    const ops = diffToOps(cur, [
+      { ref: cur[0].ref, text: 'א' },
+      { ref: 'new-1', text: 'ראשון' },
+      { ref: 'new-2', text: 'שני' },
+      { ref: cur[1].ref, text: 'ב' },
+    ]);
+    expect(ops.map((o) => o.kind)).toEqual(['insert', 'insert']);
+    expect(applyOps(html, ops)).toBe('<p>א</p><p>ראשון</p><p>שני</p><p>ב</p>');
+  });
+
   it('applyOps escapes model text rather than letting it inject markup', () => {
     const out = applyOps('<p>א</p>', [
       { id: 'o', anchor: 'p-1', kind: 'replace', before: 'א', after: '<script>x</script>' },

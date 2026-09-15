@@ -15,6 +15,12 @@
  *
  * and `ai/index.ts` imports `./admin.js` for the side effect once X1 lands. Until then the
  * default is a no-op, so this lane compiles and runs with X1 absent — which is the point.
+ *
+ * **In the end X1 did not use it** (A-M11): the admin routes landed under
+ * `modules/admin/routes.ts`, so `registrar` is the no-op in every configuration that ships and
+ * `registerAdmin` has no caller. The hook stays because `runAdminRegistrar` is what lets the
+ * chat half boot with the admin half absent, but `ai/index.ts` no longer re-exports
+ * `registerAdmin` — a seam nothing drives should not look like a live one from outside.
  */
 import type { FastifyInstance } from 'fastify';
 

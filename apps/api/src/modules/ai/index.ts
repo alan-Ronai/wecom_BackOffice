@@ -11,6 +11,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { getAiSettings } from '../../lib/aiSettings.js';
+import { resolveModelSlots } from '../../lib/modelSlots.js';
 import { ChatOrchestrator } from './chat.js';
 import { aiChatHolder, initChatModel, type ChatModelHolder } from './chatModel.js';
 import { runAdminRegistrar } from './adminHook.js';
@@ -39,7 +40,7 @@ export default async function aiModule(app: FastifyInstance) {
     chat: aiChatHolder,
     events: app.events,
     log: app.log,
-    settings: () => getAiSettings(app.db),
+    settings: () => getAiSettings(app.db, resolveModelSlots(app.config)),
   });
 
   await app.register(aiRoutes({ orchestrator }));
@@ -48,4 +49,10 @@ export default async function aiModule(app: FastifyInstance) {
 }
 
 export { aiChatHolder, ChatOrchestrator };
-export { registerAdmin } from './adminHook.js';
+/**
+ * A-M11: `registerAdmin` is deliberately **not** re-exported. X1 registered its admin routes
+ * under `modules/admin/routes.ts` instead, so nothing ever called it; re-exporting it from the
+ * module's public surface advertised a seam that does nothing. `adminHook.ts` itself stays — the
+ * no-op registrar `runAdminRegistrar` drives is still the thing that lets this module boot with
+ * the admin half absent — it is just no longer something another module is invited to call.
+ */

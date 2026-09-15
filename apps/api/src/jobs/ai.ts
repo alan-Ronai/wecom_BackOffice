@@ -22,7 +22,7 @@ export async function runEvalJob(
   app: FastifyInstance,
   data: { runId?: string; useRules?: boolean },
 ): Promise<string> {
-  const settings = await getAiSettings(app.db);
+  const settings = await getAiSettings(app.db, resolveModelSlots(app.config));
   const slots = resolveModelSlots(app.config);
   const useRules = data.useRules || app.config.MODEL_DISABLED;
   const tag = settings.models.suggestModel || slots.suggestModel;

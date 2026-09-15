@@ -210,9 +210,28 @@ run('sources & suggestions routes', () => {
         const queue = await app.inject({ method: 'GET', url: `/api/v1/suggestions?sourceId=${sourceId}` });
         const remainder = queue.json().items.find((x: { parentId: string | null }) => x.parentId === s1.id);
         expect(remainder).toMatchObject({ status: 'pending', title: 'סף §1 (המשך)' });
-        const bad = await app.inject({
+        // A-I4: a second partial accept on an already-accepted suggestion is a 409, not a
+        // re-split. Before the fix `base` was the already-narrowed payload, so the repeat call
+        // looked like a whole accept: it erased `applied_parts` and left the first remainder in
+        // the queue with nothing explaining it.
+        const again = await app.inject({
           method: 'POST',
           url: `/api/v1/suggestions/${s1.id}/accept`,
+          payload: { parts: ['add-0'] },
+        });
+        expect(again.statusCode).toBe(409);
+        expect(again.json().code).toBe('NOT_PENDING');
+        expect(
+          (await app.inject({ method: 'GET', url: `/api/v1/suggestions/${s1.id}` })).json().appliedParts,
+        ).toEqual(['add-0']);
+        expect(
+          queue.json().items.filter((x: { parentId: string | null }) => x.parentId === s1.id),
+        ).toHaveLength(1);
+
+        // An unknown row on a still-pending suggestion is still a 400.
+        const bad = await app.inject({
+          method: 'POST',
+          url: `/api/v1/suggestions/${s2.id}/accept`,
           payload: { parts: ['nope'] },
         });
         expect(bad.statusCode).toBe(400);

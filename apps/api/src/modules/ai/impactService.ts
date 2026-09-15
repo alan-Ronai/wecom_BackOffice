@@ -15,6 +15,7 @@ import type pg from 'pg';
 import type { ImpactSet } from '@wecom/model';
 import { ImpactService } from '../sources/impact.js';
 import { visibleDocument } from './tools/read.js';
+import { canReadUnpublished } from '../../lib/visibility.js';
 import type { ToolCtx } from './tools/registry.js';
 import type { Queryable } from '../../lib/sql.js';
 import type { ReqUser } from '../../lib/user.js';
@@ -30,8 +31,12 @@ export const impactServicePort = (pool: pg.Pool): ImpactPort => {
       // are one outcome, and `getVisibleDocument` signals two of them by throwing.
       const doc = await visibleDocument({ db: q, user } as ToolCtx, documentId);
       if (!doc) return EMPTY;
+      // A-I1: the caller's own reach, not the pipeline's. `scopes` now narrows the embedding
+      // neighbours as well as the inbound links, and `readUnpublished` is the caller's
+      // permission rather than the job's hardcoded `true`.
       return service.impactForDocument(documentId, {
         scopes: user.worldScopes ? [...user.worldScopes] : null,
+        readUnpublished: canReadUnpublished(user),
       });
     },
   };

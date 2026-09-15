@@ -110,7 +110,7 @@ export async function reindexEmbeddings(
         skipped += texts.length;
       }
     }
-    for (const id of slice) steps += await refreshStepEmbeddings(deps.db, id, deps.model);
+    for (const id of slice) steps += await refreshStepEmbeddings(deps.db, id, deps.model, deps.log);
   }
   return { documents, steps, skipped, dimension };
 }

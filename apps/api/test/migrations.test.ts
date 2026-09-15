@@ -632,6 +632,80 @@ run('migrations', () => {
     expect(idx.rows.map((r) => r.indexname)).toContain('step_embeddings_document_idx');
   });
 
+  /**
+   * A-M5. Two things had no coverage: 0051 has a `down` at all, and that `down` restores the
+   * width the column actually had rather than a hardcoded 768. On a tier-1 install the old
+   * `down` narrowed a 1024 column to 768 and a re-`up` widened it again — every vector dropped
+   * twice for one round trip, with only the reindex job to recover.
+   */
+  it('0051 down restores the recorded embedding width, and re-up is idempotent', async () => {
+    const require = createRequire(import.meta.url);
+    const m = require('../migrations/0051_wave6_embeddings_affects.js') as {
+      resolveEmbedDimension: (env: NodeJS.ProcessEnv) => number;
+      NOTES_TABLE: string;
+      EMBEDDING_WIDTH_KEY: string;
+    };
+    const dim = m.resolveEmbedDimension(process.env);
+    const width = async () =>
+      Number(
+        (
+          await pool.query(
+            `select substring(format_type(a.atttypid, a.atttypmod) from '[(]([0-9]+)[)]') w
+               from pg_attribute a
+              where a.attrelid='documents'::regclass and a.attname='embedding' and not a.attisdropped`,
+          )
+        ).rows[0].w,
+      );
+    // `up` wrote down what 0003 left behind, before it rebuilt the column.
+    const noted = await pool.query(`select value from ${m.NOTES_TABLE} where key=$1`, [
+      m.EMBEDDING_WIDTH_KEY,
+    ]);
+    expect(noted.rows[0].value).toBe('768');
+    expect(await width()).toBe(dim);
+
+    const move = (direction: 'up' | 'down', count?: number) =>
+      runner({
+        databaseUrl: c.getConnectionUri(),
+        dir: 'migrations',
+        direction,
+        count,
+        migrationsTable: 'pgmigrations',
+        ignorePattern: 'package\\.json',
+        log: () => undefined,
+      });
+    const fromWave6 = (await readdir('migrations')).filter((f) => {
+      const n = Number(/^(\d{4})_/.exec(f)?.[1] ?? NaN);
+      return n >= 51;
+    }).length;
+
+    // A pre-0051 install that was *not* 768: the note is what `down` must honour.
+    await pool.query(`update ${m.NOTES_TABLE} set value='384' where key=$1`, [m.EMBEDDING_WIDTH_KEY]);
+    await move('down', fromWave6);
+    expect(await width()).toBe(384);
+    // The notes table is 0051's own, so a rollback leaves nothing behind.
+    expect((await pool.query(`select to_regclass('${m.NOTES_TABLE}') r`)).rows[0].r).toBeNull();
+    // Everything 0051 added is gone too — a `down` that left the columns would still pass a
+    // "the schema is empty afterwards" check, because 0051's tables are dropped either way.
+    expect((await pool.query(`select to_regclass('step_embeddings') r`)).rows[0].r).toBeNull();
+    expect((await pool.query(`select to_regclass('ai_eval_runs') r`)).rows[0].r).toBeNull();
+    expect(
+      (
+        await pool.query(
+          `select column_name from information_schema.columns
+            where table_name='suggestions' and column_name in ('affects','prompt_version','model')`,
+        )
+      ).rowCount,
+    ).toBe(0);
+
+    await move('up');
+    expect(await width()).toBe(dim);
+    // And `up` re-recorded the width it found this time, not the one from the first pass.
+    expect(
+      (await pool.query(`select value from ${m.NOTES_TABLE} where key=$1`, [m.EMBEDDING_WIDTH_KEY])).rows[0]
+        .value,
+    ).toBe('384');
+  }, 120000);
+
   it('rolls back cleanly', async () => {
     await runner({
       databaseUrl: c.getConnectionUri(),

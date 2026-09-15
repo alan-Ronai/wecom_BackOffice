@@ -15,7 +15,7 @@ import {
   type ModelTestResult,
 } from '@wecom/shared';
 import { currentPromptVersion, getAiSettings, putAiSettings } from '../../lib/aiSettings.js';
-import { resolveModelSlots } from '../../lib/modelSlots.js';
+import { resolveModelSlots, type ModelSlots } from '../../lib/modelSlots.js';
 import { withTransaction } from '../../lib/sql.js';
 import { requireUser } from '../../lib/user.js';
 import { QUEUES } from '../../plugins/boss.js';
@@ -33,20 +33,13 @@ import { listEvalRuns, startEvalRun } from './eval.js';
 const MODEL_TEST_TIMEOUT_MS = 30_000;
 const PROBE_PROMPT = 'ענה במילה אחת: שלום';
 
-/** The tag an admin's saved settings select for a slot, falling back to the deployed config. */
-const tagFor = (
-  slot: ModelSlot,
-  settings: { models: { suggestModel: string; chatModel: string; embedModel: string } },
-  fallback: { suggestModel: string; chatModel: string; embedModel: string },
-): string => {
-  const saved = {
-    suggest: settings.models.suggestModel,
-    chat: settings.models.chatModel,
-    embed: settings.models.embedModel,
-  }[slot];
-  const env = { suggest: fallback.suggestModel, chat: fallback.chatModel, embed: fallback.embedModel }[slot];
-  return saved || env;
-};
+/**
+ * The tag a slot resolves to. A-I5: this is `resolveModelSlots(config)` and nothing else — the
+ * stored `ai.models` row no longer overrides it, so the probe answers for the tag the process
+ * would actually load rather than for one an admin typed into a row nothing reads.
+ */
+const tagFor = (slot: ModelSlot, slots: ModelSlots): string =>
+  ({ suggest: slots.suggestModel, chat: slots.chatModel, embed: slots.embedModel })[slot];
 
 export default async function aiAdminRoutes(instance: FastifyInstance) {
   const app = instance.withTypeProvider<ZodTypeProvider>();
@@ -59,7 +52,8 @@ export default async function aiAdminRoutes(instance: FastifyInstance) {
     },
     async (req) => {
       requireUser(req);
-      return getAiSettings(app.db);
+      // A-I5: `models` is derived from the environment, not from the stored row.
+      return getAiSettings(app.db, resolveModelSlots(app.config));
     },
   );
 
@@ -72,7 +66,9 @@ export default async function aiAdminRoutes(instance: FastifyInstance) {
     async (req) => {
       const user = requireUser(req);
       const patch = req.body;
-      const after = await withTransaction(app.db, (tx) => putAiSettings(tx, patch, user.id));
+      // A-I5: `putAiSettings` refuses a `models` patch with 400 MODELS_ENV_ONLY.
+      await withTransaction(app.db, (tx) => putAiSettings(tx, patch, user.id));
+      const after = await getAiSettings(app.db, resolveModelSlots(app.config));
       await app.audit(req, 'admin.ai.settings.update', 'app_settings', 'ai', null, {
         promptVersion: currentPromptVersion(after),
       });
@@ -128,8 +124,7 @@ export default async function aiAdminRoutes(instance: FastifyInstance) {
     async (req) => {
       requireUser(req);
       const { slot } = req.body;
-      const settings = await getAiSettings(app.db);
-      const tag = tagFor(slot, settings, resolveModelSlots(app.config));
+      const tag = tagFor(slot, resolveModelSlots(app.config));
       const base: ModelTestResult = { slot, tag, reachable: false };
       if (app.config.MODEL_DISABLED)
         return { ...base, error: 'MODEL_DISABLED=true — אין חיבור למודל בהתקנה הזו' };
@@ -204,14 +199,14 @@ export default async function aiAdminRoutes(instance: FastifyInstance) {
     async (req, reply) => {
       const user = requireUser(req);
       const useRules = req.body?.useRules ?? false;
-      const settings = await getAiSettings(app.db);
       const slots = resolveModelSlots(app.config);
+      const settings = await getAiSettings(app.db, slots);
       // The row is created here, pending, so the admin page shows a run in flight rather than
       // nothing until the worker happens to pick the job up.
       const runId = await startEvalRun(app.db, {
-        model: useRules || app.config.MODEL_DISABLED ? 'rules' : tagFor('suggest', settings, slots),
+        model: useRules || app.config.MODEL_DISABLED ? 'rules' : tagFor('suggest', slots),
         promptVersion: currentPromptVersion(settings),
-        embedModel: tagFor('embed', settings, slots),
+        embedModel: tagFor('embed', slots),
         startedBy: user.id,
       });
       const jobId = app.boss ? await app.boss.send(QUEUES.aiEval, { runId, useRules }) : null;

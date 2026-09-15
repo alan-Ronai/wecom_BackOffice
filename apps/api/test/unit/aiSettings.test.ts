@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { MODEL_TIER_PRESETS } from '@wecom/shared';
-import { currentPromptVersion, getAiSettings, putAiSettings } from '../../src/lib/aiSettings.js';
+import {
+  currentPromptVersion,
+  getAiSettings,
+  modelsFromSlots,
+  putAiSettings,
+} from '../../src/lib/aiSettings.js';
 import { QUEUES } from '../../src/plugins/boss.js';
 
 /** The fake-db pattern from `workflowSettings.test.ts`: one row set, every call recorded. */
@@ -46,16 +51,47 @@ describe('AI settings', () => {
       } as never),
     ).toBe('v3.4.2');
   });
-  it('deep-merges a models patch and writes only the row that changed', async () => {
+  /**
+   * A-I5. The models block used to be writable and displayed and read by nothing that runs:
+   * every live consumer resolves its tag from `resolveModelSlots(config)`. It is now derived on
+   * read and refused on write.
+   */
+  it('refuses a models patch before touching the database', async () => {
     const db = fakeDb([{ key: 'ai.models', value: { tier: 1, chatModel: 'keep-me' } }]);
-    const s = await putAiSettings(db as never, { models: { tier: 2 } }, null);
-    expect(s.models.tier).toBe(2);
-    expect(s.models.chatModel).toBe('keep-me');
-    const upserts = written(db, 'app_settings');
-    expect(upserts).toHaveLength(1);
-    expect(upserts[0]?.values?.[0]).toBe('ai.models');
-    expect(written(db, 'ai_setting_versions')).toHaveLength(0);
+    await expect(putAiSettings(db as never, { models: { tier: 2 } }, null)).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'MODELS_ENV_ONLY',
+    });
+    expect(db.calls).toHaveLength(0); // not even the `for update` read
+  });
+  it('an empty models object is not a write and is allowed through', async () => {
+    const db = fakeDb([{ key: 'ai.brief', value: { text: 'ישן', version: 1 } }]);
+    const s = await putAiSettings(db as never, { models: {}, brief: { text: 'חדש' } }, 'u1');
+    expect(s.brief.version).toBe(2);
+    expect(written(db, 'app_settings')).toHaveLength(1);
     expect(db.calls[0]?.text).toMatch(/for update/i);
+  });
+  it('the models block is derived from the resolved slots, not from the stored row', async () => {
+    const db = fakeDb([{ key: 'ai.models', value: { tier: 1, chatModel: 'stale-row' } }]);
+    const slots = {
+      tier: 2 as const,
+      suggestModel: 'suggest-tag',
+      chatModel: 'chat-tag',
+      embedModel: 'embed-tag',
+      embedDimension: 1024,
+    };
+    expect(modelsFromSlots(slots)).toEqual({
+      tier: 2,
+      suggestModel: 'suggest-tag',
+      chatModel: 'chat-tag',
+      embedModel: 'embed-tag',
+      embedDimension: 1024,
+    });
+    const s = await getAiSettings(db as never, slots);
+    expect(s.models.chatModel).toBe('chat-tag');
+    expect(s.models.tier).toBe(2);
+    // No tier configured reports 0; the three tags still say what is actually loaded.
+    expect(modelsFromSlots({ ...slots, tier: null }).tier).toBe(0);
   });
   it('a brief edit bumps its version and appends a version row', async () => {
     const db = fakeDb([{ key: 'ai.brief', value: { text: 'ישן', version: 1 } }]);

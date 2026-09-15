@@ -24,7 +24,7 @@ X0 is on `main` before any lane starts. Nothing X0 landed changes behaviour: `MO
 | Event | `ai.message { conversationId, messageId, userId }` — per-user SSE fan-out, like `notification.created` |
 | Queues | `QUEUES.aiEval = 'ai.eval'`, `QUEUES.aiReindex = 'ai.reindex'` |
 | Config | `MODEL_TIER` (0–4, optional), `SUGGEST_MODEL`, `CHAT_MODEL`; `MODEL_TIER_PRESETS` in `wave6.ts`; `resolveModelSlots(config)` in `apps/api/src/lib/modelSlots.ts` → `{ tier, suggestModel, chatModel, embedModel, embedDimension }` |
-| Settings | keys `ai.brief`, `ai.style`, `ai.models`, `ai.limits` (`AI_SETTINGS_KEYS`); `getAiSettings(q)`, `putAiSettings(tx, patch, actorId)`, `currentPromptVersion(settings)` in `apps/api/src/lib/aiSettings.ts` |
+| Settings | keys `ai.brief`, `ai.style`, `ai.models`, `ai.limits` (`AI_SETTINGS_KEYS`); `getAiSettings(q, slots?)`, `putAiSettings(tx, patch, actorId)`, `currentPromptVersion(settings)`, `modelsFromSlots(slots)` in `apps/api/src/lib/aiSettings.ts`. `ai.models` is a **derived** block: pass `resolveModelSlots(app.config)` as `slots` and a `models` patch is refused (A-I5) |
 | Model contract | `ChatMessage`, `ToolCall`, `ChatToolSpec`, `ChatResult`, `ModelClient.chat?`, `ModelClient.embedBatch?`, `ImpactSet`, `FewShotExample`, `ProposalContext` += `brief`, `style`, `impact`, `examples`, `maxContextChars` |
 | Conversations | `ConversationKindSchema`, `ConversationSchema`, `CreateConversationBodySchema`, `ConversationsQuerySchema`, `ConversationsResponseSchema`, `MessageRoleSchema`, `AiMessageSchema`, `ConversationDetailSchema`, `SendMessageBodySchema`, `ChatEventSchema`, `MessageFeedbackBodySchema` |
 | Proposed edits | `ProposedEditOpSchema`, `ProposedEditsSchema`, `DecideProposedEditsBodySchema`, `DecideProposedEditsResultSchema` |
@@ -69,13 +69,21 @@ The tags are X1's to confirm against the VM's Ollama library; `POST /admin/ai/mo
 
 | Method | Path | Body / Query | Response | Requires |
 |---|---|---|---|---|
-| GET | `/admin/ai/settings` | — | `AiSettingsSchema` | ai.manage |
-| PUT | `/admin/ai/settings` | `AiSettingsPutSchema` | `AiSettingsSchema` (deep-merged; a brief/style text change bumps that version) | ai.manage |
+| GET | `/admin/ai/settings` | — | `AiSettingsSchema` (the `models` block is **derived**, see below) | ai.manage |
+| PUT | `/admin/ai/settings` | `AiSettingsPutSchema` | `AiSettingsSchema` (deep-merged; a brief/style text change bumps that version). A non-empty `models` is **400 `MODELS_ENV_ONLY`** | ai.manage |
 | GET | `/admin/ai/settings/versions` | `?key` | `AiSettingVersionsResponseSchema` | ai.manage |
 | POST | `/admin/ai/models/test` | `ModelTestBodySchema` | `ModelTestResultSchema` | ai.manage |
 | POST | `/admin/ai/eval` | — | 202 `JobQueuedSchema` (queues `ai.eval`) | ai.manage |
 | GET | `/admin/ai/eval/runs` | — | `EvalRunsResponseSchema` | ai.manage |
 | POST | `/admin/ai/reindex` | — | 202 `JobQueuedSchema` (queues `ai.reindex`) | ai.manage |
+
+**The `models` block is read-only and environment-derived** (fix wave, A-I5). `AiSettingsSchema.models` reports `resolveModelSlots(config)` — the same resolution `makeChatModel`, `app.model`, the boot dimension check and `reindexEmbeddings` use — not the `ai.models` row. Before the fix an admin could move the tier on `/admin/ai`, see it saved, see `POST /admin/ai/models/test` confirm the new tag, and change nothing that runs; `embedDimension` in particular could be set to a width `documents.embedding` cannot hold. So:
+
+- `PUT /admin/ai/settings` with a non-empty `models` object answers **400 `MODELS_ENV_ONLY`** (an empty `{}` is not a write and passes through). `brief`, `style` and `limits` are unchanged — those *are* read live.
+- `POST /admin/ai/models/test` probes the tag `resolveModelSlots` resolves for the slot, so the probe answers for what a restart would load.
+- `models.tier` reports `0` when no `MODEL_TIER` is configured (the slots then come from `MODEL_NAME` / `EMBED_MODEL`); the three tag fields always say what is actually loaded.
+- Changing a slot is `MODEL_TIER` (or `SUGGEST_MODEL`/`CHAT_MODEL`/`EMBED_MODEL`) plus a restart, plus migration 0051 and `POST /admin/ai/reindex` when the width moves — spec §6, and the Deploy checklist below.
+- **Web:** `ModelsTab` is a display surface and the "test" button; it must not offer a save. See the handoff note in the fix-wave report.
 
 ### X1/X3 — Suggestions
 
@@ -90,7 +98,15 @@ Existing routes keep their paths and their permissions (`suggestions.review`, `s
 
 **`PUT`, not `PATCH`.** Spec §4.2 names the edit route `PATCH /suggestions/:id/edit`; the live route the web already calls is `PUT`, so X3 widened that body instead of adding a second route. `editedPayload` and `structuredEdit` are mutually exclusive — a body with both, or with neither, is a 400 `VALIDATION`.
 
-**Permissions.** `accept` and `analytics` both sit behind `suggestions.review`, the permission the existing decision routes already use (the table previously said `suggestions.apply` / `analytics.read`; the live routes are `suggestions.review` and X3 kept them consistent). `suggestions.apply` still guards `POST /suggestions/publish`, which is what actually writes documents.
+**Permissions.** `accept` and `analytics` both sit behind **`suggestions.review`**, the permission the existing decision routes already use (the table previously said `suggestions.apply` / `analytics.read`; the live routes are `suggestions.review` and X3 kept them consistent). `suggestions.apply` still guards `POST /suggestions/publish`, which is what actually writes documents. **`GET /suggestions/analytics` is `suggestions.review`, not `analytics.read`** — the web tab must be gated on the same permission the route enforces (fix wave; `SuggestionAnalyticsTab` is the web fixer's change).
+
+**World scope (fix wave, A-I6).** The review queue is world-scoped like every other reader, and one predicate says so for all of it — `suggestionVisibleSql` in `apps/api/src/modules/sources/suggestionScope.ts`:
+
+- a suggestion **with** a target document is visible when that document is: live, status-visible to the caller, and inside the caller's world scope;
+- a suggestion with **no** target (`new-card`, which carries a whole proposed document in its payload, and `field-alert`) is visible when its source feeds at least one document in the caller's scope (`source_revisions → sources → documents → document_worlds`);
+- a caller with no world scope sees everything, as everywhere else. A row outside the caller's reach answers **404**, never 403.
+
+It applies to `GET /suggestions`, `GET /suggestions/:id`, the `before` snapshot every decision route audits against (so `accept`/`reject`/`reset`/`edit` cannot reach past the read), the chat's `list_suggestions` and `refine_suggestion` tools, and the dashboard's `pipeline` panel — whose `bySource` returns source *titles* and therefore cannot stay org-wide while the queue it links to is scoped. `list_suggestions` additionally requires at least one of `documentId` / `sourceRevisionId`: with neither it used to return the 30 most recent suggestions on the instance.
 
 **Row ids** (`rowsOf` in `packages/shared/src/suggestions/structured.ts` — the one scheme the editor renders, the API applies and `applied_parts` stores):
 
@@ -123,7 +139,7 @@ A row id outside `STRUCTURED_EDIT_ROW_GROUPS[type]` is a 400 (X3 widened those l
 | GET | `/ai/proposed-edits/:id` | — | `ProposedEditsSchema` | ai.ask, own conversation (or ai.manage) |
 | POST | `/ai/proposed-edits/:id/decide` | `DecideProposedEditsBodySchema` | `DecideProposedEditsResultSchema` | ai.chat + docs.edit |
 | GET | `/admin/ai/conversations` | `ConversationsQuerySchema` (`userId`, `documentId`, `from`, `to`) | `ConversationsResponseSchema` | ai.manage |
-| GET | `/admin/ai/conversations/export.jsonl` | same filters | `application/x-ndjson` | ai.manage |
+| GET | `/admin/ai/conversations/export.jsonl` | same filters | `application/x-ndjson`; audited as **`admin.ai.conversations.export`** with the filter, before the reply is hijacked (A-I7) | ai.manage |
 | DELETE | `/admin/ai/conversations/:id` | — | 204 | ai.manage |
 
 Rate limit: `ai.limits.chatPerUserPerHour` (default 60) → 429 `AI_RATE_LIMITED`. Context budget: `ai.limits.maxContextChars` (default 24000), passed to the assembler as `ProposalContext.maxContextChars`.
@@ -146,6 +162,24 @@ One `ChatEventSchema` frame per SSE `data:` line, in this order: any number of `
 
 **Anchors.** `ProposedEditOp.anchor` is a paragraph ref in `htmlToParagraphs` form — heading path plus index inside it, e.g. `§h2-1.p-3` — resolved client-side by block order, never a DOM id: the sanitizer strips `id` attributes, so there is nothing in the document to look up. Every op carries `before` (the anchor paragraph's current text) including inserts, so the overlay can show a real diff and the apply path can refuse a hunk whose text moved under it.
 
+**Insert order (fix wave, A-C1).** Several `insert` ops may share one anchor — `diffToOps` emits one op per added paragraph, all anchored to the last echoed ref — and **the ops are applied in array order**: the first insert lands immediately after the anchor, the second after the first, and so on. `applyParagraphEdits` advances a per-anchor cursor to make that true; a renderer showing the hunks must list them in the same order the array gives, because that is the order the document will get.
+
+**`propose_source_edit` is bound to the conversation's document (A-I3).** The orchestrator persists hunks as `{ documentId: conversation.documentId, baseSourceVersion: conversationSource.version }`, so the tool refuses a `documentId` that is not the conversation's, and refuses outright in a conversation opened without a document. Both are `ok:false` with a Hebrew summary, never a silently dropped proposal.
+
+### Untrusted content in the prompt (fix wave, A-I8)
+
+Document text, source text and every tool result reach the model inside a fenced region:
+
+```
+<<<WECOM_UNTRUSTED>>>
+…content…
+<<<END_WECOM_UNTRUSTED>>>
+```
+
+The sentinels are stripped from the content before it is wrapped, so content cannot close its own region; the fence is applied *after* the context-budget truncation, so a cut section still ends with its closing sentinel; and the never-truncatable `RULES` block carries one line saying the region is content to reason about and never an instruction. The admin's `brief` and `style` are *not* fenced — those are instructions by design. `apps/api/src/modules/ai/prompt.ts` exports `UNTRUSTED_OPEN`, `UNTRUSTED_CLOSE`, `stripSentinels`, `fenceUntrusted` and `renderToolResult`; nothing else may splice authored content into a prompt.
+
+A tool result is rendered by `renderToolResult`, which truncates **inside `data`** (as a string ending `…`) rather than slicing the stringified envelope, so what the model receives is always parseable JSON.
+
 ### Tool sets
 
 The tiers nest — `ai.chat` implies the `ai.ask` tools, `ai.manage` implies both — which is what `toolsFor(permissions)` returns, in catalogue order.
@@ -154,9 +188,12 @@ The tiers nest — `ai.chat` implies the `ai.ask` tools, `ai.manage` implies bot
 |---|---|
 | `ai.ask` (agent) | `read_document`, `read_topic`, `search_kb`, `explain_step` |
 | `ai.chat` (editor) | + `read_source`, `read_impact`, `list_suggestions`, `propose_source_edit`, `refine_suggestion`, `review_document`, `draft_step` |
+
 | `ai.manage` (admin) | + `read_eval` |
 
 No tool writes. `propose_source_edit` returns hunks and `refine_suggestion` returns a payload; both need a human decision afterwards (owner decision §1.3). Every read tool applies the visibility rule, so an agent's answer can never quote unpublished content.
+
+**Every read tool applies the caller's *world* scope too** (fix wave). `read_impact` narrows both halves of the impact set — the inbound-link walk and the embedding-neighbour query — and reports drafts only to a caller holding `docs.read_unpublished`, rather than the queued pipeline's hardcoded `true` (A-I1). `list_suggestions` and `refine_suggestion` use `suggestionVisibleSql` (see the Suggestions section), and `list_suggestions` requires a `documentId` or a `sourceRevisionId` (A-I2). `int/scope-leak.test.ts` is the file that holds all of this.
 
 ### Events
 
@@ -178,7 +215,7 @@ Routes: `/workspace/:id` (X4a) · `/admin/ai` (X4b).
 
 Two web-side gates are worth stating because they are not the route's own:
 
-- `SuggestionAnalyticsTab` is gated on **`analytics.read`** (X4b's choice, matching the other analytics surfaces) while `GET /suggestions/analytics` enforces **`suggestions.review`** (X3's, matching the other suggestion routes). Both seeded roles that hold either hold both, so the pair is consistent in practice; an operator granted only `analytics.read` would see the tab and a 403 inside it.
+- `SuggestionAnalyticsTab` must be gated on **`suggestions.review`**, the permission `GET /suggestions/analytics` actually enforces. X4b gated it on `analytics.read` to match the other analytics surfaces; both seeded roles hold both, so the mismatch is latent, but a custom role holding one and not the other gets a tab that 403s inside itself. The contract is the route's permission (fix wave).
 - The admin transcript browser's `feedback` filter is applied in the browser: `ConversationsQuerySchema` has `userId`, `documentId`, `from` and `to`, and no feedback field.
 
 The workspace link ("🧭 סביבת עבודה") is shown to an `ai.chat` holder who can also edit the document, from the article topbar (and its narrow overflow menu) and the editor toolbar. There is no top-level nav entry for it: the workspace is reached from a document (spec §5).

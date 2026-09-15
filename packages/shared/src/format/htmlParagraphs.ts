@@ -155,6 +155,11 @@ const STRUCTURED = new Set(['ul', 'ol', 'table']);
  * have to reason about how the earlier ones renumbered things. A `replace` on a list or a table
  * becomes a `<p>`, because a plain-text rewrite has no rows or items to put back.
  *
+ * Several `insert`s may share one anchor — `diffToOps` emits one op per added paragraph, all
+ * anchored to the last echoed ref. Inserting each of them `afterend` of the *same* element would
+ * write them out in reverse, so the anchor advances: the node an insert just wrote becomes the
+ * anchor for the next insert on that ref, and the run lands in the order the reviewer approved.
+ *
  * Unknown refs are ignored rather than thrown on: the caller (`ai/proposedEdits.ts`) has already
  * refused the hunks whose text moved, and a ref that resolves to nothing is not a reason to lose
  * the hunks that do.
@@ -162,6 +167,8 @@ const STRUCTURED = new Set(['ul', 'ol', 'table']);
 export function applyParagraphEdits(html: string, edits: readonly ParagraphEdit[]): string {
   const root = parse(html, { comment: false });
   const byRef = new Map(walkBlocks(root).map((b) => [b.ref, b]));
+  /** ref -> the node the *next* insert on that anchor goes after (the last one written). */
+  const insertCursor = new Map<string, HTMLElement>();
   for (const edit of edits) {
     const block = byRef.get(edit.ref);
     if (!block) continue;
@@ -171,7 +178,13 @@ export function applyParagraphEdits(html: string, edits: readonly ParagraphEdit[
     }
     const markup = escapeHtml(edit.text);
     if (edit.kind === 'insert') {
-      block.el.insertAdjacentHTML('afterend', `<p>${markup}</p>`);
+      const anchor = insertCursor.get(edit.ref) ?? block.el;
+      anchor.insertAdjacentHTML('afterend', `<p>${markup}</p>`);
+      const siblings = anchor.parentNode?.childNodes;
+      const at = siblings ? siblings.indexOf(anchor) : -1;
+      const written = at >= 0 ? siblings?.[at + 1] : undefined;
+      if (written && written.nodeType === NodeType.ELEMENT_NODE)
+        insertCursor.set(edit.ref, written as HTMLElement);
       continue;
     }
     if (STRUCTURED.has(block.tag)) {
