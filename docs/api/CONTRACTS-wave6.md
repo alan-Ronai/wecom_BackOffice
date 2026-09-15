@@ -11,7 +11,7 @@ X0 is on `main` before any lane starts. Nothing X0 landed changes behaviour: `MO
 | X0 | `0050_wave6_ai_settings.js` | `ai.ask`/`ai.chat`/`ai.manage` + grants, `ai_setting_versions`, the four `ai.*` `app_settings` rows (done) |
 | X1 | `0051` | `documents.embedding` → `EMBED_DIMENSION`, `step_embeddings`, `suggestions.affects`, `suggestions.prompt_version`, `suggestions.model` |
 | X2 | `0052` | `ai_conversations`, `ai_messages`, `ai_message_feedback`, `ai_proposed_edits` |
-| X3 | `0053` | `suggestions.edit_diff`, `suggestions.applied_parts` |
+| X3 | `0053` | `suggestions.edit_diff`, `suggestions.applied_parts`, `suggestions.parent_id` (FK → `suggestions`, `on delete set null`), `suggestions_status_decided_idx`, `suggestions_parent_idx` |
 | X6 | `0054` | seams |
 
 `checkOrder` is on and nothing else reserves below `0055`.
@@ -29,7 +29,7 @@ X0 is on `main` before any lane starts. Nothing X0 landed changes behaviour: `MO
 | Conversations | `ConversationKindSchema`, `ConversationSchema`, `CreateConversationBodySchema`, `ConversationsQuerySchema`, `ConversationsResponseSchema`, `MessageRoleSchema`, `AiMessageSchema`, `ConversationDetailSchema`, `SendMessageBodySchema`, `ChatEventSchema`, `MessageFeedbackBodySchema` |
 | Proposed edits | `ProposedEditOpSchema`, `ProposedEditsSchema`, `DecideProposedEditsBodySchema`, `DecideProposedEditsResultSchema` |
 | Tools | `AI_TOOLS`, `AiToolNameSchema`, `toolsFor(permissions)` |
-| Suggestions | `AffectsItemSchema`, `SuggestionSchema` += `affects` / `promptVersion` / `model` / `editDiff` / `appliedParts`, `StructuredEditSchema`, `STRUCTURED_EDIT_ROW_GROUPS`, `StructuredEditDiffSchema`, `AcceptSuggestionBodySchema`, `SuggestionAnalyticsQuerySchema`, `SuggestionAnalyticsSchema` |
+| Suggestions | `AffectsItemSchema`, `SuggestionSchema` += `affects` / `promptVersion` / `model` / `editDiff` / `appliedParts` (+ `parentId`, X3), `StructuredEditSchema`, `STRUCTURED_EDIT_ROW_GROUPS`, `StructuredEditDiffSchema`, `AcceptSuggestionBodySchema`, `SuggestionAnalyticsQuerySchema`, `SuggestionAnalyticsSchema`; X3 adds `rowsOf` / `applyStructuredEdit` / `diffPayloads` / `splitByParts` / `NotSplittableError` / `SuggestionRow` in `packages/shared/src/suggestions/structured.ts` |
 | AI settings | `AiModelsSettingsSchema`, `AiLimitsSettingsSchema`, `AiSettingsSchema`, `AiSettingsPutSchema`, `AiSettingVersionSchema`, `AiSettingVersionsResponseSchema`, `JobQueuedSchema`, `ModelTestBodySchema`, `ModelTestResultSchema` |
 | Eval | `EvalCaseSchema`, `EvalLinkedStepSchema`, `EvalExpectationSchema`, `EvalRunSchema`, `EvalRunsResponseSchema` |
 | Web routes reserved | `/workspace/:id` (X4a), `/admin/ai` (X4b) |
@@ -83,12 +83,31 @@ Existing routes keep their paths and their permissions (`suggestions.review`, `s
 
 | Method | Path | Body / Query | Response | Requires |
 |---|---|---|---|---|
-| GET | `/suggestions/:id` | — | `SuggestionSchema`, now including `affects`, `promptVersion`, `model`, `editDiff` | suggestions.review |
-| PATCH | `/suggestions/:id/edit` | `StructuredEditSchema` (per type) | `SuggestionSchema` (stores `editedPayload` + `editDiff`; the original payload is kept) | suggestions.review |
-| POST | `/suggestions/:id/accept` | `AcceptSuggestionBodySchema` `{ parts? }` — row ids; omitted = all | `SuggestionSchema` (`appliedParts` records what was applied) | suggestions.apply |
-| GET | `/suggestions/analytics` | `SuggestionAnalyticsQuerySchema` | `SuggestionAnalyticsSchema` | analytics.read |
+| GET | `/suggestions/:id` | — | `SuggestionSchema`, now including `affects`, `promptVersion`, `model`, `editDiff`, `appliedParts`, `parentId` | suggestions.review |
+| PUT | `/suggestions/:id/edit` | `SuggestionDecisionBodySchema` — exactly one of `editedPayload` (full payload) or `structuredEdit` (`StructuredEditSchema`, per type) | `SuggestionSchema` (stores `editedPayload` + the server-derived `editDiff`; the original payload is kept) | suggestions.review |
+| POST | `/suggestions/:id/accept` | `AcceptSuggestionBodySchema` `{ parts? }` — row ids; omitted, empty or no body at all = the whole suggestion | `SuggestionSchema` (`appliedParts` records what was applied) | suggestions.review |
+| GET | `/suggestions/analytics` | `SuggestionAnalyticsQuerySchema` | `SuggestionAnalyticsSchema` | suggestions.review |
 
-Row ids are `<group>-<index>` or `<group>:<key>`; the groups each type exposes are `STRUCTURED_EDIT_ROW_GROUPS` (`update-step`: `add`, `replace`, `patch`, `branch`, `outcome` · `new-card`: `phase`, `step`, `patch` · `new-step`: `step`, `action`, `outcome`, `patch` · `update-block`: `action`, `script` · `deprecate-step`: `reason` · `field-alert`: `alert`). A row id from another type's groups is a 400.
+**`PUT`, not `PATCH`.** Spec §4.2 names the edit route `PATCH /suggestions/:id/edit`; the live route the web already calls is `PUT`, so X3 widened that body instead of adding a second route. `editedPayload` and `structuredEdit` are mutually exclusive — a body with both, or with neither, is a 400 `VALIDATION`.
+
+**Permissions.** `accept` and `analytics` both sit behind `suggestions.review`, the permission the existing decision routes already use (the table previously said `suggestions.apply` / `analytics.read`; the live routes are `suggestions.review` and X3 kept them consistent). `suggestions.apply` still guards `POST /suggestions/publish`, which is what actually writes documents.
+
+**Row ids** (`rowsOf` in `packages/shared/src/suggestions/structured.ts` — the one scheme the editor renders, the API applies and `applied_parts` stores):
+
+| type | rows | notes |
+|---|---|---|
+| `update-step` | `add-<i>`, `rep-<action.id>`, `branch`, `out-<i>`, `patch-<key>` | `rep-*` is the atomic group `replace`, `out-*` the atomic group `outcomes` |
+| `new-card` | `meta`, `step-<phase>-<step>` | `meta` (title/description/category/wave/priority) is required; a phase left with no steps is dropped |
+| `new-step` | `meta`, `act-<i>`, `out-<i>` | `meta` (afterStepKey/title) is required; at least one action must remain |
+| `update-block` | `act-<action.id>`, `script` | `act-*` is the atomic group `actions` — the payload is the block's whole new action list |
+| `deprecate-step` | `reason` | required, whole-or-nothing |
+| `field-alert` | `alert` | required, whole-or-nothing |
+
+A row id outside `STRUCTURED_EDIT_ROW_GROUPS[type]` is a 400 (X3 widened those lists additively to the spellings above). Other errors: 400 `UNKNOWN_ROW` (a row id the payload does not have), 400 `REQUIRED_ROW` (removing a required row, or leaving a `new-step` with no actions), 400 `NOT_SPLITTABLE` with `details.group` (a `parts` selection that cuts through an atomic group, or that cannot be assembled into a valid payload), 409 `ALREADY_APPLIED`.
+
+**Partial apply.** `accept` with `parts` narrows the row's `edited_payload` to the selected rows, records `applied_parts`, and re-queues everything left over as a **new pending suggestion** of the same type, revision, anchor and targets, with `parentId` set, the title suffixed ` (המשך)`, and a `suggestion.created` event — so nothing an editor did not explicitly reject leaves the queue. Selecting every row is an ordinary accept: no remainder, `appliedParts` stays null. Two selections leave no appliable remainder and so produce none: an `update-block` whose `script` was left out (the action list *is* the change), and a payload whose remaining rows are all required.
+
+**Analytics** (`GET /suggestions/analytics`, cached 60 s): **decided** = `accepted|rejected|applied`; **accepted** = `accepted|applied`; **edited** = accepted *and* (`edit_diff` has ≥1 row **or** `applied_parts` is set) — always server-derived; **rejected** = `status='rejected'`. `rates.*` are shares of the decided rows (`0` when none). `meanMinutesToDecision` averages `decided_at - created_at` over decided rows, `null` when nothing is decided. Every bucket is `{ key, total, accepted, edited, rejected, pending }`; `key` is the type, the source id, the model tag or the prompt version. Remainder rows count in their own right. `byModel` / `byPromptVersion` bucket under `'—'` until X1's 0051 adds `suggestions.model` / `suggestions.prompt_version`.
 
 `affects` is computed **server-side** by X1 from the graph and the embeddings and is not part of `ProposedSuggestion`: a model cannot claim a change touches a document it never saw.
 

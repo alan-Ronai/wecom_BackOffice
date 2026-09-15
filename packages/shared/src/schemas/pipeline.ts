@@ -159,10 +159,10 @@ export type StructuredEditRow = z.infer<typeof StructuredEditRowSchema>;
  * before its first `-` or `:`, so `add-0`, `patch:priority` and `reason` are all well formed.
  */
 export const STRUCTURED_EDIT_ROW_GROUPS = {
-  'update-step': ['add', 'replace', 'patch', 'branch', 'outcome'],
-  'new-card': ['phase', 'step', 'patch'],
-  'new-step': ['step', 'action', 'outcome', 'patch'],
-  'update-block': ['action', 'script'],
+  'update-step': ['add', 'rep', 'replace', 'patch', 'branch', 'out', 'outcome'],
+  'new-card': ['meta', 'phase', 'step', 'patch'],
+  'new-step': ['meta', 'act', 'action', 'out', 'outcome', 'step', 'patch'],
+  'update-block': ['act', 'action', 'script'],
   'deprecate-step': ['reason'],
   'field-alert': ['alert'],
 } as const satisfies Record<SuggestionType, readonly string[]>;
@@ -174,6 +174,11 @@ const editVariant = <T extends SuggestionType>(type: T) =>
 /**
  * `PATCH /suggestions/:id/edit` — one variant per suggestion type (X3 owns the route), so a
  * row group belonging to another type is a 400 rather than a silently ignored edit.
+ *
+ * X3 widened the group lists (additively — nothing X0 accepted is rejected now) to the row ids
+ * `rowsOf` actually mints in `../suggestions/structured.ts`, which is the one scheme the editor
+ * renders and the API applies: `rep-`/`out-`/`act-` are the emitted spellings of `replace`,
+ * `outcome` and `action`, and `meta` is the required first row of `new-card` / `new-step`.
  */
 export const StructuredEditSchema = z
   .discriminatedUnion('type', [
@@ -248,6 +253,11 @@ export const SuggestionSchema = z
     editDiff: StructuredEditDiffSchema.nullable().optional(),
     /** Row ids applied by a partial accept; null/absent means the whole payload. */
     appliedParts: z.array(z.string()).nullable().optional(),
+    /**
+     * The suggestion this one is the remainder of: the rows a partial accept left out are
+     * re-queued as a pending suggestion so nothing an editor did not reject disappears (X3).
+     */
+    parentId: IdSchema.nullable().optional(),
   })
   .refine((s) => s.payload.type === s.type, { message: 'payload.type must equal type' });
 export type Suggestion = z.infer<typeof SuggestionSchema>;
