@@ -25,6 +25,7 @@ import { unwrap } from '../unwrap.js';
 import { streamChat } from '../aiStream.js';
 import { chatReducer, initialChatView, type ChatViewState } from '../../lib/chatReducer.js';
 import { ApiError } from '../unwrap.js';
+import { invalidateAi } from '../invalidateAi.js';
 
 export const useConversations = (
   q: { documentId?: string; kind?: ConversationKind; mine?: boolean },
@@ -60,7 +61,7 @@ export const useCreateConversation = () => {
       sourceRevisionId?: string;
       title?: string;
     }): Promise<Conversation> => checked(ConversationSchema, await api.POST('/ai/conversations', { body })),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['ai', 'conversations'] }),
+    onSuccess: () => invalidateAi(qc),
   });
 };
 
@@ -100,11 +101,18 @@ export function useSendMessage(conversationId: string | null) {
   const [error, setError] = useState<string | null>(null);
   const ctl = useRef<AbortController | null>(null);
 
+  /*
+   * Stopping owns its own refresh: the guarded `finally` below deliberately does nothing once
+   * `ctl.current` has moved on, and the server has still persisted whatever streamed before the
+   * abort, so the transcript has to be re-read from here.
+   */
   const stop = useCallback(() => {
-    ctl.current?.abort();
+    if (!ctl.current) return;
+    ctl.current.abort();
     ctl.current = null;
     setStreaming(false);
-  }, []);
+    invalidateAi(qc);
+  }, [qc]);
   useEffect(() => () => ctl.current?.abort(), []);
 
   const send = useCallback(
@@ -117,11 +125,18 @@ export function useSendMessage(conversationId: string | null) {
       ctl.current = c;
       void streamChat({ conversationId: id, body, signal: c.signal, onEvent: dispatch })
         .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'השיחה נכשלה'))
+        /*
+         * The *whole* body is guarded on still being the current stream. `stop()` nulls
+         * `ctl.current` synchronously, so an aborted send whose promise settles after the user has
+         * already started the next one would otherwise flip `isStreaming` off under the new
+         * stream — the composer says "שלח", the click is swallowed by `if (ctl.current) return`,
+         * and sending is dead with nothing on screen to say so.
+         */
         .finally(() => {
-          if (ctl.current === c) ctl.current = null;
+          if (ctl.current !== c) return;
+          ctl.current = null;
           setStreaming(false);
-          void qc.invalidateQueries({ queryKey: keys.ai.conversation(id) });
-          void qc.invalidateQueries({ queryKey: ['ai', 'conversations'] });
+          invalidateAi(qc);
         });
     },
     [conversationId, qc],
@@ -180,7 +195,7 @@ export const useDecideProposedEdits = (documentId: string) => {
       void qc.invalidateQueries({ queryKey: keys.sourceVersions(documentId) });
       qc.removeQueries({ queryKey: keys.sourceDraft(documentId) });
       void qc.invalidateQueries({ queryKey: keys.doc(documentId) });
-      void qc.invalidateQueries({ queryKey: ['ai'] });
+      invalidateAi(qc);
     },
   });
 };

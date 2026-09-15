@@ -73,7 +73,9 @@ describe('ai admin hooks', () => {
       await result.current.mutateAsync(CONV_1);
     });
     expect(aiAdminState.deleted).toContain(CONV_1);
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['ai', 'conversations'] }));
+    // Through `invalidateAi`: the whole `ai` prefix, so every filter combination's cache entry
+    // goes, not only the key the screen happens to be holding.
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['ai'] }));
   });
 
   it('exports the transcripts as JSONL through download()', async () => {
