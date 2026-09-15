@@ -5,7 +5,14 @@ Target: one VMware VM, Ubuntu 22.04/24.04, 4 vCPU, 16 GB RAM, 80 GB disk, Docker
 ## Clean install
 1. Install Docker: `curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER` (log out and in).
 2. Clone: `git clone <repo-url> /opt/wecom-kb && cd /opt/wecom-kb`.
-3. Configure: `cp deploy/.env.example deploy/.env`, then set `POSTGRES_PASSWORD`, `SESSION_SECRET` (`openssl rand -hex 32`), `CONNECTOR_KEY` (`openssl rand -hex 32` — required even if you add the WordPress connector later; it encrypts connector secrets at rest), `PUBLIC_URL` (the DNS name users will open), and the identity settings below. `SESSION_SECRET` and `CONNECTOR_KEY` have development defaults that the API **refuses to start with** when `NODE_ENV=production`, and `CONNECTOR_HOST_ALLOWLIST` and `TRUST_PROXY` must be set there too (both have permissive fallbacks — left empty, the allowlist admits **any reachable host, private ranges and loopback included**, and an unset `TRUST_PROXY` used to trust any `X-Forwarded-For` — that a production deployment should not arrive at by omission; see the WordPress connector and reverse-proxy sections, and set `TRUST_PROXY_HOPS=1` with it). A half-filled `.env` therefore fails loudly at step 5 rather than silently running open.
+3. Configure: `cp deploy/.env.example deploy/.env`, then set `POSTGRES_PASSWORD`, `SESSION_SECRET` (`openssl rand -hex 32`), `CONNECTOR_KEY` (`openssl rand -hex 32` — required even if you add the WordPress connector later; it encrypts connector secrets at rest), `PUBLIC_URL` (the DNS name users will open), and the identity settings below. `SESSION_SECRET` and `CONNECTOR_KEY` have development defaults that the API **refuses to start with** when `NODE_ENV=production`, and `CONNECTOR_HOST_ALLOWLIST` and `TRUST_PROXY` must be set there too (both have permissive fallbacks — left empty, the allowlist admits **any reachable host, private ranges and loopback included**, and an unset `TRUST_PROXY` used to trust any `X-Forwarded-For` — that a production deployment should not arrive at by omission; see the WordPress connector and reverse-proxy sections, and set `TRUST_PROXY_HOPS=1` with it). A half-filled `.env` therefore fails loudly at step 5 rather than silently running open. Three
+things nothing derives for you, so change them in the same pass as `PUBLIC_URL`:
+`OIDC_REDIRECT_URI` (make it `<PUBLIC_URL>/api/v1/auth/callback`; it ships pointing at
+`kb.wecom.local` and a stale value is an Entra redirect-mismatch error at the first SSO login,
+not a start-up failure), `DATABASE_URL` (harmless on the shipped stack — `docker-compose.yml`
+overrides it from `POSTGRES_PASSWORD` for the `api` and `backup` containers — but it is what any
+command you run *outside* compose will use), and `MODEL_NAME`/`EMBED_MODEL` if you are not taking
+the shipped tags.
 4. TLS: place `cert.pem` and `key.pem` in `deploy/certs/` (see "TLS certificate").
 5. Start: `docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build`.
    First start pulls the model (~2 GB, 5–20 min on the LAN); progress: `docker compose -f deploy/docker-compose.yml logs -f ollama-pull`.
@@ -18,7 +25,10 @@ Target: one VMware VM, Ubuntu 22.04/24.04, 4 vCPU, 16 GB RAM, 80 GB disk, Docker
    Skip it and nothing fails: search silently falls back to lexical ranking, with no error in the
    logs and `model:true` in health. `docker compose -f deploy/docker-compose.yml exec ollama
    ollama list` is what tells you both tags are actually there.
-6. Verify: `deploy/smoke.sh https://<PUBLIC_URL host>` prints `smoke passed`.
+6. Verify: `deploy/smoke.sh https://<PUBLIC_URL host>` prints `smoke passed`. The argument is a
+   whole origin, so include the port if you changed `WEB_HTTPS_PORT` away from 443
+   (`deploy/smoke.sh https://kb.wecom.local:9443`). Run it from the repository root: the script
+   looks for `deploy/.env` next to itself.
    The check waits for the database **and** for the exact `MODEL_NAME` tag to appear in Ollama's
    `ollama list` — not merely for Ollama to answer — so a mistyped `MODEL_NAME` fails here
    (`waiting for the model tag '<tag>' to be pulled`) instead of at the first suggestion job. It
@@ -177,4 +187,16 @@ One spec asserts that a browser forging `X-Forwarded-For` stays signed out. See
   `docker compose up ollama-pull`.
 - Browser certificate error → the cert's CN/SAN does not match `PUBLIC_URL`, or the CA is not trusted on that machine.
 - Slow suggestions → expected on CPU (10–40 s per paragraph); jobs are queued, see `GET /api/v1/admin/system` (queue depths, model reachability, last backup age).
-- Logs: `docker compose logs -f api` (JSON lines; filter by `requestId` shown in error messages).
+- `backup.lastBackupOk: false` / `lastBackupAt: null` on a stack you installed today → expected,
+  and not a failure: `system.backup-check` runs at API start-up and after the nightly backup job,
+  and at install time there is no dump yet. It clears itself after 02:15, or immediately with
+  `docker compose -f deploy/docker-compose.yml exec backup backup.sh` followed by
+  `docker compose -f deploy/docker-compose.yml restart api`.
+- Logs, all four on stdout — nothing is written to a file, so `docker compose logs` is the whole
+  story and Docker's rotation is what bounds it:
+  - `docker compose logs -f api` — the application (JSON lines; filter by `requestId`, which is
+    also the `x-request-id` header and the id shown in error messages).
+  - `docker compose logs -f web` — nginx's access log, also JSON (`ip`, `uri`, `status`, `ms`,
+    `requestId`), which is where you see the client address the API was given.
+  - `docker compose logs backup` — the nightly `backup.sh` output, one line per run.
+  - `docker compose logs ollama-pull` — the model pull; the container exits when it is done.
