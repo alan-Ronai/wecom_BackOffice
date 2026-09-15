@@ -25,10 +25,10 @@ both as a component suite (`pnpm --filter @wecom/web test`) and in a browser
 | **gap** | Legacy behaviour the port lost. Every one is pinned by a test under `apps/web/test/parity/`; the ones that were fixed in this lane say so. |
 | **dropped** | Deliberately not ported, with the ruling that says so. |
 
-**Counts** — 71 rows across the four matrices below: **35 parity**, **28 improved** (7 of them
+**Counts** — 71 rows across the four matrices below: **34 parity**, **29 improved** (8 of them
 rows where a gap found in this walk was closed), **6 new** (capabilities the port adds that legacy
 never had), **2 dropped**. Section 6 names two further dropped behaviours that have no
-legacy-versus-port row of their own. Nine gaps were found: **8 fixed here**, **1 left open**
+legacy-versus-port row of their own. Ten gaps were found: **9 fixed here**, **1 left open**
 (§5).
 
 ---
@@ -58,7 +58,7 @@ legacy-versus-port row of their own. Nine gaps were found: **8 fixed here**, **1
 | Library by wave/priority, category routes | `#/library/:cat`, three wave rules, priority chip | `/library/:category`, same rules and chip | parity | `test/library/Library.test.tsx` "groups cards" |
 | Pinned section, ★ pin/unpin, P key | Pin in `localStorage`, optimistic star, `P` from the article | Pin through `POST/DELETE /documents/:id/pin`, optimistic, `P` in the article scope | parity | `test/api/hooks.test.tsx`, `test/article/PageOneIndependence.test.tsx` |
 | Auto card: CRM fields changing this week | Two most-used fields + this week's changes, links to `/fields` | Same card, same two groups | parity | `test/library/Library.test.tsx` "auto CRM card" |
-| Import/export JSON & CSV | `KB.exportAll`, CSV with `title,desc,cat,wave,pri` | Same toolbar pair, same CSV columns; the export bundle keeps the `scripts` key | parity | `LibraryPage.tsx` toolbar, `test/library/Library.test.tsx` |
+| Import/export JSON & CSV | `KB.exportAll`, CSV with `title,desc,cat,wave,pri` | Same toolbar pair; the export bundle keeps the `scripts` key. The `pri` column was being ignored and is honoured again | improved (gap closed) | `LibraryPage.tsx` toolbar, `test/parity/csv-import.test.tsx` |
 | Article call mode: ↑↓, 1–3, ↵, timer, reset | As above | As above | parity | `test/article/Article.test.tsx` "walks steps" |
 | Jump strip + G-then-number, skipped marks | `G` arms for 1500 ms, digits buffer for 450 ms, `↵` commits, skipped count with route label | Identical timings and the same hint/armed states | parity | `test/article/Article.test.tsx` "jumps with G" |
 | Trail + source § | Breadcrumb + active step + "מקור: …" | Same | parity | `test/article/Article.test.tsx` |
@@ -141,7 +141,7 @@ per-user state to `GET/PUT /me/preferences`, which is why the storage differs on
 
 ## 5. Gaps found
 
-Eight were fixed in this lane; one is left open. Every one is pinned by a test under
+Nine were fixed in this lane; one is left open. Every one is pinned by a test under
 `apps/web/test/parity/`.
 
 ### Fixed here
@@ -156,12 +156,13 @@ Eight were fixed in this lane; one is left open. Every one is pinned by a test u
 | G6 | The settings dialog had lost the two-column typography/bidi rules card — one of the design's eleven option cards, and the only written form of the contract every `<Fmt>` call implements. The stylesheet still had `.type-rules`; nothing rendered into it. | `SettingsDialog` renders the card | `test/parity/settings.test.tsx` |
 | G7 | The palette never scrolled its selection into view (the box shows ~6 rows and holds up to 40), and in `newtab`/`split` mode it offered fields, blocks and scripts as the answer to "which document?" — picking one navigated to `/doc/<field name>`. | `Palette` scrolls `.ri.on` into view; rows are narrowed to hits that name a document when the palette is asking for one, and `split` resolves a hit the same way `newtab` does | `test/parity/palette.test.tsx` |
 | G8 | The CRM note under an action said "שדה CRM · תקין" and dropped legacy's "· ב-N מסמכים"; the hover peek always showed the description and never legacy's "משתף איתך: ⧉ <block> (שלב N)"; and `document.title` never changed, so every browser tab, history entry and bookmark read "wecom · מאגר ידע פנימי". | `StepView` renders `usedIn` (already on `GET /fields`); `Peek` computes the shared blocks from two already-cached documents; `navStore` names the route and the article reports its own title | `test/parity/article.test.tsx`, `test/parity/document-title.test.tsx` |
+| G9 | CSV import read four of the five documented columns and hard-coded `priority: 'm'`, so an import of the shape `legacy/README.md` publishes flattened every card to "בינוני" — and priority is what the library groups and facets by, so the whole import landed in the wrong place with nothing to say so. | `LibraryPage.importFile` reads `pri`, falling back to `'m'` for an empty or unknown value exactly as legacy did (1 line) | `test/parity/csv-import.test.tsx` |
 
 ### Left open
 
 | # | Gap | Why it is not fixed here | Estimate |
 |---|---|---|---|
-| G9 | The editor's two picker quick-commands. Legacy offered `+ שדה CRM` and `+ קישור` on each step's adder row and `CRM שדה` / `↗ קישור למסמך` in the `/` menu; each opened a `<select>` (over `crm-fields.json`, or over every other document) and appended `פתח CRM ↗ שדה <name>` or `המשך לפי [[doc:<id>]]`. The port has neither. The **capability** is intact — `<Fmt>` still detects a field in free text and resolves `[[doc:id]]`, and the action placeholder says so — but an editor now has to type the exact field name, or a raw uuid, from memory. That is worse than legacy, where document ids were slugs. | Two new dialogs plus wiring in three files (`DropZone`'s `SlashCommand` union and command list, `EditorPage`'s `onCommand` switch and `applyBasic`, `StepEditor`'s adder row), past the ≤ 30-line in-place budget this lane works to. | ~90 lines across 3 files, half a day with tests. The existing `useModal` + `useFields` + `useDocuments` hooks cover everything it needs; no API or schema change. |
+| G10 | The editor's two picker quick-commands. Legacy offered `+ שדה CRM` and `+ קישור` on each step's adder row and `CRM שדה` / `↗ קישור למסמך` in the `/` menu; each opened a `<select>` (over `crm-fields.json`, or over every other document) and appended `פתח CRM ↗ שדה <name>` or `המשך לפי [[doc:<id>]]`. The port has neither. The **capability** is intact — `<Fmt>` still detects a field in free text and resolves `[[doc:id]]`, and the action placeholder says so — but an editor now has to type the exact field name, or a raw uuid, from memory. That is worse than legacy, where document ids were slugs. | Two new dialogs plus wiring in three files (`DropZone`'s `SlashCommand` union and command list, `EditorPage`'s `onCommand` switch and `applyBasic`, `StepEditor`'s adder row), past the ≤ 30-line in-place budget this lane works to. | ~90 lines across 3 files, half a day with tests. The existing `useModal` + `useFields` + `useDocuments` hooks cover everything it needs; no API or schema change. |
 
 ---
 
