@@ -21,6 +21,7 @@ import { initialTaxonomy, taxonomyHandlers, type TaxonomyState } from './taxonom
 import { feedbackHandlers, resetFeedbackState } from './feedback-handlers.js';
 import { learningHandlers, resetLearningState } from './learning-handlers.js';
 import { learningManageHandlers, resetLearningState as resetLearningManageState } from './learning-manage.js';
+import { aiAdminHandlers, resetAiAdminState } from './ai-admin.js';
 import type { TrashItem } from '../../src/api/types.js';
 
 const B = '/api/v1';
@@ -92,6 +93,7 @@ export function resetState(): void {
   resetFeedbackState();
   resetLearningState();
   resetLearningManageState();
+  resetAiAdminState();
 }
 
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
@@ -127,6 +129,8 @@ export const handlers: RequestHandler[] = [
   // two lanes stub the same path, the agent's view is the one `CONTRACTS-wave5.md` describes.
   ...learningHandlers,
   ...learningManageHandlers,
+  // wave 6 (X4b) — `/suggestions/analytics` and `/admin/ai/*` before the generic `:id` routes.
+  ...aiAdminHandlers,
   http.get(`${B}/auth/me`, () => HttpResponse.json({ ...fx.me, preferences: { ...state.preferences } })),
   // Bare provider ids plus a fallback — not `{ id, label }` objects.
   http.get(`${B}/auth/providers`, () =>
