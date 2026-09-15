@@ -1569,6 +1569,15 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 }
 .quiz-q > legend, .quiz-q > .stem { font-weight: 600; font-size: 13px; }
 .quiz-q label { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; }
+/* The `order` kind: a numbered list the learner moves with the same ↑/↓ the builders use. */
+.quiz-order, .quiz-order-review { margin: 0; padding-inline-start: 22px; display: grid; gap: 6px; }
+.quiz-order-row { font-size: 12.5px; }
+.quiz-order-row .quiz-order-text { margin-inline-end: 8px; }
+.quiz-order-row button {
+  min-width: 26px; padding: 2px 6px; margin-inline-start: 4px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r);
+}
+.quiz-order-row button:disabled { opacity: 0.4; }
 .quiz-result { display: grid; gap: 8px; padding: 14px; border-radius: var(--r-md); }
 .quiz-result.pass { background: var(--ok-bg); border: 1px solid var(--ok-border); }
 .quiz-result.fail { background: var(--warn-bg); border: 1px solid var(--warn-border); }
