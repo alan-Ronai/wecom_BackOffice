@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { API_BASE } from '../../api/client.js';
+import { isChunkLoadError, pageReload } from '../../lib/chunkError.js';
 
 /**
  * The missing floor under the whole SPA (acceptance review §3 A-8, §6.2, §7 item 4).
@@ -89,9 +90,19 @@ export class ErrorBoundary extends Component<Props, State> {
 
   private readonly reset = () => this.setState({ error: null });
 
+  /** The only "retry" a stale lazy chunk can honour — see `lib/chunkError.ts`. */
+  private readonly reload = () => pageReload.run();
+
   override render(): ReactNode {
     const { error } = this.state;
     if (!error) return this.props.children;
+    /**
+     * A chunk that 404s after a deploy is the one error `reset()` cannot fix: React caches the
+     * rejected `import()` inside the `lazy()` wrapper, so re-rendering the same subtree replays
+     * the same rejection forever (review H1). Only a document load reaches the new asset names,
+     * so for this error the primary action *is* the reload — and it says so.
+     */
+    const stale = isChunkLoadError(error);
     return (
       <div className="error-boundary" role="alert" dir="rtl" data-where={this.props.where}>
         <div className="eb-card">
@@ -101,11 +112,19 @@ export class ErrorBoundary extends Component<Props, State> {
           <h2>משהו השתבש</h2>
           {/* The message, not the stack: an agent cannot act on a stack, and a support call that
               can quote one line is worth more than a screen that says only "error". */}
-          <p className="eb-msg">{error.message || 'שגיאה לא צפויה'}</p>
+          <p className="eb-msg">
+            {stale ? 'גרסה חדשה של המערכת פורסמה. יש לטעון את הדף מחדש.' : error.message || 'שגיאה לא צפויה'}
+          </p>
           <div className="eb-actions">
-            <button type="button" className="btn primary" onClick={this.reset}>
-              נסה שוב
-            </button>
+            {stale ? (
+              <button type="button" className="btn primary" onClick={this.reload}>
+                טען מחדש
+              </button>
+            ) : (
+              <button type="button" className="btn primary" onClick={this.reset}>
+                נסה שוב
+              </button>
+            )}
             <a className="btn ghost" href="/library">
               חזרה לספרייה
             </a>
