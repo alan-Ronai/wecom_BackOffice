@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { LearningItem, LearningItemPatch } from '@wecom/shared';
 import {
@@ -24,6 +24,50 @@ import { ItemPreview } from './ItemPreview.js';
 import { KIND_LABEL, LSTATUS_LABEL, LSTATUS_TONE } from './LearningManagePage.js';
 import { QuizBuilder } from './QuizBuilder.js';
 
+const TABS = [
+  ['build', 'עריכה'],
+  ['completion', 'השלמה'],
+] as const;
+type Tab = (typeof TABS)[number][0];
+
+/**
+ * The intro, held locally and committed on blur — the same contract as the `כותרת` field beside it.
+ *
+ * `RichText` fires `onChange` on every keystroke (it is a draft channel, which is how `EditorPage`
+ * and `SourceEditor` use it). Feeding that straight to `PATCH /learning/items/:id` was a request
+ * and seven cache invalidations per character, and worse: once a response lagged behind the typing,
+ * `RichText`'s resync effect saw an older `value` than the editor's own HTML and reset the content
+ * with the caret at the start, mid-sentence.
+ */
+function IntroField({ value, onCommit }: { value: string; onCommit: (html: string) => void }) {
+  const [html, setHtml] = useState(value);
+  /** A server copy that arrives while the editor is untouched wins; one mid-edit does not. */
+  const dirty = useRef(false);
+  useEffect(() => {
+    if (!dirty.current) setHtml(value);
+  }, [value]);
+  return (
+    <div
+      onBlur={(e) => {
+        // Moving between the toolbar and the body is not leaving the field.
+        if (e.currentTarget.contains(e.relatedTarget as Node | null) || !dirty.current) return;
+        dirty.current = false;
+        if (html !== value) onCommit(html);
+      }}
+    >
+      <RichText
+        value={html}
+        onChange={(next) => {
+          dirty.current = true;
+          setHtml(next);
+        }}
+        compact
+        label="הקדמה"
+      />
+    </div>
+  );
+}
+
 /** Builder shell (spec §5): metadata, the kind-specific builder, preview, publish, assign, completion. */
 export function LearningItemEditor() {
   const { id } = useParams<{ id?: string }>();
@@ -41,7 +85,7 @@ export function LearningItemEditor() {
   const publish = usePublishLearningItem(id ?? '');
   const del = useDeleteLearningItem();
   const [assignOpen, setAssignOpen] = useState(false);
-  const [tab, setTab] = useState<'build' | 'completion'>('build');
+  const [tab, setTab] = useState<Tab>('build');
   const mayManage = can('learning.manage');
   const mayPublish = can('learning.publish');
   /** `/learning/manage/new` creates exactly once, even under StrictMode's double effect. */
@@ -71,6 +115,26 @@ export function LearningItemEditor() {
     );
   if (!item.data) return <div className="route-loading">טוען…</div>;
   const it = item.data;
+
+  /** RTL: ArrowLeft is the next tab on screen, ArrowRight the previous one. */
+  const onTabKey = (e: ReactKeyboardEvent<HTMLElement>) => {
+    const i = TABS.findIndex(([k]) => k === tab);
+    const to =
+      e.key === 'ArrowLeft'
+        ? i + 1
+        : e.key === 'ArrowRight'
+          ? i - 1
+          : e.key === 'Home'
+            ? 0
+            : e.key === 'End'
+              ? TABS.length - 1
+              : -1;
+    if (to < 0 || to >= TABS.length || to === i) return;
+    e.preventDefault();
+    const next = TABS[to]![0];
+    setTab(next);
+    e.currentTarget.querySelector<HTMLElement>(`#item-tab-${next}`)?.focus();
+  };
 
   const save = (body: LearningItemPatch) =>
     patch.mutateAsync(body).catch(() => toast('השמירה נכשלה', 'warn'));
@@ -142,134 +206,130 @@ export function LearningItemEditor() {
           </button>
         ) : null}
       </div>
-      <nav className="tabs" role="tablist" aria-label="תצוגה">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'build'}
-          className={'facet' + (tab === 'build' ? ' on' : '')}
-          onClick={() => setTab('build')}
-        >
-          עריכה
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'completion'}
-          className={'facet' + (tab === 'completion' ? ' on' : '')}
-          onClick={() => setTab('completion')}
-        >
-          השלמה
-        </button>
+      {/*
+        A real tablist: one tab stop for the pair, arrows to move between them (right-to-left, as
+        the page reads), and each tab pointing at the panel it controls.
+      */}
+      <nav className="tabs" role="tablist" aria-label="תצוגה" onKeyDown={onTabKey}>
+        {TABS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            id={`item-tab-${key}`}
+            aria-controls="item-tabpanel"
+            aria-selected={tab === key}
+            tabIndex={tab === key ? 0 : -1}
+            className={'facet' + (tab === key ? ' on' : '')}
+            onClick={() => setTab(key)}
+          >
+            {label}
+          </button>
+        ))}
       </nav>
-      {tab === 'completion' ? (
-        <CompletionDashboard itemId={it.id} />
-      ) : (
-        <div className="item-editor">
-          <div>
-            <label>
-              כותרת
-              <input
-                aria-label="כותרת"
-                defaultValue={it.title}
-                onBlur={(e) => {
-                  const v = e.target.value.trim();
-                  if (v && v !== it.title) void save({ title: v });
-                }}
-              />
-            </label>
-            <RichText
-              value={it.description}
-              onChange={(html) => {
-                if (html !== it.description) void save({ description: html });
-              }}
-              compact
-              label="הקדמה"
-            />
-            {it.kind === 'briefing' ? <BriefingBuilder item={it} /> : <QuizBuilder item={it} />}
-          </div>
-          <aside className="side">
-            <label>
-              עולם תוכן
-              <select
-                aria-label="עולם תוכן"
-                value={it.worldSlug ?? ''}
-                onChange={(e) => void save({ worldSlug: e.target.value || null })}
-              >
-                <option value="">כללי</option>
-                {(worlds.data ?? []).map((w) => (
-                  <option key={w.slug} value={w.slug}>
-                    {w.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              זמן משוער (דקות)
-              <input
-                aria-label="זמן משוער (דקות)"
-                type="number"
-                min={1}
-                defaultValue={it.estimatedMinutes ?? ''}
-                onBlur={(e) =>
-                  void save({ estimatedMinutes: e.target.value ? Number(e.target.value) : null })
-                }
-              />
-            </label>
-            {it.kind === 'quiz' ? (
-              <>
-                <label>
-                  ציון עובר (%)
-                  <input
-                    aria-label="ציון עובר (%)"
-                    type="number"
-                    min={1}
-                    max={100}
-                    defaultValue={it.passMark ?? 80}
-                    onBlur={(e) => void save({ passMark: Number(e.target.value) || 80 })}
-                  />
-                </label>
-                <label>
-                  מספר ניסיונות מרבי
-                  <select
-                    aria-label="מספר ניסיונות מרבי"
-                    value={it.maxAttempts ?? ''}
-                    onChange={(e) =>
-                      void save({ maxAttempts: e.target.value ? Number(e.target.value) : null })
-                    }
-                  >
-                    {/* `null` is unlimited retakes — the owner's ruling (spec §1.4). */}
-                    <option value="">ללא הגבלה</option>
-                    {[1, 2, 3, 5, 10].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </>
-            ) : null}
-            <div className="kv">
-              <span>גרסה</span>
-              <b>{it.currentVersion}</b>
-              <span>עודכן</span>
-              <b>{ago(it.updatedAt)}</b>
+      <div role="tabpanel" id="item-tabpanel" aria-labelledby={`item-tab-${tab}`}>
+        {tab === 'completion' ? (
+          <CompletionDashboard itemId={it.id} />
+        ) : (
+          <div className="item-editor">
+            <div>
+              <label>
+                כותרת
+                <input
+                  aria-label="כותרת"
+                  defaultValue={it.title}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v && v !== it.title) void save({ title: v });
+                  }}
+                />
+              </label>
+              <IntroField value={it.description} onCommit={(html) => void save({ description: html })} />
+              {it.kind === 'briefing' ? <BriefingBuilder item={it} /> : <QuizBuilder item={it} />}
             </div>
-            {versions.data?.length ? (
-              <ul className="version-list">
-                {versions.data.map((v) => (
-                  <li key={v.version}>
-                    גרסה {v.version} · {v.label} · {v.authorName} · {ago(v.createdAt)}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            <button type="button" className="btn sm danger" onClick={() => void doDelete()}>
-              מחק
-            </button>
-          </aside>
-        </div>
-      )}
+            <aside className="side">
+              <label>
+                עולם תוכן
+                <select
+                  aria-label="עולם תוכן"
+                  value={it.worldSlug ?? ''}
+                  onChange={(e) => void save({ worldSlug: e.target.value || null })}
+                >
+                  <option value="">כללי</option>
+                  {(worlds.data ?? []).map((w) => (
+                    <option key={w.slug} value={w.slug}>
+                      {w.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                זמן משוער (דקות)
+                <input
+                  aria-label="זמן משוער (דקות)"
+                  type="number"
+                  min={1}
+                  defaultValue={it.estimatedMinutes ?? ''}
+                  onBlur={(e) =>
+                    void save({ estimatedMinutes: e.target.value ? Number(e.target.value) : null })
+                  }
+                />
+              </label>
+              {it.kind === 'quiz' ? (
+                <>
+                  <label>
+                    ציון עובר (%)
+                    <input
+                      aria-label="ציון עובר (%)"
+                      type="number"
+                      min={1}
+                      max={100}
+                      defaultValue={it.passMark ?? 80}
+                      onBlur={(e) => void save({ passMark: Number(e.target.value) || 80 })}
+                    />
+                  </label>
+                  <label>
+                    מספר ניסיונות מרבי
+                    <select
+                      aria-label="מספר ניסיונות מרבי"
+                      value={it.maxAttempts ?? ''}
+                      onChange={(e) =>
+                        void save({ maxAttempts: e.target.value ? Number(e.target.value) : null })
+                      }
+                    >
+                      {/* `null` is unlimited retakes — the owner's ruling (spec §1.4). */}
+                      <option value="">ללא הגבלה</option>
+                      {[1, 2, 3, 5, 10].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              ) : null}
+              <div className="kv">
+                <span>גרסה</span>
+                <b>{it.currentVersion}</b>
+                <span>עודכן</span>
+                <b>{ago(it.updatedAt)}</b>
+              </div>
+              {versions.data?.length ? (
+                <ul className="version-list">
+                  {versions.data.map((v) => (
+                    <li key={v.version}>
+                      גרסה {v.version} · {v.label} · {v.authorName} · {ago(v.createdAt)}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <button type="button" className="btn sm danger" onClick={() => void doDelete()}>
+                מחק
+              </button>
+            </aside>
+          </div>
+        )}
+      </div>
       {assignOpen ? <AssignDialog itemId={it.id} onClose={() => setAssignOpen(false)} /> : null}
     </div>
   );

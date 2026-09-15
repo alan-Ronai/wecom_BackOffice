@@ -1,4 +1,5 @@
 import { useLearningDashboard } from '../../../api/hooks/learningManage.js';
+import { attempts } from '../../../lib/count.js';
 import { worldLabel } from '../../taxonomy/TypeBadge.js';
 import { LoadError } from '../../ui/index.js';
 
@@ -66,7 +67,7 @@ export function LearningDashboardPanel({ world }: { world?: string }) {
               <li key={q.questionId}>
                 <span className="chip chip-red">{pct(q.failRate)}</span> {q.stem}{' '}
                 <small>
-                  · {q.itemTitle} · {q.attempts} ניסיונות
+                  · {q.itemTitle} · {attempts(q.attempts)}
                 </small>
               </li>
             ))}

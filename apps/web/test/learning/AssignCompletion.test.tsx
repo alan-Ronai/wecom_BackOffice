@@ -6,7 +6,8 @@ import { App } from '../../src/App.js';
 import { withMe } from '../msw/handlers.js';
 import { server } from '../msw/server.js';
 import { learningState } from '../msw/learning-manage.js';
-import { LI_BRIEF, U2 } from '../msw/fixtures.js';
+import { http, HttpResponse } from 'msw';
+import { fx, LI_BRIEF, U2 } from '../msw/fixtures.js';
 
 const asEditor = () =>
   server.use(
@@ -15,6 +16,14 @@ const asEditor = () =>
       permissions: ['docs.read', 'learning.read', 'learning.manage', 'notes.write'],
     }),
   );
+
+/** jsdom's `Blob` has no `.text()`; `FileReader` is how you read one there. */
+const blobText = (b: Blob): Promise<string> =>
+  new Promise((resolve) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.readAsText(b);
+  });
 
 describe('assign and completion', () => {
   it('creates an audience of roles × worlds with due days', async () => {
@@ -35,7 +44,7 @@ describe('assign and completion', () => {
       worldSlugs: ['intl'],
       dueDays: 10,
     });
-    expect(await screen.findByText(/הוקצה ל-12 משתמשים/)).toBeInTheDocument();
+    expect(await screen.findByText('הוקצה ל-12 משתמשים')).toBeInTheDocument();
   });
 
   it('assigns individuals picked from the people search', async () => {
@@ -59,14 +68,42 @@ describe('assign and completion', () => {
     const table = await screen.findByRole('table', { name: 'השלמות' });
     expect(within(table).getAllByRole('row')).toHaveLength(3);
     expect(within(table).getByText('באיחור')).toBeInTheDocument();
-    const types: string[] = [];
+    const blobs: Blob[] = [];
     const orig = URL.createObjectURL;
     URL.createObjectURL = (b: Blob) => {
-      types.push(b.type);
+      blobs.push(b);
       return 'blob:x';
     };
     await userEvent.click(screen.getByRole('button', { name: 'ייצוא CSV' }));
-    expect(types[0]).toContain('text/csv');
+    expect(blobs[0]!.type).toContain('text/csv');
+    const csv = await blobText(blobs[0]!);
+    // The dates read as the table shows them, not as raw ISO.
+    expect(csv).toContain('1 ספטמבר 2026');
+    expect(csv).not.toContain('2026-09-01T08:00:00.000Z');
+    URL.createObjectURL = orig;
+  });
+
+  it('neutralises a display name that Excel would run as a formula', async () => {
+    asEditor();
+    server.use(
+      http.get('/api/v1/learning/items/:id/completion', () =>
+        HttpResponse.json({
+          ...fx.completion,
+          rows: [{ ...fx.completion.rows[0]!, displayName: '=1+1+cmd|calc' }],
+        }),
+      ),
+    );
+    renderWithProviders(<App />, { route: `/learning/manage/${LI_BRIEF}` });
+    await userEvent.click(await screen.findByRole('tab', { name: 'השלמה' }));
+    await screen.findByRole('table', { name: 'השלמות' });
+    const blobs: Blob[] = [];
+    const orig = URL.createObjectURL;
+    URL.createObjectURL = (b: Blob) => {
+      blobs.push(b);
+      return 'blob:x';
+    };
+    await userEvent.click(screen.getByRole('button', { name: 'ייצוא CSV' }));
+    expect(await blobText(blobs[0]!)).toContain(`"'=1+1+cmd|calc"`);
     URL.createObjectURL = orig;
   });
 });

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMentionable } from '../../../api/hooks/collab.js';
 import { useAssignUsers, useAudienceOptions, useCreateAudience } from '../../../api/hooks/learningManage.js';
+import { users as nUsers } from '../../../lib/count.js';
 import { useDebounced } from '../../../lib/useDebounced.js';
 import { useToast } from '../../ui/Toast.js';
 import { useFocusTrap } from '../../ui/useFocusTrap.js';
@@ -30,7 +31,13 @@ export function AssignDialog({ itemId, onClose }: { itemId: string; onClose: () 
    * replacing it. The number is derived once, where it is actually sent.
    */
   const [dueDaysText, setDueDaysText] = useState('14');
-  const dueDays = Number(dueDaysText) || 14;
+  /**
+   * `Number(text) || 14` silently rewrote `0`, `abc` and `9999` to the default, and the `min`/`max`
+   * attributes did nothing without a form to validate. An unusable value now blocks the two assign
+   * buttons and says why, instead of assigning something the manager did not ask for.
+   */
+  const dueDays = Number.parseInt(dueDaysText, 10);
+  const dueValid = Number.isInteger(dueDays) && dueDays >= 1 && dueDays <= 365;
   const [q, setQ] = useState('');
   const people = useMentionable(useDebounced(q, 200), true);
   const [picked, setPicked] = useState<{ id: string; displayName: string }[]>([]);
@@ -101,18 +108,24 @@ export function AssignDialog({ itemId, onClose }: { itemId: string; onClose: () 
               min={1}
               max={365}
               value={dueDaysText}
+              aria-invalid={!dueValid}
               onChange={(e) => setDueDaysText(e.target.value)}
             />
           </label>
+          {dueValid ? null : (
+            <div className="form-error" role="alert">
+              מספר הימים להשלמה חייב להיות בין 1 ל-365
+            </div>
+          )}
           <button
             type="button"
             className="btn primary sm"
-            disabled={!roleNames.length || !worldSlugs.length || createAudience.isPending}
+            disabled={!roleNames.length || !worldSlugs.length || !dueValid || createAudience.isPending}
             onClick={() =>
               void createAudience
                 .mutateAsync({ roleNames, worldSlugs, userIds: [], dueDays })
                 .then((a) => {
-                  toast(`הוקצה ל-${a.resolvedUsers} משתמשים`, 'ok');
+                  toast(`הוקצה ל-${nUsers(a.resolvedUsers)}`, 'ok');
                   onClose();
                 })
                 .catch(() => toast('ההקצאה נכשלה', 'warn'))
@@ -160,12 +173,12 @@ export function AssignDialog({ itemId, onClose }: { itemId: string; onClose: () 
           <button
             type="button"
             className="btn sm"
-            disabled={!picked.length || assign.isPending}
+            disabled={!picked.length || !dueValid || assign.isPending}
             onClick={() =>
               void assign
                 .mutateAsync({ userIds: picked.map((p) => p.id), dueDays })
                 .then((r) => {
-                  toast(`הוקצה ל-${r.assigned} משתמשים`, 'ok');
+                  toast(`הוקצה ל-${nUsers(r.assigned)}`, 'ok');
                   onClose();
                 })
                 .catch(() => toast('ההקצאה נכשלה', 'warn'))

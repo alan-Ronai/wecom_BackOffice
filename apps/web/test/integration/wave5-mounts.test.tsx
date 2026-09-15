@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { server } from '../msw/server.js';
 import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
@@ -128,7 +128,7 @@ describe('V6 editor mounts', () => {
     const box = await screen.findByRole('checkbox', { name: 'שינוי מהותי – דרוש רענון' });
     // The detector already decided; the editor is confirming, not guessing.
     await waitFor(() => expect(box).toBeChecked());
-    expect(screen.getByText(/2 פריטי למידה מושפעים/)).toBeInTheDocument();
+    expect(screen.getByText(/שני פריטי למידה מושפעים/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'אישור' }));
     await waitFor(() => expect(sent?.significantChange).toBe(true));
     expect(await screen.findByText(/5 רענונים נוצרו/)).toBeInTheDocument();
@@ -156,6 +156,37 @@ describe('V6 editor mounts', () => {
     await user.click(box);
     await user.click(screen.getByRole('button', { name: 'אישור' }));
     await waitFor(() => expect(sent?.significantChange).toBe(false));
+  });
+
+  it('says nothing about a significant change while the preview is still in flight', async () => {
+    let sent: Record<string, unknown> | undefined;
+    server.use(
+      // The preview never lands: a fast editor, or a slow API — the case where an unticked box
+      // means "not known yet" rather than "no".
+      http.get(`${B}/documents/:id/change-preview`, async () => {
+        await delay('infinite');
+        return HttpResponse.json({});
+      }),
+      http.post(`${B}/documents/:id/publish`, async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          document: fx.docBrowsing,
+          version: 4,
+          auditId: 'a0000000-0000-4000-8000-0000000000ce',
+          changeFlag: { significant: true, reasons: [], affectedItems: 1, refreshAssignments: 3 },
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<App />, { route: `/edit/${fx.docBrowsing.id}` });
+    await user.click(await screen.findByRole('button', { name: /פרסם/ }));
+    const box = await screen.findByRole('checkbox', { name: 'שינוי מהותי – דרוש רענון' });
+    expect(box).toBeDisabled();
+    expect(screen.getByText('בודק אם השינוי מהותי…')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'אישור' }));
+    await waitFor(() => expect(sent).toBeTruthy());
+    // Silence, so the server's own detector decides — not `significantChange: false`.
+    expect(sent).not.toHaveProperty('significantChange');
   });
 });
 

@@ -100,7 +100,8 @@ test('W5-E2E-1 a quiz is built, assigned, passed, refreshed after a significant 
   await expect.poll(() => worldBoxes.count()).toBeGreaterThan(0);
   await worldBoxes.first().check();
   await assign.getByRole('button', { name: 'הקצה לקהל' }).click();
-  await expect(l.getByText(/הוקצה ל-[1-9]\d* משתמשים/)).toBeVisible();
+  // The count goes through `lib/count.ts`, so one user reads "משתמש אחד" and two read "שני משתמשים".
+  await expect(l.getByText(/הוקצה ל-(משתמש אחד|שני משתמשים|[1-9]\d* משתמשים)/)).toBeVisible();
 
   /* 3. the agent passes it in the player ------------------------------------ */
   /*
@@ -127,13 +128,48 @@ test('W5-E2E-1 a quiz is built, assigned, passed, refreshed after a significant 
   await a.getByRole('link', { name: QUIZ }).click();
   await a.getByRole('button', { name: 'התחל שאלון' }).click();
   for (let i = 0; i < questions.length; i++) {
-    await expect(a.locator('.quiz-progress')).toHaveText(`שאלה ${i + 1} מתוך ${questions.length}`);
-    const asked = await a.locator('.quiz-q legend').innerText();
+    await expect(a.getByText(`שאלה ${i + 1} מתוך ${questions.length}`)).toBeVisible();
+    // The question is a `role="group"` named by its own `<legend>`; the legend inside it is the
+    // only non-role locator left here, and it is semantic markup rather than a styling hook.
+    const group = a.getByRole('group');
+    const asked = await group.locator('legend').innerText();
     const q = questions.find((x) => x.stem.trim() === asked.trim());
     expect(q, `the player asked a question the item did not list: ${asked}`).toBeTruthy();
     const advance = a.getByRole('button', { name: i + 1 < questions.length ? 'הבא' : 'שלח תשובות' });
-    const inputs = a.locator('.quiz-q input');
-    for (const [n, o] of q!.options.entries()) if (o.correct) await inputs.nth(n).check();
+
+    if (q!.kind === 'order') {
+      // The rules fallback emits one of these per document. The correct sequence is the option
+      // order the manager route returns; the player shows them shuffled and the learner sorts
+      // them with the ↑ buttons, each named after the row it moves.
+      const want = q!.options.map((o) => o.text);
+      const shown = () =>
+        group
+          .getByRole('button', { name: /^העלה את / })
+          .evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')!.replace('העלה את ', '')));
+      for (let t = 0; t < want.length; t++) {
+        let from = (await shown()).indexOf(want[t]!);
+        expect(from, `the player did not offer the option "${want[t]}"`).toBeGreaterThanOrEqual(0);
+        while (from > t) {
+          await group.getByRole('button', { name: `העלה את ${want[t]}` }).click();
+          from--;
+        }
+      }
+      expect(await shown()).toEqual(want);
+    } else {
+      const role = q!.kind === 'multi' ? 'checkbox' : 'radio';
+      for (const o of q!.options) {
+        if (!o.correct) continue;
+        const input = group.getByRole(role, { name: o.text });
+        // Re-tick rather than assume: a `learning.*` notification for this assignment refetches
+        // the player payload mid-quiz (see the parked row in docs/wave5-acceptance.md). The player
+        // now keys its selections by question id and holds them across that, and this is where
+        // that claim is checked rather than trusted.
+        await expect(async () => {
+          await input.check();
+          await expect(input).toBeChecked({ timeout: 1_000 });
+        }).toPass({ timeout: 15_000 });
+      }
+    }
     await expect(advance).toBeEnabled();
     await advance.click();
   }
@@ -155,7 +191,7 @@ test('W5-E2E-1 a quiz is built, assigned, passed, refreshed after a significant 
   const significant = pub.getByRole('checkbox', { name: 'שינוי מהותי – דרוש רענון' });
   await significant.check();
   await pub.getByRole('button', { name: 'אישור' }).click();
-  await expect(l.getByText(/רענונים נוצרו/)).toBeVisible({ timeout: 30_000 });
+  await expect(l.getByText(/(רענון אחד נוצר|רענונים נוצרו)/)).toBeVisible({ timeout: 30_000 });
 
   await a.goto(`/doc/${doc!.id}`);
   await expect(a.getByRole('status', { name: 'רענון ידע נדרש' })).toBeVisible({ timeout: 30_000 });

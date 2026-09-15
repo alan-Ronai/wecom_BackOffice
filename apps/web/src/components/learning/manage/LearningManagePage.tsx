@@ -8,6 +8,7 @@ import {
 } from '../../../api/hooks/learningManage.js';
 import { useCan } from '../../../api/hooks/me.js';
 import { useWorlds } from '../../../api/hooks/taxonomy.js';
+import { counted, entries, questions, users } from '../../../lib/count.js';
 import { ago } from '../../../lib/format.js';
 import { Hamburger } from '../../shell/MobileDrawer.js';
 import { useModal } from '../../ui/Modal.js';
@@ -27,6 +28,9 @@ export const LSTATUS_TONE: Record<LearningStatus, string> = {
   published: 'chip-green',
   archived: 'chip-gray',
 };
+
+/** Why the facets are inert while the list is scoped to one knowledge item (B-I7). */
+const FACETS_OFF = 'הסינון אינו זמין בתצוגה של פריט ידע יחיד';
 
 /** The editor's learning manager (spec §5): list, filters, create, dashboard strip. */
 export function LearningManagePage() {
@@ -91,12 +95,19 @@ export function LearningManagePage() {
         </button>
       </div>
       <LearningDashboardPanel world={world} />
+      {/*
+        The document-scoped list comes from `GET /documents/:id/learning`, which takes none of
+        these four: leaving them live meant controls that wrote to the URL and changed nothing.
+        They are disabled with the reason on them until the chip is cleared.
+      */}
       <div className="facets" aria-label="סינון">
         <label className="small">
           סוג
           <select
             aria-label="סוג"
             value={kind ?? ''}
+            disabled={!!documentId}
+            title={documentId ? FACETS_OFF : undefined}
             onChange={(e) => set('kind', e.target.value || undefined)}
           >
             <option value="">הכל</option>
@@ -109,6 +120,8 @@ export function LearningManagePage() {
           <select
             aria-label="סטטוס"
             value={status ?? ''}
+            disabled={!!documentId}
+            title={documentId ? FACETS_OFF : undefined}
             onChange={(e) => set('status', e.target.value || undefined)}
           >
             <option value="">הכל</option>
@@ -124,6 +137,8 @@ export function LearningManagePage() {
           <select
             aria-label="עולם תוכן"
             value={world ?? ''}
+            disabled={!!documentId}
+            title={documentId ? FACETS_OFF : undefined}
             onChange={(e) => set('world', e.target.value || undefined)}
           >
             <option value="">הכל</option>
@@ -138,11 +153,14 @@ export function LearningManagePage() {
           aria-label="חיפוש"
           placeholder="חיפוש…"
           value={q}
+          disabled={!!documentId}
+          title={documentId ? FACETS_OFF : undefined}
           onChange={(e) => {
             setQ(e.target.value);
             set('q', e.target.value || undefined);
           }}
         />
+        {documentId ? <span className="small muted">{FACETS_OFF}</span> : null}
       </div>
       {documentId ? (
         <div className="chips" aria-live="polite">
@@ -189,8 +207,8 @@ export function LearningManagePage() {
             </div>
             <div className="title">{c.title}</div>
             <div className="desc">
-              {c.kind === 'quiz' ? `${c.questionCount} שאלות` : `${c.entryCount} פריטים`} · {c.assignedUsers}{' '}
-              הוקצו
+              {c.kind === 'quiz' ? questions(c.questionCount) : entries(c.entryCount)} ·{' '}
+              {counted(c.assignedUsers, users, 'הוקצה', 'הוקצו')}
               {c.completionRate !== null ? ` · ${Math.round(c.completionRate * 100)}%` : ''} · עודכן{' '}
               {ago(c.updatedAt)}
             </div>

@@ -1,6 +1,21 @@
 import type { Assignment, Document } from '@wecom/shared';
 
 export const KIND_LABEL: Record<Assignment['kind'], string> = { briefing: 'תדריך', quiz: 'שאלון' };
+
+/**
+ * Move one row of an ordered list by a step, or return it unchanged at the ends.
+ *
+ * The ↑/↓ buttons are the wave-4 ordering ruling (keyboard-reachable, no drag), and wave 5 orders
+ * three lists with them — briefing entries, quiz questions, and the learner's own answer to an
+ * `order` question. One implementation so the player and the builders cannot disagree.
+ */
+export const move = <T>(xs: readonly T[], i: number, dir: -1 | 1): T[] => {
+  const j = i + dir;
+  if (i < 0 || i >= xs.length || j < 0 || j >= xs.length) return [...xs];
+  const n = [...xs];
+  [n[i], n[j]] = [n[j]!, n[i]!];
+  return n;
+};
 export const STATUS_LABEL: Record<Assignment['status'], string> = {
   open: 'פתוחה',
   overdue: 'באיחור',

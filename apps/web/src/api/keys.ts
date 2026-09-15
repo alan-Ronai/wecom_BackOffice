@@ -55,7 +55,6 @@ export const keys = {
   feedbackItem: (id: string) => ['feedback', 'item', id] as const,
   feedbackAnalytics: (q: unknown = '*') => ['feedback', 'analytics', q] as const,
   docFeedback: (id: string) => ['docFeedback', id] as const,
-  /* wave 5 — learning (V4a reads `my`; V4b owns the rest) */
   /**
    * wave 5 — learning (V4a's learner keys and V4b's manager keys in one block). Every key starts
    * with `'learning'`, which is what lets one prefix invalidation drop the whole surface when a

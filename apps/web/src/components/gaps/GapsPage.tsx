@@ -3,7 +3,8 @@ import type { Gap } from '@wecom/shared';
 import { useDetectGaps, useDismissGap, useGaps, useResolveGap } from '../../api/hooks/gaps.js';
 import { useCan } from '../../api/hooks/me.js';
 import { useWorlds } from '../../api/hooks/taxonomy.js';
-import { ago } from '../../lib/format.js';
+import { counted, gaps as nGaps } from '../../lib/count.js';
+import { ago, fmtDate } from '../../lib/format.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { worldLabel } from '../taxonomy/TypeBadge.js';
 import { useModal } from '../ui/Modal.js';
@@ -26,6 +27,53 @@ const ACTION_LABEL: Record<Gap['suggestedAction'], string> = {
   review: 'בדוק',
 };
 
+/**
+ * The evidence a heuristic fired on, in Hebrew.
+ *
+ * It used to be `JSON.stringify(evidence, null, 1)` in a `<pre>` — a block of LTR JSON in an RTL
+ * card, with the field names the detector happens to use today. Each heuristic writes its own
+ * shape (`heuristics.ts`), so this labels the keys they write and falls back to the raw key for
+ * anything a later heuristic adds: unreadable beats invisible, but only as the last resort.
+ */
+const EVIDENCE_LABEL: Record<string, string> = {
+  count: 'חיפושים',
+  samples: 'מונחים',
+  lastTerms: 'מונחים',
+  lastAt: 'לאחרונה',
+  windowDays: 'חלון (ימים)',
+  open: 'דיווחים פתוחים',
+  kinds: 'סוגי דיווח',
+  views: 'צפיות',
+  updatedAt: 'עודכן',
+  staleDays: 'סף יישון (ימים)',
+  attempts: 'ניסיונות',
+  failed: 'נכשלו',
+};
+
+const ISO = /^\d{4}-\d{2}-\d{2}T/;
+const evidenceText = (v: unknown): string => {
+  if (Array.isArray(v)) return v.map((x) => String(x)).join(', ');
+  if (typeof v === 'string') return ISO.test(v) ? fmtDate(v) : v;
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+};
+
+function Evidence({ evidence }: { evidence: Record<string, unknown> }) {
+  // Ids are plumbing: the card already links to whatever the gap points at.
+  const rows = Object.entries(evidence).filter(([k, v]) => v !== null && v !== undefined && !/Id$/.test(k));
+  if (!rows.length) return null;
+  return (
+    <dl className="evidence" role="group" aria-label="ממצאים">
+      {rows.map(([k, v]) => (
+        <div key={k}>
+          <dt>{EVIDENCE_LABEL[k] ?? k}</dt>
+          <dd>{evidenceText(v)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 const STATUS_LABEL: Record<Gap['status'], string> = {
   open: 'פתוחים',
   dismissed: 'נדחו',
@@ -43,6 +91,12 @@ export function GapsPage() {
   const world = sp.get('world') ?? undefined;
   const mayRead = can('gaps.read');
   const mayManage = can('gaps.manage');
+  /**
+   * The two actions that open the editor need `docs.edit` — `gaps.read` alone is a lead-adjacent
+   * reader, and sending them to `/edit/new` lands them on a screen they cannot use. Same rule as
+   * the library's own edit affordances.
+   */
+  const mayEdit = can('docs.edit');
   const gaps = useGaps({ kind, status, world }, mayRead);
   const worlds = useWorlds();
   const dismiss = useDismissGap();
@@ -101,6 +155,10 @@ export function GapsPage() {
         : g.topicId
           ? `/topic/${g.topicId}`
           : '/library';
+  /** A reader without `docs.edit` is shown the item instead of an editor they cannot open. */
+  const readerHref = (g: Gap) =>
+    g.documentId ? `/doc/${g.documentId}` : g.topicId ? `/topic/${g.topicId}` : '/library';
+  const opensEditor = (g: Gap) => g.suggestedAction === 'create' || !!g.documentId;
 
   return (
     <div className="page gaps-page">
@@ -117,7 +175,12 @@ export function GapsPage() {
             onClick={() =>
               void detect
                 .mutateAsync()
-                .then((r) => toast(`זוהו ${r.detected}, עודכנו ${r.updated}`, 'ok'))
+                .then((r) =>
+                  toast(
+                    `${counted(r.detected, nGaps, 'זוהה', 'זוהו')} · ${counted(r.updated, nGaps, 'עודכן', 'עודכנו')}`,
+                    'ok',
+                  ),
+                )
                 .catch(() => toast('הזיהוי נכשל', 'warn'))
             }
           >
@@ -185,7 +248,7 @@ export function GapsPage() {
                 <small>נראה לראשונה {ago(g.firstSeenAt)}</small>
               </div>
               <h3>{g.title}</h3>
-              <pre className="evidence">{JSON.stringify(g.evidence, null, 1)}</pre>
+              <Evidence evidence={g.evidence} />
               {g.dismissedReason ? (
                 <p>
                   <b>נדחה:</b> {g.dismissedReason}
@@ -198,9 +261,21 @@ export function GapsPage() {
               ) : null}
             </div>
             <div className="row-actions">
-              <Link className="btn sm primary" to={actionHref(g)}>
-                {ACTION_LABEL[g.suggestedAction]}
-              </Link>
+              {opensEditor(g) && !mayEdit ? (
+                g.suggestedAction === 'create' ? (
+                  <span className="btn sm" aria-disabled="true" title="נדרשת הרשאת עריכת פריטי ידע">
+                    {ACTION_LABEL[g.suggestedAction]}
+                  </span>
+                ) : (
+                  <Link className="btn sm" to={readerHref(g)}>
+                    הצג פריט
+                  </Link>
+                )
+              ) : (
+                <Link className="btn sm primary" to={actionHref(g)}>
+                  {ACTION_LABEL[g.suggestedAction]}
+                </Link>
+              )}
               {mayManage && g.status === 'open' ? (
                 <>
                   <button type="button" className="btn sm" onClick={() => doResolve(g)}>

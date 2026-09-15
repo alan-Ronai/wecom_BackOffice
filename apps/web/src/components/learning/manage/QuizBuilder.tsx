@@ -1,22 +1,31 @@
 import { useEffect, useState } from 'react';
 import type { LearningItem, QuizQuestion } from '@wecom/shared';
 import { useGenerateQuestions, usePutQuestions } from '../../../api/hooks/learningManage.js';
+import { move } from '../../../lib/learning.js';
 import { useToast } from '../../ui/Toast.js';
 import { DocumentPicker, type PickedDoc } from './DocumentPicker.js';
-import { QuestionEditor } from './QuestionEditor.js';
+import { AUTHORABLE_KINDS, QuestionEditor, newOptionId } from './QuestionEditor.js';
 
-const move = <T,>(xs: T[], i: number, dir: -1 | 1): T[] => {
-  const j = i + dir;
-  if (j < 0 || j >= xs.length) return xs;
-  const n = [...xs];
-  [n[i], n[j]] = [n[j]!, n[i]!];
-  return n;
+/**
+ * Why a question cannot be saved, in the words the manager needs — one message per reason rather
+ * than one message for every failure, which used to blame a missing answer key for an empty stem.
+ * `null` means the question is saveable.
+ */
+const problem = (q: QuizQuestion): string | null => {
+  if (!q.stem.trim()) return 'לכל שאלה נדרש נוסח';
+  // `free` has no player and the API rejects it with 400 UNSUPPORTED_KIND; saying so here is
+  // cheaper than a failed PUT.
+  if (!AUTHORABLE_KINDS.includes(q.kind)) return 'סוג "תשובה חופשית" אינו נתמך — בחרו סוג שאלה אחר';
+  if (q.options.length < 2) return 'לכל שאלה נדרשות לפחות שתי אפשרויות';
+  if (!q.options.every((o) => o.text.trim())) return 'לכל אפשרות נדרש טקסט';
+  // An `order` question has no answer key: its own order is the answer.
+  if (q.kind !== 'order' && !q.options.some((o) => o.correct)) return 'לכל שאלה נדרשת לפחות תשובה נכונה אחת';
+  return null;
 };
 
-const valid = (q: QuizQuestion) =>
-  q.stem.trim().length > 0 &&
-  (q.kind === 'free' ||
-    (q.options.length >= 2 && q.options.every((o) => o.text.trim()) && q.options.some((o) => o.correct)));
+/** The order *is* the answer, so every option of an `order` question is correct — as the API requires. */
+const normalise = (q: QuizQuestion): QuizQuestion =>
+  q.kind === 'order' ? { ...q, options: q.options.map((o) => ({ ...o, correct: true })) } : q;
 
 /** Spec §1.2 / §5: pick documents → generate → curate → save. Nothing is saved until "שמור שאלות". */
 export function QuizBuilder({ item }: { item: LearningItem }) {
@@ -46,13 +55,14 @@ export function QuizBuilder({ item }: { item: LearningItem }) {
   };
 
   const save = async () => {
-    if (!questions.every(valid)) {
-      setError('לכל שאלה נדרשת לפחות תשובה נכונה אחת');
+    const first = questions.map(problem).find((p) => p !== null);
+    if (first) {
+      setError(first);
       return;
     }
     setError(null);
     try {
-      await put.mutateAsync({ questions });
+      await put.mutateAsync({ questions: questions.map(normalise) });
       toast('השאלות נשמרו', 'ok');
     } catch {
       toast('השמירה נכשלה', 'warn');
@@ -98,6 +108,7 @@ export function QuizBuilder({ item }: { item: LearningItem }) {
             </div>
             <QuestionEditor
               q={q}
+              groupId={q.id ?? `new-${i}`}
               // Any edit makes the question the editor's, not the model's — the badge is a claim
               // about provenance, and a curated question is no longer model output.
               onChange={(nq) =>
@@ -147,8 +158,8 @@ export function QuizBuilder({ item }: { item: LearningItem }) {
                 stem: '',
                 kind: 'single',
                 options: [
-                  { id: 'a', text: '', correct: true },
-                  { id: 'b', text: '', correct: false },
+                  { id: newOptionId(), text: '', correct: true },
+                  { id: newOptionId(), text: '', correct: false },
                 ],
                 explanation: '',
                 generated: false,

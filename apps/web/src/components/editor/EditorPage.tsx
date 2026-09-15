@@ -20,6 +20,7 @@ import {
 import { useCan } from '../../api/hooks/me.js';
 import { ApiError } from '../../api/unwrap.js';
 import { PRI } from '../../lib/constants.js';
+import { counted, learningItems, refreshes } from '../../lib/count.js';
 import { ago, download } from '../../lib/format.js';
 import { useHotkeys } from '../../lib/keys.js';
 import { allSteps } from '../../lib/steps.js';
@@ -165,7 +166,8 @@ function PublishBody({
   defaultLabel: string;
   onLabel: (v: string) => void;
   onIds: (v: string[]) => void;
-  onSignificant: (v: boolean) => void;
+  /** `known` is false while the preview is still in flight and the editor has not overridden it. */
+  onSignificant: (v: boolean, known: boolean) => void;
   onSubmit: () => void;
 }) {
   const LABEL = 'מה השתנה? (מופיע בהיסטוריית הגרסאות)';
@@ -176,11 +178,18 @@ function PublishBody({
    * advance (`GET /documents/:id/change-preview`) so the editor confirms or overrides a reading
    * rather than guessing one. Unticking it is a real override — the publish body then carries
    * `significantChange: false` and no refresh is created.
+   *
+   * Which is exactly why an unticked box is only an override once there is something to override:
+   * while the request is in flight the box is unticked because nothing is known yet, and sending
+   * that as an explicit `false` silently suppressed the refreshes the detector wanted to create.
+   * Until the preview lands, or the editor ticks the box themselves, the flag is not sent at all
+   * and the server's own verdict stands.
    */
   const preview = useChangePreview(documentId ?? undefined);
   const [significant, setSignificant] = useState(false);
   const [touched, setTouched] = useState(false);
   const previewed = preview.data?.significant ?? false;
+  const known = touched || preview.isSuccess;
   useEffect(() => {
     if (!touched) setSignificant(previewed);
   }, [previewed, touched]);
@@ -191,8 +200,8 @@ function PublishBody({
     onIds(ids);
   }, [ids, onIds]);
   useEffect(() => {
-    onSignificant(significant);
-  }, [significant, onSignificant]);
+    onSignificant(significant, known);
+  }, [significant, known, onSignificant]);
   return (
     <div className="form" style={{ display: 'grid', gap: 10 }}>
       <label>
@@ -217,6 +226,7 @@ function PublishBody({
             type="checkbox"
             aria-label={SIGNIFICANT}
             checked={significant}
+            disabled={preview.isPending}
             onChange={(e) => {
               setTouched(true);
               setSignificant(e.target.checked);
@@ -224,9 +234,11 @@ function PublishBody({
           />
           {SIGNIFICANT}
           <span className="small muted">
-            {previewed && preview.data?.affectedItems
-              ? `זוהה שינוי בתוצאה או בהסתעפות · ${preview.data.affectedItems} פריטי למידה מושפעים`
-              : 'מבטל השלמות של תדריכים ושאלונים שמבוססים על המסמך ויוצר משימות רענון'}
+            {preview.isPending
+              ? 'בודק אם השינוי מהותי…'
+              : previewed && preview.data?.affectedItems
+                ? `זוהה שינוי בתוצאה או בהסתעפות · ${counted(preview.data.affectedItems, learningItems, 'מושפע', 'מושפעים')}`
+                : 'מבטל השלמות של תדריכים ושאלונים שמבוססים על המסמך ויוצר משימות רענון'}
           </span>
         </label>
       ) : null}
@@ -500,7 +512,13 @@ export function EditorPage() {
     }
     const partial = checks.some(([, t]) => t.includes('ריק'));
     const nextV = (published.data?.currentVersion ?? 0) + 1;
-    const box = { label: isNew ? 'פריט ידע חדש' : '', ids: [] as string[], significant: false };
+    const box = {
+      label: isNew ? 'פריט ידע חדש' : '',
+      ids: [] as string[],
+      significant: false,
+      /** Only a landed preview or an editor's own tick makes the flag worth sending. */
+      significantKnown: false,
+    };
     const ok = await new Promise<boolean>((resolve) => {
       let dispose = () => {};
       const submit = () => {
@@ -515,7 +533,10 @@ export function EditorPage() {
             defaultLabel={box.label}
             onLabel={(v) => (box.label = v)}
             onIds={(v) => (box.ids = v)}
-            onSignificant={(v) => (box.significant = v)}
+            onSignificant={(v, known) => {
+              box.significant = v;
+              box.significantKnown = known;
+            }}
             onSubmit={submit}
           />
         ),
@@ -589,15 +610,17 @@ export function EditorPage() {
       label: label || 'פורסם',
       markPartial: partial,
       ...(box.ids.length ? { resolveFeedbackIds: box.ids } : {}),
-      // Always sent for an existing document: the checkbox is an explicit yes *or* an explicit no,
-      // and only silence would let the detector's own verdict stand unreviewed.
-      ...(isNew ? {} : { significantChange: box.significant }),
+      // Sent for an existing document once the answer is *known*: the checkbox is an explicit yes
+      // or an explicit no, and only silence lets the detector's own verdict stand. Silence is the
+      // right answer while the preview is still in flight — confirming the dialog that fast would
+      // otherwise send a loading state as "not significant" and suppress the refreshes.
+      ...(isNew || !box.significantKnown ? {} : { significantChange: box.significant }),
     });
     const { version } = result;
     const flag = result.changeFlag;
     toast(
       flag?.significant
-        ? `פורסם v${version} · שינוי מהותי: ${flag.refreshAssignments} רענונים נוצרו`
+        ? `פורסם v${version} · שינוי מהותי: ${counted(flag.refreshAssignments, refreshes, 'נוצר', 'נוצרו')}`
         : `פורסם v${version} · הכרטיס בספרייה עודכן`,
       'ok',
     );

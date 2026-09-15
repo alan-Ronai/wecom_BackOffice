@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { WorkflowSettings } from '@wecom/shared';
 import { useCan } from '../../api/hooks/me.js';
 import { usePutWorkflowSettings, useWorkflowSettings } from '../../api/hooks/workflow.js';
@@ -12,6 +12,10 @@ import { LoadError } from '../ui/index.js';
  * its old value, so clearing it and typing a new one appended to the old one ("180" → "180120").
  * The text is local and only a parseable value is committed upward; the effect re-syncs when the
  * saved settings change under it.
+ *
+ * `min`/`max` are enforced, not advisory: the browser's own validation does nothing until a form
+ * is submitted and there is no form here, so a pass mark of 999 used to reach the PUT. An
+ * out-of-range value stays in the field, marked invalid, and is not committed.
  */
 function NumField({
   label,
@@ -32,6 +36,9 @@ function NumField({
 }) {
   const [text, setText] = useState(String(value));
   useEffect(() => setText(String(value)), [value]);
+  const n = Number(text);
+  const inRange =
+    text !== '' && Number.isFinite(n) && (min === undefined || n >= min) && (max === undefined || n <= max);
   return (
     <label>
       {label}
@@ -43,12 +50,24 @@ function NumField({
         step={step}
         disabled={disabled}
         value={text}
+        aria-invalid={text !== '' && !inRange}
         onChange={(e) => {
           setText(e.target.value);
-          const n = Number(e.target.value);
-          if (e.target.value !== '' && Number.isFinite(n)) onChange(n);
+          const v = Number(e.target.value);
+          if (
+            e.target.value !== '' &&
+            Number.isFinite(v) &&
+            (min === undefined || v >= min) &&
+            (max === undefined || v <= max)
+          )
+            onChange(v);
         }}
       />
+      {text !== '' && !inRange ? (
+        <small className="form-error">
+          ערך מותר: {min ?? '−∞'}–{max ?? '∞'}
+        </small>
+      ) : null}
     </label>
   );
 }
@@ -68,9 +87,19 @@ export function WorkflowSettingsSection() {
   const put = usePutWorkflowSettings();
   const toast = useToast();
   const [draft, setDraft] = useState<WorkflowSettings | null>(null);
+  /**
+   * A background refetch of `/admin/workflow` used to overwrite an edit in progress. The server
+   * copy is adopted only while nothing is unsaved — and again after a save, which is what clears
+   * the flag.
+   */
+  const dirty = useRef(false);
   useEffect(() => {
-    if (s.data) setDraft(s.data);
+    if (s.data && !dirty.current) setDraft(s.data);
   }, [s.data]);
+  const edit = (next: WorkflowSettings) => {
+    dirty.current = true;
+    setDraft(next);
+  };
 
   if (s.isError) return <LoadError what="הגדרות תהליך" error={s.error} />;
   if (!draft) return null;
@@ -78,7 +107,10 @@ export function WorkflowSettingsSection() {
   const save = (patch: Parameters<typeof put.mutateAsync>[0]) =>
     put
       .mutateAsync(patch)
-      .then(() => toast('ההגדרות נשמרו', 'ok'))
+      .then(() => {
+        dirty.current = false;
+        toast('ההגדרות נשמרו', 'ok');
+      })
       .catch(() => toast('השמירה נכשלה', 'warn'));
 
   return (
@@ -92,7 +124,7 @@ export function WorkflowSettingsSection() {
             disabled={!mayEdit || put.isPending}
             checked={draft.requireApprover}
             onChange={(e) => {
-              setDraft({ ...draft, requireApprover: e.target.checked });
+              edit({ ...draft, requireApprover: e.target.checked });
               void save({ requireApprover: e.target.checked });
             }}
           />
@@ -105,7 +137,7 @@ export function WorkflowSettingsSection() {
           max={100}
           disabled={!mayEdit}
           value={draft.learning.defaultPassMark}
-          onChange={(n) => setDraft({ ...draft, learning: { ...draft.learning, defaultPassMark: n } })}
+          onChange={(n) => edit({ ...draft, learning: { ...draft.learning, defaultPassMark: n } })}
         />
         <label>
           ניסיונות מרביים ברירת מחדל
@@ -114,7 +146,7 @@ export function WorkflowSettingsSection() {
             disabled={!mayEdit}
             value={draft.learning.defaultMaxAttempts ?? ''}
             onChange={(e) =>
-              setDraft({
+              edit({
                 ...draft,
                 learning: {
                   ...draft.learning,
@@ -138,7 +170,7 @@ export function WorkflowSettingsSection() {
           max={90}
           disabled={!mayEdit}
           value={draft.learning.refreshDueDays}
-          onChange={(n) => setDraft({ ...draft, learning: { ...draft.learning, refreshDueDays: n } })}
+          onChange={(n) => edit({ ...draft, learning: { ...draft.learning, refreshDueDays: n } })}
         />
         <NumField
           label="תזכורת לפני מועד היעד (ימים)"
@@ -146,28 +178,28 @@ export function WorkflowSettingsSection() {
           max={30}
           disabled={!mayEdit}
           value={draft.learning.reminderDaysBefore}
-          onChange={(n) => setDraft({ ...draft, learning: { ...draft.learning, reminderDaysBefore: n } })}
+          onChange={(n) => edit({ ...draft, learning: { ...draft.learning, reminderDaysBefore: n } })}
         />
         <NumField
           label="מינימום חיפושים ללא תוצאה"
           min={1}
           disabled={!mayEdit}
           value={draft.gaps.zeroResultMin}
-          onChange={(n) => setDraft({ ...draft, gaps: { ...draft.gaps, zeroResultMin: n } })}
+          onChange={(n) => edit({ ...draft, gaps: { ...draft.gaps, zeroResultMin: n } })}
         />
         <NumField
           label="מינימום משובים לאשכול"
           min={1}
           disabled={!mayEdit}
           value={draft.gaps.feedbackClusterMin}
-          onChange={(n) => setDraft({ ...draft, gaps: { ...draft.gaps, feedbackClusterMin: n } })}
+          onChange={(n) => edit({ ...draft, gaps: { ...draft.gaps, feedbackClusterMin: n } })}
         />
         <NumField
           label="פריט נחשב מיושן אחרי (ימים)"
           min={30}
           disabled={!mayEdit}
           value={draft.gaps.staleDays}
-          onChange={(n) => setDraft({ ...draft, gaps: { ...draft.gaps, staleDays: n } })}
+          onChange={(n) => edit({ ...draft, gaps: { ...draft.gaps, staleDays: n } })}
         />
         <NumField
           label="שיעור כישלון לשאלה בעייתית"
@@ -176,7 +208,7 @@ export function WorkflowSettingsSection() {
           step={0.05}
           disabled={!mayEdit}
           value={draft.gaps.failedQuestionRate}
-          onChange={(n) => setDraft({ ...draft, gaps: { ...draft.gaps, failedQuestionRate: n } })}
+          onChange={(n) => edit({ ...draft, gaps: { ...draft.gaps, failedQuestionRate: n } })}
         />
         {mayEdit ? (
           <button

@@ -1530,10 +1530,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .learning-page { display: grid; gap: 16px; }
 .learning-section { display: grid; gap: 8px; }
 .learning-section > h2 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
-.learning-section > .empty { padding: 14px; }
-.learning-section .cards {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px;
-}
 .learning-card {
   display: grid; gap: 6px; padding: 12px 14px; background: var(--surface);
   border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-sm);
@@ -1569,6 +1565,15 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 }
 .quiz-q > legend, .quiz-q > .stem { font-weight: 600; font-size: 13px; }
 .quiz-q label { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; }
+/* The `order` kind: a numbered list the learner moves with the same ↑/↓ the builders use. */
+.quiz-order, .quiz-order-review { margin: 0; padding-inline-start: 22px; display: grid; gap: 6px; }
+.quiz-order-row { font-size: 12.5px; }
+.quiz-order-row .quiz-order-text { margin-inline-end: 8px; }
+.quiz-order-row button {
+  min-width: 26px; padding: 2px 6px; margin-inline-start: 4px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r);
+}
+.quiz-order-row button:disabled { opacity: 0.4; }
 .quiz-result { display: grid; gap: 8px; padding: 14px; border-radius: var(--r-md); }
 .quiz-result.pass { background: var(--ok-bg); border: 1px solid var(--ok-border); }
 .quiz-result.fail { background: var(--warn-bg); border: 1px solid var(--warn-border); }
@@ -1582,7 +1587,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .learning-panel-list a { cursor: pointer; font-size: 12.5px; }
 
 @media (max-width: 900px) {
-  .learning-section .cards { grid-template-columns: 1fr; }
   .briefing, .quiz { max-width: none; }
 }
 
@@ -1608,7 +1612,11 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .gaps-page .gap-list { display: grid; gap: 10px; }
 .gaps-page .gap { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
 .gaps-page .score { font-size: 22px; font-weight: 700; color: var(--red); }
-.gaps-page .evidence { font-size: 12px; color: var(--muted); font-family: var(--mono); white-space: pre-wrap; }
+.gaps-page .evidence { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0 0; font-size: 12px; }
+.gaps-page .evidence > div { display: flex; gap: 4px; }
+.gaps-page .evidence dt { color: var(--muted); }
+.gaps-page .evidence dt::after { content: ':'; }
+.gaps-page .evidence dd { margin: 0; }
 .workflow-section .form label { display: grid; gap: 4px; }
 .workflow-section .form label.row { display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 900px) { .item-editor { grid-template-columns: 1fr; } .gaps-page .gap { grid-template-columns: 1fr; } }
