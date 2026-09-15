@@ -54,6 +54,7 @@ import { dirname, join, resolve } from 'node:path';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { runPlaywright } from './lib/playwright-run.mjs';
+import { assertPortsFree as assertFree } from './lib/ports.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DEPLOY = join(ROOT, 'deploy');
@@ -281,26 +282,27 @@ function ensureCerts() {
   console.log('✓ minted a self-signed certificate in deploy/certs');
 }
 
+/**
+ * See scripts/lib/ports.mjs: `lsof`, then `ss`, then an actual bind — so that a runner without
+ * `lsof` (a plain Ubuntu image, a GitHub runner) cannot read every port as free and fail later as
+ * an unexplained collision inside docker.
+ */
 function assertPortsFree() {
-  const busy = [];
-  for (const [name, port] of [
-    ['nginx https', HTTPS_PORT],
-    ['nginx http', HTTP_PORT],
-    ['paloalto stub control', PANOS_PORT],
-    ['wordpress stub', WP_PORT],
-    ['lan client', LAN_CLIENT_PORT],
-    ['lan client (unknown address)', LAN_UNKNOWN_CLIENT_PORT],
-    ['offsite client', OFFSITE_CLIENT_PORT],
-  ]) {
-    const r = spawnSync('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' });
-    const pids = (r.stdout ?? '').trim().split('\n').filter(Boolean);
-    if (pids.length) busy.push(`  :${port} (${name}) held by pid ${pids.join(', ')}`);
-  }
-  if (busy.length)
-    throw new Error(
-      `ports already in use — the pilot stack, or a leftover run:\n${busy.join('\n')}\n` +
-        '  stop whatever holds them (the ports are fixed by deploy/docker-compose.ci.yml) and retry',
-    );
+  return assertFree(
+    [
+      ['nginx https', HTTPS_PORT],
+      ['nginx http', HTTP_PORT],
+      ['paloalto stub control', PANOS_PORT],
+      ['wordpress stub', WP_PORT],
+      ['lan client', LAN_CLIENT_PORT],
+      ['lan client (unknown address)', LAN_UNKNOWN_CLIENT_PORT],
+      ['offsite client', OFFSITE_CLIENT_PORT],
+    ],
+    {
+      intro: 'ports already in use — the pilot stack, or a leftover run:',
+      remedy: '  stop whatever holds them (the ports are fixed by deploy/docker-compose.ci.yml) and retry',
+    },
+  );
 }
 
 function teardown() {
@@ -357,7 +359,7 @@ async function main() {
   mkdirSync(join(DEPLOY, 'backups'), { recursive: true });
   // Any stack left by a previous run, volumes included: the seed below assumes an empty database.
   compose(['down', '-v', '--remove-orphans'], { stdio: 'ignore' });
-  assertPortsFree();
+  await assertPortsFree();
 
   if (process.env.E2E_SKIP_BUILD === '1') {
     console.log('\n── 2. build (skipped: E2E_SKIP_BUILD=1) ─────────────────────');
