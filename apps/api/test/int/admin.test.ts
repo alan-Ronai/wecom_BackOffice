@@ -163,6 +163,8 @@ run('admin routes', () => {
 
     const health = await app.inject({ method: 'GET', url: '/api/v1/system/health' });
     expect(health.json()).toMatchObject({ lastBackupAt: latestAt, lastBackupOk: true });
+    // W-9: and the tri-state beside it, which is what tells a fresh install from a failure.
+    expect(health.json().backup).toMatchObject({ status: 'ok', latestAt, ageHours: 1 });
 
     const sys = await app.inject({ method: 'GET', url: '/api/v1/admin/system', headers: admin });
     expect(sys.json().backup).toMatchObject({
@@ -170,6 +172,43 @@ run('admin routes', () => {
       latestFile: 'kb-20260913-0215.dump',
       lastBackupAt: latestAt,
       lastBackupOk: true,
+    });
+  });
+
+  /**
+   * W-9. `system.backup-check` runs at API start-up, so ten minutes into a clean, correct install
+   * health reported `lastBackupOk: false` — a red status that looks like a failure and that
+   * `deploy/smoke.sh` warns on. The worker's verdict is unchanged; what is new is that health can
+   * now say *which* false it is, so a caller can treat "no dump yet" and "the dump is 40 hours
+   * old" differently.
+   */
+  it('separates a never-backed-up install from a stale backup', async () => {
+    const { recordBackupCheck } = await import('../../src/services/backupCheck.js');
+
+    await recordBackupCheck(db.pool, { ok: false, latestFile: null, ageHours: null, latestAt: null });
+    const fresh = (await app.inject({ method: 'GET', url: '/api/v1/system/health' })).json();
+    expect(fresh.backup).toMatchObject({ status: 'never', latestAt: null, ageHours: null });
+    expect(fresh.backup.checkedAt).not.toBeNull();
+    // The boolean still says what it always said, for clients written against it.
+    expect(fresh.lastBackupOk).toBe(false);
+
+    const old = new Date(Date.now() - 40 * 3_600_000).toISOString();
+    await recordBackupCheck(db.pool, {
+      ok: false,
+      latestFile: 'kb-20260913-0215.dump',
+      ageHours: 40,
+      latestAt: old,
+    });
+    const stale = (await app.inject({ method: 'GET', url: '/api/v1/system/health' })).json();
+    expect(stale.backup).toMatchObject({ status: 'stale', latestAt: old, ageHours: 40 });
+    expect(stale.lastBackupOk).toBe(false);
+
+    // `system_state` is shared across this file's cases; leave it as the case above found it.
+    await recordBackupCheck(db.pool, {
+      ok: true,
+      latestFile: 'kb-20260913-0215.dump',
+      ageHours: 1,
+      latestAt: new Date().toISOString(),
     });
   });
 

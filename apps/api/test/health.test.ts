@@ -14,6 +14,12 @@ describe('health', () => {
     expect(body.ok).toBe(false);
     expect(body.db).toBe(false);
     expect(typeof body.version).toBe('string');
+    /**
+     * W-9: nothing has ever taken a backup here, which is `never` — not a failure. The boolean
+     * stays for clients written against it, and keeps saying `null` for "the worker has not run".
+     */
+    expect(body.backup).toEqual({ status: 'never', latestAt: null, ageHours: null, checkedAt: null });
+    expect(body.lastBackupOk).toBeNull();
     await app.close();
   });
   it('serves openapi json', async () => {

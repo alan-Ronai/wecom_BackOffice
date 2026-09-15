@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { HealthResponseSchema, VERSION } from '@wecom/shared';
 import { probeModel, probeQueue } from '../services/probes.js';
-import { getRecordedBackupCheck } from '../services/backupCheck.js';
+import { backupHealth, getRecordedBackupCheck } from '../services/backupCheck.js';
 
 const started = Date.now();
 const MODEL_PROBE_MS = 2000;
@@ -51,7 +51,10 @@ export default async function routes(app: FastifyInstance) {
         version: VERSION,
         uptimeSec: Math.round((Date.now() - started) / 1000),
         lastBackupAt: backup?.latestAt ?? null,
+        // Kept for clients that read the old boolean; `backup` below is what tells a fresh
+        // install ("never") apart from a backup that has gone stale (W-9).
         lastBackupOk: backup?.ok ?? null,
+        backup: backupHealth(backup),
       };
     },
   );

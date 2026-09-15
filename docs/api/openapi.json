@@ -69,6 +69,40 @@
                     "lastBackupOk": {
                       "type": "boolean",
                       "nullable": true
+                    },
+                    "backup": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "never",
+                            "ok",
+                            "stale"
+                          ]
+                        },
+                        "latestAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "ageHours": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "checkedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "latestAt",
+                        "ageHours",
+                        "checkedAt"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -80,7 +114,8 @@
                     "version",
                     "uptimeSec",
                     "lastBackupAt",
-                    "lastBackupOk"
+                    "lastBackupOk",
+                    "backup"
                   ],
                   "additionalProperties": false
                 }
