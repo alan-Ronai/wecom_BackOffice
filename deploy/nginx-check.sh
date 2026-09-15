@@ -97,8 +97,12 @@ echo "TLS settings ok: server_tokens off, TLSv1.2+1.3, ECDHE-only ciphers, share
 # config needs at request time for the `api` upstream. Nothing answers as `api`, so /api/* is a
 # 502 — that is fine and in fact the stronger assertion, because the headers are declared
 # `always` and must survive an error response too.
-name=kb-nginx-header-check
-net=kb-nginx-header-check-net
+#
+# Suffixed with this process's pid, for the reason deploy/backup-check.sh now is: the `docker rm
+# -f` below is unconditional, so with fixed names two runs on one machine — this script beside a
+# `pnpm e2e:compose`, or two branches — deleted each other's container and network mid-assertion.
+name=kb-nginx-header-check-$$
+net=kb-nginx-header-check-net-$$
 cleanup() {
   docker rm -f "$name" >/dev/null 2>&1 || true
   docker network rm "$net" >/dev/null 2>&1 || true
