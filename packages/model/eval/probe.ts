@@ -1,7 +1,7 @@
 /**
  * review/wave6-ai-quality — diagnostic probe (NOT part of the shipped harness).
  *
- * Runs the *exact* production request (`buildMessages` + `RESPONSE_FORMAT`) against a real
+ * Runs the *exact* production request (`buildMessages` + the flat per-context schema) against a real
  * Ollama tag for the committed cases and writes, per case: the rendered prompt, its character
  * and token counts, the raw model content, and the parse verdict. `eval/run.ts` only reports a
  * score; this reports what the model actually said, which is the thing nobody had looked at.
@@ -10,7 +10,7 @@
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { buildMessages, parseProposals, RESPONSE_FORMAT } from '../src/prompt.js';
+import { buildMessages, numCtxFor, parseProposals, RESPONSE_FORMAT } from '../src/prompt.js';
 import { flatResponseFormat, parseFlatProposals } from '../src/flat.js';
 import { contextForCase, EVAL_CASES_DIR, loadCases, scoreCase } from '../src/eval.js';
 
@@ -24,8 +24,8 @@ const url = arg('url') ?? 'http://localhost:11434';
 const tag = arg('model') ?? 'qwen2.5:3b-instruct-q4_K_M';
 const outDir = arg('out') ?? '/tmp/probe';
 const only = (arg('cases') ?? '').split(',').filter(Boolean);
-const numCtx = Number(arg('num_ctx') ?? 8192);
-const temp = Number(arg('temp') ?? 0.1);
+const legacy = flag('legacy-envelope');
+const temp = Number(arg('temp') ?? 0);
 
 mkdirSync(outDir, { recursive: true });
 const cases = loadCases(fileURLToPath(EVAL_CASES_DIR)).filter(
@@ -42,10 +42,10 @@ for (const c of cases) {
     body: JSON.stringify({
       model: tag,
       stream: false,
-      format: flag('flat') ? flatResponseFormat(ctx) : RESPONSE_FORMAT,
+      format: legacy ? RESPONSE_FORMAT : flatResponseFormat(ctx),
       options: {
         temperature: temp,
-        num_ctx: numCtx,
+        num_ctx: Number(arg('num_ctx') ?? numCtxFor(ctx)),
         ...(arg('num-predict') ? { num_predict: Number(arg('num-predict')) } : {}),
       },
       messages,
@@ -57,7 +57,7 @@ for (const c of cases) {
     eval_count?: number;
   };
   const raw = data.message?.content ?? '';
-  const parsed = flag('flat') ? parseFlatProposals(ctx, raw) : parseProposals(raw);
+  const parsed = legacy ? parseProposals(raw) : parseFlatProposals(ctx, raw);
   const report = {
     case: c.id,
     tag,
@@ -68,7 +68,7 @@ for (const c of cases) {
     ms: Date.now() - started,
     parseOk: parsed.ok,
     parseError: parsed.ok ? null : parsed.error,
-    score: parsed.ok ? scoreCase(c, parsed.items) : { hitTarget: 0, hitType: 0, contentOverlap: 0 },
+    score: parsed.ok ? scoreCase(c, parsed.items) : scoreCase(c, []),
     raw,
   };
   writeFileSync(`${outDir}/${c.id}.json`, JSON.stringify(report, null, 2));

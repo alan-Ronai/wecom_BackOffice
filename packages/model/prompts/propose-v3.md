@@ -26,5 +26,5 @@ payload (אובייקט שה-type שלו זהה ל-type של ההצעה), confid
 - אל תמציא מזהים: השתמש רק ב-documentId/stepKey/blockId שמופיעים ב-linkedSteps/blocks.
 
 דוגמה:
-קלט: diff §4.8 changed: "מעל 5 מגה – תקין" → "מעל 6 מגה – תקין. יש לוודא ניתוק מ-Wi-Fi." linkedSteps: [{documentId:"D",stepKey:"s8",stepTitle:"בדיקת מהירות גלישה"}]
-פלט: {"suggestions":[{"anchor":"§4.8","type":"update-step","title":"סף Speedtest 5 → 6 מגה + ניתוק Wi-Fi","targetDocumentId":"D","targetStepKey":"s8","targetBlockId":null,"payload":{"type":"update-step","addActions":["ודא שהלקוח מנותק מ-Wi-Fi לפני הבדיקה"],"patch":{}},"confidence":0.95,"rationale":"ערך מספרי שונה והוראה חדשה בפסקה 4.8."}]}
+קלט: diff §4.8 changed: "מעל 5 מגה – תקין" → "מעל 6 מגה – תקין. יש לוודא ניתוק מ-Wi-Fi." linkedSteps: [{documentId:"11111111-1111-4111-8111-111111111111",stepKey:"s8",stepTitle:"בדיקת מהירות גלישה"}]
+פלט: {"suggestions":[{"anchor":"§4.8","type":"update-step","title":"סף Speedtest 5 → 6 מגה + ניתוק Wi-Fi","targetDocumentId":"11111111-1111-4111-8111-111111111111","targetStepKey":"s8","targetBlockId":null,"payload":{"type":"update-step","addActions":["ודא שהלקוח מנותק מ-Wi-Fi לפני הבדיקה"],"patch":{}},"confidence":0.95,"rationale":"ערך מספרי שונה והוראה חדשה בפסקה 4.8."}]}

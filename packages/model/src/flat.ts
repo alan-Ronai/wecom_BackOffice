@@ -63,6 +63,8 @@ export function flatResponseFormat(ctx: ProposalContext): Record<string, unknown
         type: 'array',
         items: {
           type: 'object',
+          /** C-M4: a field the grammar did not name is a field the parse would silently strip. */
+          additionalProperties: false,
           required: [
             'anchor',
             'type',
@@ -202,15 +204,55 @@ function toPayload(f: FlatSuggestion, type: string): SuggestionPayload | null {
 
 /**
  * The per-type target rule of `prompt.ts`'s `superRefine`, applied here too — an `update-step`
- * with no step key cannot be accepted by the apply path, so it is not a suggestion.
+ * with no step key cannot be accepted by the apply path, so it is not a suggestion. Returns the
+ * *name* of the first missing field rather than a boolean, because the retry (C-I7) has to be
+ * able to tell the model which field it left out.
  */
-const targetsOk = (s: ProposedSuggestion): boolean => {
+const missingTarget = (s: ProposedSuggestion): string | null => {
   if (s.type === 'update-step' || s.type === 'deprecate-step')
-    return !!s.targetDocumentId && !!s.targetStepKey;
-  if (s.type === 'update-block') return !!s.targetBlockId;
-  if (s.type === 'new-step') return !!s.targetDocumentId;
-  return true;
+    return !s.targetDocumentId ? 'targetDocumentId' : !s.targetStepKey ? 'targetStepKey' : null;
+  if (s.type === 'update-block') return s.targetBlockId ? null : 'targetBlockId';
+  if (s.type === 'new-step') return s.targetDocumentId ? null : 'targetDocumentId';
+  return null;
 };
+
+/* ── C-I7: a repair turn a Hebrew-instructed 3B can act on ───────────────── */
+
+/**
+ * The shipped retry appended an English zod path (`suggestions.0.payload.actions.0.id: Required`)
+ * to a Hebrew conversation and omitted the answer it was complaining about. In 16 observed
+ * retries it recovered nothing. This names the field in Hebrew, and the caller puts the model's
+ * own answer back on the wire as the assistant turn so "the previous answer" has a referent.
+ */
+const FIELD_HE: Record<string, string> = {
+  targetDocumentId: 'targetDocumentId — מזהה המסמך, מועתק בדיוק משורת "שלבים ממופים"',
+  targetStepKey: 'targetStepKey — מפתח השלב (למשל "s8"), מועתק בדיוק',
+  targetBlockId: 'targetBlockId — מזהה הבלוק המשותף, מועתק בדיוק',
+  afterStepKey: 'afterStepKey — מפתח השלב שאחריו נוסף השלב החדש',
+  actions: 'actions — מערך מחרוזות עם ההוראות',
+  reason: 'reason — משפט קצר שמסביר מדוע השלב יוצא משימוש',
+  fieldName: 'fieldName — שם שדה ה-CRM מתוך רשימת השדות המוכרים',
+  issue: 'issue — אחד מ: unknown, renamed, retired',
+  type: 'type — אחד מששת סוגי ההצעה בלבד',
+  title: 'title — כותרת קצרה בעברית',
+  rationale: 'rationale — משפט הסבר אחד בעברית',
+  anchor: 'anchor — עוגן הפסקה, למשל "§2.3"',
+};
+
+export function repairHint(error: string): string {
+  const named = Object.keys(FIELD_HE).filter((f) => error.includes(f));
+  const what = named.length
+    ? 'חסרים או שגויים השדות הבאים:\n' + named.map((f) => '- ' + FIELD_HE[f]).join('\n')
+    : /invalid json/i.test(error)
+      ? 'התשובה לא הייתה JSON תקין.'
+      : 'התשובה לא תאמה את המבנה המבוקש.';
+  return (
+    'התשובה הקודמת שלך לא התקבלה. ' +
+    what +
+    '\nהחזר עכשיו את אותן הצעות שוב, JSON בלבד בפורמט {"suggestions":[...]}, עם כל השדות מלאים. ' +
+    'אם אין ערך מתאים לשדה מזהה, כתוב "".'
+  );
+}
 
 /**
  * Parses a flat answer into `ProposedSuggestion[]`. Unlike `parseProposals` this is
@@ -278,8 +320,9 @@ export function parseFlatProposals(
         s.targetStepKey ??= via.stepKey;
       }
     }
-    if (!targetsOk(s)) {
-      errors.push(`${i}: ${type} is missing a required target`);
+    const missing = missingTarget(s);
+    if (missing) {
+      errors.push(`${i}: ${type} is missing ${missing}`);
       continue;
     }
     items.push(s);

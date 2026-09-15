@@ -42,10 +42,14 @@ async function main(): Promise<void> {
           model: tag,
           embedModel: embed,
           timeoutMs: EVAL_TIMEOUT_MS,
-          /* review/wave6-ai-quality experiment levers; absent = the shipped behaviour. */
-          flatSchema: flag('flat'),
+          /**
+           * The measured path is the default now; these two turn *off* halves of it, so a run
+           * can still reproduce the wave-6-as-merged baseline (`--legacy-envelope --prompt
+           * propose-v3 --no-guards`) or isolate the model's unaided classification.
+           */
+          legacyEnvelope: flag('legacy-envelope'),
+          ...(flag('no-guards') ? { guards: false } : {}),
           ...(arg('prompt') ? { promptVersion: arg('prompt') } : {}),
-          guards: flag('guards'),
           ...(arg('temp') ? { temperature: Number(arg('temp')) } : {}),
           ...(arg('num-predict') ? { numPredict: Number(arg('num-predict')) } : {}),
           ...(arg('num-ctx') ? { numCtx: Number(arg('num-ctx')) } : {}),
