@@ -179,9 +179,7 @@ export class OllamaModel implements ModelClient {
   }
 
   /** `/api/show` for one tag: family, parameter size, quantization and (for embedders) the vector width. */
-  async showModel(
-    tag: string,
-  ): Promise<{
+  async showModel(tag: string): Promise<{
     family?: string;
     parameterSize?: string;
     quantization?: string;

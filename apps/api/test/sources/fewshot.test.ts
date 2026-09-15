@@ -124,9 +124,7 @@ run('fewShotExamples', () => {
       expect(out).toHaveLength(2);
       // Same source first, however much newer the other decision is.
       expect(out[0].suggestion.anchor).toBe('§4.8');
-      expect((out[0].suggestion.payload as { addActions: string[] }).addActions).toEqual([
-        'מה שהעורך השאיר',
-      ]);
+      expect((out[0].suggestion.payload as { addActions: string[] }).addActions).toEqual(['מה שהעורך השאיר']);
       expect(out[0].diff).toContain('מעל 6 מגה');
       expect(out.map((e) => e.suggestion.type)).toEqual(['update-step', 'deprecate-step']);
       // A revision with no stored diffs falls back to the anchor rather than dropping out.

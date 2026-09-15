@@ -13,8 +13,7 @@ export const stepText = (s: { title: string; actions: string[] }): string =>
   [s.title, ...s.actions].filter(Boolean).join('. ').slice(0, 2000);
 
 /** Short content hash; collisions would only cost a skipped re-embed, not correctness of a read. */
-export const textHash = (t: string): string =>
-  createHash('sha256').update(t).digest('hex').slice(0, 32);
+export const textHash = (t: string): string => createHash('sha256').update(t).digest('hex').slice(0, 32);
 
 /** One round trip per `batch` texts when the client supports it, else one per text. */
 export async function embedMany(model: ModelClient, texts: string[], batch = 32): Promise<number[][]> {

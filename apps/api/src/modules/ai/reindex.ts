@@ -22,7 +22,10 @@ export interface ReindexDeps {
   model: ModelClient;
   /** The column's own width, as `plugins/model.ts` resolved and asserted it at boot. */
   expectedDim: number;
-  log: { info(o: Record<string, unknown>, m: string): void; warn(o: Record<string, unknown>, m: string): void };
+  log: {
+    info(o: Record<string, unknown>, m: string): void;
+    warn(o: Record<string, unknown>, m: string): void;
+  };
 }
 
 export interface ReindexResult {

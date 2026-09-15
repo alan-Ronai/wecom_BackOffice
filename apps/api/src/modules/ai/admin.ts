@@ -39,7 +39,11 @@ const tagFor = (
   settings: { models: { suggestModel: string; chatModel: string; embedModel: string } },
   fallback: { suggestModel: string; chatModel: string; embedModel: string },
 ): string => {
-  const saved = { suggest: settings.models.suggestModel, chat: settings.models.chatModel, embed: settings.models.embedModel }[slot];
+  const saved = {
+    suggest: settings.models.suggestModel,
+    chat: settings.models.chatModel,
+    embed: settings.models.embedModel,
+  }[slot];
   const env = { suggest: fallback.suggestModel, chat: fallback.chatModel, embed: fallback.embedModel }[slot];
   return saved || env;
 };
@@ -178,7 +182,10 @@ export default async function aiAdminRoutes(instance: FastifyInstance) {
       const jobId = app.boss
         ? await app.boss.send(QUEUES.aiReindex, { since: since ?? null }, { singletonKey: 'ai.reindex' })
         : null;
-      await app.audit(req, 'admin.ai.reindex', 'job', QUEUES.aiReindex, null, { since: since ?? null, jobId });
+      await app.audit(req, 'admin.ai.reindex', 'job', QUEUES.aiReindex, null, {
+        since: since ?? null,
+        jobId,
+      });
       reply.code(202);
       return { queued: true as const, jobId };
     },

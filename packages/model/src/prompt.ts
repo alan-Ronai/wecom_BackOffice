@@ -167,9 +167,7 @@ export function buildMessages(ctx: ProposalContext): { role: 'system' | 'user'; 
     'החזר JSON בלבד.',
   ];
   const withImpact = impactText ? ['', 'השפעה (impact) — מה עוד השינוי נוגע בו:', impactText] : [];
-  const withExamples = examplesText
-    ? ['', 'דוגמאות מאושרות (שמור על אותה רמת פירוט):', examplesText]
-    : [];
+  const withExamples = examplesText ? ['', 'דוגמאות מאושרות (שמור על אותה רמת פירוט):', examplesText] : [];
   const size = (optional: string[]) => sys.length + [...head, ...optional, ...tail].join('\n').length;
   let optional = [...withImpact, ...withExamples];
   if (size(optional) > budget) optional = [...withImpact];

@@ -56,7 +56,16 @@ run('ImpactService', () => {
             id: 'p1',
             label: '',
             steps: [
-              { key: 's1', num: '1', title: 'ריענון', blockId: BLK, blockRefs: [], deps: [], actions: [], outcomes: [] },
+              {
+                key: 's1',
+                num: '1',
+                title: 'ריענון',
+                blockId: BLK,
+                blockRefs: [],
+                deps: [],
+                actions: [],
+                outcomes: [],
+              },
               {
                 key: 's2',
                 num: '2',

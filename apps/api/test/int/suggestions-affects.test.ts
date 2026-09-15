@@ -20,7 +20,8 @@ const run = integration ? describe : describe.skip;
 const D = '11111111-1111-4111-8111-111111111111';
 const BLK = '44444444-4444-4444-8444-444444444444';
 const PARA_V1 = '4.14 ריענון SIM ברשת. אם הלקוח מדווח על היעדר קליטה – בצע ריענון SIM בקונסולה.';
-const PARA_V2 = '4.14 ריענון SIM ברשת. אם הלקוח מדווח על היעדר קליטה – בצע ריענון SIM בקונסולה. המתן 90 שניות.';
+const PARA_V2 =
+  '4.14 ריענון SIM ברשת. אם הלקוח מדווח על היעדר קליטה – בצע ריענון SIM בקונסולה. המתן 90 שניות.';
 
 afterEach(() => setContentApi(null));
 
@@ -173,9 +174,8 @@ run('suggestions carry affects, prompt version and model', () => {
         expect(item.affects.some((a: { kind: string }) => a.kind === 'block')).toBe(true);
 
         // The diffs behind the batch are kept on the revision, so the next run has a few-shot bank.
-        const meta = (
-          await pool.query(`select meta from source_revisions where id=$1`, [second.revisionId])
-        ).rows[0].meta as { diffs: { ref: string }[] };
+        const meta = (await pool.query(`select meta from source_revisions where id=$1`, [second.revisionId]))
+          .rows[0].meta as { diffs: { ref: string }[] };
         expect(meta.diffs.length).toBeGreaterThan(0);
 
         await app.close();

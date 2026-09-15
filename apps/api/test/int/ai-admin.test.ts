@@ -40,18 +40,14 @@ run('admin AI routes', () => {
     await db?.stop();
   });
 
-  const inject = (
-    method: 'GET' | 'POST' | 'PUT',
-    url: string,
-    payload?: unknown,
-    who = admin,
-  ) => app.inject({ method, url, payload: payload as object, headers: { ...auth(who) } });
+  const inject = (method: 'GET' | 'POST' | 'PUT', url: string, payload?: unknown, who = admin) =>
+    app.inject({ method, url, payload: payload as object, headers: { ...auth(who) } });
 
   it('refuses every operation without ai.manage', async () => {
     expect((await inject('GET', '/api/v1/admin/ai/settings', undefined, editor)).statusCode).toBe(403);
-    expect(
-      (await inject('POST', '/api/v1/admin/ai/models/test', { slot: 'embed' }, editor)).statusCode,
-    ).toBe(403);
+    expect((await inject('POST', '/api/v1/admin/ai/models/test', { slot: 'embed' }, editor)).statusCode).toBe(
+      403,
+    );
     expect((await inject('POST', '/api/v1/admin/ai/reindex', {}, editor)).statusCode).toBe(403);
     expect((await inject('POST', '/api/v1/admin/ai/eval', {}, editor)).statusCode).toBe(403);
     expect((await inject('GET', '/api/v1/admin/ai/eval/runs', undefined, editor)).statusCode).toBe(403);

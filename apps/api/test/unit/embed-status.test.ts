@@ -141,9 +141,7 @@ describe('embedStatus: the embedding path stops being silent', () => {
       const tracker = new EmbedStatusTracker('bge-m3', 768);
       const { log, warnings } = recorder();
       const model = instrumentEmbedding(batchModel([768, 1024, 768]), tracker, log);
-      await expect(model.embedBatch!(['a', 'b', 'c'])).rejects.toBeInstanceOf(
-        EmbedDimensionMismatchError,
-      );
+      await expect(model.embedBatch!(['a', 'b', 'c'])).rejects.toBeInstanceOf(EmbedDimensionMismatchError);
       expect(warnings[0].obj).toMatchObject({ embedModel: 'bge-m3', dimension: 1024, expected: 768 });
       expect(tracker.snapshot()).toMatchObject({ dimension: 1024, lastOk: false });
       expect(tracker.snapshot().lastError).toContain('1024');

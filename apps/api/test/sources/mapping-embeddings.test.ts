@@ -65,9 +65,8 @@ run('embedding-based paragraph → step mapping', () => {
       const uid = await seedUser(pool, { displayName: 'ע' });
       await seedDocument(pool, doc(A, 'הגדרות רשת', 'הגדרת APN', 'עדכן APN במכשיר'), uid);
       await seedDocument(pool, doc(B, 'כרטיס SIM', 'ריענון SIM', 'בצע ריענון SIM בקונסולה'), uid);
-      const src = (
-        await pool.query(`insert into sources(kind, title) values ('docx','נהלים') returning id`)
-      ).rows[0].id as string;
+      const src = (await pool.query(`insert into sources(kind, title) values ('docx','נהלים') returning id`))
+        .rows[0].id as string;
 
       const apnStep = (await pool.query(`select id from steps where document_id=$1`, [A])).rows[0]
         .id as string;
@@ -91,10 +90,7 @@ run('embedding-based paragraph → step mapping', () => {
       };
 
       const paragraphs = [para('1.1', 'הגדרת APN מחדש במכשיר'), para('1.2', 'ריענון כרטיס SIM ברשת')];
-      const mapped = await new MappingService(pool as pg.Pool, model).proposeInitialMapping(
-        src,
-        paragraphs,
-      );
+      const mapped = await new MappingService(pool as pg.Pool, model).proposeInitialMapping(src, paragraphs);
       expect(mapped).toHaveLength(2);
       expect(mapped[0]).toMatchObject({ ref: '1.1', documentId: A, stepKey: 's1' });
       expect(mapped[1]).toMatchObject({ ref: '1.2', documentId: B, stepKey: 's1' });
