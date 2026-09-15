@@ -36,6 +36,30 @@ import { isChunkLoadError, pageReload } from '../../lib/chunkError.js';
 const CLIENT_ERROR = 'client_error';
 
 /**
+ * M2 — which document the agent was on when the screen went blank.
+ *
+ * `client_error` rows were arriving with nothing but `{ kind, at }`, which answers "did anything
+ * crash this week" and nothing else: the one column `telemetry_events` already has for context is
+ * `document_id`, and the boundary knows the route it guards, so the two were simply never joined.
+ * A crash on `/doc/<id>` is now attributable to an item somebody can open and reproduce.
+ *
+ * The id has to *look* like one — `/edit/new` is a route, not a document, and `document_id` is a
+ * foreign key into `documents`, so anything else would be a 23503 on insert and the crash report
+ * would itself fail. `/edit/:id` is included for the same reason `/doc/:id` is: a malformed step
+ * breaks both screens, and the editor is where it gets fixed.
+ *
+ * The *path* and the *message* are still missing, and deliberately so: `telemetry_events` has no
+ * column for either (`0010_telemetry.js` — id, user_id, kind, document_id, step_key, at; no jsonb),
+ * so appending `path` to `TelemetryEventSchema` without a migration would only add a field the API
+ * silently drops. Deferred: needs migration.
+ */
+const DOC_ROUTE = /^\/(?:doc|edit)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/i;
+
+export function documentIdFromPath(path: string): string | undefined {
+  return DOC_ROUTE.exec(path)?.[1];
+}
+
+/**
  * Fire-and-forget, and deliberately not `useTelemetry`'s 10-second buffer: the batch that matters
  * is the one describing a screen the agent is about to reload away from, and a boundary is a class
  * component that cannot hold the hook anyway. Wrapped twice — `try` for a `fetch` that is missing
@@ -88,7 +112,9 @@ class ErrorBoundaryBase extends Component<Props, State> {
     // The console line is what a developer with the tab open sees; the telemetry row is what
     // anybody looking at the deployed VM a day later sees. Both, not one.
     console.error(`[ErrorBoundary:${this.props.where}]`, error, info.componentStack);
-    reportClientError();
+    // `where` is the route path for every boundary but the shell's, which is why it can name the
+    // document (M2).
+    reportClientError(documentIdFromPath(this.props.where));
   }
 
   override componentDidUpdate(prev: Props): void {
