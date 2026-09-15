@@ -5,6 +5,7 @@ import { IdSchema, SuggestionPayloadSchema, SuggestionSchema, SuggestionTypeSche
 import type { ProposalContext, ProposedSuggestion } from './contract.js';
 import { groupSections, isNewSourcePath } from './sections.js';
 import { toFlatExample } from './flat.js';
+import { materialDiffs } from './material.js';
 
 /** Bump together with a new `prompts/<version>.md` file; stored on every run for reproducibility.
  * v2 (pipeline-fanout): a brand-new source is proposed as one card per SECTION, and a single
@@ -190,8 +191,14 @@ export function buildMessages(
   opts: PromptOptions = {},
 ): { role: 'system' | 'user'; content: string }[] {
   const v4 = (opts.version ?? PROMPT_VERSION) !== LEGACY_PROMPT_VERSION;
-  const diffs = ctx.diffs
-    .filter((d) => d.kind !== 'same')
+  /**
+   * A spelling fix, a re-spaced line or a reordered source is not shown to the model at all.
+   * Deciding that a typo is not a procedure change is not a language task, the tokens are not
+   * free, and a model shown noise proposes on noise — which is what fills a review queue nobody
+   * then reads. `material.ts` is deliberately conservative: a changed number, latin token or
+   * quoted string is always material and always reaches the prompt.
+   */
+  const diffs = materialDiffs(ctx.diffs)
     .map(
       (d) =>
         `- §${stripAnchor(d.ref)} ${d.kind}: לפני: ${JSON.stringify(d.before ?? '')} אחרי: ${JSON.stringify(d.after ?? '')}`,

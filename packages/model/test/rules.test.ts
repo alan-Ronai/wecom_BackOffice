@@ -66,7 +66,15 @@ describe('RuleBasedModel', () => {
     ]);
     const upd = out[0];
     if (upd.payload.type !== 'update-step') throw new Error();
-    expect(upd.payload.addActions).toEqual(['יש לוודא שהלקוח מנותק מ-Wi-Fi לפני הבדיקה.']);
+    /**
+     * Both the sentence whose value changed (5 → 6) and the wholly new one. The changed sentence
+     * is the fix for the engine's old empty-`addActions` answer: a suggestion that names no
+     * action scored 1/1/**0** on case `01` and told an editor nothing.
+     */
+    expect(upd.payload.addActions).toEqual([
+      'מעל 6 מגה – תקין.',
+      'יש לוודא שהלקוח מנותק מ-Wi-Fi לפני הבדיקה.',
+    ]);
     expect(upd.targetStepKey).toBe('s8');
     expect(upd.confidence).toBeGreaterThan(0.5);
   });

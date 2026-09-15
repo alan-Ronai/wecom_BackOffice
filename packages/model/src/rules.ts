@@ -1,8 +1,8 @@
-import { similarity } from '@wecom/shared';
 import type { ModelClient, ProposalContext, ProposedSuggestion } from './contract.js';
 import { isNewSourcePath, sectionCards } from './sections.js';
 import { confidenceFor } from './calibration.js';
 import { detectFieldAlerts } from './guard.js';
+import { isCosmetic, isFieldRenameOnly, isHeadingRef, isReorderOnly, materialSentences } from './material.js';
 
 const sentences = (t: string) =>
   t
@@ -11,23 +11,6 @@ const sentences = (t: string) =>
     .filter((s) => s.length > 2);
 const anchorOf = (ref: string) => (ref.startsWith('§') ? ref : '§' + ref);
 const stripRef = (ref: string) => ref.replace(/^§/, '');
-
-/** A near-similarity threshold below which an "after" sentence with no exact "before"
- * match is still treated as a lightly-edited existing sentence (e.g. a changed number)
- * rather than genuinely new content. */
-const NEW_SENTENCE_MAX_SIMILARITY = 0.5;
-
-/** Sentences in `after` with no exact match in `before` and no near-duplicate either
- * (so a sentence that only swapped a word/number, like a changed threshold, is not
- * reported as newly added content). */
-const addedSentences = (before: string, after: string): string[] => {
-  const beforeSentences = sentences(before);
-  const beforeSet = new Set(beforeSentences);
-  return sentences(after).filter((s) => {
-    if (beforeSet.has(s)) return false;
-    return beforeSentences.every((b) => similarity(s, b) < NEW_SENTENCE_MAX_SIMILARITY);
-  });
-};
 
 /** Deterministic fallback: no language model, only alignment + heuristics. */
 export class RuleBasedModel implements ModelClient {
@@ -42,9 +25,24 @@ export class RuleBasedModel implements ModelClient {
      * source as sections instead — see `sections.ts`.
      */
     if (isNewSourcePath(ctx)) return sectionCards(ctx);
+    /**
+     * The source was reordered and says the same things in a different order. That is an edit of
+     * the document and not of the knowledge, and a suggestion per moved paragraph is precisely
+     * the noise that buries a review queue.
+     */
+    if (isReorderOnly(ctx.diffs)) return [];
+    const known = new Set(ctx.fields.map((f) => f.name.toLowerCase()));
     const out: ProposedSuggestion[] = [];
     for (const d of ctx.diffs) {
       if (d.kind === 'same') continue;
+      /**
+       * A spelling fix, a re-spaced line, a comma, a renamed heading: real edits of the source,
+       * nothing for an editor to decide. `material.ts` keeps this conservative — a changed
+       * number, latin token or quoted string is always material, so case `01`'s threshold and
+       * case `05`'s field name are never mistaken for typography.
+       */
+      if (d.kind === 'changed' && (isHeadingRef(d.ref) || isCosmetic(d.before ?? '', d.after ?? '')))
+        continue;
       const linked = ctx.linkedSteps.filter((s) => stripRef(s.anchor) === stripRef(d.ref));
       const anchor = anchorOf(d.ref);
       if (d.kind === 'removed' && linked.length) {
@@ -107,7 +105,20 @@ export class RuleBasedModel implements ModelClient {
         continue;
       }
       // changed + linked
-      const added = addedSentences(d.before ?? '', d.after ?? '');
+      /**
+       * `materialSentences` returns new sentences *and* sentences whose value changed, where
+       * `addedSentences` returned only the first. That is why case `01` used to score an overlap
+       * of 0: every sentence had a close counterpart, so the engine emitted an `update-step`
+       * whose `addActions` was `[]` — a suggestion naming no action.
+       */
+      const added = materialSentences(d.before ?? '', d.after ?? '');
+      if (!added.length) continue;
+      /**
+       * The paragraph's only material change is that a known CRM field is called something else
+       * now. `detectFieldAlerts` below raises that as the suggestion; an `update-step` beside it
+       * would ask an editor to approve the same fact twice.
+       */
+      if (isFieldRenameOnly(d.before ?? '', d.after ?? '', known)) continue;
       for (const s of linked) {
         if (s.blockId) {
           const b = ctx.blocks.find((x) => x.id === s.blockId);
