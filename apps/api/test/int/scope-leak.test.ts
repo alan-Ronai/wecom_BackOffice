@@ -610,7 +610,11 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     ).json().id as string;
 
     const attempts: [string, string, unknown][] = [
-      ['POST', `/api/v1/learning/items/${billingQuiz}/audiences`, { roleNames: ['agent'], worldSlugs: [], userIds: [], dueDays: 14 }],
+      [
+        'POST',
+        `/api/v1/learning/items/${billingQuiz}/audiences`,
+        { roleNames: ['agent'], worldSlugs: [], userIds: [], dueDays: 14 },
+      ],
       ['DELETE', `/api/v1/learning/audiences/${audience.rows[0].id}`, undefined],
       ['POST', `/api/v1/learning/items/${billingQuiz}/assign`, { userIds: [admin.id], dueDays: 14 }],
       ['GET', `/api/v1/learning/items/${billingQuiz}/completion`, undefined],

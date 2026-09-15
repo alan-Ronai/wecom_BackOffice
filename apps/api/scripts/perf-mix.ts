@@ -122,7 +122,10 @@ export function buildQueryMix(perClass = 40, seed = 1337): PerfQuery[] {
      * sends is three characters.
      */
     const whole = pick(rng, PREFIX_NOUNS);
-    const cut = Math.max(MIN_PREFIX_CHARS, Math.min(whole.length - 1, MIN_PREFIX_CHARS + Math.floor(rng() * 3)));
+    const cut = Math.max(
+      MIN_PREFIX_CHARS,
+      Math.min(whole.length - 1, MIN_PREFIX_CHARS + Math.floor(rng() * 3)),
+    );
     out.push({ cls: 'prefix', q: whole.slice(0, cut) });
     out.push({
       cls: 'stopword',

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import pg from 'pg';
 import { runner } from 'node-pg-migrate';
+import { readdir } from 'node:fs/promises';
 import { resolvePermissions } from '../../src/modules/auth/permissions.js';
 import { gcUnreferencedAssets } from '../../src/modules/sourcedocs/assets.js';
 
@@ -36,9 +37,20 @@ run('0045 — user_role_worlds (A-M14)', () => {
     pool = new pg.Pool({ connectionString: c.getConnectionUri() });
     await migrate(c.getConnectionUri(), 'up');
 
-    // Roll 0045 back so legacy rows can be written the way they existed before it, then roll
-    // forward over them: this is the backfill path a real deploy takes.
-    await migrate(c.getConnectionUri(), 'down', 1);
+    /**
+     * Roll 0045 back so legacy rows can be written the way they existed before it, then roll
+     * forward over them: this is the backfill path a real deploy takes.
+     *
+     * Counted from the directory, not hardcoded to 1. Wave 5's migrations were renumbered above
+     * 0045 (A-C3, `checkOrder`), so "down one" stopped meaning "undo 0045" and started meaning
+     * "undo the newest wave" — the backfill under test never ran and the assertion failed with no
+     * hint as to why. Same lesson `migrations.test.ts` already carries in its wave-4 rollback.
+     */
+    const fromPilotHardening = (await readdir('migrations')).filter((f) => {
+      const n = Number(/^(\d{4})_/.exec(f)?.[1] ?? NaN);
+      return n >= 45;
+    }).length;
+    await migrate(c.getConnectionUri(), 'down', fromPilotHardening);
     await pool.query(
       `insert into users(id, subject, source, email, display_name, initials)
          values ($1,'am14','local','am14@t','X','X')`,

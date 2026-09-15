@@ -39,7 +39,11 @@ export default function gapsRoutes(deps: () => DetectDeps) {
      *
      * 404 rather than 403, matching the list: a gap the caller may not see does not exist for them.
      */
-    const visibleGap = async (tx: Parameters<typeof repo.getGap>[0], id: string, user: ReturnType<typeof requireUser>) => {
+    const visibleGap = async (
+      tx: Parameters<typeof repo.getGap>[0],
+      id: string,
+      user: ReturnType<typeof requireUser>,
+    ) => {
       const gap = await repo.getGap(tx, id);
       if (!gap) throw notFound('הפער');
       if (user.worldScopes && gap.worldSlug && !hasScope(user, gap.worldSlug)) throw notFound('הפער');

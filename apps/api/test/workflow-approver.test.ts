@@ -214,15 +214,12 @@ run('workflow settings and approver gate', () => {
       const self = await decide(auth(lead), 'approve');
       expect(self.statusCode).toBe(403);
       expect(self.json().code).toBe('SELF_APPROVAL');
-      const before = (
-        await db.pool.query('select current_version from documents where id=$1', [docId])
-      ).rows[0].current_version as number;
+      const before = (await db.pool.query('select current_version from documents where id=$1', [docId]))
+        .rows[0].current_version as number;
       const ok = await decide(auth(other), 'approve');
       expect(ok.statusCode, ok.body).toBe(200);
       expect(ok.json().status).toBe('approved');
-      const after = await db.pool.query('select current_version, status from documents where id=$1', [
-        docId,
-      ]);
+      const after = await db.pool.query('select current_version, status from documents where id=$1', [docId]);
       expect(after.rows[0].current_version).toBe(before + 1);
       expect(after.rows[0].status).toBe('published');
       // A-C2: the approve publish records §1.5's change flag like any other editorial publish.

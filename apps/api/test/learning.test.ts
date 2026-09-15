@@ -233,17 +233,15 @@ run('learning content', () => {
       url: `/api/v1/learning/items/${item.id}/questions`,
       headers: auth(editor),
       payload: {
-        questions: [
-          { documentId: pubDoc, stem: 'ספרו במילים שלכם', kind: 'free', options: [] },
-        ],
+        questions: [{ documentId: pubDoc, stem: 'ספרו במילים שלכם', kind: 'free', options: [] }],
       },
     });
     expect(r.statusCode, r.body).toBe(400);
     expect(r.json().code).toBe('UNSUPPORTED_KIND');
     // Nothing was written: a refused save leaves the item as it was.
     expect(
-      (await db.pool.query('select count(*)::int n from quiz_questions where item_id=$1', [item.id]))
-        .rows[0].n,
+      (await db.pool.query('select count(*)::int n from quiz_questions where item_id=$1', [item.id])).rows[0]
+        .n,
     ).toBe(0);
   });
 
@@ -340,10 +338,7 @@ run('learning content', () => {
         headers: auth(agent),
       })
     ).json();
-    expect(asAgent.questions[0].options.map((o: { correct: boolean }) => o.correct)).toEqual([
-      false,
-      false,
-    ]);
+    expect(asAgent.questions[0].options.map((o: { correct: boolean }) => o.correct)).toEqual([false, false]);
     expect(asAgent.questions[0].explanation).toBe('');
     expect(asAgent.questions[0].generated).toBe(false);
     expect(asAgent.questions[0].modelConf).toBeNull();
@@ -355,10 +350,7 @@ run('learning content', () => {
         headers: auth(editor),
       })
     ).json();
-    expect(asManager.questions[0].options.map((o: { correct: boolean }) => o.correct)).toEqual([
-      true,
-      false,
-    ]);
+    expect(asManager.questions[0].options.map((o: { correct: boolean }) => o.correct)).toEqual([true, false]);
     expect(asManager.questions[0].explanation).toBe('כי כן');
     // republish after editing a document bumps the pinned version
     const doc = (

@@ -651,9 +651,7 @@ run('wave 5 seams', () => {
     });
     expect(assigned.statusCode, assigned.body).toBe(200);
     const mine = await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agent) });
-    const assignmentId = mine
-      .json()
-      .open.find((a: { itemId: string }) => a.itemId === itemId).id as string;
+    const assignmentId = mine.json().open.find((a: { itemId: string }) => a.itemId === itemId).id as string;
 
     // The editor now rewrites the question — same id, different stem, different correct option —
     // and does *not* republish the item.
@@ -674,9 +672,7 @@ run('wave 5 seams', () => {
     // Preserved, so the stored attempt answers below still join.
     expect(second.json().questions[0].id).toBe(questionId);
     expect(
-      (await db.pool.query('select id from quiz_questions where item_id=$1', [itemId])).rows.map(
-        (r) => r.id,
-      ),
+      (await db.pool.query('select id from quiz_questions where item_id=$1', [itemId])).rows.map((r) => r.id),
     ).toEqual([questionId]);
 
     const player = await app.inject({
@@ -703,10 +699,9 @@ run('wave 5 seams', () => {
     expect(graded.statusCode, graded.body).toBe(200);
     expect(graded.json().passed).toBe(true);
     // The stored answer key is the question that still exists, so the history survives the edit.
-    const stored = await db.pool.query(
-      `select answers from learning_attempts where id=$1`,
-      [started.json().attemptId],
-    );
+    const stored = await db.pool.query(`select answers from learning_attempts where id=$1`, [
+      started.json().attemptId,
+    ]);
     expect(Object.keys(stored.rows[0].answers as Record<string, unknown>)).toEqual([questionId]);
     expect(
       (

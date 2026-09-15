@@ -421,10 +421,7 @@ run('migrations', () => {
       `insert into learning_items(kind, title, status, current_version) values ('quiz','לבדיקת מחיקה','published',1) returning id`,
     );
     const itemId = item.rows[0].id as string;
-    await pool.query(
-      `insert into learning_audiences(item_id, due_days) values ($1, 7)`,
-      [itemId],
-    );
+    await pool.query(`insert into learning_audiences(item_id, due_days) values ($1, 7)`, [itemId]);
     await pool.query(
       `insert into learning_assignments(item_id, item_version, user_id, reason, due_at)
        values ($1, 1, $2, 'manual', now() + interval '7 days')`,

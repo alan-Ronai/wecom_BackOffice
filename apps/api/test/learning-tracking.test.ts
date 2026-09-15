@@ -419,9 +419,11 @@ run('learning tracking', () => {
     expect(stolen.statusCode, stolen.body).toBe(404);
     // Untouched: still open, still unfinished.
     expect(
-      (await db.pool.query(`select finished_at from learning_attempts where id=$1`, [
-        started.json().attemptId,
-      ])).rows[0].finished_at,
+      (
+        await db.pool.query(`select finished_at from learning_attempts where id=$1`, [
+          started.json().attemptId,
+        ])
+      ).rows[0].finished_at,
     ).toBeNull();
     expect(
       (await db.pool.query(`select status from learning_assignments where id=$1`, [aid])).rows[0].status,

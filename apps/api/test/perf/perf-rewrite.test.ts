@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { search } from '../../src/modules/search/repo.js';
+import { resetStopwordCache, search } from '../../src/modules/search/repo.js';
 import {
   isStepsStatement,
   isUnionForm,
@@ -20,6 +20,10 @@ import {
  * `rewriteUnionToLegacy` reconstructs the pre-0044 baseline the A/B measures against.
  */
 const capture = async (q: string, opts: { world?: string; scopes?: string[]; stopwords?: string[] } = {}) => {
+  // A-M3 gave the stopword list a one-minute process-wide cache, and this helper changes what the
+  // table answers between calls — which is exactly the case the cache cannot see. Dropping it per
+  // capture keeps each call measuring the list it asked for.
+  resetStopwordCache();
   const seen: { sql: string; params: unknown[] }[] = [];
   const stub = {
     query: async (sql: string, params?: unknown[]) => {
