@@ -12,7 +12,11 @@ interface RowState {
 
 const LABEL: Record<Verdict, string> = { keep: 'שמור', edit: 'ערוך', remove: 'הסר' };
 
-const initialState = (rows: SuggestionRow[], prefill?: SuggestionPayload | null, base?: SuggestionPayload) => {
+const initialState = (
+  rows: SuggestionRow[],
+  prefill?: SuggestionPayload | null,
+  base?: SuggestionPayload,
+) => {
   const preset = new Map(
     prefill && base ? diffRows(base, prefill).map((r) => [r.rowId, String(r.value ?? '')]) : [],
   );
@@ -64,7 +68,11 @@ export function StructuredEditDrawer({
       // Atomic groups move together — keep-all or remove-all.
       if (row.atomic)
         for (const r of rows)
-          if (r.atomic === row.atomic && r.rowId !== row.rowId && (op === 'remove' || s[r.rowId]!.op === 'remove'))
+          if (
+            r.atomic === row.atomic &&
+            r.rowId !== row.rowId &&
+            (op === 'remove' || s[r.rowId]!.op === 'remove')
+          )
             next[r.rowId] = { ...s[r.rowId]!, op: op === 'remove' ? 'remove' : 'keep' };
       return next;
     });

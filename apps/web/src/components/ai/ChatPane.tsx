@@ -11,6 +11,7 @@ import {
 import { useToast } from '../ui/Toast.js';
 import { Composer } from './Composer.js';
 import { MessageList } from './MessageList.js';
+import { parseRefinedPayload } from './RefinedSuggestionCard.js';
 
 export interface ChatContext {
   stepKey?: string;
@@ -99,10 +100,15 @@ export function ChatPane({
         decidedAt: null,
         resultingSourceVersion: null,
       });
+    if (last.refined && onRefinedSuggestion) {
+      // The stream types `editedPayload` as unknown; a payload that is not one is not handed on.
+      const payload = parseRefinedPayload(last.refined.editedPayload);
+      if (payload) onRefinedSuggestion(last.refined.suggestionId, payload);
+    }
     if (onToolResult)
       for (const t of last.tools)
         if (t.ok && t.payload !== undefined) onToolResult(t.name as AiToolName, t.payload, last.messageId);
-  }, [last, onProposedEdits, onToolResult]);
+  }, [last, onProposedEdits, onRefinedSuggestion, onToolResult]);
 
   if (!mayAsk) return null;
 

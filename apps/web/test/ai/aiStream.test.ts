@@ -14,17 +14,15 @@ const sse = (chunks: string[], status = 200, ct = 'text/event-stream') =>
     { status, headers: { 'content-type': ct } },
   );
 
-const DONE = '{"type":"done","messageId":"11111111-1111-4111-8111-111111111111","tokensIn":0,"tokensOut":0,"latencyMs":0}';
+const DONE =
+  '{"type":"done","messageId":"11111111-1111-4111-8111-111111111111","tokensIn":0,"tokensOut":0,"latencyMs":0}';
 
 afterEach(() => vi.restoreAllMocks());
 
 describe('streamChat', () => {
   it('parses events split across chunks and validates each against ChatEventSchema', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      sse([
-        'event: token\ndata: {"type":"token","te',
-        'xt":"שלום"}\n\nevent: done\ndata: ' + DONE + '\n\n',
-      ]),
+      sse(['event: token\ndata: {"type":"token","te', 'xt":"שלום"}\n\nevent: done\ndata: ' + DONE + '\n\n']),
     );
     const seen: ChatEvent[] = [];
     await streamChat({

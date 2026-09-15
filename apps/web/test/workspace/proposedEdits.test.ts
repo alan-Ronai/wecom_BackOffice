@@ -15,7 +15,13 @@ const ops: ProposedEditOp[] = [
     after: 'ודא חיבור לרשת לפני הבדיקה.',
   },
   { id: 'op-2', anchor: '§h2-1.p-2', kind: 'delete', before: 'פסקה כפולה.', after: '' },
-  { id: 'op-3', anchor: '§h2-1.p-1', kind: 'insert', before: 'יש לוודא חיבור לרשת לפני הבדיקה.', after: '<p>חדש.</p>' },
+  {
+    id: 'op-3',
+    anchor: '§h2-1.p-1',
+    kind: 'insert',
+    before: 'יש לוודא חיבור לרשת לפני הבדיקה.',
+    after: '<p>חדש.</p>',
+  },
 ];
 
 describe('paragraph anchors', () => {

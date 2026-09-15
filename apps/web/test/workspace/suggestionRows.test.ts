@@ -118,10 +118,13 @@ describe('applyRows', () => {
       title: 'כרטיס',
     });
     expect(
-      applyRows({ type: 'deprecate-step', reason: 'ישן' }, {
-        type: 'deprecate-step',
-        rows: [{ rowId: 'reason', op: 'remove' }],
-      }),
+      applyRows(
+        { type: 'deprecate-step', reason: 'ישן' },
+        {
+          type: 'deprecate-step',
+          rows: [{ rowId: 'reason', op: 'remove' }],
+        },
+      ),
     ).toMatchObject({ reason: 'ישן' });
   });
 
@@ -145,7 +148,10 @@ describe('applyRows', () => {
 
   it('edits a patch value and drops a patch key', () => {
     expect(
-      applyRows(updateStep, { type: 'update-step', rows: [{ rowId: 'patch-hint', op: 'edit', value: 'ר2' }] }),
+      applyRows(updateStep, {
+        type: 'update-step',
+        rows: [{ rowId: 'patch-hint', op: 'edit', value: 'ר2' }],
+      }),
     ).toMatchObject({ patch: { hint: 'ר2' } });
     expect(
       applyRows(updateStep, { type: 'update-step', rows: [{ rowId: 'patch-hint', op: 'remove' }] }),
@@ -153,9 +159,9 @@ describe('applyRows', () => {
   });
 
   it('ignores a row id that belongs to another type', () => {
-    expect(
-      applyRows(newStep, { type: 'new-step', rows: [{ rowId: 'patch-hint', op: 'remove' }] }),
-    ).toEqual(newStep);
+    expect(applyRows(newStep, { type: 'new-step', rows: [{ rowId: 'patch-hint', op: 'remove' }] })).toEqual(
+      newStep,
+    );
   });
 });
 

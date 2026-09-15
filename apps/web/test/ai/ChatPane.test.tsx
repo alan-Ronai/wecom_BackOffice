@@ -102,7 +102,14 @@ describe('<ChatPane>', () => {
   it('hands tool payloads to onToolResult when the reply seals', async () => {
     scriptStream([
       { type: 'tool_call', id: 't9', name: 'draft_step', args: {} },
-      { type: 'tool_result', id: 't9', name: 'draft_step', ok: true, summary: 'טיוטה', payload: { title: 'שלב חדש' } },
+      {
+        type: 'tool_result',
+        id: 't9',
+        name: 'draft_step',
+        ok: true,
+        summary: 'טיוטה',
+        payload: { title: 'שלב חדש' },
+      },
       { type: 'done', messageId: MSG_3, tokensIn: 1, tokensOut: 1, latencyMs: 1 },
     ]);
     const user = userEvent.setup();

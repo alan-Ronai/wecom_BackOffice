@@ -16,7 +16,21 @@ import type { ProposedEditOp } from '@wecom/shared';
  * `node-html-parser`, so a ref computed on the server resolves to the same block here.
  */
 
-const BLOCKS = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'table', 'blockquote', 'pre', 'figure']);
+const BLOCKS = new Set([
+  'p',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'ul',
+  'ol',
+  'table',
+  'blockquote',
+  'pre',
+  'figure',
+]);
 
 /** Strip tags and decode the entities the sanitizer emits — for diff previews and comparisons. */
 export const htmlToPlain = (html: string): string =>
@@ -28,7 +42,7 @@ export const htmlToPlain = (html: string): string =>
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/[ ‎‏]/g, ' ')
+    .replace(/[\u00a0\u200e\u200f]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -113,9 +127,7 @@ const fragmentOf = (html: string): Node[] => {
  */
 export function applyOps(html: string, ops: ProposedEditOp[], accepted: ReadonlySet<string>): string {
   const body = parseBody(html);
-  const index = new Map(
-    anchoredBlocksOf(body).map((b) => [b.ref, b] as const),
-  );
+  const index = new Map(anchoredBlocksOf(body).map((b) => [b.ref, b] as const));
   let changed = false;
   for (const op of ops) {
     if (!accepted.has(op.id)) continue;

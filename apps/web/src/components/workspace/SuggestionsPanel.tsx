@@ -11,7 +11,8 @@ import { rowsOf } from '../../lib/suggestionRows.js';
 import { AffectsChips } from './AffectsChips.js';
 import { StructuredEditDrawer } from './StructuredEditDrawer.js';
 
-const pending = (n: number) => plural(n, { one: 'הצעה אחת ממתינה', two: 'שתי הצעות ממתינות', many: '# הצעות ממתינות' });
+const pending = (n: number) =>
+  plural(n, { one: 'הצעה אחת ממתינה', two: 'שתי הצעות ממתינות', many: '# הצעות ממתינות' });
 
 /**
  * The workspace's middle pane: the suggestions raised against this item's source document, each

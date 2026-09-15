@@ -108,7 +108,10 @@ export function rowsOf(p: SuggestionPayload): SuggestionRow[] {
  * The effective verdict per row: required rows can never be `remove`, and an atomic group in
  * which anything was removed is removed whole.
  */
-function verdicts(p: SuggestionPayload, edit: StructuredEdit): Map<string, { op: 'keep' | 'edit' | 'remove'; value?: unknown }> {
+function verdicts(
+  p: SuggestionPayload,
+  edit: StructuredEdit,
+): Map<string, { op: 'keep' | 'edit' | 'remove'; value?: unknown }> {
   const rows = rowsOf(p);
   const byId = new Map(rows.map((r) => [r.rowId, r]));
   const out = new Map<string, { op: 'keep' | 'edit' | 'remove'; value?: unknown }>();
@@ -182,8 +185,7 @@ export function applyRows(p: SuggestionPayload, edit: StructuredEdit): Suggestio
         outcomes: kept(p.outcomes.map((o, i) => decide(`out-${i}`, o, (s) => ({ ...o, text: s })))),
       };
     case 'update-block': {
-      const script =
-        p.script === undefined ? undefined : (decide('script', p.script, (s) => s) ?? undefined);
+      const script = p.script === undefined ? undefined : (decide('script', p.script, (s) => s) ?? undefined);
       return {
         ...p,
         actions: kept(p.actions.map((a) => decide(`act-${a.id}`, a, (s) => ({ ...a, text: s })))),

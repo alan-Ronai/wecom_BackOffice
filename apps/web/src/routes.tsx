@@ -117,6 +117,13 @@ const LearningItemEditor = () =>
 const GapsPage = () => import('./components/gaps/GapsPage.js').then((m) => ({ default: m.GapsPage }));
 
 /**
+ * Wave 6 (X4a). The AI workspace is a writing surface reached deliberately — and it carries the
+ * source editor's TipTap bundle plus the chat — so it stays out of the entry chunk.
+ */
+const WorkspacePage = () =>
+  import('./components/workspace/WorkspacePage.js').then((m) => ({ default: m.WorkspacePage }));
+
+/**
  * One boundary around the whole lazy area rather than one per route.
  *
  * `Suspense` resolves to the nearest boundary above the suspending component, so a single wrapper
@@ -212,6 +219,8 @@ export const routeObjects: RouteObject[] = [
       { path: 'learning/manage/:id', element: split(LearningItemEditor) },
       { path: 'learning/:assignmentId', element: split(AssignmentPage) },
       { path: 'gaps', element: split(GapsPage) },
+      // wave 6 (X4a) — the combined source / suggestions / chat workspace.
+      { path: 'workspace/:id', element: split(WorkspacePage) },
       {
         path: 'admin',
         element: split(AdminLayout),

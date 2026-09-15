@@ -96,6 +96,8 @@ function emit(frame: string, onEvent: (e: ChatEvent) => void): void {
   }
   const parsed = ChatEventSchema.safeParse(json);
   onEvent(
-    parsed.success ? parsed.data : { type: 'error', code: 'CONTRACT', message: 'תשובת השרת אינה תואמת את החוזה' },
+    parsed.success
+      ? parsed.data
+      : { type: 'error', code: 'CONTRACT', message: 'תשובת השרת אינה תואמת את החוזה' },
   );
 }
