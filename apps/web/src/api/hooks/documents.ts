@@ -121,6 +121,32 @@ export function useDocRefs(id: string | undefined): DocRef[] {
 }
 
 /**
+ * H2 — titles for link targets the editor has no card for.
+ *
+ * The reader resolves `[[doc:…]]` through `useDocRefs` above, off the document's own graph. The
+ * *editor* had no equivalent: it named link targets from `useDocuments({ sort: 'wave' })`, i.e.
+ * the 50 cards on page 1, so an action pointing anywhere past that showed a raw uuid in the field
+ * the picker exists to keep readable — the G10 defect, reinstated on the writing side.
+ *
+ * Same shape as `useDocStatuses`: capped, `retry: false` (a link to something deleted or invisible
+ * is a 404 and stays unresolved rather than retrying), and keyed on the shared `keys.doc(id)`, so
+ * the lookup is usually a cache hit and opening the link afterwards is free.
+ */
+export function useDocRefsByIds(ids: string[]): DocRef[] {
+  const wanted = useMemo(() => [...new Set(ids)].slice(0, MAX_DOC_REF_LOOKUPS), [ids]);
+  return useQueries({
+    queries: wanted.map((docId) => ({
+      queryKey: keys.doc(docId),
+      staleTime: 60_000,
+      retry: false,
+      queryFn: async () => unwrap(await api.GET('/documents/{id}', { params: { path: { id: docId } } })),
+    })),
+    combine: (results) =>
+      results.flatMap((r) => (r.data ? [{ id: r.data.id, title: r.data.title, code: r.data.code }] : [])),
+  });
+}
+
+/**
  * Statuses for a set of link targets, for §5.5's invalid-link rendering.
  *
  * Neither `GET /documents/:id/related` nor `/links` carries the target's status, so the only way
