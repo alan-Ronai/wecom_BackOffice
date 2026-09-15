@@ -1,4 +1,10 @@
-import { rowsOf as sharedRowsOf, type StructuredEdit, type SuggestionPayload } from '@wecom/shared';
+import {
+  applyStructuredEdit,
+  rowsOf as sharedRowsOf,
+  type StructuredEdit,
+  type SuggestionPayload,
+  type SuggestionRow as SharedRow,
+} from '@wecom/shared';
 
 /**
  * The row scheme the structured editor and X3's server-side apply share.
@@ -17,6 +23,7 @@ import { rowsOf as sharedRowsOf, type StructuredEdit, type SuggestionPayload } f
 export interface SuggestionRow {
   rowId: string;
   label: string;
+  /** The one line the drawer shows and edits. */
   value: string;
   /** Extra read-only context for the drawer (the branch's options, a step's number). */
   hint?: string;
@@ -24,6 +31,51 @@ export interface SuggestionRow {
   atomic?: string;
   /** A required row can be edited but never removed. */
   required?: boolean;
+  /** The shared row's own value, which is what an edit must send back — see `structuredValue`. */
+  raw: unknown;
+  /** The shared row's editable kind, which says how the typed line folds back into `raw`. */
+  editable: SharedRow['editable'];
+}
+
+/**
+ * The inverse of the display projection: the typed line, folded back into the shape the row
+ * really has.
+ *
+ * `applyStructuredEdit` substitutes a row's value **verbatim** — an `action` row is an
+ * `{ id, text }`, a `new-card` `meta` row is the whole `{ title, description, category, wave,
+ * priority }` object — so sending the display string back is a 400 on every row that is not plain
+ * text. That is most of them, and it was why the structured editor could not save a `new-card` at
+ * all. Each kind folds the line into the single field the projection displayed and keeps the rest
+ * of the object untouched.
+ */
+export function structuredValue(row: SuggestionRow, typed: string): unknown {
+  const raw = row.raw;
+  if (typeof raw === 'string' || raw === null || raw === undefined) return typed;
+  if (typeof raw === 'number') {
+    const n = Number(typed);
+    return Number.isFinite(n) && typed.trim() !== '' ? n : typed;
+  }
+  if (typeof raw !== 'object') return typed;
+  const o = raw as Record<string, unknown>;
+  switch (row.editable) {
+    case 'action':
+    case 'outcome':
+      return { ...o, text: typed };
+    case 'branch':
+      return { ...o, q: typed };
+    case 'step':
+      return { ...o, title: typed };
+    case 'json':
+      // `meta` (both kinds) shows the title; the field alert shows `<field> · <issue>`.
+      if ('title' in o) return { ...o, title: typed };
+      if ('fieldName' in o && 'issue' in o) {
+        const [fieldName, ...rest] = typed.split(' · ');
+        return rest.length ? { ...o, fieldName, issue: rest.join(' · ') } : { ...o, issue: typed };
+      }
+      return typed;
+    default:
+      return typed;
+  }
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : JSON.stringify(v));
@@ -102,103 +154,27 @@ export function rowsOf(p: SuggestionPayload): SuggestionRow[] {
       ...(d?.hint ? { hint: d.hint } : {}),
       ...(r.atomic ? { atomic: r.group } : {}),
       ...(r.required ? { required: true } : {}),
+      raw: r.value,
+      editable: r.editable,
     };
   });
 }
 
 /**
- * The effective verdict per row: required rows can never be `remove`, and an atomic group in
- * which anything was removed is removed whole.
- */
-function verdicts(
-  p: SuggestionPayload,
-  edit: StructuredEdit,
-): Map<string, { op: 'keep' | 'edit' | 'remove'; value?: unknown }> {
-  const rows = rowsOf(p);
-  const byId = new Map(rows.map((r) => [r.rowId, r]));
-  const out = new Map<string, { op: 'keep' | 'edit' | 'remove'; value?: unknown }>();
-  const removedGroups = new Set<string>();
-  for (const r of edit.rows) {
-    const row = byId.get(r.rowId);
-    if (!row) continue;
-    if (r.op === 'remove' && row.required) continue;
-    out.set(r.rowId, { op: r.op, value: r.value });
-    if (r.op === 'remove' && row.atomic) removedGroups.add(row.atomic);
-  }
-  for (const row of rows)
-    if (row.atomic && removedGroups.has(row.atomic)) out.set(row.rowId, { op: 'remove' });
-  return out;
-}
-
-/**
- * A pure preview of an edit — the server applies the real thing; this is what the drawer's
- * "תוצאה" line summarises, so an editor can see the payload they are about to save.
+ * A pure preview of an edit — what the drawer's "תוצאה" line summarises, so an editor can see the
+ * payload they are about to save.
+ *
+ * X6: this is the shared `applyStructuredEdit`, the function the route itself applies an edit
+ * with, rather than a second implementation of the same rules. The local copy rewrote only rows
+ * whose value was a string, which quietly stopped previewing anything once the drawer began
+ * sending structured values (see `structuredValue`). An edit the server would refuse previews as
+ * the unchanged payload rather than throwing at the editor mid-keystroke.
  */
 export function applyRows(p: SuggestionPayload, edit: StructuredEdit): SuggestionPayload {
-  const ops = verdicts(p, edit);
-  /** `null` means "drop this row"; anything else is the (possibly rewritten) value. */
-  const decide = <T>(rowId: string, current: T, rewrite: (s: string) => T): T | null => {
-    const r = ops.get(rowId);
-    if (!r || r.op === 'keep') return current;
-    if (r.op === 'remove') return null;
-    return typeof r.value === 'string' ? rewrite(r.value) : current;
-  };
-  const kept = <T>(xs: (T | null)[]): T[] => xs.filter((x): x is T => x !== null);
-  const text = (rowId: string, current: string): string => decide(rowId, current, (s) => s) ?? current;
-
-  switch (p.type) {
-    case 'update-step':
-      return {
-        ...p,
-        addActions: kept(p.addActions.map((a, i) => decide(`add-${i}`, a, (s) => s))),
-        ...(p.replaceActions
-          ? {
-              replaceActions: kept(
-                p.replaceActions.map((a) => decide(`rep-${a.id}`, a, (s) => ({ ...a, text: s }))),
-              ),
-            }
-          : {}),
-        ...(p.outcomes
-          ? { outcomes: kept(p.outcomes.map((o, i) => decide(`out-${i}`, o, (s) => ({ ...o, text: s })))) }
-          : {}),
-        ...(p.branch ? { branch: decide('branch', p.branch, (s) => ({ ...p.branch!, q: s })) } : {}),
-        patch: Object.fromEntries(
-          kept(
-            Object.entries(p.patch).map(([k, v]) =>
-              decide(`patch-${k}`, [k, v] as [string, unknown], (s) => [k, s] as [string, unknown]),
-            ),
-          ),
-        ),
-      };
-    case 'new-card':
-      return {
-        ...p,
-        title: text('meta', p.title),
-        phases: p.phases.map((ph, pi) => ({
-          ...ph,
-          steps: kept(ph.steps.map((s, si) => decide(`step-${pi}-${si}`, s, (t) => ({ ...s, title: t })))),
-        })),
-      };
-    case 'new-step':
-      return {
-        ...p,
-        title: text('meta', p.title),
-        actions: kept(p.actions.map((a, i) => decide(`act-${i}`, a, (s) => s))),
-        outcomes: kept(p.outcomes.map((o, i) => decide(`out-${i}`, o, (s) => ({ ...o, text: s })))),
-      };
-    case 'update-block': {
-      const script = p.script === undefined ? undefined : (decide('script', p.script, (s) => s) ?? undefined);
-      return {
-        ...p,
-        actions: kept(p.actions.map((a) => decide(`act-${a.id}`, a, (s) => ({ ...a, text: s })))),
-        ...(script === undefined ? {} : { script }),
-      };
-    }
-    case 'deprecate-step':
-      return { ...p, reason: text('reason', p.reason) };
-    case 'field-alert':
-      // One row, and it is the identity of the suggestion: an edit here would be a different alert.
-      return p;
+  try {
+    return applyStructuredEdit(p, edit).payload;
+  } catch {
+    return p;
   }
 }
 

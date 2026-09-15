@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import type { StructuredEdit, Suggestion, SuggestionPayload } from '@wecom/shared';
 import { useFocusTrap } from '../ui/useFocusTrap.js';
 import { payloadSummary } from '../sources/SuggestionCard.js';
-import { applyRows, diffRows, rowsOf, type SuggestionRow } from '../../lib/suggestionRows.js';
+import {
+  applyRows,
+  diffRows,
+  rowsOf,
+  structuredValue,
+  type SuggestionRow,
+} from '../../lib/suggestionRows.js';
 
 type Verdict = 'keep' | 'edit' | 'remove';
 interface RowState {
@@ -84,7 +90,9 @@ export function StructuredEditDrawer({
       .map((r) =>
         state[r.rowId]!.op === 'remove'
           ? { rowId: r.rowId, op: 'remove' as const }
-          : { rowId: r.rowId, op: 'edit' as const, value: state[r.rowId]!.value },
+          : // X6: the typed line folds back into the row's real shape — the server substitutes a
+            // row's value verbatim, so an action row has to go back as `{ id, text }`.
+            { rowId: r.rowId, op: 'edit' as const, value: structuredValue(r, state[r.rowId]!.value) },
       ),
   } as StructuredEdit;
 

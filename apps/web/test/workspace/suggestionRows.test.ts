@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import type { SuggestionPayload } from '@wecom/shared';
-import { applyRows, diffRows, rowsOf } from '../../src/lib/suggestionRows.js';
+import { applyRows, diffRows, rowsOf, structuredValue } from '../../src/lib/suggestionRows.js';
+
+/** What the drawer sends for a row it edited: the typed line folded back into the row's shape. */
+const edited = (payload: SuggestionPayload, rowId: string, typed: string) => ({
+  rowId,
+  op: 'edit' as const,
+  value: structuredValue(
+    rowsOf(payload).find((r) => r.rowId === rowId)!,
+    typed,
+  ),
+});
 
 const updateStep: SuggestionPayload = {
   type: 'update-step',
@@ -77,10 +87,10 @@ describe('rowsOf follows X3’s pinned row-id scheme', () => {
   });
 
   it('the single-row types expose one required row each', () => {
-    expect(rowsOf({ type: 'deprecate-step', reason: 'ישן' })).toEqual([
+    expect(rowsOf({ type: 'deprecate-step', reason: 'ישן' })).toMatchObject([
       { rowId: 'reason', label: 'סיבת ההוצאה משימוש', value: 'ישן', required: true },
     ]);
-    expect(rowsOf({ type: 'field-alert', fieldName: 'x', issue: 'unknown' })).toEqual([
+    expect(rowsOf({ type: 'field-alert', fieldName: 'x', issue: 'unknown' })).toMatchObject([
       { rowId: 'alert', label: 'התראת שדה', value: 'x · unknown', required: true },
     ]);
   });
@@ -101,16 +111,30 @@ describe('applyRows', () => {
     expect(out).toMatchObject({ addActions: ['א', 'ב2'] });
   });
 
-  it('removes an atomic group whole when any of its rows is removed', () => {
+  /**
+   * X6: the atomic-group rule lives in the **drawer**, which widens a "הסר" across the group
+   * before sending, and in `splitByParts`, which refuses a `parts` selection that cuts through
+   * one. `applyStructuredEdit` — which is what this preview and the route both run — applies
+   * exactly the rows it is given. The two tests below therefore assert the apply, and the
+   * widening is asserted where it happens, in `StructuredEditDrawer.test.tsx`.
+   */
+  it('applies exactly the rows it is given, leaving the rest of the group alone', () => {
     const out = applyRows(updateStep, { type: 'update-step', rows: [{ rowId: 'rep-a1', op: 'remove' }] });
-    expect(out).toMatchObject({ replaceActions: [] });
-    // The other groups are untouched.
+    expect(out).toMatchObject({ replaceActions: [{ id: 'a2' }] });
     expect((out as Extract<SuggestionPayload, { type: 'update-step' }>).outcomes).toHaveLength(2);
   });
 
-  it('removes every outcome when one is removed', () => {
-    const out = applyRows(updateStep, { type: 'update-step', rows: [{ rowId: 'out-1', op: 'remove' }] });
-    expect(out).toMatchObject({ outcomes: [] });
+  it('omits an optional list the edit emptied rather than writing []', () => {
+    // `replaceActions: []` is an instruction to wipe the step's action list, which is never what
+    // "the editor dropped every proposed replacement" means (X3's rule, now the only one).
+    const out = applyRows(updateStep, {
+      type: 'update-step',
+      rows: [
+        { rowId: 'rep-a1', op: 'remove' },
+        { rowId: 'rep-a2', op: 'remove' },
+      ],
+    });
+    expect('replaceActions' in out).toBe(false);
   });
 
   it('refuses to remove a required row', () => {
@@ -130,20 +154,21 @@ describe('applyRows', () => {
 
   it('edits the branch question and drops the whole branch on remove', () => {
     expect(
-      applyRows(updateStep, { type: 'update-step', rows: [{ rowId: 'branch', op: 'edit', value: 'ש2?' }] }),
+      applyRows(updateStep, { type: 'update-step', rows: [edited(updateStep, 'branch', 'ש2?')] }),
     ).toMatchObject({ branch: { q: 'ש2?' } });
     expect(
-      applyRows(updateStep, { type: 'update-step', rows: [{ rowId: 'branch', op: 'remove' }] }),
-    ).toMatchObject({ branch: null });
+      'branch' in applyRows(updateStep, { type: 'update-step', rows: [{ rowId: 'branch', op: 'remove' }] }),
+    ).toBe(false);
   });
 
   it('edits a step title inside a new-card phase and drops a step', () => {
     expect(
-      applyRows(newCard, { type: 'new-card', rows: [{ rowId: 'step-0-0', op: 'edit', value: 'אחר' }] }),
+      applyRows(newCard, { type: 'new-card', rows: [edited(newCard, 'step-0-0', 'אחר')] }),
     ).toMatchObject({ phases: [{ steps: [{ title: 'אחר' }] }] });
+    // A phase left with no steps is dropped, not kept empty.
     expect(
       applyRows(newCard, { type: 'new-card', rows: [{ rowId: 'step-0-0', op: 'remove' }] }),
-    ).toMatchObject({ phases: [{ steps: [] }] });
+    ).toMatchObject({ phases: [] });
   });
 
   it('edits a patch value and drops a patch key', () => {
