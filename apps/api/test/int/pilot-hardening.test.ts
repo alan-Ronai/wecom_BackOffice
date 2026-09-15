@@ -300,4 +300,20 @@ run('0045 — asset_refs (B-M15)', () => {
   it('backfills references out of version snapshots written before the migration', async () => {
     expect(await refsOf(7)).toEqual(['document_version']);
   });
+
+  /**
+   * Post-pilot L2. Nothing enforces the case of the hex in a `src` that arrives from a connector,
+   * an import or a hand-edited draft, and a lowercase-only capture silently recorded no reference
+   * for an uppercase one — so the gc deleted an image that was plainly on the page.
+   */
+  it('recognises a reference whose uuid is spelled in uppercase hex', async () => {
+    await mkAsset(8);
+    await pool.query(`insert into drafts(user_id, draft_key, payload) values ($1, 'source:upper', $2)`, [
+      userId,
+      JSON.stringify({ html: `<p><img src="/api/v1/assets/${asset(8).toUpperCase()}"></p>` }),
+    ]);
+    expect(await refsOf(8)).toEqual(['draft']);
+    expect(await gcUnreferencedAssets(pool)).toBe(0);
+    expect(await alive(8)).toBe(true);
+  });
 });

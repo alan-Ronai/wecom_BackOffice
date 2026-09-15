@@ -21,8 +21,18 @@
  * `down` reverses everything so `migrations.test.ts`'s full rollback stays green.
  */
 
-/** Same capture the gc used to run inline: the `src` the sanitizer keeps, as a strict uuid. */
-const ASSET_REF_RE = '/api/v1/assets/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
+/**
+ * Same capture the gc used to run inline: the `src` the sanitizer keeps, as a strict uuid.
+ *
+ * Case-insensitive on purpose (post-pilot L2). `gen_random_uuid()::text` is lowercase and so is
+ * everything the API emits today, but nothing in the schema or in `sanitizeHtml` enforces that
+ * on HTML arriving from a connector, an import or a hand-edited draft — and a `src` spelled with
+ * uppercase hex would have produced no `asset_refs` row at all, so the gc would have deleted an
+ * image that was plainly referenced. A regexp class costs nothing; being wrong here costs the
+ * only copy of the bytes.
+ */
+const ASSET_REF_RE =
+  '/api/v1/assets/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})';
 
 /**
  * Every column an asset can be referenced from: `[owner_kind, table, ...path into the row]`.
