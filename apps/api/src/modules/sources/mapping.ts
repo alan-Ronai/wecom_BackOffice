@@ -76,10 +76,14 @@ export class MappingService {
         p.stepKey,
         '§' + anchor(p.ref),
       ]);
+      // M2: `where not exists` is a check, not a guarantee — two editors confirming the same
+      // mapping read "absent" in the same instant and both insert, and since 0037 gave
+      // `document_links` its edge-identity unique index the loser gets a 23505 out of a plain
+      // 500. `on conflict do nothing` is the same intent expressed atomically, and is what the
+      // other three writers of this edge (`seed.ts`, `suggestions.ts` twice) already use.
       await this.pool.query(
         `insert into document_links(from_document_id, from_step_key, to_source_id, type, origin)
-         select $1,$2,$3,'derived_from_source','explicit'
-         where not exists (select 1 from document_links where from_document_id=$1 and from_step_key=$2 and to_source_id=$3 and type='derived_from_source')`,
+         values ($1,$2,$3,'derived_from_source','explicit') on conflict do nothing`,
         [p.documentId, p.stepKey, sourceId],
       );
       await this.pool.query(`update documents set source_id=coalesce(source_id,$2) where id=$1`, [
