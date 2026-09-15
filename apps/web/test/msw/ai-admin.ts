@@ -190,6 +190,8 @@ export const aiAdminState = {
   lastTest: null as ModelSlot | null,
   exportCalls: 0,
   analytics: sampleAnalytics(),
+  /** The query string the analytics tab last asked with, so a filter can be asserted end to end. */
+  lastAnalyticsQuery: null as Record<string, string> | null,
 };
 
 export const resetAiAdminState = (): void => {
@@ -205,6 +207,7 @@ export const resetAiAdminState = (): void => {
   aiAdminState.lastTest = null;
   aiAdminState.exportCalls = 0;
   aiAdminState.analytics = sampleAnalytics();
+  aiAdminState.lastAnalyticsQuery = null;
 };
 
 const deepMerge = (
@@ -253,7 +256,10 @@ export const aiAdminHandlers: RequestHandler[] = [
     aiAdminState.reindexQueued += 1;
     return HttpResponse.json({ queued: true, jobId: 'job-reindex-1' }, { status: 202 });
   }),
-  http.get(`${B}/suggestions/analytics`, () => HttpResponse.json(aiAdminState.analytics)),
+  http.get(`${B}/suggestions/analytics`, ({ request }) => {
+    aiAdminState.lastAnalyticsQuery = Object.fromEntries(new URL(request.url).searchParams);
+    return HttpResponse.json(aiAdminState.analytics);
+  }),
   // Before `/admin/ai/conversations`, or the export path would be read as a conversation id.
   http.get(`${B}/admin/ai/conversations/export.jsonl`, () => {
     aiAdminState.exportCalls += 1;
