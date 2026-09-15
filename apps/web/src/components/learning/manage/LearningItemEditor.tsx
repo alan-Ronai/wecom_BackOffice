@@ -24,6 +24,44 @@ import { ItemPreview } from './ItemPreview.js';
 import { KIND_LABEL, LSTATUS_LABEL, LSTATUS_TONE } from './LearningManagePage.js';
 import { QuizBuilder } from './QuizBuilder.js';
 
+/**
+ * The intro, held locally and committed on blur — the same contract as the `כותרת` field beside it.
+ *
+ * `RichText` fires `onChange` on every keystroke (it is a draft channel, which is how `EditorPage`
+ * and `SourceEditor` use it). Feeding that straight to `PATCH /learning/items/:id` was a request
+ * and seven cache invalidations per character, and worse: once a response lagged behind the typing,
+ * `RichText`'s resync effect saw an older `value` than the editor's own HTML and reset the content
+ * with the caret at the start, mid-sentence.
+ */
+function IntroField({ value, onCommit }: { value: string; onCommit: (html: string) => void }) {
+  const [html, setHtml] = useState(value);
+  /** A server copy that arrives while the editor is untouched wins; one mid-edit does not. */
+  const dirty = useRef(false);
+  useEffect(() => {
+    if (!dirty.current) setHtml(value);
+  }, [value]);
+  return (
+    <div
+      onBlur={(e) => {
+        // Moving between the toolbar and the body is not leaving the field.
+        if (e.currentTarget.contains(e.relatedTarget as Node | null) || !dirty.current) return;
+        dirty.current = false;
+        if (html !== value) onCommit(html);
+      }}
+    >
+      <RichText
+        value={html}
+        onChange={(next) => {
+          dirty.current = true;
+          setHtml(next);
+        }}
+        compact
+        label="הקדמה"
+      />
+    </div>
+  );
+}
+
 /** Builder shell (spec §5): metadata, the kind-specific builder, preview, publish, assign, completion. */
 export function LearningItemEditor() {
   const { id } = useParams<{ id?: string }>();
@@ -178,14 +216,7 @@ export function LearningItemEditor() {
                 }}
               />
             </label>
-            <RichText
-              value={it.description}
-              onChange={(html) => {
-                if (html !== it.description) void save({ description: html });
-              }}
-              compact
-              label="הקדמה"
-            />
+            <IntroField value={it.description} onCommit={(html) => void save({ description: html })} />
             {it.kind === 'briefing' ? <BriefingBuilder item={it} /> : <QuizBuilder item={it} />}
           </div>
           <aside className="side">
