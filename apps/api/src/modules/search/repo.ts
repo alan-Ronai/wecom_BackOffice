@@ -58,7 +58,19 @@ export async function search(
   const want = (t: SearchGroupType) => requested.has(t);
   const limit = query.limit;
   if (!text) return { groups: [], total: 0, tookMs: Date.now() - started, files: 0 };
-  const ws = words(text);
+  /**
+   * The `ilike` conjunction drops Hebrew stopwords, exactly as 0027 dropped them from the ranking
+   * side. `pg_trgm` cannot index a pattern shorter than three characters and these words are two
+   * (`של`, `את`, `על`), so one of them in a query forces the sequential scan the rest of the query
+   * would have avoided — while filtering nothing, since `של` matches inside `שלב` and `שלום`. An
+   * all-stopword query keeps today's behaviour rather than matching everything.
+   */
+  const typed = words(text);
+  const stop = new Set(
+    (await q.query<{ word: string }>('select word from search_hebrew_stopwords')).rows.map((r) => r.word),
+  );
+  const content = typed.filter((w) => !stop.has(w));
+  const ws = content.length ? content : typed;
   const files = new Set<string>();
   /** Appends the world-scope intersection term when the caller is scoped. */
   const scopeTerm = (params: unknown[]): string => {
@@ -96,17 +108,35 @@ export async function search(
   const stepHits: SearchHit[] = [];
   if (want('steps')) {
     const params: unknown[] = [];
-    const cond = allWords(
-      [
-        's.title',
-        "coalesce(s.description,'')",
-        "coalesce((select string_agg(a.text, ' ') from step_actions a where a.step_id=s.id),'')",
-        "coalesce(s.script,'')",
-        "coalesce(b.title,'')",
-      ],
-      ws,
-      params,
-    );
+    /**
+     * One indexable set of step ids per word, instead of a five-way `or` over the row.
+     *
+     * Two of the old arms could never use an index: `string_agg(a.text)` is a correlated
+     * aggregate with no value to index until the row is read, and `coalesce(b.title,'')` belongs
+     * to a left-joined table — and an `or` is index-driven only when every arm is. The plan was a
+     * sequential scan of all 46,002 steps with the aggregate rebuilt per row (235,000 buffers,
+     * 98 % of the work), which no index in 0044 could have helped. As a union of per-table arms
+     * each one is a bitmap scan over 0044's trigram indexes: 18,736 buffers, 41 ms (docs/perf.md).
+     *
+     * Disclosed behaviour change: the old form could match a substring spanning the `' '` that
+     * joined two of a step's actions; the new form matches within one action.
+     */
+    const stepWordSet = (w: string): string => {
+      params.push(w);
+      const pat = `'%' || ${likeEscape('$' + params.length)} || '%'`;
+      // Rendered on one line, byte-for-byte as `scripts/perf-rewrite.ts` renders it: that script's
+      // inverse transform reconstructs the pre-0044 predicate from this text, which is what lets
+      // `perf:sql` keep proving the two forms answer identically.
+      return (
+        `s.id in (select s1.id from steps s1 where s1.title ilike ${pat}${LIKE_ESCAPE}` +
+        ` or coalesce(s1.description,'') ilike ${pat}${LIKE_ESCAPE}` +
+        ` or coalesce(s1.script,'') ilike ${pat}${LIKE_ESCAPE}` +
+        ` union select a1.step_id from step_actions a1 where a1.text ilike ${pat}${LIKE_ESCAPE}` +
+        ` union select s2.id from steps s2 join blocks b1 on b1.id = s2.block_id` +
+        ` where b1.title ilike ${pat}${LIKE_ESCAPE})`
+      );
+    };
+    const cond = ws.map(stepWordSet).join(' and ');
     const stepScope = scopeTerm(params);
     const stepTax = taxTerm(params);
     params.push(limit);

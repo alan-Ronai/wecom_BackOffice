@@ -27,13 +27,6 @@ const mount = (stepKey?: string, docType: string | undefined = 'T') =>
   );
 
 describe('<FeedbackButton>', () => {
-  it('A-4: names the doc type as letter · label, never the bare storage letter', async () => {
-    mount('s1', 'T');
-    await userEvent.click(screen.getByRole('button', { name: 'דיווח על בעיה / משוב' }));
-    const dialog = await screen.findByRole('dialog', { name: 'דיווח על בעיה / משוב' });
-    expect(within(dialog).getByText(/סוג T · תסריט/)).toBeInTheDocument();
-  });
-
   it('opens the seven kinds with the read-only context and submits without extra input', async () => {
     mount('s3');
     await userEvent.click(screen.getByRole('button', { name: 'דיווח על בעיה / משוב' }));

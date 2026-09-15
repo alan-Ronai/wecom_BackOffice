@@ -30,7 +30,7 @@ import fakeAuth from '../test/helpers/fakeAuth.js';
 import { makeUser, auth } from '../test/helpers/fixtures.js';
 import { seedPerfCorpus } from './perf-seed.js';
 import { buildQueryMix, LatencyRecorder, QUERY_CLASSES, type PerfQuery } from './perf-mix.js';
-import { maybeRewrite } from './perf-rewrite.js';
+import { isUnionForm, maybeRewrite, rewriteUnionToLegacy } from './perf-rewrite.js';
 
 const args = process.argv.slice(2);
 const argNum = (name: string, def: number): number => {
@@ -94,9 +94,18 @@ interface Phase {
   name: string;
   rewrite: boolean;
   drop: boolean;
+  /** Undo the landed union predicate, to measure the shape `repo.ts` emitted before V6. */
+  legacy?: boolean;
 }
+/**
+ * Both proposals landed in `repo.ts` (V6), so `current` *is* what used to be called `both`, and
+ * the forward transforms have nothing left to match. The comparison that still means something is
+ * the other direction: `legacy` reconstructs the pre-V6 predicate from the statement the code now
+ * emits, so `--compare` measures what the change bought rather than three identical phases.
+ */
 const PHASES: Record<string, Phase> = {
-  current: { name: 'current (main)', rewrite: false, drop: false },
+  legacy: { name: 'legacy (pre-V6 string_agg or)', rewrite: false, drop: false, legacy: true },
+  current: { name: 'current (union + stopword drop)', rewrite: false, drop: false },
   rewrite: { name: 'proposal 1 (steps union)', rewrite: true, drop: false },
   both: { name: 'proposal 1 + 2 (and stopword drop)', rewrite: true, drop: true },
 };
@@ -114,7 +123,7 @@ async function main() {
     (await db.pool.query('select word from search_hebrew_stopwords')).rows.map((r) => r.word as string),
   );
   phase = COMPARE
-    ? PHASES.current
+    ? PHASES.legacy
     : DROP_STOPWORDS
       ? PHASES.both
       : REWRITE_STEPS
@@ -127,9 +136,13 @@ async function main() {
     const original = pool.query.bind(pool) as (text: string, params?: unknown[]) => Promise<unknown>;
     (pool as unknown as { query: unknown }).query = (text: string, params?: unknown[]) =>
       original(
-        typeof text === 'string' && phase.rewrite
-          ? maybeRewrite(text, { params, stopwords: phase.drop ? stopwords : undefined })
-          : text,
+        typeof text !== 'string'
+          ? text
+          : phase.legacy && isUnionForm(text)
+            ? rewriteUnionToLegacy(text).sql
+            : phase.rewrite
+              ? maybeRewrite(text, { params, stopwords: phase.drop ? stopwords : undefined })
+              : text,
         params,
       );
   }
@@ -205,9 +218,7 @@ async function main() {
     // `--compare` runs every configuration against this one warm database, A B C C B A, and
     // reports each as the mean of its two passes. Separate invocations of this script are not
     // comparable on a laptop: identical configurations measured minutes apart varied 10x.
-    const order: Phase[] = COMPARE
-      ? [PHASES.current, PHASES.rewrite, PHASES.both, PHASES.both, PHASES.rewrite, PHASES.current]
-      : [phase];
+    const order: Phase[] = COMPARE ? [PHASES.legacy, PHASES.current, PHASES.current, PHASES.legacy] : [phase];
     const passes: { phase: Phase; rec: LatencyRecorder; errors: number; elapsed: number }[] = [];
     console.log(
       `perf-load: ${CLIENTS} concurrent clients, ${SECONDS}s per phase (pool max ${POOL_MAX}), ` +
