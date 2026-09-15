@@ -2,6 +2,7 @@ import type { Dashboard } from '@wecom/shared';
 import type { Q } from '../documents/repo.js';
 import { iso } from '../documents/repo.js';
 import { visibleStatusSql, visibleWhere } from '../../lib/visibility.js';
+import { suggestionVisibleSql } from '../sources/suggestionScope.js';
 
 const int = (v: unknown): number => Number(v ?? 0);
 
@@ -12,10 +13,15 @@ const int = (v: unknown): number => Number(v ?? 0);
  *
  * `scopes` is the caller's `user.worldScopes`. The five aggregates that read `documents`
  * take it: `coverage.byCategory` and `freshness.byCategory` used to enumerate categories the
- * caller cannot read, and `usage.topDocuments` returned *titles* from any of them. The
- * pipeline and sync panels stay org-wide — they count suggestions, source revisions and sync
- * links, none of which are category-bearing, and a lead watching the sync queue needs the
- * whole queue.
+ * caller cannot read, and `usage.topDocuments` returned *titles* from any of them.
+ *
+ * The **pipeline** panel used to stay org-wide on the reasoning that a suggestion is not
+ * category-bearing. `bySource` disproves it: it returns source *titles*, and a source's title is
+ * the document's. Wave 6's fix wave (A-I6) settled the rule for the review queue — a suggestion
+ * is scoped by the worlds of the document it targets, or of the documents its source feeds — so
+ * the panel that counts the same rows uses the same predicate rather than disagreeing with the
+ * queue the lead clicks through to. The sync panel does stay org-wide: `sync_links` are
+ * connector plumbing and a lead watching the queue needs the whole queue.
  */
 export async function computeDashboard(
   q: Q,
@@ -28,6 +34,8 @@ export async function computeDashboard(
   const inScope =
     '($1::text[] is null or exists (select 1 from document_worlds dws where dws.document_id=d.id and dws.world_slug = any($1)))' +
     visibleWhere(readUnpublished);
+  /** A-I6's predicate, so the pipeline panel and the review queue agree on one row set. */
+  const suggestionScope = suggestionVisibleSql('g', '$1', readUnpublished);
   const [
     coverage,
     coverageByCategory,
@@ -87,11 +95,12 @@ export async function computeDashboard(
            from telemetry_events`,
     ),
     q.query(
-      `select count(*) filter (where status = 'pending')::int pending,
-                count(*) filter (where status = 'accepted')::int accepted,
-                count(*) filter (where status = 'rejected')::int rejected,
-                count(*) filter (where status = 'applied')::int applied
-           from suggestions`,
+      `select count(*) filter (where g.status = 'pending')::int pending,
+                count(*) filter (where g.status = 'accepted')::int accepted,
+                count(*) filter (where g.status = 'rejected')::int rejected,
+                count(*) filter (where g.status = 'applied')::int applied
+           from suggestions g where ${suggestionScope}`,
+      p1,
     ),
     q.query(
       `select s.id, s.title,
@@ -100,7 +109,9 @@ export async function computeDashboard(
            from suggestions g
            join source_revisions sr on sr.id = g.source_revision_id
            join sources s on s.id = sr.source_id and s.deleted_at is null
+          where ${suggestionScope}
           group by s.id, s.title order by pending desc, s.title limit 10`,
+      p1,
     ),
     q.query(
       `select count(*)::int links,

@@ -43,6 +43,10 @@ run('category scope: an out-of-scope document leaks through no route', () => {
   let trashedBilling: string;
   let billingSource: string;
   let billingRevision: string;
+  /** A-I6: a suggestion on the billing document — the queue is world-scoped like every reader. */
+  let billingSuggestion: string;
+  /** A-I2: a suggestion with **no** target document, scoped only through its source's worlds. */
+  let billingNullSuggestion: string;
 
   const post = (url: string, payload: unknown, u = admin) =>
     app.inject({ method: 'POST', url, headers: auth(u), payload });
@@ -203,6 +207,31 @@ run('category scope: an out-of-scope document leaks through no route', () => {
         [billingSource],
       )
     ).rows[0].id as string;
+    /**
+     * Wave 6 fix wave. Two suggestions on the billing revision: one targeting the billing
+     * document (A-I6 — the review queue had no scope at all), and one with a **null** target
+     * (A-I2 — `list_suggestions` and `refine_suggestion` skipped their check entirely for these,
+     * and `new-card`/`field-alert` are exactly the types that have no target). Inserted directly:
+     * what is under test is the read filter, not the proposal pipeline.
+     */
+    billingSuggestion = (
+      await db.pool.query(
+        `insert into suggestions(source_revision_id, anchor, type, title, target_document_id, target_step_key, payload, confidence, rationale)
+         values ($1, '§1', 'deprecate-step', $2, $3, 's2', $4, 0.8, $2) returning id`,
+        [billingRevision, SECRET, billingDoc, JSON.stringify({ type: 'deprecate-step', reason: SECRET })],
+      )
+    ).rows[0].id as string;
+    billingNullSuggestion = (
+      await db.pool.query(
+        `insert into suggestions(source_revision_id, anchor, type, title, payload, confidence, rationale)
+         values ($1, '§2', 'field-alert', $2, $3, 0.8, $2) returning id`,
+        [
+          billingRevision,
+          SECRET,
+          JSON.stringify({ type: 'field-alert', fieldName: SECRET, issue: 'unknown' }),
+        ],
+      )
+    ).rows[0].id as string;
   }, 180000);
 
   afterAll(async () => {
@@ -235,6 +264,9 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     `/api/v1/feedback/analytics`,
     // Wave 5 V3: a knowledge gap names the document it is about, in its key and in its title.
     `/api/v1/gaps?pageSize=100`,
+    // A-I6: the review queue. Both the targeted and the null-target suggestion carry the secret
+    // in their title and payload, and `SuggestionService.list` had no scope handling at all.
+    `/api/v1/suggestions?pageSize=100`,
   ];
 
   // One `it` rather than `it.each`: the urls are built from ids `beforeAll` assigns, and
@@ -453,6 +485,81 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     });
     expect(exported.statusCode).toBe(200);
     expect(exported.body).toContain(SECRET);
+  });
+
+  /**
+   * Wave 6 fix wave. Four holes the X2 row above did not reach, all in the same shape: a read
+   * that narrowed by the *target document* and therefore did nothing at all when there was no
+   * target, or did not narrow by world in the first place.
+   *
+   * - **A-I1** `read_impact` scoped only the inbound-link walk; the embedding-neighbour query
+   *   filtered on status and nothing else.
+   * - **A-I2** `list_suggestions` / `refine_suggestion` let every null-target row through, and
+   *   `list_suggestions` with no arguments was the 30 most recent suggestions on the instance.
+   * - **A-I6** `GET /suggestions/:id` (the X6 seam route) and `GET /suggestions` applied no scope.
+   */
+  it('A-I1/A-I2/A-I6: the wave 6 impact tool, suggestion tools and review queue are all scoped', async () => {
+    // The queue: both suggestions are the billing document's, one by target and one by source.
+    for (const id of [billingSuggestion, billingNullSuggestion]) {
+      const mine = await get(`/api/v1/suggestions/${id}`);
+      expect(mine.statusCode, mine.body).toBe(404);
+      const theirs = await get(`/api/v1/suggestions/${id}`, admin);
+      expect(theirs.statusCode, theirs.body).toBe(200);
+      expect(theirs.body).toContain(SECRET);
+    }
+    // And a decision route resolves the same way, so the write half cannot reach past the read.
+    const reject = await app.inject({
+      method: 'POST',
+      url: `/api/v1/suggestions/${billingSuggestion}/reject`,
+      headers: auth(scoped),
+    });
+    expect(reject.statusCode, reject.body).toBe(404);
+
+    // The tools. One turn asks for all four at once; none of them may name the secret.
+    aiChatHolder.swap(
+      fakeChat(({ messages }) =>
+        messages.some((m) => m.role === 'tool')
+          ? chatResult('לא מצאתי.')
+          : chatResult('', [
+              { id: 'i1', name: 'read_impact', args: { documentId: techDoc } },
+              { id: 'l1', name: 'list_suggestions', args: { sourceRevisionId: billingRevision } },
+              { id: 'l2', name: 'list_suggestions', args: {} },
+              {
+                id: 'r1',
+                name: 'refine_suggestion',
+                args: { suggestionId: billingNullSuggestion, instruction: 'שפר' },
+              },
+            ]),
+      ),
+    );
+    const c = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ai/conversations',
+      headers: auth(scoped),
+      payload: { kind: 'editor', documentId: techDoc },
+    });
+    expect(c.statusCode, c.body).toBe(201);
+    const r = await app.inject({
+      method: 'POST',
+      url: `/api/v1/ai/conversations/${c.json().id}/messages`,
+      headers: auth(scoped),
+      payload: { content: 'מה ההצעות ומה ההשפעה?' },
+    });
+    expect(r.body).not.toContain(SECRET);
+    const frames = parseSseFrames(r.body);
+    const result = (id: string) =>
+      frames.find((e) => e.type === 'tool_result' && e.id === id) as
+        { ok: boolean; payload?: { items?: unknown[]; documents?: { id: string }[] } } | undefined;
+    // `read_impact` answers — the tech document is the caller's — but names no billing neighbour.
+    expect(result('i1')).toMatchObject({ ok: true });
+    expect(result('i1')?.payload?.documents?.some((d) => d.id === billingDoc)).toBe(false);
+    // The revision is the billing source's, so the list is empty rather than a leak.
+    expect(result('l1')).toMatchObject({ ok: true });
+    expect(result('l1')?.payload?.items).toEqual([]);
+    // A-I2: no document and no revision is no longer "everything".
+    expect(result('l2')).toMatchObject({ ok: false });
+    // A-I2: a null-target suggestion is not refinable by someone who cannot see its source.
+    expect(result('r1')).toMatchObject({ ok: false });
   });
 
   /**

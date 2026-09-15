@@ -36,6 +36,11 @@ Tier 1's run predates the per-type target rule described below; the rule can onl
 stricter, so its 0.000 stands. Tier 0 was re-run after it — its earlier 0.125 came from the one
 case that had been scored on a suggestion no editor could ever have applied.
 
+**The headline number is 0.000** (A-M10). A lane report written before the re-run quotes tier 0 at
+**0.125**; that figure is superseded and this table is the one to read. Nothing in the repository
+still carries it — `X6-report.md` lives outside the tree — but if a copy surfaces, this paragraph
+is the reconciliation.
+
 RAM was not isolated per run (a shared laptop with the browser and three Postgres containers up);
 Ollama's resident set was ~2 GB for tier 0 and ~6 GB for tier 1, consistent with spec §6.
 
@@ -131,9 +136,23 @@ message they did not send).
 | `ScriptedChatModel` is reachable under `NODE_ENV=production` when `WECOM_E2E_RUNNER=1` | Accepted: `e2e:real` runs the API as production on purpose, and `WECOM_E2E_RUNNER` is the marker `config.ts` already treats as "this is the e2e stack". A deployment sets neither it nor `AI_TEST_SCRIPT` | An install that sets both gets a fake chat that answers plausibly; the boot log warns |
 | `streamChat` cancels by closing the response reader rather than passing the `AbortSignal` to `fetch` | Accepted (X4a): under jsdom the app's signal is jsdom's and `fetch` is undici's, which rejects a foreign signal outright | A request cannot be aborted before headers arrive; after that the reader close ends it |
 | The admin transcript `feedback` filter is applied in the browser | Accepted: `ConversationsQuerySchema` has no such field, and adding one is an API change no lane owned | A page of transcripts can show fewer rows than the page size when the filter is on |
-| Per-process chat rate limit (`Map<userId, number[]>`) | Accepted (X2): it guards the single CPU inference slot on this box | A second API instance gets its own budget |
+| Per-process chat rate limit (`Map<userId, number[]>`) | Accepted (X2): it guards the single CPU inference slot on this box. **Fix wave (A-M1):** the budget is now consumed *after* the 503 availability check, and the map evicts users whose window has expired | A second API instance gets its own budget |
 | `probeToolSupport` caches a successful tool probe for the life of the process | Accepted (X2) | A tag that gains tool support after a pull needs a restart |
 | `confidenceFor` clamps `new-card` at 0.75 | Accepted (X1): a whole new card is the proposal an editor should always look at | A genuinely certain new card still asks for a read |
-| `adminHook.ts` (`registerAdmin`) is unused | X1 registered its admin routes under `modules/admin/routes.ts` instead; the hook is a no-op left in place | Dead code, ~30 lines; removing it is a lane cleanup, not a fix |
+| `adminHook.ts` (`registerAdmin`) is unused | X1 registered its admin routes under `modules/admin/routes.ts` instead; the hook is a no-op left in place. **Fix wave (A-M11):** `ai/index.ts` no longer re-exports `registerAdmin`, and the file says it has no caller; `runAdminRegistrar` stays because it is what lets the chat half boot with the admin half absent | Dead code, ~30 lines; removing the rest is a lane cleanup, not a fix |
 | msw fixtures and `packages/shared/test/pipeline.test.ts` still carry `dictalm2.0-instruct:7b-q4_K_M` as a sample tag | Left: they are arbitrary strings in fixtures, and the operational copies are all corrected | A reader of the fixtures could believe the tag exists |
-| `SuggestionAnalyticsTab` is gated on `analytics.read` while `GET /suggestions/analytics` requires `suggestions.review` | Recorded: X4b gated the tab, X3 shipped the route; the two permissions do not have to coincide for the roles that hold either | An operator with `analytics.read` but not `suggestions.review` sees the tab and gets a 403 inside it |
+| `SuggestionAnalyticsTab` is gated on `analytics.read` while `GET /suggestions/analytics` requires `suggestions.review` | **Resolved in the fix wave:** `CONTRACTS-wave6.md` now states `suggestions.review` as the contract for both the route and the tab; the tab change is the web fixer's | An operator with `analytics.read` but not `suggestions.review` sees the tab and gets a 403 inside it |
+
+## Fix wave — API
+
+Package A of the wave 6 review (`findings-A.md`). A-C1, A-I1…A-I8 and the minors A-M1, A-M2,
+A-M3, A-M5, A-M6, A-M8, A-M9, A-M10, A-M11 are **fixed** on `fix/wave6-api`; the report is
+`.superpowers/sdd/program/fix-wave6-api-report.md` and the contract changes are in
+`docs/api/CONTRACTS-wave6.md`. What is left, and what it costs if the ruling is wrong:
+
+| Item | Ruling | Cost if wrong |
+|---|---|---|
+| **A-M4** — `embeddingMapping` (`sources/mapping.ts`) runs one `order by embedding <=> …` query per paragraph inside the pipeline job | Parked. It is a queued job, not a request path, and the per-paragraph query is what makes the fallback-to-trigram decision readable one paragraph at a time. A `lateral` join would fold N round trips into one but changes the scoring code the eval harness is calibrated against. The file is also the AI lane's in this fix wave | A large first import is slow — N round trips against a local Postgres, tens of ms each. No correctness cost; the job resumes from its watermark |
+| **A-M7** — every revision writes the full non-`same` diff set (before *and* after text for every changed paragraph) into `source_revisions.meta->'diffs'`, uncapped and never pruned | Parked. `meta->'diffs'` is what `fewShotExamples` reads to build the few-shot block and what the acceptance analytics join against, so a cap has to decide *which* diffs survive, and that is a product decision about what a revision's record is — not a fix-wave one | A large WordPress source keeps roughly a second copy of the document per revision, forever. Storage, on a LAN VM with a Postgres nobody vacuums aggressively; no read path degrades, because every consumer filters by anchor first |
+| **A-M5 (second half)** — migration 0051 reads `process.env` directly while the API reads a zod-parsed `Config` | Parked as documented-only, as before. The `down` half **is** fixed (the width is recorded and restored). A migration runner whose environment differs from the API's still produces a column the boot check then refuses — which is the *correct* failure, loudly, at boot | An operator who runs `pnpm migrate` with a different env than the service gets a boot refusal naming 0051, not a silent wrong-width column |
+| **Dashboard pipeline panel** (found while adding the A-I6 scope-leak rows, not in `findings-A.md`) | **Fixed, not parked**: `pipeline.bySource` returned source *titles* to any caller, and a source's title is the document's. It now uses A-I6's `suggestionVisibleSql`, so the panel and the queue it links to agree on one row set. The `sync` panel stays org-wide — `sync_links` are connector plumbing | — |
