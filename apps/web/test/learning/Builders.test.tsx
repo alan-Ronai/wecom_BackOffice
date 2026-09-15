@@ -100,6 +100,29 @@ describe('quiz builder', () => {
     expect(saved.generated).toBe(false);
   });
 
+  it('keeps two freshly added questions in separate radio groups', async () => {
+    asEditor();
+    renderWithProviders(<App />, { route: `/learning/manage/${LI_QUIZ}` });
+    const list = await screen.findByTestId('questions-list');
+    await userEvent.click(screen.getByRole('button', { name: '✚ שאלה ידנית' }));
+    await userEvent.click(screen.getByRole('button', { name: '✚ שאלה ידנית' }));
+    const drafts = within(list).getAllByRole('listitem').slice(-2);
+    // Both drafts have an empty stem and no id; naming the group after either used to make them
+    // one DOM group, so ticking in the second silently cleared the first.
+    const [a, b] = drafts.map((li) => within(li).getAllByRole('radio', { name: 'תשובה נכונה' }));
+    expect(a![0]).toBeChecked();
+    await userEvent.click(b![1]!);
+    expect(b![1]).toBeChecked();
+    expect(a![0]).toBeChecked();
+    // And the two questions do not share option ids either.
+    const ids = drafts.flatMap((li) =>
+      within(li)
+        .getAllByRole('radio', { name: 'תשובה נכונה' })
+        .map((r) => (r as HTMLInputElement).name),
+    );
+    expect(new Set(ids).size).toBe(2);
+  });
+
   it('refuses to save a question without a correct option', async () => {
     asEditor();
     renderWithProviders(<App />, { route: `/learning/manage/${LI_QUIZ}` });

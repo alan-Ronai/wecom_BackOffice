@@ -22,8 +22,23 @@ export const AUTHORABLE_KINDS: QuizQuestion['kind'][] = ['single', 'multi', 'ord
 let optSeq = 0;
 export const newOptionId = (): string => `o${Date.now().toString(36)}${(optSeq++).toString(36)}`;
 
-/** One question, fully controlled: the builder owns the draft list and saves it in one PUT. */
-export function QuestionEditor({ q, onChange }: { q: QuizQuestion; onChange: (q: QuizQuestion) => void }) {
+/**
+ * One question, fully controlled: the builder owns the draft list and saves it in one PUT.
+ *
+ * `groupId` names the radio group and is the builder's to supply. A draft question has no `id`, so
+ * this used to fall back to the stem — empty for every freshly added question, which made two new
+ * questions one DOM radio group: ticking the answer in the second cleared the first's input while
+ * React still believed it was checked.
+ */
+export function QuestionEditor({
+  q,
+  groupId,
+  onChange,
+}: {
+  q: QuizQuestion;
+  groupId: string;
+  onChange: (q: QuizQuestion) => void;
+}) {
   const kinds = AUTHORABLE_KINDS.includes(q.kind) ? AUTHORABLE_KINDS : [...AUTHORABLE_KINDS, q.kind];
   const setOpt = (i: number, patch: Partial<QuizQuestion['options'][number]>) =>
     onChange({ ...q, options: q.options.map((o, k) => (k === i ? { ...o, ...patch } : o)) });
@@ -116,7 +131,7 @@ export function QuestionEditor({ q, onChange }: { q: QuizQuestion; onChange: (q:
             ) : (
               <input
                 type={q.kind === 'single' ? 'radio' : 'checkbox'}
-                name={`correct-${q.id ?? q.stem}`}
+                name={`correct-${groupId}`}
                 aria-label="תשובה נכונה"
                 checked={o.correct}
                 onChange={() => markCorrect(i)}

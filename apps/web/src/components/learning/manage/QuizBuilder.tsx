@@ -4,7 +4,7 @@ import { useGenerateQuestions, usePutQuestions } from '../../../api/hooks/learni
 import { move } from '../../../lib/learning.js';
 import { useToast } from '../../ui/Toast.js';
 import { DocumentPicker, type PickedDoc } from './DocumentPicker.js';
-import { AUTHORABLE_KINDS, QuestionEditor } from './QuestionEditor.js';
+import { AUTHORABLE_KINDS, QuestionEditor, newOptionId } from './QuestionEditor.js';
 
 /**
  * Why a question cannot be saved, in the words the manager needs — one message per reason rather
@@ -109,6 +109,7 @@ export function QuizBuilder({ item }: { item: LearningItem }) {
             </div>
             <QuestionEditor
               q={q}
+              groupId={q.id ?? `new-${i}`}
               // Any edit makes the question the editor's, not the model's — the badge is a claim
               // about provenance, and a curated question is no longer model output.
               onChange={(nq) =>
@@ -158,8 +159,8 @@ export function QuizBuilder({ item }: { item: LearningItem }) {
                 stem: '',
                 kind: 'single',
                 options: [
-                  { id: 'a', text: '', correct: true },
-                  { id: 'b', text: '', correct: false },
+                  { id: newOptionId(), text: '', correct: true },
+                  { id: newOptionId(), text: '', correct: false },
                 ],
                 explanation: '',
                 generated: false,
