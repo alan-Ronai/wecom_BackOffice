@@ -5,7 +5,6 @@ import {
   type AiModelsSettings,
   type ModelSlot,
   type ModelTestResult,
-  type ModelTier,
 } from '@wecom/shared';
 import { useAiSettings, usePutAiSettings, useReindex, useTestModel } from '../../../api/hooks/aiAdmin.js';
 import { useModal } from '../../ui/Modal.js';
@@ -23,19 +22,27 @@ const SLOT_FIELD = {
   chat: 'chatModel',
   embed: 'embedModel',
 } as const satisfies Record<ModelSlot, keyof AiModelsSettings>;
-const TIERS: ModelTier[] = [0, 1, 2, 3, 4];
+const SLOT_ENV: Record<ModelSlot, string> = {
+  suggest: 'SUGGEST_MODEL',
+  chat: 'CHAT_MODEL',
+  embed: 'EMBED_MODEL',
+};
 const fmtBytes = (n?: number) => (n ? (n / 1e9).toFixed(1) + ' GB' : '—');
 
 /**
- * מודלים — the tier preset, the three slots, a reachability test per slot, and the reindex job
- * (spec §6).
+ * מודלים — the resolved tier and slots (read-only), a reachability test per slot, the request
+ * limits, and the reindex job (spec §6).
  *
- * A tier is configuration, not code: picking one fills the three slots from `MODEL_TIER_PRESETS`
- * and each slot stays individually editable afterwards. Nothing is saved until "שמור", so an
- * admin can compare a tier against what is running before committing to it.
+ * **The model block is the environment's, not this screen's.** `MODEL_TIER`, `SUGGEST_MODEL`,
+ * `CHAT_MODEL`, `EMBED_MODEL` and `EMBED_DIMENSION` are resolved at boot and are what the pull
+ * scripts, the embedding column width and the running process all agree on; `PUT
+ * /admin/ai/settings` rejects a `models` block outright with 400 `MODELS_ENV_ONLY`. Editing them
+ * here would have written a row the process never reads — a settings page that lies. Switching a
+ * model is a deploy change: edit the environment, run `deploy/ollama-pull.sh`, restart.
  *
- * Changing `embedDimension` is the one setting that invalidates data: existing vectors are not
- * convertible, so the screen says so and the reindex confirmation repeats it.
+ * What stays editable is `ai.limits`, which the API reads per request. "בדוק" stays live too, and
+ * it now always reports the slot that is actually running — there is no unsaved tag for it to
+ * disagree with.
  */
 export function ModelsTab() {
   const s = useAiSettings();
@@ -44,81 +51,48 @@ export function ModelsTab() {
   const reindex = useReindex();
   const modal = useModal();
   const toast = useToast();
-  const [m, setM] = useState<AiModelsSettings | null>(null);
   const [limits, setLimits] = useState<AiLimitsSettings | null>(null);
   const [results, setResults] = useState<Partial<Record<ModelSlot, ModelTestResult>>>({});
 
   useEffect(() => {
     if (!s.data) return;
-    setM((cur) => cur ?? s.data.models);
     setLimits((cur) => cur ?? s.data.limits);
   }, [s.data]);
 
-  if (!m || !limits || !s.data) return <p className="muted">טוען…</p>;
+  if (!limits || !s.data) return <p className="muted">טוען…</p>;
 
+  const m = s.data.models;
   const preset = MODEL_TIER_PRESETS[m.tier];
-  const applyTier = (tier: ModelTier) => {
-    const p = MODEL_TIER_PRESETS[tier];
-    setM({
-      tier,
-      suggestModel: p.suggestModel,
-      chatModel: p.chatModel,
-      embedModel: p.embedModel,
-      embedDimension: p.embedDimension,
-    });
-  };
-  const dimsChanged = m.embedDimension !== s.data.models.embedDimension;
 
   return (
     <div className="ai-models">
       <section className="settings-card">
         <h2>דרגת מודלים</h2>
-        <label>
-          דרגה
-          <select
-            aria-label="דרגה"
-            value={m.tier}
-            onChange={(e) => applyTier(Number(e.target.value) as ModelTier)}
-          >
-            {TIERS.map((t) => (
-              <option key={t} value={t}>
-                דרגה {t}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="muted small">
-          {preset.vm} · {preset.notes}
+        <p>
+          <b>דרגה {m.tier}</b> · {preset.vm} · {preset.notes}
         </p>
         <p className="muted small">
-          בחירת דרגה ממלאת את שלוש המשבצות מהתצורה המומלצת; אפשר לערוך כל משבצת בנפרד.
+          הדרגה והמשבצות נקבעות בתצורת השרת (<bdi dir="ltr">MODEL_TIER</bdi>) ומוצגות כאן לקריאה בלבד. החלפת
+          מודל היא שינוי פריסה: יש לעדכן את משתני הסביבה, להריץ <bdi dir="ltr">deploy/ollama-pull.sh</bdi>{' '}
+          ולהפעיל מחדש.
         </p>
       </section>
 
       {SLOTS.map((slot) => {
-        const field = SLOT_FIELD[slot];
         const r = results[slot];
         return (
           <section className="settings-card" key={slot}>
             <h2>{SLOT_LABEL[slot]}</h2>
-            <label>
-              תג המודל
-              <input
-                dir="ltr"
-                aria-label={`תג המודל · ${SLOT_LABEL[slot]}`}
-                value={m[field]}
-                onChange={(e) => setM({ ...m, [field]: e.target.value })}
-              />
-            </label>
-            {slot === 'embed' ? (
-              <NumField
-                label="מספר ממדים"
-                value={m.embedDimension}
-                min={64}
-                max={4096}
-                onChange={(n) => setM({ ...m, embedDimension: n })}
-              />
-            ) : null}
+            <p>
+              <span className="small muted">תג המודל · </span>
+              <bdi dir="ltr" aria-label={`תג המודל · ${SLOT_LABEL[slot]}`}>
+                {m[SLOT_FIELD[slot]]}
+              </bdi>
+            </p>
+            <p className="muted small">
+              מתוך <bdi dir="ltr">{SLOT_ENV[slot]}</bdi>
+              {slot === 'embed' ? ` · ${m.embedDimension} ממדים (EMBED_DIMENSION)` : ''}
+            </p>
             <div className="row">
               <button
                 type="button"
@@ -172,8 +146,9 @@ export function ModelsTab() {
           disabled={put.isPending}
           onClick={() =>
             void put
-              .mutateAsync({ models: m, limits })
-              .then(() => toast('המודלים נשמרו', 'ok'))
+              // `limits` only: a `models` block is refused with 400 `MODELS_ENV_ONLY`.
+              .mutateAsync({ limits })
+              .then(() => toast('המגבלות נשמרו', 'ok'))
               .catch((e: unknown) => toast(e instanceof Error ? e.message : 'השמירה נכשלה', 'warn'))
           }
         >
@@ -186,9 +161,7 @@ export function ModelsTab() {
           onClick={async () => {
             const ok = await modal.confirm(
               'אינדוקס מחדש של כל ההטמעות?',
-              dimsChanged
-                ? 'מספר הממדים השתנה — חובה לבצע אינדוקס מחדש אחרי השמירה. עד שיסתיים, החיפוש מדורג לקסיקלית בלבד.'
-                : 'הפעולה רצה ברקע ועשויה להימשך דקות.',
+              'הפעולה רצה ברקע ועשויה להימשך דקות. אחרי שינוי של EMBED_MODEL או EMBED_DIMENSION בתצורת השרת האינדוקס הוא חובה — עד שיסתיים, החיפוש מדורג לקסיקלית בלבד.',
             );
             if (!ok) return;
             try {
@@ -201,7 +174,6 @@ export function ModelsTab() {
         >
           אינדוקס מחדש
         </button>
-        {dimsChanged ? <span className="chip warn">שינוי ממדים דורש אינדוקס מחדש</span> : null}
       </div>
     </div>
   );

@@ -108,13 +108,25 @@ export const anchorText = (html: string, anchor: string): string | null =>
 /** `before` may arrive as text or as the block's HTML; compare on the plain text either way. */
 const sameText = (a: string, b: string): boolean => htmlToPlain(a) === htmlToPlain(b);
 
+/**
+ * An op's `after` as preview nodes — **always one `<p>` of plain text, never parsed as markup.**
+ *
+ * `op.after` is the *model's* paragraph text: `diffToOps` emits it verbatim and the server only
+ * runs `sanitizeHtml` later, on the accept path, so nothing has vetted it by the time the preview
+ * renders. Parsing it would put model-controlled elements (`<img src=x onerror=…>`) into
+ * `body.innerHTML` and from there into the overlay's `dangerouslySetInnerHTML` — content
+ * injection that today only the CSP happens to defang. It is plain paragraph text by
+ * construction, so it is rendered as plain paragraph text, and the `<p>` keeps the document's
+ * block structure in the preview.
+ *
+ * Empty text produces no node at all: a zero-length insert should insert nothing, not a blank
+ * paragraph the real apply would never create.
+ */
 const fragmentOf = (html: string): Node[] => {
-  const nodes = Array.from(parseBody(html).childNodes);
-  if (nodes.some((n) => n.nodeType === 1)) return nodes;
-  // Bare text (the common case for a model-written replacement) becomes a paragraph, so the
-  // preview keeps the document's block structure.
+  const text = htmlToPlain(html);
+  if (!text) return [];
   const p = parseBody('<p></p>').firstElementChild!;
-  p.textContent = htmlToPlain(html);
+  p.textContent = text;
   return [p];
 };
 
@@ -136,6 +148,7 @@ export function applyOps(html: string, ops: ProposedEditOp[], accepted: Readonly
     if (op.before && !sameText(op.before, block.text)) continue;
     if (op.kind === 'insert') {
       const nodes = fragmentOf(op.after);
+      if (!nodes.length) continue;
       let after: Node = block.el;
       for (const n of nodes) {
         after.parentNode?.insertBefore(n, after.nextSibling);

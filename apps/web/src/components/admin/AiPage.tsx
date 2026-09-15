@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useCan } from '../../api/hooks/me.js';
 import { Empty } from '../ui/index.js';
-import { AdminTabs } from './ai/Tabs.js';
+import { AdminTabs, tabId } from './ai/Tabs.js';
 import { PromptsTab } from './ai/PromptsTab.js';
 import { ModelsTab } from './ai/ModelsTab.js';
 
@@ -36,7 +36,9 @@ export const TAB_LABELS = [
 export function AiPage() {
   const can = useCan();
   const [sp, setSp] = useSearchParams();
-  const tab = sp.get('tab') ?? 'prompts';
+  const wanted = sp.get('tab') ?? 'prompts';
+  // An unknown `?tab=` would otherwise render no panel *and* point `aria-labelledby` at nothing.
+  const tab = TAB_LABELS.some((t) => t.id === wanted) ? wanted : 'prompts';
   if (!can('ai.manage'))
     return (
       <div className="page">
@@ -58,7 +60,7 @@ export function AiPage() {
         }}
         controls="ai-tabpanel"
       />
-      <div id="ai-tabpanel" role="tabpanel">
+      <div id="ai-tabpanel" role="tabpanel" aria-labelledby={tabId('ai-tabpanel', tab)}>
         <Suspense fallback={<p className="muted">טוען…</p>}>
           {tab === 'prompts' && <PromptsTab />}
           {tab === 'models' && <ModelsTab />}

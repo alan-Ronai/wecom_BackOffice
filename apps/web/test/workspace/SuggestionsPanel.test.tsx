@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { useState } from 'react';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SuggestionPayload } from '@wecom/shared';
 import { renderWithProviders } from '../render.js';
 import { SuggestionsPanel } from '../../src/components/workspace/SuggestionsPanel.js';
+import { StructuredEditDrawer } from '../../src/components/workspace/StructuredEditDrawer.js';
 import { aiState, resetAiState, suggestionWithAffects, SUG_AFFECTS, DOC_1 } from '../msw/ai-handlers.js';
 import { state, withMe } from '../msw/handlers.js';
 import { server } from '../msw/server.js';
@@ -91,6 +93,63 @@ describe('<SuggestionsPanel>', () => {
     expect(aiState.accepted[0]).toEqual({ id: SUG_AFFECTS, parts: ['add-0', 'rep-a1'] });
   });
 
+  /**
+   * B-I5. The quick picker obeys the same scheme the drawer and the server do: the server answers
+   * 400 `NOT_SPLITTABLE` for a `parts` selection that cuts an atomic group, so one tick moves the
+   * whole group rather than guaranteeing a generic error toast.
+   */
+  it('ticking one row of an atomic group ticks the whole group', async () => {
+    const base = suggestionWithAffects();
+    const payload = base.payload as Extract<SuggestionPayload, { type: 'update-step' }>;
+    state.suggestions = [
+      {
+        ...base,
+        payload: {
+          ...payload,
+          outcomes: [
+            { kind: 'ok', text: 'הקו תקין — סיים שיחה' },
+            { kind: 'alert', text: 'מהירות נמוכה — פתח תקלה' },
+          ],
+        } as SuggestionPayload,
+      },
+    ];
+    const user = userEvent.setup();
+    render();
+    const boxes = await screen.findAllByRole('checkbox');
+    // ['add-0', 'add-1', 'rep-a1', 'branch', 'out-0', 'out-1', 'patch-hint']
+    await user.click(boxes[4]!);
+    expect(boxes[4]).toBeChecked();
+    expect(boxes[5]).toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'החל חלקית' }));
+    await waitFor(() => expect(aiState.accepted).toHaveLength(1));
+    expect(aiState.accepted[0]).toEqual({ id: SUG_AFFECTS, parts: ['out-0', 'out-1'] });
+  });
+
+  it('a required row is ticked, locked, and always part of a partial apply', async () => {
+    state.suggestions = [
+      {
+        ...suggestionWithAffects(),
+        type: 'new-step',
+        payload: {
+          type: 'new-step',
+          afterStepKey: null,
+          title: 'שלב חדש',
+          actions: ['א', 'ב'],
+          outcomes: [],
+        } as SuggestionPayload,
+      },
+    ];
+    const user = userEvent.setup();
+    render();
+    const boxes = await screen.findAllByRole('checkbox'); // ['meta', 'act-0', 'act-1']
+    expect(boxes[0]).toBeChecked();
+    expect(boxes[0]).toBeDisabled();
+    await user.click(boxes[1]!);
+    await user.click(screen.getByRole('button', { name: 'החל חלקית' }));
+    await waitFor(() => expect(aiState.accepted).toHaveLength(1));
+    expect(aiState.accepted[0]).toEqual({ id: SUG_AFFECTS, parts: ['meta', 'act-0'] });
+  });
+
   it('a caller without suggestions.review sees neither the drawer nor the row picker', async () => {
     server.use(withMe({ permissions: ['docs.read', 'ai.ask'] }));
     render();
@@ -113,6 +172,61 @@ describe('<SuggestionsPanel>', () => {
     await user.click(screen.getByRole('button', { name: 'פתח בעורך' }));
     const dialog = await screen.findByRole('dialog', { name: 'עריכת ההצעה' });
     expect(within(dialog).getByRole('textbox', { name: 'ערך חדש · הוראה חדשה' })).toHaveValue('מעודן');
+  });
+
+  /**
+   * B-I2. `useSuggestions` refetches on window focus and on every edit/accept in the panel, and
+   * each refetch is a fresh payload object. Resetting the drawer on that identity threw away
+   * whatever the editor was typing; the reset belongs to a *transition* (another suggestion, or
+   * the drawer opening), not to a refetch.
+   */
+  it('the drawer keeps in-progress typing when the suggestion is refetched', async () => {
+    function Harness() {
+      const [, refetch] = useState(0);
+      // A new object with the same id on every render — exactly what a refetch produces.
+      const suggestion = suggestionWithAffects();
+      return (
+        <>
+          <button type="button" onClick={() => refetch((n) => n + 1)}>
+            רענון
+          </button>
+          <StructuredEditDrawer suggestion={suggestion} open onClose={() => {}} onSave={() => {}} />
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    renderWithProviders(<Harness />);
+    const dialog = await screen.findByRole('dialog', { name: 'עריכת ההצעה' });
+    await user.click(within(dialog).getAllByRole('radio', { name: 'ערוך' })[0]!);
+    const field = within(dialog).getByRole('textbox', { name: 'ערך חדש · הוראה חדשה' });
+    await user.clear(field);
+    await user.type(field, 'טיוטה שלא נשמרה');
+    await user.click(screen.getByRole('button', { name: 'רענון' }));
+    expect(within(dialog).getByRole('textbox', { name: 'ערך חדש · הוראה חדשה' })).toHaveValue(
+      'טיוטה שלא נשמרה',
+    );
+  });
+
+  /**
+   * `GET /suggestions/:id` answers 404 for a suggestion outside the caller's world scope as well
+   * as for one that is gone. A refinement the chat hands back for such a suggestion must say so,
+   * not open nothing and not spin.
+   */
+  it('says a suggestion it cannot read is unavailable, rather than opening nothing', async () => {
+    const user = userEvent.setup();
+    const base = suggestionWithAffects().payload as Extract<SuggestionPayload, { type: 'update-step' }>;
+    let consumed = false;
+    render({
+      refined: { suggestionId: 'ffffffff-0000-4000-8000-00000000dead', payload: base },
+      onRefinedConsumed: () => (consumed = true),
+    });
+    await user.click(await screen.findByRole('button', { name: 'פתח בעורך' }));
+    expect(
+      await screen.findByText('ההצעה אינה זמינה לך — ייתכן שהוסרה או שאינה בתחום ההרשאות שלך.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'עריכת ההצעה' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'סגור' }));
+    expect(consumed).toBe(true);
   });
 
   it('says so when the item has no linked source document', async () => {

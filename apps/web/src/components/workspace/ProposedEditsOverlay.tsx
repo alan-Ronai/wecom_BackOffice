@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { plural, type DecideProposedEditsResult, type ProposedEdits } from '@wecom/shared';
 import { useDecideProposedEdits } from '../../api/hooks/ai.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 import { useCan } from '../../api/hooks/me.js';
 import { useToast } from '../ui/Toast.js';
 import { ApiError } from '../../api/unwrap.js';
-import { anchorText, applyOps, htmlToPlain, normalizeAnchor } from '../../lib/proposedEdits.js';
+import { anchoredBlocks, applyOps, htmlToPlain, normalizeAnchor } from '../../lib/proposedEdits.js';
 
 const KIND: Record<string, string> = { replace: 'החלפה', insert: 'הוספה', delete: 'מחיקה' };
 const acceptedPhrase = (n: number) =>
@@ -46,6 +46,25 @@ export function ProposedEditsOverlay({
   const ops = useMemo(() => proposed?.ops ?? [], [proposed]);
   const html = source.data?.html ?? '';
   const previewHtml = useMemo(() => applyOps(html, ops, accepted), [html, ops, accepted]);
+  /*
+   * One parse of the source per render, not one per hunk: `anchorText` runs a whole `DOMParser`
+   * pass, and calling it inside `ops.map` re-parsed the document for every row.
+   */
+  const anchorTextOf = useMemo(() => {
+    const byRef = new Map(anchoredBlocks(html).map((b) => [b.ref, b.text] as const));
+    return (anchor: string): string | null => byRef.get(normalizeAnchor(anchor)) ?? null;
+  }, [html]);
+
+  /*
+   * Defence in depth behind the host's `key={proposed.id}`: op ids restart at `op-1` for every
+   * proposal, so if this component is ever reused across proposals the previous set's ticks must
+   * not survive into the new one — "אשר החלטות" would apply a hunk nobody looked at.
+   */
+  const proposalId = proposed?.id ?? null;
+  useEffect(() => {
+    setAccepted(new Set());
+    setRejected(new Set());
+  }, [proposalId]);
 
   if (!proposed) return null;
 
@@ -77,11 +96,19 @@ export function ProposedEditsOverlay({
           );
           onDecided(result);
         },
+        /*
+         * Only a 409 is terminal. The source moved under the proposal, the hunks no longer
+         * describe it, and the honest answer is to drop the overlay and ask for a fresh one. Any
+         * other failure — a transient 500, a dropped connection — leaves the proposal valid, so
+         * the overlay stays and the editor's tri-state decisions survive the retry.
+         */
         onError: (err: unknown) => {
-          if (err instanceof ApiError && err.status === 409)
+          if (err instanceof ApiError && err.status === 409) {
             toast('מסמך המקור השתנה בינתיים — טען מחדש והצע שוב', 'warn');
-          else toast(err instanceof Error ? err.message : 'לא ניתן להחיל את העריכות', 'warn');
-          onDismiss();
+            onDismiss();
+            return;
+          }
+          toast(err instanceof Error ? err.message : 'לא ניתן להחיל את העריכות', 'warn');
         },
       },
     );
@@ -111,7 +138,7 @@ export function ProposedEditsOverlay({
 
       <ol className="pe-ops">
         {ops.map((op) => {
-          const stale = op.before ? anchorText(html, op.anchor) !== htmlToPlain(op.before) : false;
+          const stale = op.before ? anchorTextOf(op.anchor) !== htmlToPlain(op.before) : false;
           return (
             <li
               key={op.id}
@@ -161,8 +188,10 @@ export function ProposedEditsOverlay({
           className="prose source-html pe-preview"
           dir="rtl"
           aria-label="תצוגה מקדימה של המקור"
-          /* Server-sanitized source plus server-produced hunks — the trust level `SourcePane`
-             already renders at. */
+          /* The only HTML here is the server-sanitized source: `applyOps` never parses an op's
+             `after` as markup — it is model-authored text and is inserted as the text content of
+             a `<p>` (see `fragmentOf`). Same trust level `SourcePane` renders at, and nothing
+             the model wrote can add an element to it. */
           dangerouslySetInnerHTML={{ __html: previewHtml }}
         />
       ) : null}

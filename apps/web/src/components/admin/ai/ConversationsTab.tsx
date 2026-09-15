@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AiMessage, ConversationKind, MessageRole } from '@wecom/shared';
 import {
   exportConversations,
@@ -22,6 +22,21 @@ const ROLE_LABEL: Record<MessageRole, string> = {
   assistant: 'המערכת',
   tool: 'כלי',
   system: 'מערכת',
+};
+
+/**
+ * `<input type="date">` gives a *local* calendar day. `new Date('YYYY-MM-DD')` reads it as UTC
+ * midnight, so in Israel (UTC+2/+3) "עד the 14th" ended at 02:00 or 03:00 on the 14th and dropped
+ * most of the selected day. Built with the local constructor instead, and "עד" is the end of the
+ * day. Same pair as `SuggestionAnalyticsTab` / `analytics/AnalyticsPage.tsx` — a page-local
+ * helper in each, not a shared API.
+ */
+const toIso = (d: string, endOfDay = false): string | undefined => {
+  if (!d) return undefined;
+  const [y, m, day] = d.split('-').map(Number) as [number, number, number];
+  return endOfDay
+    ? new Date(y, m - 1, day, 23, 59, 59, 999).toISOString()
+    : new Date(y, m - 1, day, 0, 0, 0, 0).toISOString();
 };
 
 /**
@@ -70,7 +85,21 @@ function Message({ m }: { m: AiMessage }) {
  */
 export function ConversationsTab() {
   const [q, setQ] = useState<AdminConversationsQuery>({});
+  const [userInput, setUserInput] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
+
+  /*
+   * The user box is debounced: every keystroke is a new query key, and without this a five-letter
+   * name was five round trips to the transcript list.
+   */
+  useEffect(() => {
+    const t = window.setTimeout(
+      () => setQ((cur) => ({ ...cur, userId: userInput.trim() || undefined })),
+      300,
+    );
+    return () => window.clearTimeout(t);
+  }, [userInput]);
+
   const list = useAdminConversations(q);
   const detail = useAdminConversation(openId);
   const del = useDeleteConversation();
@@ -82,20 +111,14 @@ export function ConversationsTab() {
       <div className="row">
         <label>
           משתמש
-          <input
-            aria-label="משתמש"
-            value={q.userId ?? ''}
-            onChange={(e) => setQ({ ...q, userId: e.target.value || undefined })}
-          />
+          <input aria-label="משתמש" value={userInput} onChange={(e) => setUserInput(e.target.value)} />
         </label>
         <label>
           מתאריך
           <input
             type="date"
             aria-label="מתאריך"
-            onChange={(e) =>
-              setQ({ ...q, from: e.target.value ? new Date(e.target.value).toISOString() : undefined })
-            }
+            onChange={(e) => setQ({ ...q, from: toIso(e.target.value) })}
           />
         </label>
         <label>
@@ -103,25 +126,16 @@ export function ConversationsTab() {
           <input
             type="date"
             aria-label="עד תאריך"
-            onChange={(e) =>
-              setQ({ ...q, to: e.target.value ? new Date(e.target.value).toISOString() : undefined })
-            }
+            onChange={(e) => setQ({ ...q, to: toIso(e.target.value, true) })}
           />
         </label>
-        <label>
-          משוב
-          <select
-            aria-label="משוב"
-            value={q.feedback ?? ''}
-            onChange={(e) =>
-              setQ({ ...q, feedback: (e.target.value || undefined) as 'up' | 'down' | undefined })
-            }
-          >
-            <option value="">הכל</option>
-            <option value="up">חיובי</option>
-            <option value="down">שלילי</option>
-          </select>
-        </label>
+        {/*
+          X6 fix wave: there is no feedback filter here. `ConversationsQuerySchema` has `userId`,
+          `documentId`, `from` and `to` and nothing else, the list row carries no message-level
+          rating to filter on in the browser, and the control that used to stand here only changed
+          the query key. A rating is visible per message inside a transcript; filtering the *list*
+          by one needs the field on the route first.
+        */}
         <button
           type="button"
           className="btn ghost"
@@ -183,7 +197,18 @@ export function ConversationsTab() {
                 </td>
               </tr>
             ))}
-            {!list.data?.items.length ? (
+            {/*
+              A filter change is a new query key, so `list.data` is empty until the fetch lands.
+              Without this branch the table claimed "no matching conversations" on every keystroke
+              and every date change, before it knew.
+            */}
+            {list.isPending ? (
+              <tr>
+                <td colSpan={6} className="muted">
+                  טוען…
+                </td>
+              </tr>
+            ) : !list.data?.items.length ? (
               <tr>
                 <td colSpan={6} className="muted">
                   אין שיחות תואמות.

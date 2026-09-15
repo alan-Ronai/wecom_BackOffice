@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { useState } from 'react';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../render.js';
@@ -83,6 +84,65 @@ describe('<ProposedEditsOverlay>', () => {
     await user.click(within(await region()).getByRole('button', { name: 'קבל הכל' }));
     expect(await screen.findByText('מסמך המקור השתנה בינתיים — טען מחדש והצע שוב')).toBeInTheDocument();
     await waitFor(() => expect(dismissed).toBe(true));
+  });
+
+  /**
+   * B-M17: only a 409 is terminal. A transient failure leaves the proposal valid,
+   * so the overlay — and the tri-state decisions in it — must survive the retry.
+   */
+  it('keeps the overlay and the decisions after a non-409 failure', async () => {
+    const user = userEvent.setup();
+    aiState.decideStatus = 500;
+    let dismissed = false;
+    render({ onDismiss: () => (dismissed = true) });
+    const [first] = await accepts();
+    await user.click(first!);
+    await user.click(within(await region()).getByRole('button', { name: /אשר החלטות/ }));
+    await waitFor(() => expect(aiState.decided.length).toBeGreaterThan(0));
+    expect(dismissed).toBe(false);
+    expect(await region()).toBeInTheDocument();
+    expect(within(await region()).getByRole('button', { name: /אשר החלטות/ })).toHaveTextContent(
+      'אחת מתקבלת',
+    );
+  });
+
+  /**
+   * B-I1. Server op ids restart at `op-1` for every proposal. A tick that outlived its proposal
+   * would be applied to a hunk the editor never read, which is the one thing §1.3 exists to stop.
+   */
+  it('starts a second proposal with nothing ticked', async () => {
+    // Swapped in place, deliberately without the host's `key={proposed.id}`: this is the
+    // component's own defence, and it is what makes the host's key belt-and-braces.
+    function Harness() {
+      const [second, setSecond] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setSecond(true)}>
+            הצעה חדשה
+          </button>
+          <ProposedEditsOverlay
+            documentId={DOC_1}
+            proposed={second ? { ...sampleProposedEdits(), id: 'pe-second' } : sampleProposedEdits()}
+            onDecided={() => {}}
+            onDismiss={() => {}}
+          />
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    renderWithProviders(<Harness />);
+    await user.click((await accepts())[0]!);
+    expect(within(await region()).getByRole('button', { name: /אשר החלטות/ })).toHaveTextContent(
+      'אחת מתקבלת',
+    );
+    await user.click(screen.getByRole('button', { name: 'הצעה חדשה' }));
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('region', { name: 'עריכות מוצעות במסמך' })).getByRole('button', {
+          name: /אשר החלטות/,
+        }),
+      ).toHaveTextContent('אשר החלטות (0 מתקבלות, שתיים נדחות)'),
+    );
   });
 
   it('is read-only without docs.edit', async () => {

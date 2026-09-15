@@ -5,6 +5,9 @@ export interface TabDef {
   label: string;
 }
 
+/** The DOM id of one tab button — the panel names its tab with this in `aria-labelledby`. */
+export const tabId = (controls: string, id: string): string => `${controls}-tab-${id}`;
+
 /**
  * A roving tablist. `role="tablist"` promises arrow-key navigation, and the page is RTL, so
  * ArrowLeft moves *forward* through the tabs — reading order, not codepoint order, is what the
@@ -51,6 +54,9 @@ export function AdminTabs({
           key={t.id}
           type="button"
           role="tab"
+          // Derived from `controls` so the panel can point back with `aria-labelledby` and two
+          // tablists on one page cannot collide.
+          id={tabId(controls, t.id)}
           aria-selected={i === idx}
           aria-controls={controls}
           tabIndex={i === idx ? 0 : -1}

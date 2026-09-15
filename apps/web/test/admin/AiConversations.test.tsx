@@ -43,11 +43,37 @@ describe('ConversationsTab', () => {
     expect(assistant).toHaveTextContent('14 שנ׳');
   });
 
-  it('filters by feedback', async () => {
+  /*
+   * X6 fix wave (B-I3): there is no feedback filter. It filtered nothing — `serverQuery` stripped
+   * it, no browser-side filter ran, and the covering test only ever saw the *empty* state that a
+   * changed query key produced while the refetch was in flight.
+   */
+  it('offers no feedback filter, because the route has no such field', async () => {
     renderWithProviders(<ConversationsTab />, { route: '/admin/ai?tab=conversations' });
     await screen.findByText('נועה');
-    fireEvent.change(screen.getByLabelText('משוב'), { target: { value: 'down' } });
+    expect(screen.queryByLabelText('משוב')).toBeNull();
+  });
+
+  it('says it is loading, not that nothing matched, while a filter change is in flight', async () => {
+    renderWithProviders(<ConversationsTab />, { route: '/admin/ai?tab=conversations' });
+    await screen.findByText('נועה');
+    fireEvent.change(screen.getByLabelText('משתמש'), { target: { value: 'מישהו אחר' } });
+    // The user box is debounced, then the new query key has no data yet: "טוען…", never
+    // "אין שיחות תואמות." before the answer is in.
+    expect(await screen.findByText('טוען…')).toBeInTheDocument();
+    expect(screen.queryByText('אין שיחות תואמות.')).toBeNull();
     expect(await screen.findByText('אין שיחות תואמות.')).toBeInTheDocument();
+  });
+
+  it('debounces the user box into one request', async () => {
+    aiAdminState.listCalls = 0;
+    renderWithProviders(<ConversationsTab />, { route: '/admin/ai?tab=conversations' });
+    await screen.findByText('נועה');
+    const box = screen.getByLabelText('משתמש');
+    for (const v of ['נ', 'נו', 'נוע', 'נועה']) fireEvent.change(box, { target: { value: v } });
+    await waitFor(() => expect(screen.getByText('נועה')).toBeInTheDocument());
+    // One initial list plus one for the settled value — not one per keystroke.
+    await waitFor(() => expect(aiAdminState.listCalls).toBe(2));
   });
 
   it('exports the filtered transcripts as JSONL', async () => {

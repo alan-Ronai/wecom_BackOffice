@@ -30,7 +30,18 @@ export interface ChatPaneProps {
   kind: ChatKind;
   documentId: string;
   sourceRevisionId?: string;
+  /**
+   * Pinned context for the next send. Memoize it at the mount: the pane copies it into state on
+   * every identity change, so a fresh `{ stepKey }` object per parent render would keep undoing
+   * the reader's "הסר הקשר".
+   */
   context?: ChatContext;
+  /**
+   * Hard-disables the composer, whatever the caller's permissions. **No host passes it today** —
+   * it is the seam for a future read-only transcript view (an admin reading someone else's
+   * conversation, a printed hand-off), and it is deliberately *not* how the article page works:
+   * "read-only Q&A" there is about the tool set, not about the composer.
+   */
   readOnly?: boolean;
   compact?: boolean;
   onProposedEdits?: (pe: ProposedEdits) => void;
@@ -140,7 +151,15 @@ export function ChatPane({
     <div
       className={'chat-pane' + (compact ? ' compact' : '') + (className ? ' ' + className : '')}
       dir="rtl"
-      aria-label={KIND_LABEL[kind]}
+      /*
+       * No `aria-label` here. It used to carry `KIND_LABEL[kind]`, which a screen reader never
+       * announced — an `aria-label` on a bare `<div>` has no role to hang it on. Promoting it to
+       * `role="region"` would have been worse, not better: all three hosts already wrap this pane
+       * in a landmark carrying the same name (`<section aria-label="סביבת העבודה">`,
+       * `<section aria-label="שאל את המערכת">`, `<aside aria-label="צ'אט עם המערכת">`), so the
+       * page would announce the region twice and `getByRole('region', …)` would match two nodes.
+       * The name belongs to the host; the visible `<b>` below repeats it for sighted readers.
+       */
     >
       <div className="chat-head">
         <b>{KIND_LABEL[kind]}</b>
@@ -152,7 +171,10 @@ export function ChatPane({
         streaming={chat.isStreaming}
         documentId={documentId}
         stepIndex={stepIndex}
-        canDecide={canSend && mayChat && can('docs.edit')}
+        /* `kind !== 'article'`: the server's kind-narrowing already means a `proposed_edits`
+           frame cannot reach the article pane, but the pane's own claim — no write actions here —
+           should be true locally too, not only because something upstream holds the line. */
+        canDecide={canSend && mayChat && kind !== 'article' && can('docs.edit')}
         onAcceptOps={(peId, ids) => decide.mutate({ id: peId, accept: ids, reject: [] })}
         onRejectOps={(peId, ids) => decide.mutate({ id: peId, accept: [], reject: ids })}
         onAcceptAll={(peId) => decide.mutate({ id: peId, accept: 'all', reject: [] })}

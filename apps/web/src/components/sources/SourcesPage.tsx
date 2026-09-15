@@ -291,8 +291,11 @@ export function SourcesPage() {
             row editor and a partial apply — instead of this page's own `SuggestionCard` list and
             its one-line text-blob edit. The two surfaces must not diverge: an editor who reviews a
             suggestion here and one who reviews it in the workspace has to see the same thing.
+
+            `embedded`: this `<aside>` already carries the heading, the pending count, "אשר הכל"
+            and its own source-specific empty state, so the panel draws none of its own.
           */}
-          {current ? <SuggestionsPanel sourceId={current.id} /> : null}
+          {current ? <SuggestionsPanel sourceId={current.id} embedded /> : null}
           <div className="sug-info">
             <b>מה המנוע בודק</b> · שינוי סף/ערכים → עדכון שלב · פסקה חדשה → כרטיס חדש או שלב · טקסט זהה ב-2+
             פרקים → בלוק משותף · שדה CRM לא מוכר → התראה · פסקה שנמחקה → הוצאה משימוש

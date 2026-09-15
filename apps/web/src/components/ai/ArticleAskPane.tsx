@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useCan } from '../../api/hooks/me.js';
 import { ChatPane } from './ChatPane.js';
 
@@ -32,6 +32,12 @@ export function ArticleAskPane({
   const can = useCan();
   const [open, setOpen] = useState(false);
   const id = useId();
+  /*
+   * Stable identity: `ChatPane` copies `context` into state whenever the prop's identity changes,
+   * so a fresh `{ stepKey }` per article render would keep re-pinning the step and silently undo
+   * the reader's "הסר הקשר". The article re-renders on every call-mode keystroke.
+   */
+  const context = useMemo(() => (stepKey ? { stepKey } : undefined), [stepKey]);
   if (!can('ai.ask')) return null;
   return (
     <section className="ask-pane" aria-label={ASK_TITLE}>
@@ -46,13 +52,7 @@ export function ArticleAskPane({
       </button>
       {open ? (
         <div id={id} className="ask-body">
-          <ChatPane
-            kind="article"
-            documentId={documentId}
-            context={stepKey ? { stepKey } : undefined}
-            stepIndex={stepIndex}
-            compact
-          />
+          <ChatPane kind="article" documentId={documentId} context={context} stepIndex={stepIndex} compact />
           <p className="muted small">התשובות מבוססות על התוכן שפורסם בלבד ומצטטות מספרי שלבים.</p>
         </div>
       ) : null}

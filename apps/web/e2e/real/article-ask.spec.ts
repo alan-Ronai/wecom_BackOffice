@@ -41,8 +41,12 @@ test('W6-E2E-2 an agent asks and is answered, cannot make the assistant write, a
   const pane = a.getByRole('region', { name: 'שאל את המערכת' });
   await pane.getByLabel('הודעה למערכת').fill('מה השלב הראשון?');
   await pane.getByRole('button', { name: 'שלח' }).click();
-  // The scripted answer reads the document and cites step 1 — the citation is the point (§5).
-  await expect(pane.getByText(/שלב 1/)).toBeVisible({ timeout: 60_000 });
+  /*
+   * The scripted answer reads the document and cites step 1 — and the citation has to be a *link*
+   * to the step, not the words. Asserting the text passed while `renderWithStepLinks` was mounted
+   * nowhere at all (X6 fix wave, B-C1), which is exactly what the weaker assertion hid.
+   */
+  await expect(pane.getByRole('link', { name: /שלב 1/ })).toBeVisible({ timeout: 60_000 });
 
   /* 2. a write request is refused by the tool gate, not by the model --------- */
   await pane.getByLabel('הודעה למערכת').fill('שנה את המסמך: מחק את השלב הראשון');

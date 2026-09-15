@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { ProposedEdits, SuggestionPayload } from '@wecom/shared';
 import { useDocument } from '../../api/hooks/documents.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 import { useCan } from '../../api/hooks/me.js';
 import { useMediaQuery } from '../../lib/useMediaQuery.js';
+import { allSteps } from '../../lib/steps.js';
 import { SourceEditor } from '../source/SourceEditor.js';
 import { ChatPane, type ChatContext } from '../ai/ChatPane.js';
 import { Empty, LoadError } from '../ui/index.js';
@@ -59,12 +60,24 @@ export function WorkspacePage() {
     }
   }, [panes]);
 
+  /** step number → step key, so a chat citation "שלב 3א" links to that step (same map as the
+   *  article page and the editor dock; all three panes pass it). */
+  const stepIndex = useMemo(
+    () => Object.fromEntries(allSteps(doc.data ?? undefined).map((s) => [s.num, s.key])),
+    [doc.data],
+  );
+
   const resize = useCallback(
     (i: 0 | 1) => (deltaPx: number) => {
       setPanes((p) => {
         const total = document.getElementById('workspace')?.clientWidth || 1200;
-        // RTL: dragging the splitter towards the start of the line grows the pane before it.
-        const d = (deltaPx / total) * 100;
+        /*
+         * RTL: `panes[0]` is the **rightmost** column, so a positive `deltaPx` — the pointer
+         * moving right, towards the start of the line — pushes the splitter *into* `panes[i]` and
+         * shrinks it. Hence the negated delta: the pane that grows is the one the splitter moved
+         * away from. (Keyboard agrees: ArrowLeft sends -16, which grows the right-hand pane.)
+         */
+        const d = -(deltaPx / total) * 100;
         const n = [...p];
         n[i] = Math.max(20, Math.min(70, n[i]! + d));
         n[i + 1] = Math.max(15, Math.min(70, n[i + 1]! - d));
@@ -119,7 +132,14 @@ export function WorkspacePage() {
       >
         <section className="pane" aria-label="מסמך המקור">
           {proposed ? (
+            /*
+             * `key` on the proposal id: server op ids restart at `op-1` for every proposal, so a
+             * second `proposed_edits` frame arriving while this overlay is open would otherwise
+             * swap the props without unmounting and the previous proposal's ticks would carry
+             * over — "אשר החלטות" applying a hunk nobody read.
+             */
             <ProposedEditsOverlay
+              key={proposed.id}
               documentId={id}
               proposed={proposed}
               onDecided={() => setProposed(null)}
@@ -128,7 +148,13 @@ export function WorkspacePage() {
           ) : null}
           <SourceEditor documentId={id} />
         </section>
-        <PaneResizer label="שינוי רוחב מסמך המקור" onDelta={resize(0)} />
+        <PaneResizer
+          label="שינוי רוחב מסמך המקור"
+          value={Math.round(panes[0]!)}
+          min={20}
+          max={70}
+          onDelta={resize(0)}
+        />
         <section className="pane" aria-label="הצעות">
           <SuggestionsPanel
             documentId={id}
@@ -137,12 +163,19 @@ export function WorkspacePage() {
             onRefinedConsumed={() => setRefined(null)}
           />
         </section>
-        <PaneResizer label="שינוי רוחב ההצעות" onDelta={resize(1)} />
+        <PaneResizer
+          label="שינוי רוחב ההצעות"
+          value={Math.round(panes[1]!)}
+          min={15}
+          max={70}
+          onDelta={resize(1)}
+        />
         <section className="pane" aria-label="סביבת העבודה">
           <ChatPane
             kind="workspace"
             documentId={id}
             context={ctx}
+            stepIndex={stepIndex}
             onProposedEdits={setProposed}
             onRefinedSuggestion={(suggestionId, payload) => setRefined({ suggestionId, payload })}
           />

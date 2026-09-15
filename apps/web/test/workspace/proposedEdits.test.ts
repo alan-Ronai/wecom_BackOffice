@@ -86,6 +86,24 @@ describe('applyOps', () => {
     expect(out).toContain('<p>ודא חיבור לרשת לפני הבדיקה.</p>');
   });
 
+  /**
+   * B-C2. `op.after` is the *model's* paragraph text — `diffToOps` emits it verbatim and the
+   * server's `sanitizeHtml` runs only later, on the accept path. The preview feeds this string to
+   * `dangerouslySetInnerHTML`, so parsing it as markup would put model-controlled elements in the
+   * DOM. It is plain text, and it stays plain text.
+   */
+  it('renders a model-authored replacement as text, never as HTML', () => {
+    const payload = '<img src=x onerror="alert(1)"> יש לבדוק 3 < 5';
+    const out = applyOps(html, [{ ...ops[0]!, after: payload }], new Set(['op-1']));
+    expect(out).not.toContain('<img');
+    expect(out).not.toContain('onerror');
+    expect(out).toContain('<p>יש לבדוק 3 &lt; 5</p>');
+  });
+
+  it('inserts nothing at all for a zero-length insert', () => {
+    expect(applyOps(html, [{ ...ops[2]!, after: '' }], new Set(['op-3']))).toBe(html);
+  });
+
   it('applies several accepted ops together', () => {
     const out = applyOps(html, ops, new Set(['op-1', 'op-2']));
     expect(out).toContain('ודא חיבור לרשת');

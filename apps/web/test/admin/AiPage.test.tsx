@@ -33,6 +33,12 @@ describe('AiPage', () => {
   it('opens the tab named in the URL', async () => {
     renderWithProviders(<AiPage />, { route: '/admin/ai?tab=models' });
     expect(await screen.findByRole('tab', { name: 'מודלים' })).toHaveAttribute('aria-selected', 'true');
-    expect(await screen.findByLabelText('דרגה')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'דרגת מודלים' })).toBeInTheDocument();
+  });
+
+  it('names the open tab as the panel’s label', async () => {
+    renderWithProviders(<AiPage />, { route: '/admin/ai?tab=models' });
+    const tab = await screen.findByRole('tab', { name: 'מודלים' });
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', tab.id);
   });
 });
