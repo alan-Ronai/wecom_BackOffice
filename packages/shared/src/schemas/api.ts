@@ -222,6 +222,26 @@ export const ModelStatusSchema = z.object({
   name: z.string(),
 });
 
+/**
+ * "No backup has been taken yet" and "the last backup is too old" are different situations, and
+ * `lastBackupOk: false` said both.
+ *
+ * `system.backup-check` runs at API start-up, so a stack that was installed ten minutes ago
+ * reports a red backup status on `/admin/system` and in `deploy/smoke.sh` — a failure-looking
+ * answer to a question nobody has had a chance to answer yet, which is what a first-time operator
+ * meets at the end of a clean install (walkthrough W-9). `never` is the honest reading; `stale` is
+ * the one that means something is wrong.
+ */
+export const BackupHealthStatusSchema = z.enum(['never', 'ok', 'stale']);
+export const BackupHealthSchema = z.object({
+  status: BackupHealthStatusSchema,
+  /** mtime of the newest dump the worker found, or null when it has found none. */
+  latestAt: IsoDateSchema.nullable(),
+  ageHours: z.number().nullable(),
+  /** When the worker last looked. Null means it has not run in this database yet. */
+  checkedAt: IsoDateSchema.nullable(),
+});
+
 export const HealthResponseSchema = z.object({
   ok: z.boolean(),
   db: z.boolean(),
@@ -232,7 +252,13 @@ export const HealthResponseSchema = z.object({
   uptimeSec: z.number(),
   /** The `system.backup-check` worker's last recorded result (see GET /admin/system). */
   lastBackupAt: IsoDateSchema.nullable(),
+  /**
+   * Kept for clients written against the boolean — `status === 'ok'`, with the same `null` for
+   * "the worker has never run". New readers want `backup.status`, which distinguishes the fresh
+   * install from the failure.
+   */
   lastBackupOk: z.boolean().nullable(),
+  backup: BackupHealthSchema,
 });
 
 export const AdminUserPatchSchema = z.object({

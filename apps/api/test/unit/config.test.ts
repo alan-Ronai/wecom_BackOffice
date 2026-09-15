@@ -5,7 +5,9 @@ const base = { DATABASE_URL: 'postgres://kb:pw@db:5432/kb' } as const;
 const prod = {
   ...base,
   NODE_ENV: 'production' as const,
-  SESSION_SECRET: 'a'.repeat(32),
+  // A real `openssl rand -hex 32` value: the production guard now rejects the class of weak
+  // ones (placeholders, short, one repeated character), so a test fixture has to be a real one.
+  SESSION_SECRET: 'c3f0a91d7be24568af0c1d2e3b4a5968c7d8e9f0a1b2c3d4e5f60718293a4b5c',
   CONNECTOR_KEY: 'ab'.repeat(32),
   CONNECTOR_HOST_ALLOWLIST: 'wp.wecom.local',
   TRUST_PROXY: '172.16.0.0/12',
@@ -28,6 +30,41 @@ describe('ConfigSchema', () => {
     // A known SESSION_SECRET lets an attacker forge the signed OIDC handshake cookie.
     expect(() => loadConfig({ ...prod, SESSION_SECRET: DEV_SESSION_SECRET })).toThrow(/SESSION_SECRET/);
     expect(() => loadConfig(prod)).not.toThrow();
+  });
+
+  /**
+   * W-2. The guard compared against exactly one literal, so the *other* placeholder — the one
+   * `deploy/.env.example` actually shipped — passed it, and the walkthrough's production stack
+   * started and signed session cookies with a string published in this repository. What has to be
+   * refused is the class, and each arm below is a property of the value rather than a known
+   * string: too short, placeholder language, one character repeated.
+   */
+  it('refuses the whole class of weak session secrets, not one literal', () => {
+    const refused = [
+      'change-me-to-32-random-chars-minimum', // what the template shipped
+      'CHANGE_ME_PLEASE_THIS_IS_A_LONG_ONE',
+      'my-example-session-secret-value-here',
+      'short-but-not-a-placeholder-x', // 29 characters
+      'abababababababababababababababababab',
+    ];
+    for (const secret of refused)
+      expect(() => loadConfig({ ...prod, SESSION_SECRET: secret }), secret).toThrow(
+        /SESSION_SECRET.*openssl rand -hex 32/s,
+      );
+    // A generated value is accepted, whatever it happens to contain.
+    expect(() =>
+      loadConfig({
+        ...prod,
+        SESSION_SECRET: '7b1d4e0af35c92687d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e',
+      }),
+    ).not.toThrow();
+  });
+
+  it('refuses a CONNECTOR_KEY that is one hex digit repeated', () => {
+    for (const key of ['0'.repeat(64), 'f'.repeat(64), 'C'.repeat(64)])
+      expect(() => loadConfig({ ...prod, CONNECTOR_KEY: key }), key.slice(0, 3)).toThrow(
+        /CONNECTOR_KEY.*openssl rand -hex 32/s,
+      );
   });
 
   /**

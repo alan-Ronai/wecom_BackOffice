@@ -8,6 +8,64 @@ type Subnet = [ipaddr.IPv4 | ipaddr.IPv6, number];
 export const DEV_SESSION_SECRET = 'dev-secret-change-me-please';
 export const DEV_CONNECTOR_KEY = '00'.repeat(32);
 
+/** How a generated secret is generated, said the same way everywhere it is asked for. */
+const GENERATE = 'generate one with `openssl rand -hex 32`';
+
+/**
+ * The language a template, a tutorial or a hurried `.env` is written in.
+ *
+ * Deliberately matched anywhere in the value rather than as a whole word: the string that shipped
+ * in `deploy/.env.example` and booted a production stack was
+ * `change-me-to-32-random-chars-minimum` — long enough for every length check, and a placeholder
+ * from the first word to the last.
+ */
+const PLACEHOLDER_RE =
+  /change[\s_-]*me|changeme|placeholder|example|sample|replace[\s_-]*me|to[\s_-]*do|your[\s_-]*(secret|key|value|password)|secret[\s_-]*here|password|123456|qwerty|abcdef|xxxx/i;
+
+const distinct = (s: string) => new Set(s).size;
+
+/**
+ * Why this `SESSION_SECRET` must not sign a production session cookie, or `null`.
+ *
+ * The guard used to compare against one literal, `DEV_SESSION_SECRET`. `deploy/INSTALL.md` step 3
+ * promised that a half-filled `.env` "fails loudly at step 5 rather than silently running open",
+ * and `deploy/.env.example` shipped a *different* placeholder — 36 characters, so `min(16)` and
+ * the one-literal guard both passed, and the walkthrough's stack started and signed every session
+ * cookie with a value published in this repository (W-2). A single literal cannot be the check;
+ * the check has to be on the *class*.
+ *
+ * Each arm is a property of the value, not a list of known-bad strings:
+ * length, because 32 characters is what `openssl rand -hex 32` produces at minimum and anything
+ * shorter is a typed passphrase; placeholder language, because that is what an unfilled template
+ * is made of; and charset diversity, because "aaaa…" of any length carries one character's worth
+ * of entropy.
+ */
+export function weakSessionSecret(value: string): string | null {
+  if (value === DEV_SESSION_SECRET) return 'is still the development default';
+  if (value.length < 32) return `is ${value.length} characters long; production needs at least 32`;
+  if (PLACEHOLDER_RE.test(value)) return 'is placeholder text from a template, not a generated value';
+  if (distinct(value) < 10)
+    return `uses only ${distinct(value)} distinct characters, so it carries far less entropy than its length suggests`;
+  return null;
+}
+
+/**
+ * The same question for `CONNECTOR_KEY`, which is already constrained to 64 hex digits, so the
+ * only weakness left to check is what those digits are. The all-zero dev default is the one the
+ * documents name; a key that is one digit repeated is the same mistake typed by hand.
+ *
+ * The threshold is deliberately low — a real `openssl rand -hex 32` uses ~16 distinct digits, and
+ * "fewer than 8" would be the honest bar. It is not that bar because `scripts/e2e-real.mjs` pins
+ * `'a1'.repeat(32)` and this lane may not edit `scripts/**`; see the lane report, which records
+ * raising both together as the follow-up.
+ */
+export function weakConnectorKey(value: string): string | null {
+  const key = value.toLowerCase();
+  if (key === DEV_CONNECTOR_KEY) return 'is still the all-zero default';
+  if (distinct(key) < 2) return 'is a single hex digit repeated';
+  return null;
+}
+
 /**
  * `z.coerce.boolean()` treats every non-empty string as true, so `MODEL_DISABLED=false`
  * *disabled* the model. Accept only the spellings an operator would actually write, and
@@ -148,17 +206,19 @@ export const ConfigSchema = BaseConfigSchema.superRefine((c, ctx) => {
       message:
         'WECOM_E2E_STACK=1 is set: this is the e2e configuration (deploy/e2e.env — committed secrets, stubbed firewall), not a deployment. A killed `pnpm e2e:compose` run leaves it at deploy/.env; restore deploy/.env from deploy/.env.before-e2e (or rewrite it from deploy/.env.example) before starting the stack',
     });
-  if (c.SESSION_SECRET === DEV_SESSION_SECRET)
+  const sessionIssue = weakSessionSecret(c.SESSION_SECRET);
+  if (sessionIssue)
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['SESSION_SECRET'],
-      message: 'SESSION_SECRET is still the development default — set it (`openssl rand -hex 32`)',
+      message: `SESSION_SECRET ${sessionIssue} — it signs the OIDC handshake cookie (state/nonce/PKCE verifier), so ${GENERATE}`,
     });
-  if (c.CONNECTOR_KEY.toLowerCase() === DEV_CONNECTOR_KEY)
+  const keyIssue = weakConnectorKey(c.CONNECTOR_KEY);
+  if (keyIssue)
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['CONNECTOR_KEY'],
-      message: 'CONNECTOR_KEY is still the all-zero default — set it (`openssl rand -hex 32`)',
+      message: `CONNECTOR_KEY ${keyIssue} — it encrypts connector configs at rest (the WordPress application password, the webhook secret), so ${GENERATE}`,
     });
   /**
    * §5 / item 18: an empty allowlist is unrestricted, so a connector with a `baseUrl` an editor

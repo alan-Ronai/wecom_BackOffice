@@ -65,6 +65,39 @@ export interface RecordedBackupCheck extends BackupCheckResult {
   checkedAt: string;
 }
 
+/**
+ * The tri-state `GET /system/health` publishes (W-9).
+ *
+ * `ok: false` conflated two situations an operator has to tell apart. `system.backup-check` runs
+ * at API start-up, so ten minutes after a clean install — before `backup.sh` has ever run —
+ * health and `/admin/system` showed a red backup status that reads as a failure. "No dump has
+ * been taken yet" is `never`; "the newest dump is older than the window" is `stale`; only the
+ * second is something to act on.
+ *
+ * A `null` result — the worker has not recorded anything in this database — is also `never`: the
+ * honest answer to "when was the last backup?" is still "there has not been one that we know of".
+ */
+export function backupHealth(recorded: RecordedBackupCheck | null): {
+  status: 'never' | 'ok' | 'stale';
+  latestAt: string | null;
+  ageHours: number | null;
+  checkedAt: string | null;
+} {
+  if (!recorded || recorded.latestFile === null)
+    return {
+      status: 'never',
+      latestAt: null,
+      ageHours: null,
+      checkedAt: recorded?.checkedAt ?? null,
+    };
+  return {
+    status: recorded.ok ? 'ok' : 'stale',
+    latestAt: recorded.latestAt,
+    ageHours: recorded.ageHours,
+    checkedAt: recorded.checkedAt,
+  };
+}
+
 /** The most recent worker-recorded result, or null if the worker has never run yet. */
 export async function getRecordedBackupCheck(
   db: pg.Pool | pg.PoolClient,

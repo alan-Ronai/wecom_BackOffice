@@ -106,13 +106,16 @@ describe('admin · connector wizard', () => {
     await userEvent.click(await screen.findByLabelText('WordPress'));
     await userEvent.click(screen.getByRole('button', { name: 'המשך' }));
 
-    // string, url, secret, array and enum each render as the control their schema implies.
+    // string, url, secret, array and map each render as the control their schema implies —
+    // every field the type declares, which is the whole of W-1: the settings step used to render
+    // the connector's name and nothing else, for either type.
     expect(screen.getByLabelText('כתובת האתר')).toHaveAttribute('dir', 'ltr');
     expect(screen.getByLabelText('סיסמת אפליקציה')).toHaveAttribute('type', 'password');
-    expect(screen.getByLabelText('משתמש WordPress')).toHaveAttribute('type', 'text');
-    // Schema defaults arrive pre-filled.
-    expect(screen.getByLabelText('סוגי תוכן')).toHaveValue('page, post');
-    expect(screen.getByLabelText('סטטוס בדחיפה')).toHaveValue('draft');
+    expect(screen.getByLabelText('שם משתמש')).toHaveAttribute('type', 'text');
+    expect(screen.getByLabelText('סוד ה-webhook')).toHaveAttribute('type', 'password');
+    // Schema defaults arrive pre-filled — the array as a comma list, the map as `key = value`.
+    expect(screen.getByLabelText('סוגי תוכן')).toHaveValue('posts');
+    expect(screen.getByLabelText('מיפוי קטגוריות')).toHaveValue('');
   });
 
   it('blocks the next step until every required field is filled', async () => {
@@ -121,13 +124,27 @@ describe('admin · connector wizard', () => {
     await userEvent.click(await screen.findByLabelText('WordPress'));
     await userEvent.click(screen.getByRole('button', { name: 'המשך' }));
 
-    expect(screen.getByText(/חסרים שדות חובה/)).toBeInTheDocument();
+    // One message per empty required field, beside the field — not one summary line naming
+    // fields the operator cannot see, which is what this screen used to (never) show.
+    expect(screen.getAllByText(/שדה חובה/)).toHaveLength(4);
     expect(screen.getByRole('button', { name: 'המשך לבדיקה' })).toBeDisabled();
 
     await userEvent.type(screen.getByLabelText('כתובת האתר'), 'https://help.wecom.co.il');
-    await userEvent.type(screen.getByLabelText('משתמש WordPress'), 'kb-bot');
+    await userEvent.type(screen.getByLabelText('שם משתמש'), 'kb-bot');
     await userEvent.type(screen.getByLabelText('סיסמת אפליקציה'), 'app-pass');
+    // The connector's own `min(8)`, applied here rather than discovered as a 400.
+    await userEvent.type(screen.getByLabelText('סוד ה-webhook'), 'short');
+    expect(screen.getByText('סוד ה-webhook: לפחות 8 תווים')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'המשך לבדיקה' })).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('סוד ה-webhook'), 'er-secret');
     expect(screen.getByRole('button', { name: 'המשך לבדיקה' })).toBeEnabled();
+
+    // And `z.string().url()`, likewise.
+    await userEvent.clear(screen.getByLabelText('כתובת האתר'));
+    await userEvent.type(screen.getByLabelText('כתובת האתר'), 'help.wecom.co.il');
+    expect(screen.getByText(/^כתובת האתר: כתובת לא תקינה/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'המשך לבדיקה' })).toBeDisabled();
   });
 
   it('dry-tests an unsaved connector against the typed config', async () => {
@@ -136,13 +153,76 @@ describe('admin · connector wizard', () => {
     await userEvent.click(await screen.findByLabelText('WordPress'));
     await userEvent.click(screen.getByRole('button', { name: 'המשך' }));
     await userEvent.type(screen.getByLabelText('כתובת האתר'), 'http://insecure.example');
-    await userEvent.type(screen.getByLabelText('משתמש WordPress'), 'kb-bot');
+    await userEvent.type(screen.getByLabelText('שם משתמש'), 'kb-bot');
     await userEvent.type(screen.getByLabelText('סיסמת אפליקציה'), 'app-pass');
+    await userEvent.type(screen.getByLabelText('סוד ה-webhook'), 'webhook-secret');
     await userEvent.click(screen.getByRole('button', { name: 'המשך לבדיקה' }));
 
     expect(screen.getByText('טרם נבדק')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'בדוק חיבור' }));
     expect(await screen.findByText(/כתובת האתר חייבת להיות https/)).toBeInTheDocument();
+  });
+
+  /**
+   * W-1, the whole walk: `/admin/connectors → ✚ מחבר`, WordPress, every field of the type filled
+   * in, tested, scheduled, created — and the POST carrying all six keys.
+   *
+   * The regression this exists for is exactly the one the operator walkthrough hit: step 2
+   * rendered one input (*שם המחבר*), "בדוק חיבור" answered "הגדרות המחבר אינן תקינות" and
+   * "צור מחבר" was a 400 with nowhere to type what was missing. Every automated cover of
+   * connector creation before this one posted `POST /connectors` from the spec, which is what
+   * let the form rot untouched — so this one types into the form and asserts on what it sends.
+   */
+  it('walks the WordPress wizard from the connectors page to a created connector', async () => {
+    asAdmin();
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.post('/api/v1/connectors', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ...stage5State.connectors[0], id: C_WP }, { status: 201 });
+      }),
+    );
+    renderWithProviders(<App />, { route: '/admin/connectors' });
+
+    await userEvent.click(await screen.findByRole('button', { name: '✚ מחבר' }));
+    await userEvent.click(await screen.findByLabelText('WordPress'));
+    await userEvent.click(screen.getByRole('button', { name: 'המשך' }));
+
+    // Step 2 — the name, and one control per declared field.
+    await userEvent.clear(screen.getByLabelText('שם המחבר'));
+    await userEvent.type(screen.getByLabelText('שם המחבר'), 'אתר התמיכה');
+    await userEvent.type(screen.getByLabelText('כתובת האתר'), 'https://help.wecom.co.il');
+    await userEvent.type(screen.getByLabelText('שם משתמש'), 'kb-bot');
+    await userEvent.type(screen.getByLabelText('סיסמת אפליקציה'), 'app-pass');
+    await userEvent.clear(screen.getByLabelText('סוגי תוכן'));
+    await userEvent.type(screen.getByLabelText('סוגי תוכן'), 'posts, pages');
+    await userEvent.type(screen.getByLabelText('מיפוי קטגוריות'), 'sim-cards = sim');
+    await userEvent.type(screen.getByLabelText('סוד ה-webhook'), 'webhook-secret');
+    expect(screen.queryByText(/שדה חובה/)).not.toBeInTheDocument();
+
+    // Step 3 — the dry run against the typed config, before anything is saved.
+    await userEvent.click(screen.getByRole('button', { name: 'המשך לבדיקה' }));
+    await userEvent.click(screen.getByRole('button', { name: 'בדוק חיבור' }));
+    expect(await screen.findByText(/מחובר · WordPress/)).toBeInTheDocument();
+
+    // Step 4 — schedule and create.
+    await userEvent.click(screen.getByRole('button', { name: 'המשך לתזמון' }));
+    await userEvent.selectOptions(screen.getByLabelText('תדירות'), '0 */1 * * *');
+    await userEvent.click(screen.getByRole('button', { name: 'צור מחבר' }));
+
+    await waitFor(() => expect(body).toBeDefined());
+    expect(body).toMatchObject({ type: 'wordpress', name: 'אתר התמיכה', schedule: '0 */1 * * *' });
+    // The array is a list, the map is an object, the secrets are what was typed — the shapes
+    // `WpConfigSchema` accepts, built by the form rather than by the test.
+    expect(body!.config).toEqual({
+      baseUrl: 'https://help.wecom.co.il',
+      username: 'kb-bot',
+      applicationPassword: 'app-pass',
+      postTypes: ['posts', 'pages'],
+      categoryMap: { 'sim-cards': 'sim' },
+      webhookSecret: 'webhook-secret',
+    });
+    expect(await screen.findByText('המחבר נוצר')).toBeInTheDocument();
   });
 
   it('creates a connector with the chosen cron preset', async () => {
@@ -158,8 +238,9 @@ describe('admin · connector wizard', () => {
     await userEvent.click(await screen.findByLabelText('WordPress'));
     await userEvent.click(screen.getByRole('button', { name: 'המשך' }));
     await userEvent.type(screen.getByLabelText('כתובת האתר'), 'https://help.wecom.co.il');
-    await userEvent.type(screen.getByLabelText('משתמש WordPress'), 'kb-bot');
+    await userEvent.type(screen.getByLabelText('שם משתמש'), 'kb-bot');
     await userEvent.type(screen.getByLabelText('סיסמת אפליקציה'), 'app-pass');
+    await userEvent.type(screen.getByLabelText('סוד ה-webhook'), 'webhook-secret');
     await userEvent.click(screen.getByRole('button', { name: 'המשך לבדיקה' }));
     await userEvent.click(screen.getByRole('button', { name: 'המשך לתזמון' }));
     await userEvent.selectOptions(screen.getByLabelText('תדירות'), '*/15 * * * *');
@@ -167,7 +248,7 @@ describe('admin · connector wizard', () => {
 
     await waitFor(() => expect(body).toBeDefined());
     expect(body).toMatchObject({ type: 'wordpress', schedule: '*/15 * * * *' });
-    expect((body!.config as Record<string, unknown>).appPassword).toBe('app-pass');
+    expect((body!.config as Record<string, unknown>).applicationPassword).toBe('app-pass');
   });
 
   it('never sends a masked secret back, and offers the webhook details once an id exists', async () => {
@@ -207,7 +288,7 @@ describe('admin · connector wizard', () => {
 
     // The form is seeded from the connector's own `config` — the field that was absent from the
     // detail route's published shape, which loaded this form blank and PATCHed the blank back.
-    const username = await screen.findByLabelText('משתמש WordPress');
+    const username = await screen.findByLabelText('שם משתמש');
     expect(username).toHaveValue('kb-bot');
     await userEvent.clear(username);
     await userEvent.type(username, 'kb-bot-2');
