@@ -194,6 +194,69 @@ xff_check() {
   exit 1
 }
 
+# ── W-9: what the backup status means on an install that is ten minutes old ────────────────────
+# `system.backup-check` runs at API start-up and after the nightly job. At install time there is no
+# dump, so health has always answered `lastBackupOk:false, lastBackupAt:null` — a red backup status
+# on a stack that has done nothing wrong. The operator walkthrough hit it as step 22 and it is
+# documented in INSTALL's Troubleshooting; the durable fix is a tri-state in health, and this reads
+# either shape:
+#
+#   future: a `backup` block (or scalar) carrying `status` — "ok" / "never" (or "pending") /
+#           "stale" / "failed";
+#   today:  `lastBackupOk` + `lastBackupAt`, where false-with-a-null-timestamp is exactly "never".
+#
+# None of it fails the smoke test. "Is a dump older than a day, or missing on a fresh install" is
+# not the question this script answers — it answers "is the stack up" — and an install-time failure
+# here would be the false alarm W-9 is about. A stale or failed backup on a *running* pilot is a
+# real problem, so it is printed as a warning the operator cannot miss rather than swallowed.
+backup_check() { # <health body>
+  local body=$1 block status ok at
+  # The `backup` object, if there is one; `[^}]*` keeps this to a flat block, which is all the
+  # shape above needs, and an absent key simply yields nothing.
+  block=$(printf '%s' "$body" | sed -n 's/.*"backup"[[:space:]]*:[[:space:]]*{\([^}]*\)}.*/\1/p')
+  # Only ever inside that block: `status` is a common enough key that scanning the whole body
+  # would sooner or later read some other subsystem's.
+  status=''
+  if [ -n "$block" ]; then status=$(field "$block" status); fi
+  # …or a plain string, `"backup":"never"`.
+  [ -n "$status" ] || status=$(printf '%s' "$body" | sed -n 's/.*"backup"[[:space:]]*:[[:space:]]*"\([A-Za-z]*\)".*/\1/p')
+
+  if [ -z "$status" ]; then
+    ok=$(field "$body" lastBackupOk)
+    at=$(field "$body" lastBackupAt)
+    case "$ok" in
+      true) status=ok ;;
+      false|'')
+        # A null/absent timestamp and a not-ok check is a stack that has never seen a dump; with a
+        # timestamp it has, and the check on it did not pass.
+        case "$at" in null|'') status=never ;; *) status=failed ;; esac ;;
+      *) status=$ok ;;
+    esac
+  fi
+
+  case "$status" in
+    ok|true)
+      echo "backup ok: the last dump passed its check" ;;
+    never|pending|none)
+      echo "backup: none yet — expected on a fresh install, and not a failure. \`system.backup-check\`"
+      echo "  runs at API start-up, before any dump exists, so /admin/system shows this red until the"
+      echo "  first one. Take one now and restart the API to clear it:"
+      echo "    docker compose -f deploy/docker-compose.yml exec backup backup.sh"
+      echo "    docker compose -f deploy/docker-compose.yml restart api" ;;
+    stale)
+      echo "smoke WARNING: the newest backup is stale — the nightly job has not produced a dump" >&2
+      echo "  recently. The stack is up and this does not fail the smoke test, but a pilot with no" >&2
+      echo "  current dump is one \`down -v\` from unrecoverable. Check: docker compose -f" >&2
+      echo "  deploy/docker-compose.yml logs backup" >&2 ;;
+    failed|false)
+      echo "smoke WARNING: a backup exists and its check did not pass. The stack is up; the dump is" >&2
+      echo "  not trustworthy. Check: docker compose -f deploy/docker-compose.yml logs backup, and" >&2
+      echo "  re-run deploy/backup-check.sh." >&2 ;;
+    *)
+      echo "backup status: '$status' (unrecognised — reported, not judged)" ;;
+  esac
+}
+
 # Everything above is argument handling and pure functions; everything below talks to a stack.
 # `deploy/smoke-check.sh` sources this file with SMOKE_LIB_ONLY=1 to exercise the first half
 # without needing the second — `return` outside a sourced file is an error, hence the guard's
@@ -218,6 +281,7 @@ for i in $(seq 1 60); do
       embed_check "$body" "$model_name"
     fi
     echo "health ok: $body"
+    backup_check "$body"
     rid=$(curl -ksSI "$base/api/v1/system/health" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-request-id"{print $2}')
     test -n "$rid" && echo "request id ok: $rid"
     curl -ksS -o /dev/null -w 'spa %{http_code}\n' "$base/" | grep -q 'spa 200'

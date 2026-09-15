@@ -204,7 +204,11 @@ One spec asserts that a browser forging `X-Forwarded-For` stays signed out. See
   and not a failure: `system.backup-check` runs at API start-up and after the nightly backup job,
   and at install time there is no dump yet. It clears itself after 02:15, or immediately with
   `docker compose -f deploy/docker-compose.yml exec backup backup.sh` followed by
-  `docker compose -f deploy/docker-compose.yml restart api`.
+  `docker compose -f deploy/docker-compose.yml restart api`. `deploy/smoke.sh` says as much
+  (`backup: none yet — expected on a fresh install`) rather than letting the red status be the
+  only thing you see. On a pilot that has been running, the same script warns instead — a stale or
+  failed backup is printed as `smoke WARNING` on stderr. Neither fails the smoke test: it answers
+  "is the stack up", and an install-time backup status is not that question.
 - Logs, all four on stdout — nothing is written to a file, so `docker compose logs` is the whole
   story and Docker's rotation is what bounds it:
   - `docker compose logs -f api` — the application (JSON lines; filter by `requestId`, which is

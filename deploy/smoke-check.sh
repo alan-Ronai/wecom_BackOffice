@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Exercises the half of `deploy/smoke.sh` that needs no stack: how it reads its argument (W-7).
-# Found by an operator running the documented commands, and not coverable by the CI smoke run —
-# that workflow always passes an origin it spells correctly.
+# Exercises the half of `deploy/smoke.sh` that needs no stack: how it reads its argument (W-7) and
+# how it reports the backup status (W-9). Both were found by an operator running the documented
+# commands, and neither can be covered by the CI smoke run — that stack always passes an origin
+# the workflow spells correctly, and always has the same backup state.
 #
 # `SMOKE_LIB_ONLY=1` makes smoke.sh stop after its argument handling and its functions, so this
 # calls them directly. `WECOM_E2E_RUNNER=1` because sourcing means the e2e-config refusal at the
@@ -42,5 +43,53 @@ expect_base 'an IPv4 host with a port' 'https://10.44.0.7:8443' 'https://10.44.0
 # look exactly like a stack that is down.
 expect_base 'a URL with a path is refused' 'FAILED' 'https://kb.wecom.local:9443/admin'
 
+# ── W-9: the backup status a fresh install reports ────────────────────────────────────────────
+# `system.backup-check` runs at API start-up, before any dump exists, so health answers
+# `lastBackupOk:false, lastBackupAt:null` on a stack installed minutes ago. That is not a failure
+# and must not read as one; a *stale* backup on a running pilot is a real problem and must not be
+# swallowed. Both the shape health has today and the tri-state the app lane is landing are read.
+# shellcheck disable=SC1091
+SMOKE_LIB_ONLY=1 WECOM_E2E_RUNNER=1 . ./smoke.sh
+
+expect_backup() { # <what> <health body> <substring the output must contain> <stream: out|err>
+  local what=$1 body=$2 want=$3 stream=$4 got
+  if [ "$stream" = err ]; then
+    got=$(backup_check "$body" 2>&1 >/dev/null)
+  else
+    got=$(backup_check "$body" 2>/dev/null)
+  fi
+  case "$got" in
+    *"$want"*) ok "$what" ;;
+    *) bad "$what: $stream said '${got:-(nothing)}', expected it to contain '$want'" ;;
+  esac
+}
+
+# Today's shape.
+expect_backup 'a fresh install (lastBackupOk:false, lastBackupAt:null) is a note, not a failure' \
+  '{"db":true,"lastBackupAt":null,"lastBackupOk":false}' 'backup: none yet' out
+expect_backup 'a passing check is reported as ok' \
+  '{"db":true,"lastBackupAt":"2026-09-15T02:00:00Z","lastBackupOk":true}' 'backup ok' out
+expect_backup 'a dump exists and its check failed: a warning on stderr' \
+  '{"db":true,"lastBackupAt":"2026-09-15T02:00:00Z","lastBackupOk":false}' 'smoke WARNING' err
+
+# The tri-state, whichever way it is spelled.
+expect_backup 'backup.status "never" is a note' \
+  '{"db":true,"backup":{"status":"never","at":null}}' 'backup: none yet' out
+expect_backup 'backup.status "pending" is the same note' \
+  '{"db":true,"backup":{"status":"pending","at":null}}' 'backup: none yet' out
+expect_backup 'backup.status "ok" is ok' \
+  '{"db":true,"backup":{"status":"ok","at":"2026-09-15T02:00:00Z"}}' 'backup ok' out
+expect_backup 'backup.status "stale" is a warning, not a failure' \
+  '{"db":true,"backup":{"status":"stale","at":"2026-09-01T02:00:00Z"}}' 'stale' err
+expect_backup 'a scalar "backup":"never" reads the same' \
+  '{"db":true,"backup":"never"}' 'backup: none yet' out
+# An unknown value is printed rather than guessed at, and still does not fail the run.
+expect_backup 'an unrecognised status is reported, not judged' \
+  '{"db":true,"backup":{"status":"quiescent"}}' 'unrecognised' out
+# `status` is a common key. Reading it out of the wrong block would misreport the backup entirely.
+expect_backup 'a status on another subsystem is not mistaken for the backup one' \
+  '{"db":true,"queue":{"status":"stale"},"lastBackupAt":null,"lastBackupOk":false}' \
+  'backup: none yet' out
+
 [ "$fail" = 0 ] || exit 1
-echo "smoke.sh ok (origin parsing)"
+echo "smoke.sh ok (origin parsing, backup status)"
