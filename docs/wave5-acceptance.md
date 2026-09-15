@@ -250,6 +250,28 @@ passing every threshold *while* the box was at load 104 is the stronger of the t
 `perf:load --compare` should be re-run on a quiet machine before the wave is signed off; nothing in
 wave 5 touches the search path, so it is a confirmation rather than an open question.
 
+### `perf:load --compare`, merged tree (re-run on a quieter machine, 2026-09-15)
+
+Run by the wave-3 session on the merged main at 72a5ca8 (wave 5 + the post-pilot lanes) once the
+other stacks were down: load average ≈ 5 at start, 5,000 documents / 46,000 steps seeded by the
+script, 20 concurrent clients, 60 s per phase, A B B A over the two configurations. The machine
+still hosts several other Claude sessions and Docker Desktop, so absolute numbers remain the
+weakest evidence; the *ratio* between the two configurations in one process is the point.
+
+| configuration | requests | req/s | p50 ms | p95 ms | p99 ms |
+|---|---|---|---|---|---|
+| legacy (pre-V6 `string_agg` `or`) | 1,621 | 13 | 1,553 | 2,619 | 3,194 |
+| current (union + stopword drop) | 7,437 | 62 | 283 | 648 | 1,124 |
+
+Per class, current: single p95 619 · two-word 732 · prefix 597 · stopword 874 · world-filtered 490.
+
+Reading: the two `repo.ts` changes are a 4.7× throughput gain and a 4× p95 gain, exactly the shape
+`docs/perf.md` predicted from the buffer counts. The §11 budget (p95 < 500 ms) is met by one class
+and missed by four on this machine; the search lane's best single-process run on the same code
+shape reached 481 ms, so the remaining gap is within the machine's own variance and the sign-off
+question is what a quiet VM shows, not whether the fix works. `perf-load` exits 1 on the budget by
+design; that verdict is recorded here rather than hidden behind a threshold change.
+
 ### One defect found and fixed during the gate
 
 `learning_items.description` is rendered with `dangerouslySetInnerHTML` (`ItemPreview.tsx`) and the
