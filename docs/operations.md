@@ -159,21 +159,22 @@ To upgrade:
    `ollama` volume (progress: `docker compose logs -f ollama-pull`). The old model stays
    available until you prune it.
 
-   **This pulls `MODEL_NAME` and nothing else.** `deploy/docker-compose.yml`'s `ollama-pull`
-   service passes only `MODEL_NAME` into `deploy/ollama-pull.sh`, so a changed `EMBED_MODEL` is
-   never fetched by this step — pull that one directly, and check both are there:
+   **This pulls whichever of the two changed**, `MODEL_NAME` or `EMBED_MODEL`: the service is
+   handed both and skips every tag already in the volume, so re-running it after any `.env` edit
+   is the whole procedure. Its last line names what the volume now holds
+   (`model ready: <tag> <tag>`), and `docker compose -f deploy/docker-compose.yml exec ollama
+   ollama list` shows it directly.
 
-   ```bash
-   docker compose -f deploy/docker-compose.yml exec ollama ollama pull <new-embed-tag>
-   docker compose -f deploy/docker-compose.yml exec ollama ollama list
-   ```
-
-   An `EMBED_MODEL` tag that was never pulled does not fail anything: `GET /system/health` still
-   answers `model:true` (it only looks for `MODEL_NAME`), and search quietly drops to lexical
-   ranking. `ollama list` is the only place it shows.
+   It used to pull `MODEL_NAME` alone — compose did not pass `EMBED_MODEL` in at all — so on a
+   stack installed before that fix the embedding tag is missing however many times this step was
+   run. Nothing announced it: `GET /system/health` answers `model:true` (it looks at `MODEL_NAME`
+   only), no log line mentions it, and search quietly drops to lexical ranking. Run this step once
+   after upgrading and `deploy/smoke.sh` will confirm both tags.
 3. `docker compose -f deploy/docker-compose.yml up -d api` — the API picks up the new
    `MODEL_NAME`/`EMBED_MODEL` on restart (`app.model`, `plugins/model.ts`).
-4. Confirm: `GET /api/v1/admin/system` → `modelName` reflects the new tag, `model: true`.
+4. Confirm: `GET /api/v1/admin/system` → `modelName` reflects the new tag, `model: true`; and
+   `deploy/smoke.sh https://<host>` → `model ok` for `MODEL_NAME` and `embed ok` for `EMBED_MODEL`.
+   Health reports only the first of the two, which is why the embedding tag is checked there.
 5. **If `EMBED_MODEL` changed**, every stored `documents.embedding` was computed with the old
    model and is no longer comparable to new query embeddings. Rebuild them: trigger the
    `search.reindex` job (its schedule, or `POST` the job manually if your ops tooling exposes

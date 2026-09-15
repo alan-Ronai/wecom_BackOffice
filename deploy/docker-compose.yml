@@ -20,7 +20,14 @@ services:
   ollama-pull:
     image: ollama/ollama:latest
     entrypoint: ["/bin/bash", "/ollama-pull.sh"]
-    environment: { OLLAMA_HOST: "http://ollama:11434", MODEL_NAME: "${MODEL_NAME}" }
+    # EMBED_MODEL as well as MODEL_NAME (W-3). It used to pass only the generation tag, so the
+    # embedding model deploy/.env.example configures was never pulled on any install and search
+    # silently ranked lexically for ever. `:-` because an empty value is a real configuration
+    # (no embedding model) and must not become an interpolation error.
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+      MODEL_NAME: "${MODEL_NAME}"
+      EMBED_MODEL: "${EMBED_MODEL:-}"
     volumes: ["./ollama-pull.sh:/ollama-pull.sh:ro"]
     depends_on: { ollama: { condition: service_healthy } }
     restart: "no"

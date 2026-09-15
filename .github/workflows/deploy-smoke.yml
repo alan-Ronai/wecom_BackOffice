@@ -95,10 +95,30 @@ jobs:
           code=$(docker inspect -f '{{.State.ExitCode}}' "$id")
           test "$code" = "0" || { echo "ollama-pull exited $code"; exit 1; }
 
-      # No SMOKE_REQUIRE_MODEL=false: the CI stack pulls a real (small) model, so this asserts the
+      # W-3: both tags, from the horse's mouth. deploy/ci.env configures a MODEL_NAME *and* a
+      # different EMBED_MODEL for exactly this — the walkthrough found a documented clean install
+      # finishing with one tag in `ollama list`, no error anywhere, and search permanently demoted
+      # to lexical ranking. `ollama-pull` exiting 0 was true of that install too, so the exit code
+      # above is not the assertion; this is. deploy/smoke.sh repeats it from the outside.
+      - name: both configured model tags are pulled
+        run: |
+          set -euo pipefail
+          compose() { docker compose --env-file deploy/ci.env -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml "$@"; }
+          list=$(compose exec -T ollama ollama list)
+          echo "$list"
+          for var in MODEL_NAME EMBED_MODEL; do
+            tag=$(sed -n "s/^$var=//p" deploy/ci.env | tail -1)
+            test -n "$tag" || { echo "deploy/ci.env sets no $var — W-3's coverage depends on both"; exit 1; }
+            printf '%s\n' "$list" | awk 'NR>1{print $1}' | grep -Fxq "$tag" || {
+              echo "$var='$tag' is not in \`ollama list\` — deploy/ollama-pull.sh did not pull it"
+              exit 1
+            }
+          done
+
+      # No SMOKE_REQUIRE_MODEL=false: the CI stack pulls real (small) models, so this asserts the
       # same thing an operator's run on the VM does — db reachable, the configured MODEL_NAME tag
-      # actually present, a request id on the response, the SPA served, and the O-1 security
-      # headers on `GET /`.
+      # actually present, EMBED_MODEL present too (W-3), a request id on the response, the SPA
+      # served, and the O-1 security headers on `GET /`.
       - name: smoke
         id: smoke
         run: deploy/smoke.sh https://localhost:8443

@@ -15,16 +15,19 @@ command you run *outside* compose will use), and `MODEL_NAME`/`EMBED_MODEL` if y
 the shipped tags.
 4. TLS: place `cert.pem` and `key.pem` in `deploy/certs/` (see "TLS certificate").
 5. Start: `docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build`.
-   First start pulls the model (~2 GB, 5–20 min on the LAN); progress: `docker compose -f deploy/docker-compose.yml logs -f ollama-pull`.
-   The `ollama-pull` service pulls **`MODEL_NAME` only** — compose does not pass it `EMBED_MODEL`
-   at all. The search re-rank model (`nomic-embed-text` by default) is therefore never pulled by
-   any step on this page, and step 6 does not check it, so pull it once by hand:
+   First start pulls the models (~2 GB, 5–20 min on the LAN); progress: `docker compose -f deploy/docker-compose.yml logs -f ollama-pull`.
+   The `ollama-pull` service pulls **both tags your `.env` names** — `MODEL_NAME` (chat and
+   suggestions) and `EMBED_MODEL` (the search vector re-rank, `nomic-embed-text` by default). It
+   skips either one that is already in the volume, and does nothing extra when the two are the same
+   tag or `EMBED_MODEL` is empty, so it is safe to re-run. Nothing here needs doing by hand; the
+   service's last line names what it ended up with (`model ready: <tag> <tag>`), and
    ```bash
-   docker compose -f deploy/docker-compose.yml exec ollama ollama pull nomic-embed-text
+   docker compose -f deploy/docker-compose.yml exec ollama ollama list
    ```
-   Skip it and nothing fails: search silently falls back to lexical ranking, with no error in the
-   logs and `model:true` in health. `docker compose -f deploy/docker-compose.yml exec ollama
-   ollama list` is what tells you both tags are actually there.
+   shows the volume's contents directly. (Before this, only `MODEL_NAME` was pulled: the embedding
+   model was missing on every install, nothing reported it, and search quietly ranked lexically.
+   An existing stack picks the missing tag up with `docker compose -f deploy/docker-compose.yml up
+   -d ollama-pull`.)
 6. Verify: `deploy/smoke.sh https://<PUBLIC_URL host>` prints `smoke passed`. The argument is a
    whole origin, so include the port if you changed `WEB_HTTPS_PORT` away from 443
    (`deploy/smoke.sh https://kb.wecom.local:9443`). Run it from the repository root: the script
@@ -32,8 +35,13 @@ the shipped tags.
    The check waits for the database **and** for the exact `MODEL_NAME` tag to appear in Ollama's
    `ollama list` — not merely for Ollama to answer — so a mistyped `MODEL_NAME` fails here
    (`waiting for the model tag '<tag>' to be pulled`) instead of at the first suggestion job. It
-   also asserts the five security response headers on `GET /`. Run it with
-   `SMOKE_REQUIRE_MODEL=false deploy/smoke.sh …` if you are deliberately running without a model.
+   then asserts your `EMBED_MODEL` is pulled as well, which health does not report: a mistyped
+   embedding tag costs you vector re-ranking with no error anywhere, so this is the only place it
+   surfaces. That one is asked of Ollama through `docker compose … exec ollama ollama list`
+   (Ollama has no published port); run from a host without docker it prints a "not verified" note
+   and carries on rather than failing. It also asserts the five security response headers on
+   `GET /`. Run it with `SMOKE_REQUIRE_MODEL=false deploy/smoke.sh …` if you are deliberately
+   running without a model, or `SMOKE_REQUIRE_EMBED=false` for the embedding check alone.
 7. Create the break-glass admin. There is no `--password` flag: `pnpm` echoes the resolved command
    line, so a password given there lands in the terminal transcript and in your shell history
    (acceptance review O-6). Either answer the prompt on a terminal —
