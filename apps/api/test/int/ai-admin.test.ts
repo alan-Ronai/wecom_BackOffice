@@ -5,6 +5,7 @@ import { makeUser, auth } from '../helpers/fixtures.js';
 import { buildApp } from '../../src/app.js';
 import fakeAuth from '../helpers/fakeAuth.js';
 import { runEvalJob } from '../../src/jobs/ai.js';
+import { PROMPT_FAMILY } from '../../src/lib/aiSettings.js';
 
 /**
  * Wave 6 (X1), spec §4.1. The admin surface for the model: the brief and the slots, a per-slot
@@ -99,7 +100,7 @@ run('admin AI routes', () => {
     expect(pending.statusCode).toBe(200);
     const runId = pending.json().items[0].id as string;
     expect(pending.json().items[0]).toMatchObject({ model: 'rules', finishedAt: null, cases: 0 });
-    expect(pending.json().items[0].promptVersion).toMatch(/^v3\./);
+    expect(pending.json().items[0].promptVersion).toMatch(new RegExp(`^${PROMPT_FAMILY}\\.`));
 
     // pg-boss is disabled in tests, so the worker body is driven directly.
     await runEvalJob(app, { runId, useRules: true });

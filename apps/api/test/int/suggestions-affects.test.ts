@@ -7,6 +7,7 @@ import { contentStub, seedUser, seedBlock, seedDocument, seedField } from '../he
 import { buildDocx } from '../sources/fixtures/docx-builder.js';
 import { buildApp } from '../../src/app.js';
 import { setContentApi } from '../../src/modules/sources/content-api.js';
+import { PROMPT_FAMILY } from '../../src/lib/aiSettings.js';
 
 /**
  * Wave 6 (X1), spec §1.6/§1.9. Through the real pipeline and the real routes: every suggestion
@@ -152,9 +153,10 @@ run('suggestions carry affects, prompt version and model', () => {
           )
         ).rows;
         expect(rows.length).toBeGreaterThan(0);
-        // `currentPromptVersion` — v3 plus the brief/style versions an admin has saved (0 here).
+        // `currentPromptVersion` — the prompt family (`propose-v4` → `v4`) plus the brief/style
+        // versions an admin has saved (0 here). Derived, so a v5 prompt moves this with it.
         for (const r of rows) {
-          expect(r.prompt_version).toMatch(/^v3\./);
+          expect(r.prompt_version).toMatch(new RegExp(`^${PROMPT_FAMILY}\\.`));
           expect(r.model).toBe('rules');
         }
         const blockRow = rows.find((r) => r.type === 'update-block');
@@ -169,7 +171,7 @@ run('suggestions carry affects, prompt version and model', () => {
         });
         expect(list.statusCode).toBe(200);
         const item = list.json().items.find((i: { type: string }) => i.type === 'update-block');
-        expect(item.promptVersion).toMatch(/^v3\./);
+        expect(item.promptVersion).toMatch(new RegExp(`^${PROMPT_FAMILY}\\.`));
         expect(item.model).toBe('rules');
         expect(item.affects.some((a: { kind: string }) => a.kind === 'block')).toBe(true);
 

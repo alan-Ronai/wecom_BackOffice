@@ -103,7 +103,7 @@ export async function getAiSettings(q: Queryable, slots?: ModelSlots): Promise<A
  * the fix wave shipped `propose-v4` and every suggestion kept recording provenance for a prompt
  * that no longer runs, which is exactly the question the stamp exists to answer.
  */
-const PROMPT_FAMILY = PROMPT_VERSION.slice(PROMPT_VERSION.lastIndexOf('-') + 1);
+export const PROMPT_FAMILY = PROMPT_VERSION.slice(PROMPT_VERSION.lastIndexOf('-') + 1);
 
 /**
  * The prompt version every suggestion and every message records: `v4.<brief>.<style>`.

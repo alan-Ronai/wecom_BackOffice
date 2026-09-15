@@ -190,6 +190,27 @@ metric, and its weaknesses (overlap, code-switching) are quality rather than cor
 `--out` file records the offending words per case, so the language column is actionable on the VM
 without re-reading raw output by hand.
 
+## Merged gate
+
+Run on `wave6/gate`, cut from `wave6/integration` with `main` already an ancestor. The numbers in
+the fix-wave tables above are per-lane; these are the whole wave on one tree.
+
+### Prompt provenance now tracks the prompt
+
+`currentPromptVersion` stamped the literal `v3.<brief>.<style>` onto every suggestion and every
+chat message, and had done so since the fix wave shipped `propose-v4`: the one field whose job is
+to answer "which prompt produced this row" was naming a prompt that no longer runs. The prefix is
+now derived from `PROMPT_VERSION` in `@wecom/model` (`propose-v4` → `v4`), exported as
+`PROMPT_FAMILY`, so a future `propose-v5` restamps without anyone remembering a literal.
+
+Three places moved with it: the unit test's expectation, the two integration assertions
+(`ai-admin`, `suggestions-affects`, both of which matched `/^v3\./` and now match the derived
+family), and `apps/web/src/lib/promptPreview.ts` — the admin preview's mirror of the same string,
+which the web bundle has to spell out because it does not depend on `@wecom/model`. Without the
+last one the settings screen would show an admin a version that appears in no row they can look
+up. Rows written before this change keep their `v3.*` stamp; nothing rewrites history, and the
+analytics breakdown by prompt version is the place the cutover is visible.
+
 ## Gates
 
 | Gate | Result |
