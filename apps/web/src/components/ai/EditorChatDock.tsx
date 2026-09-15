@@ -2,6 +2,8 @@ import { useCallback, useEffect, useId, useState } from 'react';
 import { useCan } from '../../api/hooks/me.js';
 import { ChatPane } from './ChatPane.js';
 
+import type { ProposedEdits } from '@wecom/shared';
+
 /** What the `draft_step` tool hands back — the shape the editor's add-step action consumes. */
 export interface DraftStep {
   title: string;
@@ -34,7 +36,8 @@ export function EditorChatDock({
   stepKey?: string;
   stepIndex?: Record<string, string>;
   onInsertStep?: (step: DraftStep) => void;
-  onProposedEdits?: (proposedEditsId: string) => void;
+  /** X6: X4a's real `ChatPane` hands back the whole `ProposedEdits`, not only its id. */
+  onProposedEdits?: (pe: ProposedEdits) => void;
   defaultOpen?: boolean;
 }) {
   const can = useCan();

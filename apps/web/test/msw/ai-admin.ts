@@ -283,9 +283,15 @@ export const aiAdminHandlers: RequestHandler[] = [
     aiAdminState.deleted.push(String(params.id));
     return new HttpResponse(null, { status: 204 });
   }),
+  /*
+   * X6: X4a's `ai-handlers.ts` group stubs the same path for the chat panes' own conversations.
+   * This resolver answers only for the ids this group seeded and returns `undefined` otherwise,
+   * which msw 2 treats as "try the next handler" — so both lanes keep their fixtures.
+   */
   http.get(`${B}/ai/conversations/:id`, ({ params }) => {
     const c = aiAdminState.conversations.find((x) => x.id === params.id);
-    if (!c || aiAdminState.deleted.includes(c.id))
+    if (!c) return undefined;
+    if (aiAdminState.deleted.includes(c.id))
       return HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
     return HttpResponse.json({ conversation: c, messages: aiAdminState.messages[c.id] ?? [] });
   }),

@@ -15,7 +15,6 @@ import type {
   ProposedEdits,
   StructuredEdit,
   Suggestion,
-  SuggestionAnalytics,
 } from '@wecom/shared';
 import { fx } from './fixtures.js';
 
@@ -135,16 +134,6 @@ export const suggestionWithAffects = (): Suggestion => ({
   model: 'dictalm2.0-instruct:7b-q4_K_M',
   editDiff: null,
   appliedParts: null,
-});
-
-const sampleAnalytics = (): SuggestionAnalytics => ({
-  total: 4,
-  byType: [{ key: 'update-step', total: 4, accepted: 2, edited: 1, rejected: 1, pending: 0 }],
-  bySource: [],
-  byModel: [],
-  byPromptVersion: [],
-  rates: { accepted: 0.5, edited: 0.25, rejected: 0.25 },
-  meanMinutesToDecision: 12,
 });
 
 interface AiState {
@@ -304,8 +293,12 @@ export const aiHandlers: RequestHandler[] = [
     pe.resultingSourceVersion = none ? null : pe.baseSourceVersion + 1;
     return HttpResponse.json({ status: pe.status, resultingSourceVersion: pe.resultingSourceVersion });
   }),
-  // Before `/suggestions/:id`, or the analytics path would load as a suggestion id.
-  http.get(`${B}/suggestions/analytics`, () => HttpResponse.json(sampleAnalytics())),
+  /*
+   * X6: `/suggestions/analytics` is stubbed once, by X4b's `ai-admin.ts` group — it is registered
+   * before this one and records the query the admin tab asks with. This lane's own fixture stays
+   * as the shape the route answers, but the path is not re-registered here: two handlers on one
+   * path meant whichever group came first silently decided the numbers for both lanes' tests.
+   */
   http.get(`${B}/suggestions/:id`, ({ params }) => {
     const s = aiState.suggestions.find((x) => x.id === params.id);
     if (s) return HttpResponse.json(s);

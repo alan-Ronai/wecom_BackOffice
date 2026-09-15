@@ -15,6 +15,7 @@ import {
   useSuggestionAnalytics,
 } from '../../src/api/hooks/suggestionsEdit.js';
 import { aiState, resetAiState, CONV_1, PE_1, SUG_AFFECTS, DOC_1, MSG_2 } from '../msw/ai-handlers.js';
+import { sampleAnalytics } from '../msw/ai-admin.js';
 
 const wrap = () => {
   const qc = new QueryClient({
@@ -141,6 +142,7 @@ describe('wave 6 X4a hooks', () => {
   it('the analytics query parses against the contract', async () => {
     const { wrapper } = wrap();
     const h = renderHook(() => useSuggestionAnalytics({}), { wrapper });
-    await waitFor(() => expect(h.result.current.data?.total).toBe(4));
+    // X6: one `/suggestions/analytics` stub for both lanes — X4b's `ai-admin.ts` fixture.
+    await waitFor(() => expect(h.result.current.data?.total).toBe(sampleAnalytics().total));
   });
 });
