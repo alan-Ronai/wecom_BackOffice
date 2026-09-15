@@ -180,7 +180,9 @@ run('sources & suggestions routes', () => {
         const edited = await app.inject({
           method: 'PUT',
           url: `/api/v1/suggestions/${s1.id}/edit`,
-          payload: { structuredEdit: { type: 'update-step', rows: [{ rowId: 'add-0', op: 'edit', value: 'א!' }] } },
+          payload: {
+            structuredEdit: { type: 'update-step', rows: [{ rowId: 'add-0', op: 'edit', value: 'א!' }] },
+          },
         });
         expect(edited.statusCode).toBe(200);
         expect(edited.json().editDiff.rows[0].rowId).toBe('add-0');
@@ -261,9 +263,9 @@ run('sources & suggestions routes', () => {
           testUser: { id: uid, displayName: 'נציג', permissions: ['docs.read'] },
         });
         expect((await app.inject({ method: 'GET', url: '/api/v1/suggestions' })).statusCode).toBe(403);
-        expect(
-          (await app.inject({ method: 'GET', url: '/api/v1/suggestions/analytics' })).statusCode,
-        ).toBe(403);
+        expect((await app.inject({ method: 'GET', url: '/api/v1/suggestions/analytics' })).statusCode).toBe(
+          403,
+        );
         expect((await app.inject({ method: 'GET', url: '/api/v1/sources' })).statusCode).toBe(200);
         await app.close();
       }),

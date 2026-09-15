@@ -285,8 +285,9 @@ run('SuggestionService', () => {
     async () =>
       withDb(async (pool) => {
         const uid = await seedUser(pool, { displayName: 'ענבר ל.' });
-        const src = (await pool.query(`insert into sources(kind, title) values ('docx','נהלים') returning id`))
-          .rows[0].id as string;
+        const src = (
+          await pool.query(`insert into sources(kind, title) values ('docx','נהלים') returning id`)
+        ).rows[0].id as string;
         const rev = (
           await pool.query(
             `insert into source_revisions(source_id, hash, paragraphs) values ($1,'h1','[]') returning id`,
@@ -359,8 +360,9 @@ run('SuggestionService', () => {
     async () =>
       withDb(async (pool) => {
         const uid = await seedUser(pool, { displayName: 'ענבר ל.' });
-        const src = (await pool.query(`insert into sources(kind, title) values ('docx','נהלים') returning id`))
-          .rows[0].id as string;
+        const src = (
+          await pool.query(`insert into sources(kind, title) values ('docx','נהלים') returning id`)
+        ).rows[0].id as string;
         const rev = (
           await pool.query(
             `insert into source_revisions(source_id, hash, paragraphs) values ($1,'h2','[]') returning id`,

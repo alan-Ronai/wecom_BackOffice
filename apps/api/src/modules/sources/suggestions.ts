@@ -282,7 +282,8 @@ export class SuggestionService {
       applied = applyStructuredEdit(cur.payload, edit);
     } catch (e) {
       const m = (e as Error).message;
-      if (/unknown row/.test(m)) throw httpErr(400, 'UNKNOWN_ROW', 'שורה לא מוכרת בהצעה: ' + m.split(': ')[1]);
+      if (/unknown row/.test(m))
+        throw httpErr(400, 'UNKNOWN_ROW', 'שורה לא מוכרת בהצעה: ' + m.split(': ')[1]);
       if (/required row/.test(m)) throw httpErr(400, 'REQUIRED_ROW', 'לא ניתן להסיר שורת חובה');
       if (/at least one action/.test(m))
         throw httpErr(400, 'REQUIRED_ROW', 'שלב חדש חייב לכלול לפחות הוראה אחת');

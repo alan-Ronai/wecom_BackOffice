@@ -44,7 +44,12 @@ export async function suggestionAnalytics(
   q: Queryable,
   query: SuggestionAnalyticsQuery,
 ): Promise<SuggestionAnalytics> {
-  const key = JSON.stringify([query.from ?? null, query.to ?? null, query.sourceId ?? null, query.type ?? null]);
+  const key = JSON.stringify([
+    query.from ?? null,
+    query.to ?? null,
+    query.sourceId ?? null,
+    query.type ?? null,
+  ]);
   const hit = cache.get(key);
   if (hit) return hit;
 
