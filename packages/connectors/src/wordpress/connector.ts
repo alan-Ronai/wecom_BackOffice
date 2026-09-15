@@ -15,18 +15,30 @@ import { contentHash, htmlToParagraphs, normalizeText } from './html.js';
 import { renderWpHtml } from '../render/wpHtml.js';
 import { assertFresh, verifySignature, WebhookBodySchema } from './webhook.js';
 import { assertAllowedHost, type ConnectorGuards } from '../guards.js';
+import { guardedFetch } from '../fetch.js';
 
 export class WordPressConnector implements Connector<WpConfig> {
   configSchema = WpConfigSchema;
+
+  /**
+   * Every outbound call this connector makes — the REST client's, the media HEAD, the media
+   * GET — goes through this one wrapper, so each *hop* of a redirect is re-checked against the
+   * allowlist rather than only the URL we first asked for (M3). There is deliberately no second
+   * outbound path: the raw `fetch` the caller passed is not kept.
+   */
+  private readonly fetchImpl: typeof fetch;
+
   /**
    * `guards.hostAllowlist` limits where `cfg.baseUrl` may point. Without it every
    * authenticated call is an SSRF primitive against anything the API container
    * can reach; link-local metadata is refused either way.
    */
   constructor(
-    private fetchImpl: typeof fetch = fetch,
+    fetchImpl: typeof fetch = fetch,
     private guards: ConnectorGuards = {},
-  ) {}
+  ) {
+    this.fetchImpl = guardedFetch(fetchImpl, guards.hostAllowlist);
+  }
 
   protected client(cfg: WpConfig): WpClient {
     assertAllowedHost(cfg.baseUrl, this.guards.hostAllowlist);
@@ -210,11 +222,23 @@ export class WordPressConnector implements Connector<WpConfig> {
     const dropped: AbsorbedMedia['dropped'] = [];
     const urls = [...html.matchAll(WordPressConnector.REMOTE_IMG)].map((m) => m[3]!);
     if (!urls.length) return { html, dropped };
+    /**
+     * H2. The credentials exist to read a *private upload off this site*, and the only URL that
+     * can need them is one on this site's own origin. The HTML they are extracted from is written
+     * by WordPress authors, so before this an `<img src="https://evil/x.png">` in any post handed
+     * the site's application password — full REST API access, the whole library's worth — to
+     * whoever hosts `evil`, on the next sync, silently. With a permissive
+     * `CONNECTOR_HOST_ALLOWLIST` (`*`, or the empty value production forbids) nothing else stood
+     * in the way. Compare origins, not hosts: a credential minted for `https://wp` is not for
+     * `http://wp` either.
+     */
+    const baseOrigin = new URL(cfg.baseUrl).origin;
     const headers = this.client(cfg).mediaHeaders();
     for (const url of new Set(urls)) {
       try {
         assertAllowedHost(url, this.guards.hostAllowlist);
-        const res = await this.fetchImpl(url, { headers });
+        const sameSite = new URL(url).origin === baseOrigin;
+        const res = await this.fetchImpl(url, sameSite ? { headers } : {});
         if (!res.ok) throw new WpError(res.status, `WordPress GET media → ${res.status}`);
         const mime = (res.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
         if (!WordPressConnector.EXT[mime]) throw new Error(`unsupported media type: ${mime || 'unknown'}`);

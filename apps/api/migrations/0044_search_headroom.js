@@ -27,11 +27,18 @@
  *      arm to be indexable; and
  *   2. put in place exactly the indexes the proposed `repo.ts` rewrite needs, so that change is
  *      a query-only diff for the owning session with no migration attached. The rewrite turns
- *      each word's predicate into a union of indexable arms over `steps`, `step_actions` and
- *      `blocks`. Without these indexes it is worth nothing; with them, the same two-word
- *      statement goes from 229,404 buffers / 201 ms to 18,736 buffers / 41 ms, and the load
- *      profile's overall p95 from 2,488 ms to 676 ms at 3.5x the throughput. The proposal, the
- *      exact diff and the plans are in the report.
+ *      each word's predicate into a union of indexable arms over `steps` and `step_actions`.
+ *      Without these indexes it is worth nothing; with them, the same two-word statement goes
+ *      from 229,404 buffers / 201 ms to 18,736 buffers / 41 ms, and the load profile's overall
+ *      p95 from 2,488 ms to 676 ms at 3.5x the throughput. The proposal, the exact diff and the
+ *      plans are in the report.
+ *
+ * The `blocks` group is deliberately **not** indexed here (post-pilot M6). Its predicate ORs
+ * `title`, `coalesce(description,'')`, `coalesce(script,'')` and the `block_actions` aggregate,
+ * and this migration's own rule is that a bitmap OR needs *every* arm indexable — so a lone
+ * `blocks_title_trgm` could never be chosen for that predicate. It would have been GIN
+ * maintenance on every blocks write bought for nothing. When the blocks arms are split the way
+ * the steps arms are, they get their indexes in the change that makes them readable.
  *
  * This migration on its own does **not** restore the NFR, and the report says so in those words:
  * measured with the indexes and without the query change, overall p95 was 2,488 ms against a
@@ -61,7 +68,6 @@ const INDEXES = {
   steps_description_trgm: `create index steps_description_trgm on steps using gin ((coalesce(description,'')) gin_trgm_ops)`,
   steps_script_trgm: `create index steps_script_trgm on steps using gin ((coalesce(script,'')) gin_trgm_ops)`,
   step_actions_text_trgm: `create index step_actions_text_trgm on step_actions using gin (text gin_trgm_ops)`,
-  blocks_title_trgm: `create index blocks_title_trgm on blocks using gin (title gin_trgm_ops)`,
 };
 
 exports.up = (pgm) => {
@@ -70,7 +76,6 @@ exports.up = (pgm) => {
   pgm.sql('analyze documents');
   pgm.sql('analyze steps');
   pgm.sql('analyze step_actions');
-  pgm.sql('analyze blocks');
 };
 
 exports.down = (pgm) => {

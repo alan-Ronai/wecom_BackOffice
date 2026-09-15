@@ -57,8 +57,15 @@ the only thing they cannot vary without invalidating the signature, which is why
 That makes the **`nonce` field inside the body** the part that matters, and the header merely its
 visible mirror. Without a body nonce, two saves of the same post inside the same second produce
 byte-identical bodies (`sent_at` has second precision) and the second is refused as a replay.
-A plugin should therefore generate a fresh random `nonce` per delivery, put it in the JSON body
+A plugin must therefore generate a fresh random `nonce` per delivery, put it in the JSON body
 *before* signing, and copy it into `X-KB-Nonce`.
+
+It is part of the request contract: `WebhookBodySchema`
+(`packages/connectors/src/wordpress/webhook.ts`) declares `nonce` as a non-empty string, so a
+plugin that sends it as a number fails validation rather than having the field quietly dropped.
+It is `optional()` in the schema for exactly one reason — the release of grace below has to be a
+real one for sites still running a plugin that predates the field. Anything written against this
+document sends it.
 
 ### Upgrading an old plugin
 

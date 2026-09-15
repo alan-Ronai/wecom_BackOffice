@@ -34,7 +34,13 @@ export default async function routes(app: FastifyInstance) {
       const key = keyOf(user.worldScopes) + (readUnpublished ? '|all' : '|published');
       // The cache is an optimisation, never a dependency: if `system_state` cannot be read the
       // panel is computed rather than refused.
-      let stamp = '';
+      //
+      // L5: `null` means the read failed, and that is not the same as "the stamp is `''`". A
+      // failed read used to leave `stamp = ''` and the snapshot was then written under `''` —
+      // which no later read matches once a stamp exists, so that key was a permanent miss:
+      // every request recomputed the panel and rewrote the same unusable row, for good. Skip
+      // the write instead; the next request whose read succeeds stores a usable one.
+      let stamp: string | null = null;
       try {
         const cached = await readDashboardCache(app.db, key);
         stamp = cached.stamp;
@@ -43,11 +49,12 @@ export default async function routes(app: FastifyInstance) {
         req.log.warn({ err }, 'dashboard cache unreadable; computing');
       }
       const value = await repo.computeDashboard(app.db, user.worldScopes, readUnpublished);
-      try {
-        await writeDashboardCache(app.db, key, stamp, value);
-      } catch (err) {
-        req.log.warn({ err }, 'dashboard cache unwritable');
-      }
+      if (stamp !== null)
+        try {
+          await writeDashboardCache(app.db, key, stamp, value);
+        } catch (err) {
+          req.log.warn({ err }, 'dashboard cache unwritable');
+        }
       return value;
     },
   );

@@ -129,6 +129,45 @@ run('0045 — user_role_worlds (A-M14)', () => {
     await pool.query(`delete from worlds where slug='temp-world'`);
     expect(await slugs()).toEqual(['tech']);
   });
+
+  /**
+   * Post-pilot H3. The mirror trigger joins `worlds`, so a scope naming a world that does not
+   * exist yet produces no row — and `world_scope` is never written again, so it never produces
+   * one. The grant was dead forever while `GET /admin/users` went on echoing it back.
+   */
+  it('re-attaches a waiting scope when the world it names is created later', async () => {
+    await pool.query(`update user_roles set world_scope=$1 where user_id=$2`, [['tech', 'later'], U]);
+    // Nothing to mirror yet: `later` names nothing.
+    expect(await slugs()).toEqual(['tech']);
+    await pool.query(`insert into worlds(slug, name, position) values ('later','מאוחר',98)`);
+    expect(await slugs()).toEqual(['later', 'tech']);
+    // Which is the point: the user can now see the world they were granted.
+    expect((await resolvePermissions(pool, U)).worldScopes).toEqual(['later', 'tech']);
+    await pool.query(`delete from worlds where slug='later'`);
+  });
+
+  const scopeOf = async () =>
+    (await pool.query(`select world_scope from user_roles where user_id=$1`, [U])).rows[0].world_scope;
+
+  /**
+   * Post-pilot M7. The FK cascades the join rows when a world goes, but the array they were
+   * mirrored from stayed — and a slug re-created under the same name then silently restored every
+   * scope that had ever named it, including one an admin had revoked by deleting the world.
+   */
+  it('prunes the array when a world is deleted, so re-creating the slug resurrects nothing', async () => {
+    await pool.query(`insert into worlds(slug, name, position) values ('doomed','נמחק',97)`);
+    await pool.query(`update user_roles set world_scope=$1 where user_id=$2`, [['tech', 'doomed'], U]);
+    expect(await slugs()).toEqual(['doomed', 'tech']);
+
+    await pool.query(`delete from worlds where slug='doomed'`);
+    expect(await slugs()).toEqual(['tech']);
+    // The column agrees with the join table rather than keeping a slug that scopes nothing.
+    expect(await scopeOf()).toEqual(['tech']);
+
+    await pool.query(`insert into worlds(slug, name, position) values ('doomed','נמחק',97)`);
+    expect(await slugs()).toEqual(['tech']);
+    await pool.query(`delete from worlds where slug='doomed'`);
+  });
 });
 
 const asset = (n: number) => `a${n}aaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`;
@@ -180,6 +219,13 @@ run('0045 — asset_refs (B-M15)', () => {
         [href(1)],
       )
     ).rows[0].id;
+    // H1: a version frozen before the migration existed. Its `bodyHtml` is the only thing that
+    // still names this image, and the backfill has to find it.
+    await mkAsset(7);
+    await pool.query(
+      `insert into document_versions(document_id, version, snapshot, label) values ($1, 99, $2, 'legacy')`,
+      [docId, JSON.stringify({ id: docId, title: 'מסמך', bodyHtml: href(7) })],
+    );
     await migrate(c.getConnectionUri(), 'up');
   }, 240000);
 
@@ -259,5 +305,54 @@ run('0045 — asset_refs (B-M15)', () => {
     expect(await refsOf(5)).toEqual([]);
     expect(await gcUnreferencedAssets(pool)).toBe(0);
     expect(await alive(5)).toBe(true);
+  });
+
+  /**
+   * Post-pilot H1. `publishDocument` freezes `bodyHtml` into `document_versions.snapshot` and
+   * `restoreVersion` replays it, so a frozen version is a reference exactly like the live column.
+   * Without this owner an image removed from the current body is unreferenced a day later, gets
+   * collected, and every `<img>` in the version that still names it 404s for good.
+   */
+  it('counts a frozen version snapshot as a reference, so a restore is not a wall of 404s', async () => {
+    await mkAsset(6);
+    await pool.query(
+      `insert into document_versions(document_id, version, snapshot, label)
+         values ($1, 1, $2, 'v1')`,
+      [docId, JSON.stringify({ id: docId, title: 'מסמך', bodyHtml: href(6) })],
+    );
+    expect(await refsOf(6)).toEqual(['document_version']);
+    // The live document never named it, so only the snapshot is holding it — and that is enough.
+    expect(await gcUnreferencedAssets(pool)).toBe(0);
+    expect(await alive(6)).toBe(true);
+
+    // Dropping the version releases it again: nothing references it and nothing is left dangling.
+    await pool.query(`delete from document_versions where document_id=$1 and version=1`, [docId]);
+    expect(await refsOf(6)).toEqual([]);
+    expect(await gcUnreferencedAssets(pool)).toBe(1);
+    expect(await alive(6)).toBe(false);
+  });
+
+  /**
+   * The backfill half of H1: a version frozen before 0045 ran must be found too, or the first
+   * gc pass after the deploy collects everything only old versions still point at.
+   */
+  it('backfills references out of version snapshots written before the migration', async () => {
+    expect(await refsOf(7)).toEqual(['document_version']);
+  });
+
+  /**
+   * Post-pilot L2. Nothing enforces the case of the hex in a `src` that arrives from a connector,
+   * an import or a hand-edited draft, and a lowercase-only capture silently recorded no reference
+   * for an uppercase one — so the gc deleted an image that was plainly on the page.
+   */
+  it('recognises a reference whose uuid is spelled in uppercase hex', async () => {
+    await mkAsset(8);
+    await pool.query(`insert into drafts(user_id, draft_key, payload) values ($1, 'source:upper', $2)`, [
+      userId,
+      JSON.stringify({ html: `<p><img src="/api/v1/assets/${asset(8).toUpperCase()}"></p>` }),
+    ]);
+    expect(await refsOf(8)).toEqual(['draft']);
+    expect(await gcUnreferencedAssets(pool)).toBe(0);
+    expect(await alive(8)).toBe(true);
   });
 });

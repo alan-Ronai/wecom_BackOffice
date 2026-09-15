@@ -74,16 +74,24 @@ connector's `path` must resolve inside `CONNECTOR_FILE_ROOT`. Add the connector 
 
 > **`CONNECTOR_HOST_ALLOWLIST` is now required when `NODE_ENV=production`** — the API refuses to
 > start with it empty, the same way it refuses the development `SESSION_SECRET` (acceptance
-> review §5 / item 18). Write `*` if you genuinely want "any public host": the point is that it is
-> a decision on the record, not a blank line. Leaving it empty used to mean
-> **any reachable host** — including private ranges and loopback. This is deliberate: the KB is
-> a LAN product and the WordPress instance normally *is* on a private address, so the allowlist
-> is the control and not the private-range check (`packages/connectors/src/guards.ts`). The only
-> thing refused unconditionally is link-local/cloud metadata (`169.254.0.0/16`, `fe80::/10`).
-> With the list empty, anyone holding `connectors.manage` can point a connector at
-> `http://127.0.0.1:11434` (the model) or at the database port and read the response back
-> through a source revision. List the hosts this installation may talk to; an entry beginning
-> with `.` matches that domain and its subdomains.
+> review §5 / item 18). The three settings are genuinely different
+> (`packages/connectors/src/guards.ts`):
+>
+> - **empty** — unrestricted: **any reachable host**, private ranges and loopback included. Only
+>   link-local/cloud metadata (`169.254.0.0/16`, `fe80::/10`) is refused, unconditionally. Anyone
+>   holding `connectors.manage` can point a connector at `http://127.0.0.1:11434` (the model) or
+>   at the database port and read the response back through a source revision. This is the
+>   dev/LAN shape, and it is why production refuses to start on it.
+> - **`*`** — any **public** host, and exactly that: loopback, `10/8`, `172.16/12`, `192.168/16`,
+>   carrier-grade NAT (`100.64/10`), `0.0.0.0`, `::1`, `fc00::/7` and `localhost` are all refused
+>   under it. The setting the documentation calls open-but-safe is the one the code implements.
+> - **a list** — exactly those hosts, whatever range they are in; an entry beginning with `.`
+>   matches that domain and its subdomains. The KB is a LAN product and the WordPress instance
+>   normally *is* on a private address, so naming it is how you admit it — an explicit entry
+>   always wins, `*` present or not.
+>
+> The public/non-public test reads IP literals and `localhost`. A DNS name that resolves into
+> private space is admitted under `*`; name the hosts if your deployment needs that closed too.
 >
 > The same list also constrains the admin identity probes — `PUT /admin/identity` and
 > `POST /admin/identity/test` refuse an `issuer` or Palo Alto `host` outside it, on the same

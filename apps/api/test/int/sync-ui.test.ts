@@ -163,6 +163,52 @@ run('stage 5 — connectors & sync UI', () => {
     ).toEqual({ documentId: other, overall: 'unlinked', flagReason: null, links: [] });
   });
 
+  /**
+   * L4. The badge answers to `docs.read` — every agent in the building — because the article
+   * header needs it. That does not extend to the connector's name and type, the URL of the
+   * remote post, or how the connector's last run went: those describe the integration rather
+   * than the article, and `sources.manage` is the permission that gates them everywhere else.
+   */
+  it('hides the connector-operations fields from a caller without sources.manage', async () => {
+    const reader = await buildL6TestApp({
+      pool: db.pool,
+      databaseUrl: db.url,
+      testUser: {
+        id: (await db.pool.query("select id from users where subject='sync-ui'")).rows[0].id,
+        permissions: ['docs.read'],
+      },
+      revisions: memoryRevisions(),
+      documents: sqlDocumentsService(db.pool),
+      enqueue: async () => 'job-reader',
+    });
+    try {
+      const r = await reader.inject({ method: 'GET', url: `/api/v1/documents/${docId}/sync-state` });
+      expect(r.statusCode, r.body).toBe(200);
+      const body = r.json();
+      // The badge itself is intact — that is the whole reason the route is on `docs.read`.
+      expect(body).toMatchObject({ documentId: docId, overall: 'synced', flagReason: null });
+      expect(body.links[0]).toMatchObject({
+        linkId,
+        state: 'synced',
+        connectorName: null,
+        connectorType: null,
+        remoteUrl: null,
+        connectorLastStatus: null,
+        connectorLastRunAt: null,
+      });
+      // …and the version numbers the header compares are still there.
+      expect(typeof body.links[0].currentLocalVersion).toBe('number');
+
+      // The same request from a holder of `sources.manage` is unredacted.
+      expect(
+        (await app.inject({ method: 'GET', url: `/api/v1/documents/${docId}/sync-state` })).json().links[0]
+          .connectorName,
+      ).toBe('אתר תמיכה');
+    } finally {
+      await reader.close();
+    }
+  });
+
   it('no conflict yet → the conflict view is a 404, not an empty three-way', async () => {
     const r = await app.inject({ method: 'GET', url: `/api/v1/sync/links/${linkId}/conflict` });
     expect(r.statusCode).toBe(404);

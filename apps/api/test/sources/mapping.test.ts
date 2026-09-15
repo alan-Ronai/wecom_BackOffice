@@ -143,4 +143,69 @@ run('mapping + proposal context', () => {
       }),
     180000,
   );
+
+  /**
+   * M2. `where not exists` is a check, not a guarantee: it answers out of the statement's own
+   * snapshot, so a concurrent confirm that has inserted but not yet committed is invisible to it.
+   * Since 0037 gave `document_links` its edge-identity unique index the loser of that race is a
+   * 23505 — surfaced to the second editor as a 500 on a mapping that was in fact already made.
+   */
+  it(
+    'confirms a mapping another session is inserting concurrently, instead of raising 23505',
+    async () =>
+      withDb(async (pool) => {
+        const uid = await seedUser(pool, { displayName: 'ענבר ל.' });
+        const src = await pool.query(
+          `insert into sources(kind, title) values ('docx','נהלי תמיכה') returning id`,
+        );
+        const sourceId = src.rows[0].id as string;
+        await seedBlock(pool, block);
+        await seedDocument(pool, doc(sourceId), uid);
+        // The seed anchors the document's steps to the source; this test is about the *first*
+        // confirm of a paragraph, so start from no edges at all.
+        await pool.query('delete from document_links');
+        const pair = [{ ref: '9.1', documentId: D, stepKey: 's8' }];
+
+        /** True once some backend is waiting on a lock — i.e. the insert below has reached the index. */
+        const blocked = async () =>
+          (
+            await pool.query<{ n: number }>(
+              `select count(*)::int n from pg_stat_activity
+                where wait_event_type='Lock' and state='active' and pid <> pg_backend_pid()`,
+            )
+          ).rows[0].n > 0;
+
+        const other = await pool.connect();
+        try {
+          await other.query('begin');
+          // The other editor's confirm, mid-flight: inserted, not yet committed, so it is
+          // invisible to anybody else's `where not exists`.
+          await other.query(
+            `insert into document_links(from_document_id, from_step_key, to_source_id, type, origin)
+             values ($1,$2,$3,'derived_from_source','explicit')`,
+            [D, 's8', sourceId],
+          );
+
+          const mine = new MappingService(pool).confirmMapping(sourceId, pair);
+          for (let i = 0; i < 200 && !(await blocked()); i++) await new Promise((r) => setTimeout(r, 25));
+          await other.query('commit');
+
+          // Before the fix this rejected with 23505 once the other transaction committed.
+          await expect(mine).resolves.toBeUndefined();
+        } finally {
+          other.release();
+        }
+
+        // One edge, as the unique index says there must be.
+        expect(
+          (
+            await pool.query<{ n: number }>(
+              `select count(*)::int n from document_links where to_source_id=$1`,
+              [sourceId],
+            )
+          ).rows[0].n,
+        ).toBe(1);
+      }),
+    180000,
+  );
 });

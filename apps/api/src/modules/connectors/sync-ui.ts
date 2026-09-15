@@ -1,5 +1,5 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { getDocumentSyncState } from './document-sync-state.js';
+import { getDocumentSyncState, redactSyncState } from './document-sync-state.js';
 import { z } from 'zod';
 import {
   ConflictViewSchema,
@@ -208,7 +208,10 @@ const routes: FastifyPluginAsyncZod<SyncUiOptions> = async (app, opts) => {
     },
     async (req) => {
       await assertVisibleDocument(app.db, req.params.id, requireUser(req));
-      return getDocumentSyncState(app.db, req.params.id);
+      const state = await getDocumentSyncState(app.db, req.params.id);
+      // L4: the badge is for everyone who may read the article; the connector's name, type,
+      // remote URL and last-run status are `sources.manage`'s business.
+      return hasPermission(userOf(req), 'sources.manage') ? state : redactSyncState(state);
     },
   );
 

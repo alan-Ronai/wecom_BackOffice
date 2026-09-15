@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { WordPressConnector, WpConfigSchema, contentHash, htmlToParagraphs } from '../src/index.js';
 import type { Document, Block } from '@wecom/shared';
 import { startWpStub, type WpStub } from './helpers/wpStub.js';
@@ -206,6 +208,61 @@ describe('absorbMedia (pull-side rewrite)', () => {
     }));
     expect(absorbed.dropped).toHaveLength(1);
     expect(absorbed.dropped[0].error).toMatch(/host not allowed/);
+  });
+
+  /**
+   * H2. `mediaHeaders()` carries the site's application password — full REST access to the whole
+   * library. The HTML it is applied to is written by WordPress authors, so a single
+   * `<img src="https://evil/x.png">` in any post used to hand that credential to whoever hosts
+   * `evil`, on the next sync, silently. It is only ever needed for a private upload on the site's
+   * own origin.
+   */
+  it('sends the application password to the site itself and to nobody else', async () => {
+    const seen: (string | undefined)[] = [];
+    const third = http.createServer((req, res) => {
+      seen.push(req.headers.authorization);
+      res.writeHead(200, { 'content-type': 'image/png' });
+      res.end(png);
+    });
+    await new Promise<void>((r) => third.listen(0, '127.0.0.1', r));
+    const thirdUrl = `http://127.0.0.1:${(third.address() as AddressInfo).port}/x.png`;
+    const sent: Record<string, string | null> = {};
+    const spy: typeof fetch = (input, init) => {
+      sent[String(input)] = new Headers(init?.headers as HeadersInit | undefined).get('authorization');
+      return fetch(input as string, init);
+    };
+    try {
+      // 127.0.0.1 is allowlisted, so the guard is not what is being tested here.
+      const c = new WordPressConnector(spy, { hostAllowlist: ['127.0.0.1'] });
+      // Give the site an upload of its own, so one call of `absorbMedia` covers both origins.
+      await c.push(cfg(), 'posts:7', {
+        ...doc(),
+        html: `<p><img src="/api/v1/assets/${A}" alt="x"></p>`,
+        assets: async () => ({ bytes: new Uint8Array(png), mime: 'image/png' }),
+      });
+      const ownUrl = /src="([^"]+\/wp-content\/uploads\/[^"]+)"/.exec(
+        stub.posts.get('posts:7')!.content.rendered,
+      )![1];
+
+      let n = 0;
+      const absorbed = await c.absorbMedia(
+        cfg(),
+        `<p><img src="${ownUrl}"></p><p><img src="${thirdUrl}"></p>`,
+        async () => ({ src: `/api/v1/assets/4444444${n++}-4444-4444-8444-444444444444` }),
+      );
+      // Both images are still taken — this is about the credential, not about refusing the fetch.
+      expect(absorbed.dropped).toEqual([]);
+      expect(absorbed.html.match(/\/api\/v1\/assets\//g)).toHaveLength(2);
+
+      const basic = 'Basic ' + Buffer.from('kb:xxxx yyyy').toString('base64');
+      // The site's own upload gets the credential — the reason `mediaHeaders()` exists…
+      expect(sent[ownUrl]).toBe(basic);
+      // …and the third-party host gets nothing, neither from us nor in what it observed.
+      expect(sent[thirdUrl]).toBeNull();
+      expect(seen).toEqual([undefined]);
+    } finally {
+      await new Promise<void>((r) => third.close(() => r()));
+    }
   });
 
   it('reuses a recorded media item instead of re-uploading it (B-I6)', async () => {
