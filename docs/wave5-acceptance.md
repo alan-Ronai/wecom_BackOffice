@@ -26,15 +26,15 @@ Run on `wave5/integration` after the last `main` merge.
 | Gate | Result |
 |---|---|
 | `pnpm -r build`, `pnpm typecheck` | clean |
-| `pnpm --filter @wecom/shared test` | 15 files, 79 tests |
-| `pnpm --filter @wecom/model test` | 5 files, 27 tests |
-| `pnpm --filter @wecom/connectors test` | 7 files, 37 tests |
+| `pnpm --filter @wecom/shared test` | 79 tests |
+| `pnpm --filter @wecom/model test` | 30 tests |
+| `pnpm --filter @wecom/connectors test` | 49 tests |
 | `pnpm --filter @wecom/web test` | 101 files, 698 tests |
-| `RUN_INTEGRATION=1 pnpm --filter @wecom/api test:int` | 98 files, 567 tests |
+| `RUN_INTEGRATION=1 pnpm --filter @wecom/api test:int` | 98 files, 581 tests |
 | `pnpm openapi` + contract test | no diff after regeneration; `route-coverage.test.ts` green (both new routes are named in `wave5-seams.test.ts`) |
 | `pnpm lint` | clean |
-| `pnpm e2e:real` | see the run recorded below |
-| `E2E_OIDC=1 pnpm e2e:real` | see the run recorded below |
+| `pnpm e2e:real` | 14/14 (`E2E_PG_PORT=55534 E2E_API_PORT=3211 E2E_WEB_PORT=4281`) |
+| `E2E_OIDC=1 pnpm e2e:real` | 15/15 (same ports, `E2E_OIDC_PORT=9411`) |
 
 ### Search performance (`docs/perf.md`)
 
@@ -58,7 +58,7 @@ wave can reopen it cheaply.
 
 | Item | Ruling | Cost if wrong |
 |---|---|---|
-| The quiz player can lose a selection when the player payload refetches mid-quiz (the assignment's own notification arrives over SSE). | Left as V4a's to fix; W5-E2E-1 re-ticks until the advance button enables, and the seam test drives the same flow through the API. | An agent mid-quiz loses one answer and re-picks it. Visible, not destructive — the attempt is only submitted at the end. |
+| `GET /learning/items/:id/preview` answers `PlayerQuestionSchema`, which omits `correct`, so a manager previewing a quiz cannot see which option is right. | Kept. The preview exists to show the manager *what the agent will see*; the authoring view (`GET /learning/items/:id`) is where the answers live, and it is one click away in the same screen. | A manager checking answers opens the builder instead of the preview. (This omission cost an hour of W5-E2E-1 debugging — it reads as the player ignoring clicks. The spec now says so in a comment.) |
 | `learning_items.description` is HTML but carries no `asset_refs` trigger. | `RichText … compact` drops the image extension precisely because the learning surface has no asset pipeline, so nothing can reference `/api/v1/assets/…` from there. `briefing_entries.note` and `quiz_questions.*` are plain text. | If a future editor gains an image button on a briefing intro, the weekly gc could collect an image only that intro references. Adding the owner to 0045's `OWNERS` list is a one-line change. |
 | `GET /documents/:id/change-preview` is a second read of the detector rather than a value carried out of the editor's unsaved state. | The dialog opens after the structure is saved, so the server's view and the editor's agree; a preview computed client-side would be a second implementation of §1.5 that could disagree with the one that decides. | One extra request per publish dialog. |
 | The audience picker lists every role, including `admin`. | `GET /learning/audience-options` exposes names and labels only, and an audience of admins is a legitimate (if unusual) choice. | A manager can assign learning to administrators. Harmless; a filter is a one-line change. |

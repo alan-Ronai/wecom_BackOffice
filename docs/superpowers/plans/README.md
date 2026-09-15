@@ -68,3 +68,6 @@ Acceptance: `docs/wave4-acceptance.md` · Merge log: `docs/wave4-merge-log.md`
 | V6 Integration | `2026-09-15-V6-integration.md` | V1–V4b merged | mounts, seams (0042), real e2e flows, whole-wave review, and the three wave-4 follow-ups (F-4, A-4, E-1) |
 
 Run order: V0 alone on `main`; V1–V4b in parallel worktrees branched after V0 lands; V6 last. Shared-file rules and the migration numbers are in V0's contract document.
+
+Wave 5 landed on `wave5/integration`: the merge record is `docs/wave5-merge-log.md` and the
+PRD-bullet-to-test matrix is `docs/wave5-acceptance.md`.
