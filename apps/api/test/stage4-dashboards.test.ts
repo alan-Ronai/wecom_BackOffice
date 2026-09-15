@@ -176,6 +176,62 @@ run('stage 4: dashboards and telemetry', () => {
     ).toBeGreaterThan(0);
   });
 
+  /**
+   * Post-pilot M2. The row the review found useless was `{ kind, at }`: it could say a screen
+   * blanked and never which one or why. `0043` gives the table `path` and `message`, and this is
+   * the round trip — what the boundary posts is what someone reading `telemetry_events` gets
+   * back, on the same row as the document, with everything else still null.
+   */
+  it('stores the route and the message a client_error carries, and leaves them null for the rest', async () => {
+    await db.pool.query(`delete from telemetry_events`);
+    const r = await post('/api/v1/telemetry', {
+      events: [
+        {
+          kind: 'client_error',
+          documentId: docId,
+          path: `/doc/${docId}`,
+          message: 'Cannot read properties of undefined (reading "outcomes")',
+        },
+        // The shell crashed: a route, a message, no document.
+        { kind: 'client_error', path: '/library', message: 'boom' },
+        { kind: 'palette' },
+      ],
+    });
+    expect(r.statusCode).toBe(204);
+    const rows = (
+      await db.pool.query(
+        `select kind, document_id, path, message from telemetry_events order by path nulls last`,
+      )
+    ).rows;
+    expect(rows).toEqual([
+      {
+        kind: 'client_error',
+        document_id: docId,
+        path: `/doc/${docId}`,
+        message: 'Cannot read properties of undefined (reading "outcomes")',
+      },
+      { kind: 'client_error', document_id: null, path: '/library', message: 'boom' },
+      { kind: 'palette', document_id: null, path: null, message: null },
+    ]);
+    await db.pool.query(`delete from telemetry_events`);
+  });
+
+  it("refuses a path or a message past the contract's cap rather than truncating it silently", async () => {
+    expect(
+      (await post('/api/v1/telemetry', { events: [{ kind: 'client_error', path: '/x'.repeat(300) }] }))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (await post('/api/v1/telemetry', { events: [{ kind: 'client_error', message: 'x'.repeat(1001) }] }))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (await post('/api/v1/telemetry', { events: [{ kind: 'client_error', message: 'x'.repeat(1000) }] }))
+        .statusCode,
+    ).toBe(204);
+    await db.pool.query(`delete from telemetry_events`);
+  });
+
   it('rejects an empty or oversized telemetry batch', async () => {
     expect((await post('/api/v1/telemetry', { events: [] })).statusCode).toBe(400);
     expect((await post('/api/v1/telemetry', { events: [{ kind: 'nope' }] })).statusCode).toBe(400);

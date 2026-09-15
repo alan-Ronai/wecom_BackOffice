@@ -14018,6 +14018,14 @@
                         "at": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "path": {
+                          "type": "string",
+                          "maxLength": 512
+                        },
+                        "message": {
+                          "type": "string",
+                          "maxLength": 1000
                         }
                       },
                       "required": [

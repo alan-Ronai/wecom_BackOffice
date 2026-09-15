@@ -253,6 +253,25 @@ export const TelemetryEventSchema = z.object({
   documentId: IdSchema.optional(),
   stepKey: z.string().optional(),
   at: IsoDateSchema.optional(),
+  /**
+   * Post-pilot M2. Appended, never inserted: every field on this object is optional and every
+   * existing emitter keeps sending exactly what it sent before.
+   *
+   * `path` is the route pathname the boundary was mounted at — `/doc/<id>`, `/library` — and only
+   * the pathname: the query string and the hash are where a search term or a scroll anchor would
+   * be, and neither belongs in a table anyone with `analytics.read` can read. 512 is far past any
+   * route this app has, so the cap is a guard against a caller that is not the boundary, not a
+   * limit the boundary will meet.
+   *
+   * `message` is `error.message` and nothing else — never the stack (it names a bundle and helps
+   * nobody reading a dashboard), never anything the user typed. `ui/ErrorBoundary.tsx` redacts
+   * what a thrown message tends to leak by accident (an email, a uuid that is not the
+   * `documentId` already on the row) before it gets here; 1,000 is the cap the column is sized
+   * for, and a longer message is truncated rather than rejected, because the one report that must
+   * never be dropped is the one about the screen that just went blank.
+   */
+  path: z.string().max(512).optional(),
+  message: z.string().max(1000).optional(),
 });
 export const TelemetryBatchSchema = z.object({ events: z.array(TelemetryEventSchema).min(1).max(200) });
 

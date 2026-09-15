@@ -491,7 +491,7 @@ interface Stage4State {
   reimported: string[];
   uploads: string[];
   renames: { name: string; newName: string; updateReferences: boolean; label: string }[];
-  telemetry: { kind: string; documentId?: string }[];
+  telemetry: { kind: string; documentId?: string; path?: string; message?: string }[];
 }
 
 const initial = (): Stage4State => ({

@@ -190,7 +190,16 @@ interface Stage45State {
   templates: Template[];
   reviews: ReturnType<typeof reviews>;
   presence: Record<string, Presence['editors']>;
-  telemetry: { kind: string; documentId?: string; stepKey?: string }[];
+  // M2 appends `path` and `message` to `TelemetryEventSchema`; the log keeps whatever the
+  // contract accepted, so a test can assert on exactly what the boundary sent.
+  telemetry: {
+    kind: string;
+    documentId?: string;
+    stepKey?: string;
+    at?: string;
+    path?: string;
+    message?: string;
+  }[];
   heartbeats: string[];
   bulk: { action: string; ids: string[] }[];
 }
