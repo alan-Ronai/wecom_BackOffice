@@ -4,6 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App.js';
 import { installPreloadErrorReload } from './lib/chunkError.js';
+// Before `app.css`: the `@font-face` rules have to be in the sheet before anything asks for
+// `var(--font)`. Self-hosted — see the module's comment, and walkthrough W-5.
+import './styles/fonts.js';
 import './styles/app.css';
 
 /**

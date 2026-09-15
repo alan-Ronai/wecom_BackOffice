@@ -1005,6 +1005,9 @@ export const health = {
   uptimeSec: 10,
   lastBackupAt: T,
   lastBackupOk: true,
+  // W-9: the tri-state beside the boolean — `never` on a fresh install, `stale` when the last
+  // dump has aged out, `ok` here.
+  backup: { status: 'ok' as const, latestAt: T, ageHours: 8, checkedAt: T },
 };
 
 /* ── Wave 4 — taxonomy (W1) ────────────────────────────────────────────────

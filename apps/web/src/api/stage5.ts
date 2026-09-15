@@ -116,13 +116,16 @@ export type SyncLinkCreate = z.input<typeof SyncLinkCreateBodySchema>;
 /** `configSchema` is a JSON-Schema object; this is the slice the wizard renders. */
 export interface ConfigField {
   key: string;
-  type: 'string' | 'secret' | 'url' | 'array' | 'enum' | 'boolean' | 'number';
+  type: 'string' | 'secret' | 'url' | 'array' | 'enum' | 'boolean' | 'number' | 'map' | 'json';
   title: string;
   description?: string;
   required: boolean;
   enum?: string[];
   default?: unknown;
   placeholder?: string;
+  /** The connector's own `z.string().min(n)` / `z.array(...).min(n)`, re-applied in the form. */
+  minLength?: number;
+  minItems?: number;
 }
 
 /** `POST /connectors` / `PATCH /connectors/:id` — the existing L6 body. */
@@ -279,46 +282,107 @@ export const stage5 = {
 
 /* ── JSON-Schema → form fields ────────────────────────────────────────────── */
 
-interface JsonSchemaProp {
-  type?: string;
-  title?: string;
-  description?: string;
-  format?: string;
-  enum?: unknown[];
-  default?: unknown;
-  writeOnly?: boolean;
-  examples?: unknown[];
-  items?: { type?: string };
-}
+type JsonSchemaProp = ConnectorTypeInfo['configSchema']['properties'][string];
 
 const fieldType = (p: JsonSchemaProp): ConfigField['type'] => {
   if (p.enum?.length) return 'enum';
   if (p.type === 'array') return 'array';
   if (p.type === 'boolean') return 'boolean';
   if (p.type === 'number' || p.type === 'integer') return 'number';
+  // A free-keyed map (`additionalProperties`) is `key = value` rows; an object with a fixed
+  // shape is edited as JSON, because inventing controls for a shape we were not given is how
+  // a form comes to post something the server rejects.
+  if (p.type === 'object') return p.additionalProperties ? 'map' : 'json';
   if (p.writeOnly || p.format === 'password') return 'secret';
-  if (p.format === 'uri' || p.format === 'url') return 'url';
+  if (p.format === 'uri') return 'url';
   return 'string';
 };
 
 /**
- * Flattens a connector type's `configSchema` into the field list the wizard renders. Only the top
- * level is walked — no connector declares a nested config object, and guessing at one would render
- * controls the server would reject.
+ * Flattens a connector type's `configSchema` into the field list the wizard renders.
+ *
+ * Only the top level is walked; a nested object arrives as one `json` field rather than as
+ * guessed-at controls. The `minLength`/`minItems` the API publishes come through so the form can
+ * apply the connector's own rules before posting — see `fieldError`.
  */
-export function configFields(configSchema: Record<string, unknown>): ConfigField[] {
-  const props = (configSchema.properties ?? {}) as Record<string, JsonSchemaProp>;
-  const required = new Set((configSchema.required as string[] | undefined) ?? []);
-  return Object.entries(props).map(([key, p]) => ({
+export function configFields(configSchema: ConnectorTypeInfo['configSchema']): ConfigField[] {
+  const required = new Set(configSchema.required);
+  return Object.entries(configSchema.properties).map(([key, p]) => ({
     key,
     type: fieldType(p),
-    title: p.title ?? key,
+    title: p.title || key,
     description: p.description,
     required: required.has(key),
-    enum: p.enum?.map(String),
+    enum: p.enum,
     default: p.default,
     placeholder: p.examples?.length ? String(p.examples[0]) : undefined,
+    minLength: p.minLength,
+    minItems: p.minItems,
   }));
+}
+
+/** `key = value` per line — how the wizard edits a free-keyed map such as `categoryMap`. */
+export const formatMap = (value: unknown): string =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.entries(value as Record<string, unknown>)
+        .map(([k, v]) => `${k} = ${String(v)}`)
+        .join('\n')
+    : '';
+
+/** The inverse, or `null` when a line is not `key = value`. */
+export function parseMap(text: string): Record<string, string> | null {
+  const out: Record<string, string> = {};
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    const at = line.indexOf('=');
+    if (at < 0) return null;
+    const key = line.slice(0, at).trim();
+    if (!key) return null;
+    out[key] = line.slice(at + 1).trim();
+  }
+  return out;
+}
+
+/** Empty for the purposes of `required`: nothing typed, an empty list, an empty map. */
+const isBlank = (v: unknown): boolean =>
+  v === undefined ||
+  v === null ||
+  v === '' ||
+  (Array.isArray(v) && v.length === 0) ||
+  (typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0);
+
+/**
+ * The connector's own validation, re-applied in the browser.
+ *
+ * The API validates the posted config against the connector's zod schema and answers a 400 whose
+ * body is a `flatten()` of zod issues. Before W-1 the wizard rendered no config fields at all, so
+ * that 400 was the *only* feedback an operator ever got — "הגדרות המחבר אינן תקינות", with
+ * nowhere to type what was missing. These are the same rules as the schema publishes them
+ * (`minLength`, `minItems`, `format: 'uri'`), said beside the field they belong to. The server
+ * still decides: this only stops the obviously-wrong post.
+ */
+export function fieldError(field: ConfigField, value: unknown): string | null {
+  // A masked secret means "the server already holds one"; it satisfies `required` and is not
+  // measured against `minLength`, because it is not the value.
+  if (typeof value === 'string' && value.startsWith(SECRET_MASK)) return null;
+  if (isBlank(value)) return field.required ? 'שדה חובה' : null;
+  // `map`/`json` keep the raw text in state while it does not parse — that is the error.
+  if (field.type === 'map' && typeof value === 'string') return 'כל שורה היא "מפתח = ערך"';
+  if (field.type === 'json' && typeof value === 'string') return 'JSON לא תקין';
+  if (field.type === 'url') {
+    let url: URL | undefined;
+    try {
+      url = new URL(String(value));
+    } catch {
+      /* not a URL at all */
+    }
+    if (!url || !/^https?:$/.test(url.protocol)) return 'כתובת לא תקינה — למשל https://example.com';
+  }
+  if (field.minLength !== undefined && String(value).length < field.minLength)
+    return `לפחות ${field.minLength} תווים`;
+  if (field.minItems !== undefined && Array.isArray(value) && value.length < field.minItems)
+    return `יש להזין לפחות ${field.minItems} ערכים`;
+  return null;
 }
 
 /** A saved secret comes back masked; re-sending the mask would overwrite the real value with it. */

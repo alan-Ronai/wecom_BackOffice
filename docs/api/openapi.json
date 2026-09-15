@@ -69,6 +69,40 @@
                     "lastBackupOk": {
                       "type": "boolean",
                       "nullable": true
+                    },
+                    "backup": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "never",
+                            "ok",
+                            "stale"
+                          ]
+                        },
+                        "latestAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "ageHours": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "checkedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "latestAt",
+                        "ageHours",
+                        "checkedAt"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -80,7 +114,8 @@
                     "version",
                     "uptimeSec",
                     "lastBackupAt",
-                    "lastBackupOk"
+                    "lastBackupOk",
+                    "backup"
                   ],
                   "additionalProperties": false
                 }
@@ -36632,7 +36667,112 @@
                           },
                           "configSchema": {
                             "type": "object",
-                            "additionalProperties": {}
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "object"
+                                ]
+                              },
+                              "properties": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "string",
+                                        "number",
+                                        "integer",
+                                        "boolean",
+                                        "array",
+                                        "object"
+                                      ]
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    },
+                                    "format": {
+                                      "type": "string",
+                                      "enum": [
+                                        "uri",
+                                        "password"
+                                      ]
+                                    },
+                                    "writeOnly": {
+                                      "type": "boolean"
+                                    },
+                                    "enum": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "default": {},
+                                    "minLength": {
+                                      "type": "integer",
+                                      "minimum": 0
+                                    },
+                                    "minItems": {
+                                      "type": "integer",
+                                      "minimum": 0
+                                    },
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "additionalProperties": {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "title"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": {
+                                "type": "boolean",
+                                "enum": [
+                                  false
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "properties",
+                              "required",
+                              "additionalProperties"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [

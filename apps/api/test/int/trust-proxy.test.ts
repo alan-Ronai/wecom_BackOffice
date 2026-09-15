@@ -20,8 +20,8 @@ describe('trustProxySetting', () => {
   it('is required in production, and defaults to false elsewhere', () => {
     const prod = {
       NODE_ENV: 'production',
-      SESSION_SECRET: 'x'.repeat(32),
-      CONNECTOR_KEY: 'ab'.repeat(32),
+      SESSION_SECRET: 'c3f0a91d7be24568af0c1d2e3b4a5968c7d8e9f0a1b2c3d4e5f60718293a4b5c',
+      CONNECTOR_KEY: '0123456789abcdef'.repeat(4),
       CONNECTOR_HOST_ALLOWLIST: 'wp.wecom.local',
     };
     expect(() => cfg(prod)).toThrow(/TRUST_PROXY/);

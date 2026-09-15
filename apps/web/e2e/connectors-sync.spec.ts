@@ -21,10 +21,11 @@ test('the wizard builds its form from the type schema and dry-tests before savin
 
   await expect(page.getByRole('button', { name: 'המשך לבדיקה' })).toBeDisabled();
   await page.getByLabel('כתובת האתר').fill('http://insecure.example');
-  await page.getByLabel('משתמש WordPress').fill('kb-bot');
+  await page.getByLabel('שם משתמש').fill('kb-bot');
   await page.getByLabel('סיסמת אפליקציה').fill('app-pass');
+  await page.getByLabel('סוד ה-webhook').fill('webhook-secret');
   // Schema defaults arrive filled in.
-  await expect(page.getByLabel('סוגי תוכן')).toHaveValue('page, post');
+  await expect(page.getByLabel('סוגי תוכן')).toHaveValue('posts');
   await page.getByRole('button', { name: 'המשך לבדיקה' }).click();
 
   await page.getByRole('button', { name: 'בדוק חיבור' }).click();

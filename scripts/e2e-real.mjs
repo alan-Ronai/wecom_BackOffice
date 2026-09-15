@@ -26,6 +26,7 @@
  *                  is what a deployment with no issuer configured actually does.
  */
 import { spawn, spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
@@ -392,7 +393,9 @@ async function main() {
       // fallback either, in both modes.
       AUTH_FALLBACK: 'none',
       ...oidcEnv,
-      SESSION_SECRET: 'e2e-session-secret-at-least-16-chars',
+      // Generated per run: the production guard refuses placeholders and low-entropy patterns, and
+      // a gate that pins a literal would either fail it or force the guard to stay lax.
+      SESSION_SECRET: randomBytes(32).toString('hex'),
       PUBLIC_URL: WEB_URL,
       // Requests arrive straight from Playwright, not through nginx, so there is no forwarded
       // header to trust — and trusting one here would let a client spoof `req.ip`, which gates
@@ -400,7 +403,7 @@ async function main() {
       // under NODE_ENV=production, so it has to be set off explicitly.
       TRUST_PROXY: 'false',
       // Production refuses the dev defaults for these two, and there is no Ollama in CI.
-      CONNECTOR_KEY: 'a1'.repeat(32),
+      CONNECTOR_KEY: randomBytes(32).toString('hex'),
       MODEL_DISABLED: 'true',
       MIGRATE_ON_START: 'false',
       BACKUP_DIR: '/tmp/wecom-e2e-backups',

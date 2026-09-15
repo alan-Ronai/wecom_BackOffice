@@ -499,6 +499,64 @@ export const RoleMatrixSchema = z.object({
 });
 
 /* ── Stage 5: connectors & sync UI ──────────────────────────────────────── */
+
+/**
+ * One field of a connector's configuration, as the JSON-Schema subset `GET /connectors/types`
+ * publishes it.
+ *
+ * This is deliberately `.strict()` and deliberately not `z.record(z.unknown())`. The wizard at
+ * `/admin/connectors/new` builds its form out of this object; while the contract said only
+ * "some object", the API emitted a bespoke `{type, fields, required}` and the wizard read
+ * `properties` — so it rendered *no* configuration fields at all, for either connector type, and
+ * every create was a 400 with nowhere to type what was missing (walkthrough W-1). Nothing could
+ * see it: not the compiler, not the generated client, not the msw fixture, which was free to
+ * describe a shape no API ever emitted. A closed schema is what makes the fixture and the server
+ * answer to the same description.
+ *
+ * `minLength`/`minItems`/`format` are here because the wizard applies the same validation the
+ * connector's zod schema applies, rather than posting and translating a 400.
+ */
+export const ConnectorConfigPropertySchema = z
+  .object({
+    type: z.enum(['string', 'number', 'integer', 'boolean', 'array', 'object']),
+    /** The label the wizard renders. Falls back to the field name when the connector names none. */
+    title: z.string(),
+    description: z.string().optional(),
+    /** `uri` renders an LTR url input; `password` a masked one (always with `writeOnly`). */
+    format: z.enum(['uri', 'password']).optional(),
+    /** A secret: the server never echoes a stored value back, so the form must not expect one. */
+    writeOnly: z.boolean().optional(),
+    enum: z.array(z.string()).optional(),
+    default: z.unknown().optional(),
+    examples: z.array(z.string()).optional(),
+    minLength: z.number().int().nonnegative().optional(),
+    minItems: z.number().int().nonnegative().optional(),
+    /** `type: 'array'` — the element type. */
+    items: z.object({ type: z.string() }).optional(),
+    /**
+     * `type: 'object'` — present for a free-keyed map (`categoryMap`), which the wizard edits as
+     * `key = value` rows; absent for an object with a fixed shape, which it edits as JSON.
+     */
+    additionalProperties: z.object({ type: z.string() }).optional(),
+  })
+  .strict();
+
+/**
+ * A connector's whole configuration, as JSON Schema.
+ *
+ * `additionalProperties: false` is part of the contract rather than decoration: the connector's
+ * zod object strips keys it does not declare, so a key the wizard invented would be accepted and
+ * silently dropped. Saying so closes the form to exactly the declared fields.
+ */
+export const ConnectorConfigSchemaSchema = z
+  .object({
+    type: z.literal('object'),
+    properties: z.record(ConnectorConfigPropertySchema),
+    required: z.array(z.string()),
+    additionalProperties: z.literal(false),
+  })
+  .strict();
+
 export const ConnectorTypeInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -508,7 +566,7 @@ export const ConnectorTypeInfoSchema = z.object({
     webhooks: z.boolean(),
     identity: z.boolean(),
   }),
-  configSchema: z.record(z.unknown()),
+  configSchema: ConnectorConfigSchemaSchema,
 });
 export const ConnectorRowSchema = z.object({
   id: IdSchema,
@@ -627,6 +685,8 @@ export type AdminSessionRow = z.infer<typeof AdminSessionRowSchema>;
 export type AuditEntryDetail = z.infer<typeof AuditEntryDetailSchema>;
 export type RoleMatrix = z.infer<typeof RoleMatrixSchema>;
 export type ConnectorRow = z.infer<typeof ConnectorRowSchema>;
+export type ConnectorConfigProperty = z.infer<typeof ConnectorConfigPropertySchema>;
+export type ConnectorConfigSchema = z.infer<typeof ConnectorConfigSchemaSchema>;
 export type SyncLinkRow = z.infer<typeof SyncLinkRowSchema>;
 export type ConflictView = z.infer<typeof ConflictViewSchema>;
 export type Comment = z.infer<typeof CommentSchema>;
