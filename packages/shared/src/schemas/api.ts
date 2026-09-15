@@ -26,7 +26,7 @@ import {
 import { DocTypeSchema, TaxonomyFilterSchema, WorldSlugSchema } from './wave4.js';
 // `wave5.ts` imports only `common.js`/`content.js`, so this direction introduces no cycle.
 import { ChangeFlagSchema } from './wave5.js';
-import { SuggestionPayloadSchema } from './pipeline.js';
+import { StructuredEditSchema, SuggestionPayloadSchema } from './pipeline.js';
 import { PermissionSchema, PreferencesSchema } from './identity.js';
 
 const bool = z.union([z.boolean(), z.enum(['true', 'false']).transform((v) => v === 'true')]);
@@ -201,7 +201,21 @@ export const UpsertScriptBodySchema = z.object({
   tags: z.array(z.string()).default([]),
 });
 
-export const SuggestionDecisionBodySchema = z.object({ editedPayload: SuggestionPayloadSchema.optional() });
+/**
+ * `PUT /suggestions/:id/edit` takes either shape (spec §4.2 names the route `PATCH`; the live
+ * route the web already calls is `PUT`, and X3 widened its body rather than adding a second
+ * route). `editedPayload` replaces the whole payload; `structuredEdit` carries one verdict per
+ * row and the server derives both the new payload and the stored diff from it. Exactly one —
+ * a body with both is a client that does not know which one it means.
+ */
+export const SuggestionDecisionBodySchema = z
+  .object({
+    editedPayload: SuggestionPayloadSchema.optional(),
+    structuredEdit: StructuredEditSchema.optional(),
+  })
+  .refine((b) => (b.editedPayload ? 1 : 0) + (b.structuredEdit ? 1 : 0) === 1, {
+    message: 'exactly one of editedPayload / structuredEdit',
+  });
 export const SuggestionsQuerySchema = PaginationQuerySchema.extend({
   status: z.enum(['pending', 'accepted', 'rejected', 'applied']).optional(),
   sourceId: IdSchema.optional(),
