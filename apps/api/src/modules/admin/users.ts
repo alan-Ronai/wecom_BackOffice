@@ -18,6 +18,34 @@ import { initials as initialsOf } from '../auth/identity.js';
 const UserWithRoles = UserSchema.extend({ roles: z.array(UserRoleSchema) });
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 
+/** What a grant carries on both write routes: a role and the worlds it is scoped to. */
+type RoleGrant = { roleId: string; categoryScope: string[] | null };
+
+/**
+ * Post-pilot H3. `categoryScope` is a list of world slugs and `CategorySchema` only checks their
+ * *shape*, so `['finanace']` was accepted, written into `user_roles.world_scope`, and then
+ * dropped by `0045`'s mirror trigger — which joins `worlds` and so produces no row for a slug
+ * that names nothing. The grant was dead from the moment it was made, and `GET /admin/users`
+ * went on echoing it back out of the array, so the admin had every reason to believe it worked.
+ *
+ * Refusing it here is the half that belongs at the edge: a typo is an error, not a silent no-op.
+ * The other half is `0045`'s `worlds_created_trg`, which re-attaches scopes that were waiting on
+ * a world created (or re-created) later — nothing this route can see.
+ */
+async function assertKnownWorlds(
+  q: { query: (sql: string, params: unknown[]) => Promise<{ rows: { slug: string }[] }> },
+  roles: RoleGrant[] | undefined,
+): Promise<void> {
+  const slugs = [...new Set((roles ?? []).flatMap((r) => r.categoryScope ?? []))];
+  if (!slugs.length) return;
+  const known = new Set(
+    (await q.query(`select slug from worlds where slug = any($1)`, [slugs])).rows.map((r) => r.slug),
+  );
+  const unknown = slugs.filter((s) => !known.has(s));
+  if (unknown.length)
+    throw new HttpError(400, 'UNKNOWN_WORLD', 'עולמות תוכן לא קיימים: ' + unknown.join(', '));
+}
+
 export default async function userRoutes(instance: FastifyInstance) {
   const app = instance.withTypeProvider<ZodTypeProvider>();
 
@@ -124,6 +152,7 @@ export default async function userRoutes(instance: FastifyInstance) {
           [subject],
         );
         if (existing.rowCount) throw new HttpError(409, 'USER_EXISTS', 'משתמש מקומי עם כתובת זו כבר קיים');
+        await assertKnownWorlds(client, roles);
         const created = await client.query(
           `insert into users(subject, source, email, display_name, initials, password_hash)
            values ($1,'local',$1,$2,$3,$4) returning *`,
@@ -218,6 +247,7 @@ export default async function userRoutes(instance: FastifyInstance) {
             );
         }
         if (req.body.roles) {
+          await assertKnownWorlds(client, req.body.roles);
           await client.query(`delete from user_roles where user_id=$1`, [id]);
           for (const r of req.body.roles)
             await client.query(

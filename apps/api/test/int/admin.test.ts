@@ -80,6 +80,55 @@ run('admin routes', () => {
     expect(again.json().code).toBe('USER_EXISTS');
   });
 
+  /**
+   * Post-pilot H3. `CategorySchema` only checks the *shape* of a world slug, so a typo was
+   * accepted, stored in `user_roles.world_scope`, dropped by 0045's mirror trigger (which joins
+   * `worlds`) and then echoed straight back out of the array by `GET /admin/users` — a grant that
+   * was dead from the moment it was made, displayed as if it worked.
+   */
+  it('refuses a categoryScope naming a world that does not exist (H3)', async () => {
+    const roleId = (await db.pool.query("select id from roles where name='editor'")).rows[0].id;
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/users',
+      headers: admin,
+      payload: {
+        email: 'typo@wecom.co.il',
+        password: 'a-long-enough-password',
+        roles: [{ roleId, categoryScope: ['tech', 'finanace'] }],
+      },
+    });
+    expect(created.statusCode).toBe(400);
+    expect(created.json().code).toBe('UNKNOWN_WORLD');
+    expect(created.json().message).toContain('finanace');
+    // The whole create rolled back: no half-made user with no roles.
+    expect((await db.pool.query(`select 1 from users where subject='typo@wecom.co.il'`)).rowCount).toBe(0);
+
+    // PATCH is the same write surface and takes the same refusal.
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/admin/users/${editorId}`,
+      headers: admin,
+      payload: { roles: [{ roleId, categoryScope: ['nope'] }] },
+    });
+    expect(patched.statusCode).toBe(400);
+    expect(patched.json().code).toBe('UNKNOWN_WORLD');
+    // …and left the roles it already had alone.
+    expect((await db.pool.query(`select 1 from user_roles where user_id=$1`, [editorId])).rowCount).toBe(1);
+
+    // A scope that names real worlds still goes through, and reaches the join table.
+    const ok = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/admin/users/${editorId}`,
+      headers: admin,
+      payload: { roles: [{ roleId, categoryScope: ['tech'] }] },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(
+      (await db.pool.query(`select world_slug from user_role_worlds where user_id=$1`, [editorId])).rows,
+    ).toEqual([{ world_slug: 'tech' }]);
+  });
+
   it('reports system health (stage-1 §4 GET /admin/system)', async () => {
     const r = await app.inject({ method: 'GET', url: '/api/v1/admin/system', headers: admin });
     expect(r.statusCode).toBe(200);

@@ -129,6 +129,22 @@ run('0045 — user_role_worlds (A-M14)', () => {
     await pool.query(`delete from worlds where slug='temp-world'`);
     expect(await slugs()).toEqual(['tech']);
   });
+
+  /**
+   * Post-pilot H3. The mirror trigger joins `worlds`, so a scope naming a world that does not
+   * exist yet produces no row — and `world_scope` is never written again, so it never produces
+   * one. The grant was dead forever while `GET /admin/users` went on echoing it back.
+   */
+  it('re-attaches a waiting scope when the world it names is created later', async () => {
+    await pool.query(`update user_roles set world_scope=$1 where user_id=$2`, [['tech', 'later'], U]);
+    // Nothing to mirror yet: `later` names nothing.
+    expect(await slugs()).toEqual(['tech']);
+    await pool.query(`insert into worlds(slug, name, position) values ('later','מאוחר',98)`);
+    expect(await slugs()).toEqual(['later', 'tech']);
+    // Which is the point: the user can now see the world they were granted.
+    expect((await resolvePermissions(pool, U)).worldScopes).toEqual(['later', 'tech']);
+    await pool.query(`delete from worlds where slug='later'`);
+  });
 });
 
 const asset = (n: number) => `a${n}aaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`;

@@ -167,6 +167,28 @@ exports.up = (pgm) => {
              for each row when (old.slug is distinct from new.slug)
              execute function worlds_slug_renamed()`);
 
+  /*
+   * The create half (post-pilot H3). `user_roles_sync_worlds` can only mirror slugs that name a
+   * world *at the time the scope is written*; a scope naming one that does not exist yet produces
+   * no row and, because `world_scope` is not written again, never produces one — so the grant is
+   * dead forever while `GET /admin/users` goes on echoing it back from the array. `admin/users.ts`
+   * now refuses an unknown slug outright (400 UNKNOWN_WORLD), which closes the ordinary case;
+   * this closes the rest — a world deleted and re-created, a taxonomy import, a slug edited by
+   * hand — by making the world's arrival re-attach every scope already waiting for it.
+   */
+  pgm.sql(`create function worlds_created() returns trigger as $$
+             begin
+               insert into user_role_worlds(user_id, role_id, world_slug)
+                 select ur.user_id, ur.role_id, new.slug
+                   from user_roles ur
+                  where ur.world_scope @> array[new.slug]
+               on conflict do nothing;
+               return new;
+             end $$ language plpgsql`);
+  pgm.sql(`create trigger worlds_created_trg
+             after insert on worlds
+             for each row execute function worlds_created()`);
+
   // ── 3. asset_refs (B-M15) ──────────────────────────────────────────────
   pgm.createTable(
     'asset_refs',
@@ -247,6 +269,8 @@ exports.down = (pgm) => {
   pgm.sql('drop function if exists asset_refs_sync()');
   pgm.dropTable('asset_refs');
   pgm.sql('drop function if exists asset_refs_ids(text)');
+  pgm.sql('drop trigger if exists worlds_created_trg on worlds');
+  pgm.sql('drop function if exists worlds_created()');
   pgm.sql('drop trigger if exists worlds_slug_renamed_trg on worlds');
   pgm.sql('drop function if exists worlds_slug_renamed()');
   pgm.sql('drop trigger if exists user_roles_sync_worlds_trg on user_roles');
