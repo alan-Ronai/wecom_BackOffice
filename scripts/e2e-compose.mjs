@@ -174,11 +174,33 @@ async function waitFor(label, check, { timeoutMs = 300_000, everyMs = 2_000 } = 
 /* ── setup and teardown of things outside compose ─────────────────────────── */
 
 /**
+ * A leftover `deploy/.env.before-e2e` is a *previous run's* rescued `deploy/.env` — the operator's
+ * real one, with their real secrets — that never got put back: a SIGKILL, a crash, or a
+ * `KEEP_STACK=1` run nobody tore down. This used to `rm -f` it and carry on, which destroyed the
+ * only copy and left the e2e config installed as `deploy/.env` permanently. Refuse instead, and
+ * say which file is which, because from the outside they are indistinguishable.
+ */
+function assertNoLeftoverEnvBackup() {
+  if (!existsSync(ENV_BACKUP)) return;
+  throw new Error(
+    `${ENV_BACKUP} already exists — a previous e2e:compose run did not finish (SIGKILL, a crash,\n` +
+      '  or KEEP_STACK=1 with no teardown), and that file is the deploy/.env it moved aside. It holds\n' +
+      '  real secrets; this run will not overwrite or delete it.\n\n' +
+      '  To recover, from the repo root:\n' +
+      `    docker compose -p ${PROJECT} -f ${COMPOSE_FILES.join(' -f ')} down -v   # if a stack is still up\n` +
+      `    mv ${ENV_BACKUP} ${ENV_TARGET}   # put the real deploy/.env back (it overwrites the e2e copy)\n` +
+      '  Then re-run this gate. If deploy/.env is the one you want to keep and the backup is stale,\n' +
+      `    rm ${ENV_BACKUP}\n` +
+      '  but read it first — the two files look alike and only one has your production secrets.',
+  );
+}
+
+/**
  * `deploy/.env` is what `env_file:` reads, and an operator's own may be sitting there. Move it
  * aside rather than overwrite it, and put it back on the way out.
  */
 function swapEnv() {
-  rmSync(ENV_BACKUP, { force: true });
+  assertNoLeftoverEnvBackup();
   if (existsSync(ENV_TARGET)) {
     renameSync(ENV_TARGET, ENV_BACKUP);
     console.log(`  deploy/.env moved aside to ${ENV_BACKUP}`);
@@ -280,6 +302,9 @@ async function main() {
   console.log('\n── 1. preflight ─────────────────────────────────────────────');
   if (spawnSync('docker', ['version'], { stdio: 'ignore' }).status !== 0)
     throw new Error('docker is not available — this gate runs the real Compose stack');
+  // Before anything is built, minted or started: a leftover backup means an operator's real
+  // deploy/.env is sitting unrestored, and nothing here should run until they have it back.
+  assertNoLeftoverEnvBackup();
   ensureCerts();
   swapEnv();
   // `./backups` is bind-mounted read-only into the api container; compose would create it as
