@@ -4,6 +4,7 @@ import {
   aggregate,
   contextForCase,
   EVAL_CASES_DIR,
+  failedCase,
   loadCases,
   RuleBasedModel,
   scoreCase,
@@ -32,6 +33,13 @@ export interface EvalRunResult extends CaseScore {
  * Runs every case through `model` and scores it. A case the model fails outright is scored as a
  * zero and named in `notes`, rather than aborting the run — a tier that answers six of eight is
  * a result, not an error.
+ *
+ * That promise was not being kept. The failure branch used to score the case with
+ * `scoreCase({ ...c, expected: [] }, [{} as never])`, and the language check reads `s.title` off
+ * every suggestion before the negative-case branch is reached — so the placeholder threw, *out of
+ * the `catch`*, and the whole job died with `ai_eval_runs.finished_at` still null. The job builds
+ * its model with no fallback on purpose, so any timeout against a busy Ollama hit this. Now the
+ * failure is a value (`failedCase`), and a thrown case cannot take the run with it.
  */
 export async function runEvalCases(model: ModelClient, cases: EvalCase[]): Promise<EvalRunResult> {
   const scores: CaseScore[] = [];
@@ -40,7 +48,7 @@ export async function runEvalCases(model: ModelClient, cases: EvalCase[]): Promi
     try {
       scores.push(scoreCase(c, await model.proposeChanges(contextForCase(c))));
     } catch (e) {
-      scores.push(scoreCase({ ...c, expected: [] }, [{} as never]));
+      scores.push(failedCase());
       failures.push(`${c.id}: ${(e as Error).message}`);
     }
   }

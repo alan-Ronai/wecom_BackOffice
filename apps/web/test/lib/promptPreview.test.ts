@@ -9,12 +9,14 @@ describe('system prompt preview', () => {
     expect(p.indexOf('## ארכיטקטורת הידע')).toBeLessThan(p.indexOf('## סגנון'));
     expect(p.indexOf('## סגנון')).toBeLessThan(p.indexOf('## כללי המשימה'));
     expect(p).toContain('wecom היא חברת תקשורת');
-    expect(p).toContain('גרסת הנחיות: v3.2.1');
+    expect(p).toContain('גרסת הנחיות: v4.2.1');
   });
 
   it('marks an empty block rather than dropping its heading', () => {
     const p = buildSystemPromptPreview(sampleSettings({ style: { text: '', version: 0 } }));
     expect(p).toContain('## סגנון\n\n(ריק)');
-    expect(promptVersionOf(sampleSettings({ style: { text: '', version: 0 } }))).toBe('v3.2.0');
+    // The major is the prompt *file*; it moved to v4 with the fix wave, in step with
+    // `currentPromptVersion` in the api. A label the server will never stamp is worse than none.
+    expect(promptVersionOf(sampleSettings({ style: { text: '', version: 0 } }))).toBe('v4.2.0');
   });
 });

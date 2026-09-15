@@ -155,6 +155,27 @@ export function isFieldRenameOnly(before: string, after: string, known: Readonly
 export const HEADING_REF = /^h\d+-\d+$/;
 export const isHeadingRef = (ref: string): boolean => HEADING_REF.test(ref.replace(/^§/, ''));
 
+/** Did a number, latin run or quoted name move between these two texts? */
+export const materialTokensChanged = (before: string, after: string): boolean =>
+  !sameMultiset(materialTokens(before), materialTokens(after));
+
+/**
+ * This change is not worth showing anyone: a cosmetic edit, or a heading that was reworded.
+ *
+ * The heading clause used to be unconditional, which was wrong in one specific and expensive
+ * way: `"סף 5 מגה" → "סף 6 מגה"` on an `h2` ref is a threshold change, and it was reaching
+ * neither the model nor the rule engine. A heading is a table of contents rather than an
+ * instruction, so a *rewording* of one is noise — but a heading whose numbers, latin tokens or
+ * quoted names moved is carrying a fact, and a fact that changed is a change.
+ */
+export function isNoiseChange(d: ParagraphDiff): boolean {
+  if (d.kind !== 'changed') return false;
+  const before = d.before ?? '';
+  const after = d.after ?? '';
+  if (isCosmetic(before, after)) return true;
+  return isHeadingRef(d.ref) && !materialTokensChanged(before, after);
+}
+
 /**
  * The revision moved paragraphs around and changed nothing: the multiset of normalised texts is
  * the same before and after. A reorder is a real edit of the source and no edit of the knowledge.
@@ -180,10 +201,5 @@ export function isReorderOnly(diffs: ParagraphDiff[]): boolean {
  */
 export function materialDiffs(diffs: ParagraphDiff[]): ParagraphDiff[] {
   if (isReorderOnly(diffs)) return [];
-  return diffs.filter((d) => {
-    if (d.kind === 'same') return false;
-    if (d.kind !== 'changed') return true;
-    if (isHeadingRef(d.ref)) return false;
-    return !isCosmetic(d.before ?? '', d.after ?? '');
-  });
+  return diffs.filter((d) => d.kind !== 'same' && !isNoiseChange(d));
 }

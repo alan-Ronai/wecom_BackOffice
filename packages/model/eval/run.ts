@@ -19,6 +19,7 @@ import {
   aggregate,
   contextForCase,
   EVAL_CASES_DIR,
+  failedCase,
   languageOffences,
   latinAllowFor,
   loadCases,
@@ -77,7 +78,14 @@ async function main(): Promise<void> {
     } catch (e) {
       error = (e as Error).message;
     }
-    const s = scoreCase(c, items);
+    /**
+     * A crashed case is a **failure**, not a silent answer. Scoring it with `scoreCase(c, [])`
+     * gave the six negative cases a perfect 1.000 for timing out, which is the precise opposite
+     * of what they are for: a tier that cannot reach Ollama would have reported that it correctly
+     * declined to propose. `failedCase` scores zero on recall and is excluded from the precision
+     * and language means, which grade an answer that exists.
+     */
+    const s = error ? failedCase() : scoreCase(c, items);
     scores.push(s);
     const ms = Date.now() - started;
     latencies.push(ms);
@@ -86,14 +94,16 @@ async function main(): Promise<void> {
      * language failure is only actionable if you can see what the model said — "8 failures" is a
      * number, `champs`, `ubah`, `блок` is a reason to move a tier.
      */
-    const offences = [
-      ...new Set(
-        items.flatMap((x) => [
-          ...languageOffences(x.title, latinAllowFor(c)),
-          ...languageOffences(x.rationale, latinAllowFor(c)),
-        ]),
-      ),
-    ];
+    const offences = error
+      ? []
+      : [
+          ...new Set(
+            items.flatMap((x) => [
+              ...languageOffences(x.title, latinAllowFor(c)),
+              ...languageOffences(x.rationale, latinAllowFor(c)),
+            ]),
+          ),
+        ];
     if (offences.length) langWords.push(`${c.id}: ${offences.join(', ')}`);
     rows.push({
       case: c.id,

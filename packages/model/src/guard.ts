@@ -21,6 +21,7 @@
 import type { ProposalContext, ProposedSuggestion } from './contract.js';
 import { confidenceFor } from './calibration.js';
 import { materialDiffs } from './material.js';
+import { isNewSourcePath } from './sections.js';
 
 const stripRef = (r: string) => r.replace(/^§/, '');
 
@@ -160,11 +161,23 @@ export function detectFieldAlerts(ctx: ProposalContext, items: ProposedSuggestio
  * Kept deliberately narrow — the anchor has to match nothing at all in the material set. A
  * suggestion on a real change with a mistyped anchor is still a real suggestion and survives via
  * the `§`-insensitive compare.
+ *
+ * **Two exemptions, and they are not cosmetic.**
+ *
+ * 1. `isNewSourcePath`. On that path the suggestions are `sectionCards`' — anchored on the
+ *    *section headings*, which after the first revision are `kind: 'same'` and therefore not in
+ *    the material set at all. Without this exemption every new-source revision but the first
+ *    returned zero suggestions, and a revision with no suggestions is auto-accepted: the source
+ *    would have been marked synced with none of its sections ever reaching an editor. This guard
+ *    runs *after* `enforceSectionCards`, which is what put those cards there, so it must not be
+ *    the thing that removes them.
+ * 2. `new-card`. A card creates a document; it has no existing target it could be wrong about,
+ *    and the anchor it carries is a section of the source rather than a changed paragraph.
  */
 export function dropUnanchored(ctx: ProposalContext, items: ProposedSuggestion[]): ProposedSuggestion[] {
+  if (isNewSourcePath(ctx)) return items;
   const material = new Set(materialDiffs(ctx.diffs).map((d) => stripRef(d.ref)));
-  if (!material.size) return [];
-  return items.filter((s) => material.has(stripRef(s.anchor)));
+  return items.filter((s) => s.type === 'new-card' || material.has(stripRef(s.anchor)));
 }
 
 /**

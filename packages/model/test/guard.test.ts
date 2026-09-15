@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { applyGuards, coerceBlockUpdates, detectFieldAlerts, dropUnanchored } from '../src/index.js';
+import {
+  applyGuards,
+  coerceBlockUpdates,
+  detectFieldAlerts,
+  dropUnanchored,
+  enforceSectionCards,
+} from '../src/index.js';
 import type { ProposalContext, ProposedSuggestion } from '../src/index.js';
 
 /**
@@ -143,6 +149,55 @@ describe('dropUnanchored', () => {
   it('drops everything when nothing in the revision materially changed', () => {
     const noise: ProposalContext = { ...ctx, diffs: [ctx.diffs[2]] };
     expect(dropUnanchored(noise, [s({ anchor: '§2.9' })])).toEqual([]);
+  });
+
+  /**
+   * The regression this exists for: a second revision of an unmapped source adds one paragraph
+   * under a heading that did not change. `enforceSectionCards` anchors its cards on the
+   * *headings*, which are `kind: 'same'` and therefore not material — so the guard was deleting
+   * the very cards the invariant had just inserted, the revision came back empty, and an empty
+   * revision is auto-accepted. The source would have been marked synced with none of its
+   * sections ever reaching an editor.
+   */
+  it('keeps the section cards of a new source whose headings did not change', () => {
+    const fresh: ProposalContext = {
+      source: { id: 's2', title: 'נוהל החלפת מכשיר' },
+      paragraphs: [
+        { ref: 'h2-1', heading: 'זיהוי הלקוח', level: 2, runs: [{ t: 'זיהוי הלקוח' }] },
+        { ref: 'h2-1.p-1', runs: [{ t: 'ודא את זהות הלקוח מול תעודה מזהה.' }] },
+        { ref: 'h2-1.p-2', runs: [{ t: 'רשום את מספר התעודה בכרטיס הפנייה.' }] },
+      ],
+      diffs: [
+        { ref: 'h2-1', kind: 'same', before: 'זיהוי הלקוח', after: 'זיהוי הלקוח', similarity: 1 },
+        {
+          ref: 'h2-1.p-1',
+          kind: 'same',
+          before: 'ודא את זהות הלקוח מול תעודה מזהה.',
+          after: 'ודא את זהות הלקוח מול תעודה מזהה.',
+          similarity: 1,
+        },
+        {
+          ref: 'h2-1.p-2',
+          kind: 'added',
+          before: null,
+          after: 'רשום את מספר התעודה בכרטיס הפנייה.',
+          similarity: 0,
+        },
+      ],
+      linkedSteps: [],
+      fields: [],
+      blocks: [],
+    };
+    const cards = enforceSectionCards(fresh, []);
+    expect(cards.map((x) => [x.type, x.anchor])).toEqual([['new-card', '§h2-1']]);
+    // The card's anchor is the unchanged heading, so without the exemption this returned [].
+    expect(dropUnanchored(fresh, cards)).toEqual(cards);
+    expect(applyGuards(fresh, cards)).toEqual(cards);
+  });
+
+  it('keeps a new-card even off the new-source path — a card has no existing target to be wrong about', () => {
+    const card = s({ anchor: '§2.9', type: 'new-card' });
+    expect(dropUnanchored(ctx, [card])).toHaveLength(1);
   });
 });
 

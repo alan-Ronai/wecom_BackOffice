@@ -39,7 +39,32 @@ export interface CaseScore {
   languageOk: number;
   /** How many suggestions carried non-Hebrew text. Summed, not averaged, by `aggregate`. */
   languageFailures: number;
+  /**
+   * The model threw, timed out, or never produced an answer to score. Zero on the three recall
+   * axes — a case that was not answered was not got right — and **excluded** from the precision
+   * and language means, which measure the quality of an answer that exists. Averaging a crash in
+   * as a 1.000 would have let a tier that times out on half the set look precise and fluent.
+   */
+  failed?: boolean;
 }
+
+/**
+ * The score of a case the model could not answer. Constructed rather than derived, because the
+ * two ways of faking it are both wrong: `scoreCase(c, [])` scores a *negative* case a perfect
+ * 1.000 (silence is the right answer there, and a crash is not silence), and the api's job used
+ * to pass `scoreCase({ ...c, expected: [] }, [{} as never])`, whose empty object has no `title`
+ * for the language check to read — which threw, out of a `catch`, and took the whole admin eval
+ * run down with `finished_at` left null.
+ */
+export const failedCase = (): CaseScore => ({
+  hitTarget: 0,
+  hitType: 0,
+  contentOverlap: 0,
+  precision: 0,
+  languageOk: 0,
+  languageFailures: 0,
+  failed: true,
+});
 
 /* ── Hebrew-aware content matching (the `mustContainAny` half) ───────────── */
 
@@ -84,12 +109,19 @@ const LATIN_WORD = /[A-Za-z][A-Za-z0-9'-]*/g;
  */
 const trimEdges = (w: string) => w.replace(/^[-'’]+|[-'’]+$/g, '');
 
-/** The offending fragments in one string, or `[]` when it is clean. */
+/**
+ * The offending fragments in one string, or `[]` when it is clean.
+ *
+ * `text` is typed `string` and is not always one: it arrives from a model answer, from a stored
+ * `jsonb` payload, and (until this was fixed) from a placeholder the api's own job constructed.
+ * A metric must not be the thing that takes a run down, so the coercion is deliberate.
+ */
 export function languageOffences(text: string, allow: ReadonlySet<string>): string[] {
   const out: string[] = [];
-  const script = text.match(new RegExp(CJK_OR_CYRILLIC, 'g'));
+  const subject = String(text ?? '');
+  const script = subject.match(new RegExp(CJK_OR_CYRILLIC, 'g'));
   if (script) out.push(...new Set(script));
-  for (const raw of text.match(LATIN_WORD) ?? []) {
+  for (const raw of subject.match(LATIN_WORD) ?? []) {
     const w = trimEdges(raw);
     // A single letter or anything carrying a digit is an identifier (`s8`, `4G`), not a word.
     if (w.length < 2 || /\d/.test(w)) continue;
@@ -210,17 +242,32 @@ export function scoreCase(c: EvalCase, items: ProposedSuggestion[]): CaseScore {
 /**
  * Mean of each rate over the run; an empty run is zeroes, not NaN. `languageFailures` is a
  * count and is summed — "0.375 code-switched suggestions" would mean nothing.
+ *
+ * Recall is averaged over *every* case, so an unanswered one counts against the model. Precision
+ * and `languageOk` are averaged only over the cases that produced an answer, because they grade
+ * an answer's quality and a crash has no answer to grade; a run where everything failed reports
+ * 0 for them rather than a vacuous 1.000, and the `failed` count says why.
  */
 export function aggregate(scores: CaseScore[]): CaseScore {
-  if (!scores.length)
-    return { hitTarget: 0, hitType: 0, contentOverlap: 0, precision: 0, languageOk: 0, languageFailures: 0 };
+  const empty: CaseScore = {
+    hitTarget: 0,
+    hitType: 0,
+    contentOverlap: 0,
+    precision: 0,
+    languageOk: 0,
+    languageFailures: 0,
+  };
+  if (!scores.length) return empty;
+  const answered = scores.filter((s) => !s.failed);
   const sum = (f: (s: CaseScore) => number) => scores.reduce((a, s) => a + f(s), 0) / scores.length;
+  const ofAnswered = (f: (s: CaseScore) => number) =>
+    answered.length ? answered.reduce((a, s) => a + f(s), 0) / answered.length : 0;
   return {
     hitTarget: sum((s) => s.hitTarget),
     hitType: sum((s) => s.hitType),
     contentOverlap: sum((s) => s.contentOverlap),
-    precision: sum((s) => s.precision),
-    languageOk: sum((s) => s.languageOk),
+    precision: ofAnswered((s) => s.precision),
+    languageOk: ofAnswered((s) => s.languageOk),
     languageFailures: scores.reduce((a, s) => a + s.languageFailures, 0),
   };
 }
