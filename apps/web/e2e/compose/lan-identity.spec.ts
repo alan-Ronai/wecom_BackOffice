@@ -39,6 +39,13 @@ async function clientAt(browser: Browser, baseURL: string, ip?: string): Promise
     baseURL,
     locale: 'he-IL',
     ignoreHTTPSErrors: true,
+    /**
+     * Explicitly empty, and this is the whole point of the file: `browser.newContext()` merges the
+     * project's `use` over its own options, so without this every context here started with the
+     * break-glass admin's `storageState` and the login screen cheerfully offered to continue as
+     * *him*. Every assertion below is about what a browser with **no** session is given.
+     */
+    storageState: { cookies: [], origins: [] },
     ...(ip ? { extraHTTPHeaders: { 'X-Forwarded-For': ip } } : {}),
   });
   return ctx.newPage();

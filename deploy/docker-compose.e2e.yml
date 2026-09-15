@@ -9,6 +9,13 @@
 # Hand-formatted, like the other two compose files, and listed in .prettierignore for the same
 # reason.
 services:
+  ollama:
+    # Back to the production value, over docker-compose.ci.yml's 1 m. That file is tuned for a
+    # smoke test that never runs inference and does not want a model sitting in a runner's RAM;
+    # this gate imports a WordPress post through the real pipeline, and a one-minute keep-alive
+    # makes it pay the model load again between the proposer's two attempts.
+    environment: { OLLAMA_KEEP_ALIVE: 30m, OLLAMA_NUM_PARALLEL: 1, OLLAMA_MAX_LOADED_MODELS: 1 }
+
   # The PAN-OS XML API the API's LAN fallback asks "who is at this address?". A bare node image
   # with `scripts/paloalto-stub.mjs` bind-mounted: the stub has no dependencies precisely so that
   # no image has to be built for it. Its control plane (/_control/*) is published to the host so a
