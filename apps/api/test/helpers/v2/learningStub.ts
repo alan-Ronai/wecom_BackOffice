@@ -1,9 +1,9 @@
 import type pg from 'pg';
 
 /**
- * V1's migration 0039 creates the learning item tables. This lane's worktree may predate it, so
+ * V1's migration 0046 creates the learning item tables. This lane's worktree may predate it, so
  * tests create the spec-§3 shape when absent. Column names match the spec verbatim; V6 verifies
- * parity against 0039 when both are on main.
+ * parity against 0046 when both are on main.
  */
 export async function ensureLearningTables(pool: pg.Pool): Promise<void> {
   const r = await pool.query(`select to_regclass('learning_items') as t`);

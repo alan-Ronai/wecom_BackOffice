@@ -1,7 +1,7 @@
 /**
  * Wave 5 (V2): audiences, assignments, attempts, acknowledgements, document change flags.
- * Spec §3. `item_id` is a plain uuid: `learning_items` is V1's table (0039) and may land in a
- * different worktree; V6 adds the foreign keys in 0042 once both migrations are on main.
+ * Spec §3. `item_id` is a plain uuid: `learning_items` is V1's table (0046) and may land in a
+ * different worktree; V6 adds the foreign keys in 0049 once both migrations are on main.
  */
 const id = (pgm) => ({ type: 'uuid', primaryKey: true, default: pgm.func('gen_random_uuid()') });
 

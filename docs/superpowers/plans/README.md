@@ -65,7 +65,7 @@ Acceptance: `docs/wave4-acceptance.md` · Merge log: `docs/wave4-merge-log.md`
 | V3 Approver & gaps (api) | `2026-09-15-V3-approver-gaps.md` | V0 on main | `requireApprover` gate, gap detection job and API, `/admin/workflow` |
 | V4a Agent web | `2026-09-15-V4a-agent-web.md` | V0 on main | `/learning`, briefing reader, quiz player, article banners, notifications wiring |
 | V4b Editor web | `2026-09-15-V4b-editor-web.md` | V0 on main | builders, assign dialog, completion dashboard + CSV, `/gaps`, workflow settings section |
-| V6 Integration | `2026-09-15-V6-integration.md` | V1–V4b merged | mounts, seams (0042), real e2e flows, whole-wave review, and the three wave-4 follow-ups (F-4, A-4, E-1) |
+| V6 Integration | `2026-09-15-V6-integration.md` | V1–V4b merged | mounts, seams (0049; authored as 0042, renumbered in the fix wave), real e2e flows, whole-wave review, and the three wave-4 follow-ups (F-4, A-4, E-1) |
 
 Run order: V0 alone on `main`; V1–V4b in parallel worktrees branched after V0 lands; V6 last. Shared-file rules and the migration numbers are in V0's contract document.
 

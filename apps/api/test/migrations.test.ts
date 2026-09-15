@@ -353,7 +353,7 @@ run('migrations', () => {
       });
     // Everything from 0030 up — wave 4 and whatever later waves added on top of it — so the
     // rollback really stops at 0029 whatever the highest number currently is. Counting only
-    // `003x` silently stopped short once wave 5 added 0040+, leaving 0030 — the migration that
+    // `003x` silently stopped short once wave 5 added 0046+, leaving 0030 — the migration that
     // drops 0027's Hebrew stopword filter — still applied, and the assertion below failing.
     const fromWave4 = (await readdir('migrations')).filter((f) => {
       const n = Number(/^(\d{4})_/.exec(f)?.[1] ?? NaN);
@@ -380,7 +380,7 @@ run('migrations', () => {
     await move('up');
   }, 120000);
 
-  it('creates the wave 5 tracking tables (0040)', async () => {
+  it('creates the wave 5 tracking tables (0047)', async () => {
     const r = await pool.query(
       "select table_name from information_schema.tables where table_schema='public' and table_name in ('learning_audiences','learning_assignments','learning_attempts','learning_acknowledgements','document_change_flags') order by 1",
     );

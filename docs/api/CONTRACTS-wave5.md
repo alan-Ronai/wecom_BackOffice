@@ -7,10 +7,10 @@ Schemas: `packages/shared/src/schemas/wave5.ts` (+ the two additive fields merge
 | Lane | File | Owns |
 |---|---|---|
 | V0 | `0038_wave5_permissions_settings.js` | learning/gaps permissions + grants, the `approver` system role, `notifications.kind` widened with `learning`/`gap`, the `app_settings` row `workflow` (done) |
-| V1 | `0039` | learning_items, learning_item_versions, briefing_entries, quiz_questions |
-| V2 | `0040` | learning_audiences, learning_assignments, learning_attempts, learning_acknowledgements, document_change_flags |
-| V3 | `0041` | knowledge_gaps |
-| V6 | `0042` | seams/fixes found in integration (may be empty → do not create) |
+| V1 | `0046` | learning_items, learning_item_versions, briefing_entries, quiz_questions |
+| V2 | `0047` | learning_audiences, learning_assignments, learning_attempts, learning_acknowledgements, document_change_flags |
+| V3 | `0048` | knowledge_gaps |
+| V6 | `0049_wave5_seams.js` | the `learning_items` foreign keys 0047 could not declare |
 
 The wave-3 cleanup lane owns `0037` (already on main).
 

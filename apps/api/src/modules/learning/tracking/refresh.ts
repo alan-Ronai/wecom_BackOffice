@@ -57,7 +57,7 @@ export async function applyChangeFlag(
     [i.documentId, i.version, significant, JSON.stringify(reasons), i.actorId],
   );
   if (!significant) return { significant, reasons, affectedItems: 0, refreshAssignments: 0 };
-  // V6: V1's `learning_items` (0039) is merged, so the `to_regclass` guard that let this lane's
+  // V6: V1's `learning_items` (0046) is merged, so the `to_regclass` guard that let this lane's
   // migration stand alone is gone — a missing item table is now a broken deploy, not a state to
   // tolerate silently. `wave5-seams.test.ts` covers the fan-out end to end.
   const settings = await getWorkflowSettings(tx);
