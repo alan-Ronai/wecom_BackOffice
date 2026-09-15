@@ -19,12 +19,24 @@ const move = <T,>(xs: T[], i: number, dir: -1 | 1): T[] => {
  * A component per row rather than a batch lookup: the list is short, and the query is the one the
  * article page has usually already cached.
  */
-function EntryTitle({ documentId, fallback }: { documentId: string; fallback?: string }) {
+export function EntryTitle({
+  documentId,
+  fallback,
+  asLink = true,
+}: {
+  documentId: string;
+  fallback?: string;
+  /** The preview reuses this for the title only: a link inside the modal would navigate behind it. */
+  asLink?: boolean;
+}) {
   const doc = useDocument(documentId);
-  return (
+  const title = doc.data?.title ?? fallback ?? documentId;
+  return asLink ? (
     <Link to={`/doc/${documentId}`} onClick={(e) => e.stopPropagation()}>
-      {doc.data?.title ?? fallback ?? documentId}
+      {title}
     </Link>
+  ) : (
+    <>{title}</>
   );
 }
 

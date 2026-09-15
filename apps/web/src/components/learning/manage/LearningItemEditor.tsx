@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { LearningItem, LearningItemPatch } from '@wecom/shared';
 import {
@@ -23,6 +23,12 @@ import { CompletionDashboard } from './CompletionDashboard.js';
 import { ItemPreview } from './ItemPreview.js';
 import { KIND_LABEL, LSTATUS_LABEL, LSTATUS_TONE } from './LearningManagePage.js';
 import { QuizBuilder } from './QuizBuilder.js';
+
+const TABS = [
+  ['build', 'עריכה'],
+  ['completion', 'השלמה'],
+] as const;
+type Tab = (typeof TABS)[number][0];
 
 /**
  * The intro, held locally and committed on blur — the same contract as the `כותרת` field beside it.
@@ -79,7 +85,7 @@ export function LearningItemEditor() {
   const publish = usePublishLearningItem(id ?? '');
   const del = useDeleteLearningItem();
   const [assignOpen, setAssignOpen] = useState(false);
-  const [tab, setTab] = useState<'build' | 'completion'>('build');
+  const [tab, setTab] = useState<Tab>('build');
   const mayManage = can('learning.manage');
   const mayPublish = can('learning.publish');
   /** `/learning/manage/new` creates exactly once, even under StrictMode's double effect. */
@@ -109,6 +115,26 @@ export function LearningItemEditor() {
     );
   if (!item.data) return <div className="route-loading">טוען…</div>;
   const it = item.data;
+
+  /** RTL: ArrowLeft is the next tab on screen, ArrowRight the previous one. */
+  const onTabKey = (e: ReactKeyboardEvent<HTMLElement>) => {
+    const i = TABS.findIndex(([k]) => k === tab);
+    const to =
+      e.key === 'ArrowLeft'
+        ? i + 1
+        : e.key === 'ArrowRight'
+          ? i - 1
+          : e.key === 'Home'
+            ? 0
+            : e.key === 'End'
+              ? TABS.length - 1
+              : -1;
+    if (to < 0 || to >= TABS.length || to === i) return;
+    e.preventDefault();
+    const next = TABS[to]![0];
+    setTab(next);
+    e.currentTarget.querySelector<HTMLElement>(`#item-tab-${next}`)?.focus();
+  };
 
   const save = (body: LearningItemPatch) =>
     patch.mutateAsync(body).catch(() => toast('השמירה נכשלה', 'warn'));
@@ -180,29 +206,31 @@ export function LearningItemEditor() {
           </button>
         ) : null}
       </div>
-      <nav className="tabs" role="tablist" aria-label="תצוגה">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'build'}
-          className={'facet' + (tab === 'build' ? ' on' : '')}
-          onClick={() => setTab('build')}
-        >
-          עריכה
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'completion'}
-          className={'facet' + (tab === 'completion' ? ' on' : '')}
-          onClick={() => setTab('completion')}
-        >
-          השלמה
-        </button>
+      {/*
+        A real tablist: one tab stop for the pair, arrows to move between them (right-to-left, as
+        the page reads), and each tab pointing at the panel it controls.
+      */}
+      <nav className="tabs" role="tablist" aria-label="תצוגה" onKeyDown={onTabKey}>
+        {TABS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            id={`item-tab-${key}`}
+            aria-controls="item-tabpanel"
+            aria-selected={tab === key}
+            tabIndex={tab === key ? 0 : -1}
+            className={'facet' + (tab === key ? ' on' : '')}
+            onClick={() => setTab(key)}
+          >
+            {label}
+          </button>
+        ))}
       </nav>
-      {tab === 'completion' ? (
-        <CompletionDashboard itemId={it.id} />
-      ) : (
+      <div role="tabpanel" id="item-tabpanel" aria-labelledby={`item-tab-${tab}`}>
+        {tab === 'completion' ? (
+          <CompletionDashboard itemId={it.id} />
+        ) : (
         <div className="item-editor">
           <div>
             <label>
@@ -298,9 +326,10 @@ export function LearningItemEditor() {
             <button type="button" className="btn sm danger" onClick={() => void doDelete()}>
               מחק
             </button>
-          </aside>
-        </div>
-      )}
+            </aside>
+          </div>
+        )}
+      </div>
       {assignOpen ? <AssignDialog itemId={it.id} onClose={() => setAssignOpen(false)} /> : null}
     </div>
   );

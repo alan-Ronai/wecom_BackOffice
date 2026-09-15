@@ -6,7 +6,7 @@ import { App } from '../../src/App.js';
 import { withMe } from '../msw/handlers.js';
 import { server } from '../msw/server.js';
 import { learningState } from '../msw/learning-manage.js';
-import { LI_BRIEF, LI_QUIZ, D_BROWSING } from '../msw/fixtures.js';
+import { LI_BRIEF, LI_QUIZ, D_BROWSING, D_INTL } from '../msw/fixtures.js';
 
 const asEditor = () =>
   server.use(withMe({ roles: ['editor'], permissions: ['docs.read', 'learning.read', 'learning.manage'] }));
@@ -54,6 +54,32 @@ describe('briefing builder', () => {
     await waitFor(() =>
       expect(learningState.published.at(-1)).toEqual({ itemId: LI_BRIEF, label: 'עדכון ספטמבר' }),
     );
+  });
+
+  it('names the documents in the briefing preview instead of their ids', async () => {
+    asEditor();
+    renderWithProviders(<App />, { route: `/learning/manage/${LI_BRIEF}` });
+    await userEvent.click(await screen.findByRole('button', { name: 'תצוגה מקדימה' }));
+    const dlg = await screen.findByRole('dialog', { name: 'תצוגה מקדימה' });
+    expect(await within(dlg).findByText('אין גלישה בחו"ל')).toBeInTheDocument();
+    expect(within(dlg).queryByText(D_INTL)).toBeNull();
+  });
+
+  it('moves between the editor tabs with the arrow keys', async () => {
+    asEditor();
+    renderWithProviders(<App />, { route: `/learning/manage/${LI_BRIEF}` });
+    const build = await screen.findByRole('tab', { name: 'עריכה' });
+    const completion = screen.getByRole('tab', { name: 'השלמה' });
+    // One tab stop for the pair; the arrows do the moving, right-to-left as the page reads.
+    expect(build).toHaveAttribute('tabindex', '0');
+    expect(completion).toHaveAttribute('tabindex', '-1');
+    build.focus();
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(completion).toHaveAttribute('aria-selected', 'true');
+    expect(completion).toHaveFocus();
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', completion.id);
+    await userEvent.keyboard('{ArrowRight}');
+    expect(build).toHaveAttribute('aria-selected', 'true');
   });
 
   it('shows the preview modal read-only', async () => {

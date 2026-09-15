@@ -1530,10 +1530,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .learning-page { display: grid; gap: 16px; }
 .learning-section { display: grid; gap: 8px; }
 .learning-section > h2 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
-.learning-section > .empty { padding: 14px; }
-.learning-section .cards {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px;
-}
 .learning-card {
   display: grid; gap: 6px; padding: 12px 14px; background: var(--surface);
   border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-sm);
@@ -1591,7 +1587,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .learning-panel-list a { cursor: pointer; font-size: 12.5px; }
 
 @media (max-width: 900px) {
-  .learning-section .cards { grid-template-columns: 1fr; }
   .briefing, .quiz { max-width: none; }
 }
 

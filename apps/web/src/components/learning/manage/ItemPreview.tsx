@@ -1,9 +1,12 @@
 import type { LearningItem } from '@wecom/shared';
+import { EntryTitle } from './BriefingBuilder.js';
 
 /**
  * The item as the agent will meet it — read-only, and deliberately without the correct flags:
  * the preview is what the learner sees, so an editor checking it cannot accidentally check the
- * answer key instead. Hook-free, so it can be handed straight to `modal.open({ body })`.
+ * answer key instead. Handed straight to `modal.open({ body })`, which renders it inside the app
+ * tree, so `EntryTitle` can resolve each entry's real title the way the builder does — a preview
+ * listing raw UUIDs told the manager nothing.
  */
 export function ItemPreview({ item }: { item: LearningItem }) {
   return (
@@ -17,7 +20,9 @@ export function ItemPreview({ item }: { item: LearningItem }) {
         <ol className="preview-entries">
           {item.entries.map((e) => (
             <li key={e.id ?? e.documentId}>
-              <b>{e.documentId}</b>
+              <b>
+                <EntryTitle documentId={e.documentId} asLink={false} />
+              </b>
               {e.note ? <div className="small muted">{e.note}</div> : null}
             </li>
           ))}

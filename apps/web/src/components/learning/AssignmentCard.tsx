@@ -8,7 +8,7 @@ export function AssignmentCard({ a }: { a: Assignment }) {
   const due =
     a.status === 'completed' ? `הושלם ${fmtDate(a.completedAt ?? a.dueAt)}` : `יעד: ${inDays(a.dueAt)}`;
   return (
-    <article className="tcard learning-card">
+    <article className={'tcard learning-card' + (a.status === 'overdue' ? ' overdue' : '')}>
       <div className="learning-card-head">
         <Chip tone={a.kind === 'quiz' ? 'chip-purple' : 'chip-blue'}>{KIND_LABEL[a.kind]}</Chip>
         {a.reason === 'refresh' ? <Chip tone="chip-amber">רענון ידע</Chip> : null}
