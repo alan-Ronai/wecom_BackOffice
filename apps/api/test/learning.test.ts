@@ -162,6 +162,32 @@ run('learning content', () => {
       ).statusCode,
     ).toBe(403);
   });
+  it('sanitizes the description on create and on patch', async () => {
+    // `learning_items.description` is the one wave 5 HTML column: `ItemPreview.tsx` renders it
+    // with `dangerouslySetInnerHTML`. Same ruling as wave 4's C-C2 — the repo cleans it, so no
+    // route can forget. `<script>`'s whole subtree goes (it is in the sanitizer's DROP set) and
+    // `onclick` is not in the `p` attribute allowlist, so both halves of this payload disappear.
+    const dirty = '<p onclick="x()">a<script>alert(1)</script></p>';
+    const created = await createItem('quiz', editor, { description: dirty });
+    expect(created.description).toBe('<p>a</p>');
+
+    const clean = await createItem('briefing');
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/learning/items/${clean.id}`,
+      headers: auth(editor),
+      payload: { description: dirty },
+    });
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().description).toBe('<p>a</p>');
+
+    // The column itself, not just the serialized response: a later reader of the row — the
+    // publish snapshot among them — must not be the one that has to remember to clean.
+    const stored = await db.pool.query('select id, description from learning_items where id = any($1)', [
+      [created.id, clean.id],
+    ]);
+    for (const row of stored.rows) expect(row.description).toBe('<p>a</p>');
+  });
   it('denies authoring without learning.manage and publishing without learning.publish', async () => {
     expect(
       (

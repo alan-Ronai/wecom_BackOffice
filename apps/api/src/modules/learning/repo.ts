@@ -16,6 +16,7 @@ import type {
   QuizQuestion,
   SourceVersion,
 } from '@wecom/shared';
+import { sanitizeHtml } from '@wecom/shared';
 import type pg from 'pg';
 import type { Tx } from '../../lib/sql.js';
 import { httpError } from '../../lib/http.js';
@@ -247,6 +248,29 @@ export async function listCards(
 }
 
 /* ── writes ────────────────────────────────────────────────────────────── */
+
+/**
+ * The same ruling as wave 4's C-C2, for the same reason.
+ *
+ * `learning_items.description` is rich text — `RichText … compact` writes it, and
+ * `ItemPreview.tsx` renders it with `dangerouslySetInnerHTML`, its comment already asserting
+ * "Sanitised server-side, like every other rich-text body the app renders". Nothing was. The
+ * create and patch routes put the authored string straight into the column, so a manager could
+ * store `<p onclick="…">` or a `<script>` and every later preview of that item would carry it.
+ *
+ * Sanitizing here rather than in the routes means no caller can forget — the way
+ * `documents/repo.ts`'s `cleanBody` and `sourcedocs/repo.ts`'s `saveSourceDocument` already do
+ * it for the two other HTML columns. It also covers the publish snapshot for free:
+ * `publishItem` builds its snapshot from `getItem`, so it can only ever see a cleaned row.
+ *
+ * `briefing_entries.note` and the `quiz_questions` columns are deliberately *not* run through
+ * this: they are plain text, rendered as text (`{e.note}` in `BriefingReader` and `ItemPreview`,
+ * `{q.stem}` in the players), so React escapes them and sanitizing would only corrupt a note
+ * that legitimately mentions `<` or `&`.
+ */
+const cleanDescription = (html: string | null | undefined): string =>
+  html == null ? '' : sanitizeHtml(html);
+
 export async function createItem(tx: Tx, body: LearningItemCreate, userId: string): Promise<LearningItem> {
   const r = await tx.query(
     `insert into learning_items(kind, title, description, world_slug, pass_mark, max_attempts, estimated_minutes, created_by, updated_by)
@@ -254,7 +278,7 @@ export async function createItem(tx: Tx, body: LearningItemCreate, userId: strin
     [
       body.kind,
       body.title,
-      body.description ?? '',
+      cleanDescription(body.description),
       body.worldSlug ?? null,
       body.passMark ?? null,
       body.maxAttempts ?? null,
@@ -282,7 +306,7 @@ export async function patchItem(
   const params: unknown[] = [id];
   for (const [k, col] of Object.entries(PATCH_COLUMNS) as [keyof LearningItemPatch, string][])
     if (body[k] !== undefined) {
-      params.push(body[k]);
+      params.push(k === 'description' ? cleanDescription(body.description) : body[k]);
       sets.push(`${col} = $${params.length}`);
     }
   params.push(userId);
