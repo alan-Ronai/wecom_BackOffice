@@ -155,5 +155,97 @@ What follows is what was deliberately *not* done, each with the cost of the ruli
 | **A-M8** — `visible()` calls `repo.getItem`, which assembles entries, questions and source versions with three extra queries, purely to make a visibility decision; most handlers then throw the result away and re-read. | Parked. It is three queries on an authoring route, and the fix is a second, leaner loader whose visibility rule would have to be kept in step with `canSee` by hand — the class of duplication this codebase has already been bitten by. Worth doing with a proper `canSeeById`, not as a fix-wave shortcut. | Noticeable only on `DELETE` and `publish`, and only at authoring scale (a handful of managers). Measured: nothing in `perf:load` touches these routes. |
 | **A-M11** — E-1 *raises* the source-review flag, not only keeps it: with a `pending_push` link, a human publish sets `source_review_needed=true` even when it was false before, and `pending_push` is durable. | Parked for the spec owner, as the review itself recommends. The behaviour is consistent with the spec's wording ("keeps … with reason ממתין לדחיפה/קונפליקט") and the test asserts only the "keeps" direction. This is a question, not a defect. | Every publish of a read-only-linked document is flagged for source review, so the queue fills with documents whose only problem is that the connector cannot write back. One line in `documents/repo.ts` either way once the owner answers. |
 | **A-M4 follow-up** — `failedQuestionMin` and `topicViewsMin` are constants in `gaps/heuristics.ts`, not `WorkflowSettings.gaps` keys. | The disagreement the finding is about (5 in the heuristic, 3 in the dashboard tile) is fixed: both read one constant. Promoting them to settings means a shared-schema change and a field on the admin workflow form, which the web half of this fix wave owns and is editing concurrently. | An operator who wants a different floor needs a deploy. The promotion is additive — two zod keys with the same defaults, plus two inputs on the form — and nothing has to move to accept it. |
-| **A-C2 exclusions** — the field-rename republish (`fields/repo.ts`) and the connector sync publish (`connectors/documents-adapter.ts`) do **not** go through `publishAndFlag`. | Deliberate, and recorded in `documents/publishWithFlag.ts`'s header. A field rename rewrites a CRM field's *name* across every document that references it, so the detector's "CRM field changed" rule would fire on all of them at once and one rename would invalidate every completion in the system for a change that taught nobody anything. A sync pull is not an editorial decision — the remote is the author, and `publishDocument` already treats `kind: 'sync'` as non-human for the approver and source-review flags. | A genuinely significant change that arrives *only* through a connector pull does not trigger a refresh; an editor has to republish for it to count. For the field rename, a rename that really does change what an agent must do goes unflagged until the next editorial publish of those documents. |
+| **A-C2 exclusions** — the field-rename republish (`fields/repo.ts`), the connector sync publish (`connectors/documents-adapter.ts`) and the version restore (`documents/repo.ts`'s `restoreVersion`, `kind: 'restore'`) do **not** go through `publishAndFlag`. | Deliberate, and recorded in `documents/publishWithFlag.ts`'s header. A field rename rewrites a CRM field's *name* across every document that references it, so the detector's "CRM field changed" rule would fire on all of them at once and one rename would invalidate every completion in the system for a change that taught nobody anything. A sync pull is not an editorial decision — the remote is the author, and `publishDocument` already treats `kind: 'sync'` as non-human for the approver and source-review flags. A restore is a rollback to a version that was already flagged when it was first published, so flagging it again would invalidate completions for content the learner has already been taught. | A genuinely significant change that arrives *only* through a connector pull does not trigger a refresh; an editor has to republish for it to count. For the field rename, a rename that really does change what an agent must do goes unflagged until the next editorial publish of those documents. |
 | **A-I3 attempt budget** — a re-opened refresh resets the attempt count by moving `assigned_at`, rather than modelling assignment *cycles*. | Accepted. `learning_assignments` is unique on `(item_id, user_id, item_version, reason)`, so a second refresh row for the same item version cannot exist and should not: the learner owes one refresh, for a newer reason. Counting attempts from `assigned_at` is one predicate, no migration, and every non-refresh assignment is unaffected because it never moves. | `attemptsUsed` and `lastScore` on a re-opened refresh describe the current cycle only; the earlier cycle's attempts are still in `learning_attempts` (the heuristics and the dashboard read them) but no API surface shows them per cycle. A real cycle column is a migration whenever the product asks for that history. |
+
+## Merged gate
+
+`wave5/gate` = `wave5/integration` (a488fbd) + `main` merged twice — once at 4aaeb27, then again at
+53e0be1 after main moved mid-gate. Both merges were clean: no conflict in any file, including the
+seven the integration plan expected to fight over. The reason is that `wave5/integration` had
+already absorbed main through the point where the append-only files (`packages/shared/src/events.ts`
+and `permissions.ts`, `apps/api/src/plugins/boss.ts`, `apps/web/src/routes.tsx`, `keys.ts`,
+`test/msw/handlers.ts`) were last touched, and main's newer commits did not touch them again.
+`0043_telemetry_client_error.js` is byte-identical to main's amended version (nullable
+`path`/`message`); the wave 5 tree carries no competing copy.
+
+Migration order reads `…0043, 0044, 0045, 0046_learning_content, 0047_learning_tracking,
+0048_knowledge_gaps, 0049_wave5_seams` — nothing in 0039–0042, nothing at 0050 or above.
+
+| Gate | Result |
+|---|---|
+| `pnpm install` | clean |
+| `pnpm -r build` | clean, 5 projects |
+| `pnpm typecheck` | clean, 5 projects |
+| `pnpm lint` | clean (eslint `--max-warnings 0` + prettier) |
+| `pnpm --filter @wecom/shared test` | 79 passed / 15 files |
+| `pnpm --filter @wecom/model test` | 30 passed / 5 files |
+| `pnpm --filter @wecom/connectors test` | 49 passed / 8 files |
+| `pnpm --filter @wecom/api test` | 197 passed, 415 skipped / 99 files |
+| `pnpm --filter @wecom/web test --minWorkers=1 --maxWorkers=4` | 757 passed, 1 failed / 113 files — the known `wave4-mounts.test.tsx` TipTap race; green in isolation (21/21) |
+| `RUN_INTEGRATION=1 pnpm --filter @wecom/api test:int` | 612 passed / 99 files, first run, no flake |
+| `pnpm openapi` | regenerates byte-identically; no drift to commit |
+| `apps/api/test/route-coverage.test.ts` | 4 passed |
+| `apps/web/test/source/sourcedocs-contract.test.ts` | 5 passed |
+| `packages/connectors/test/contract.test.ts` | 1 passed |
+| `pnpm e2e:real` | 15 passed (2.4m), ports 4191/6001/10081 |
+| `E2E_OIDC=1 pnpm e2e:real` | 16 passed (2.2m), issuer on 9411 |
+| `pnpm --filter @wecom/api perf:sql` | row-identical for all 12 sampled queries; p95 173.9 → 155.3 ms (1.1x), p50 155.3 → 20.3 ms (7.6x) |
+| `pnpm --filter @wecom/api perf:check` | PASSED — every endpoint inside its §11 p95 threshold |
+| `pnpm --filter @wecom/api perf:load --compare` | **not run to completion** — see below |
+
+### `perf:sql`, merged tree
+
+```
+perf-sql: 5000 documents, 46002 steps
+perf-sql: captured 12 steps statements (union form, baseline reconstructed), 2 word group(s)
+perf-sql: verifying the rewrite returns identical rows...
+  identical for every one of the 12 sampled queries
+perf-sql: timing 20 iterations over 12 queries...
+
+steps statement                 n       p50 ms    p95 ms    max ms
+baseline (string_agg ilike or)  240     155.3     173.9     299.7
+landed (union of arms)          240     20.3      155.3     185.1
+
+p95 173.9 ms → 155.3 ms (1.1x), p50 155.3 ms → 20.3 ms (7.6x)
+```
+
+### `perf:check`, merged tree
+
+```
+endpoint                      p50 ms    p95 ms    max ms    threshold
+GET /documents                16.2      19.2      21.2      300 ms OK
+GET /documents/:id            1.2       1.8       2.2       300 ms OK
+GET /search (hebrew)          93.5      100.8     112.4     500 ms OK
+GET /search (latin)           39.2      63.7      69.8      500 ms OK
+GET /graph                    47.3      56.3      74.1      300 ms OK
+GET /graph/impact/:doc        36.1      42.6      45.1      300 ms OK
+GET /graph/impact/:field      41.4      48.3      53.0      300 ms OK
+GET /fields/:name/page        9.4       12.1      13.3      300 ms OK
+GET /blocks/:id/page          6.8       8.7       9.0       300 ms OK
+GET /documents/:id/backlinks  1.1       1.3       1.7       300 ms OK
+GET /dashboards               4.8       7.8       12.1      300 ms OK
+
+perf-check PASSED: all endpoints within their §11 p95 threshold
+```
+
+### Why `perf:load --compare` has no numbers here
+
+Two attempts, both defeated by the machine rather than by the code:
+
+1. The first died in `startTestDb` — `Health check not healthy after 120000ms`, testcontainers
+   giving up before Postgres answered.
+2. The second seeded fine and then collapsed. Its first phase was supposed to be 60 s; it ran for
+   **943 s** and served 262 requests, reporting `ALL p50 652.1 ms / p95 933402.3 ms`. A p95 of
+   fifteen minutes is not a search regression, it is queueing: the box was at load average 104 with
+   another session's full `wecom-kb-e2e-*` compose stack (ollama included) resident in the same
+   7.7 GiB Docker VM, and `perf:load`'s profile is 20 concurrent clients against a pool of 20.
+   Killed rather than left to finish; four phases at that rate is over an hour of a contended
+   machine for numbers that measure the contention.
+
+This is the failure mode the script's own header warns about ("machine state moves the numbers
+further than the code under test does"), in its acute form. The §11 search NFR is therefore carried
+here by `perf:sql` and `perf:check`, both of which ran clean on the merged tree — `perf:check`
+passing every threshold *while* the box was at load 104 is the stronger of the two data points.
+`perf:load --compare` should be re-run on a quiet machine before the wave is signed off; nothing in
+wave 5 touches the search path, so it is a confirmation rather than an open question.

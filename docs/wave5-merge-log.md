@@ -127,3 +127,71 @@ Copy that differs from the plan's draft, and what the mounts assert instead:
 8. **F-4 was dropped**: already closed on `main` (`ef91db8`). **A-4** is closed by main's own
    `TypeBadge` change and its test; V6's duplicate assertion was removed. **E-1** is V6's, in
    `publishDocument` with an integration test in `wave5-seams.test.ts`.
+
+## Main merged into `wave5/gate`
+
+`wave5/gate` branched from `wave5/integration` at a488fbd and merged `main` twice — at 4aaeb27, and
+again at 53e0be1 when main moved while the gate was running. **Both merges were clean.** Every file
+the plan flagged as a likely conflict came through untouched, because `wave5/integration` had
+already absorbed main past the last commit that edited them:
+
+- `apps/api/migrations/0043_telemetry_client_error.js` — byte-identical to main's amended version
+  (nullable `path`/`message`). No wave 5 copy to reconcile.
+- `packages/shared/src/events.ts`, `permissions.ts`, `apps/api/src/plugins/boss.ts`,
+  `apps/web/src/routes.tsx`, `keys.ts`, `apps/web/test/msw/handlers.ts` — all append-only files,
+  none of them touched by the 59 commits main added. Wave 3 entries still precede wave 5 entries;
+  `events.test.ts` and `permissions.test.ts` needed no reordering.
+- `apps/api/test/migrations.test.ts` — both counting rules intact, wave 5 at 0046–0049 above main's
+  0043–0045.
+
+What the 59 commits brought in, and what it meant for wave 5:
+
+| From main | Wave 5 impact |
+|---|---|
+| CSP with no `unsafe-inline`; the pre-paint theme script moved to `apps/web/public/theme-init.js` | None. `apps/web/index.html` now has only `src=`-based scripts, and the wave 5 UI adds no inline script. |
+| Production secret guard rejects placeholder / low-entropy `SESSION_SECRET` and `CONNECTOR_KEY` | None. No wave 5 fixture sets either; the only placeholders left are `DEV_SESSION_SECRET` in `config.ts` and the strings `env-example.test.ts` deliberately feeds the guard. |
+| `telemetry_events` carries `path` / `message` (0043 amended in place) | None — additive columns. |
+| `ConnectorTypeInfoSchema.configSchema` is strict JSON Schema | None. Wave 5 does not render a connector config. |
+| Connector wizard carries a configuration; self-hosted Hebrew fonts; `wordpress-wizard.spec.ts` | The real e2e run grows from 14 specs to 15 (16 with `E2E_OIDC=1`). |
+| `scripts/lib/ports.mjs`, e2e secrets generated per run | The gate's own port overrides still apply. |
+
+### Fixes made on `wave5/gate`
+
+Only one commit beyond the two merges — 2fc984d, the re-review residuals. None of it was merge
+fallout; the merged tree was green before it and after it.
+
+1. `QuizBuilder.tsx`'s generation toast hand-rolled its plural. It now reads
+   `counted(n, questions, 'נוצרה', 'נוצרו')` from `lib/count.ts`, which is the one place the wording
+   lives (A-3). The noun is imported as `questionsCount` because the component already has a
+   `questions` state variable.
+2. `BriefingBuilder.tsx` kept a local `move`. It imports the shared one from `lib/learning.ts`,
+   which the quiz builder and the player already use — and which additionally guards `i` out of
+   range, where the local copy only guarded `j`.
+3. Defect 6 above said the lost-selection bug was logged for V4a; it was fixed in the fix wave.
+4. `publishWithFlag.ts`'s header records a third deliberately-excluded publish path:
+   `documents/repo.ts`'s `restoreVersion` (`kind: 'restore'`). A rollback records no change flag
+   because the version it restores was already flagged when it was first published. The matching
+   row in `docs/wave5-acceptance.md` was widened to match.
+5. `setPublishFlagDeps` takes the deps **thunk** rather than a by-value snapshot, so a notifier
+   swapped after `learningTrackingModule` registers is honoured. Captured by value, the holder froze
+   whatever `app.notifier` was at registration and a swapped test double was silently ignored.
+6. `gaps/detect.ts` only calls `pg_advisory_unlock` when `pg_try_advisory_lock` actually returned
+   true. Unconditionally unlocking a lock the session never took makes Postgres log "you don't own a
+   lock of type ExclusiveLock" on every throttled concurrent click.
+
+### Declined
+
+`CompletionDashboard.tsx`'s `RISKY` CSV guard was asked to drop `-` from its leading-character set,
+on the grounds that no exported column can be negative. The set is not about negative numbers: the
+first exported column is `displayName`, which a user sets, and a leading `-` is a live formula
+trigger in Excel and Sheets (`-1+cmd|'/c calc'!A0`) listed alongside `=`, `+` and `@` in the OWASP
+CSV-injection set. Dropping it would reopen exactly the hole the comment above the regex describes,
+and the guard costs one regex test per cell. Left as it was; raise it again if the intent was
+something other than the injection set.
+
+### Known flake seen on this branch
+
+`apps/web/test/integration/wave4-mounts.test.tsx` → "edits a text-kind item as a body, not as steps"
+(the TipTap race) failed once in the full web run and passed 21/21 in isolation. The two API flakes
+named in the plan (`boss.test.ts`, `sources/routes.test.ts`) did not reproduce: integration went
+612/612 on the first attempt.
