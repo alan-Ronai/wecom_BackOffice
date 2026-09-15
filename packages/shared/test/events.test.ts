@@ -32,6 +32,8 @@ describe('events', () => {
       'gap.detected',
       // Pipeline fan-out — appended, never reordered.
       'sync.link_skipped',
+      // Wave 6 — appended, never reordered.
+      'ai.message',
     ]);
   });
   it('validates the sync.link_skipped payload', () => {
@@ -47,6 +49,15 @@ describe('events', () => {
     );
     expect(e.name).toBe('sync.link_skipped');
     expect(e.payload).toMatchObject({ externalId: 'posts:101', skippedDocumentId: other });
+  });
+  it('validates the wave 6 ai.message payload', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const e = EventSchema.parse(makeEvent('ai.message', { conversationId: id, messageId: id, userId: id }));
+    expect(e.name).toBe('ai.message');
+    expect(e.payload).toMatchObject({ userId: id });
+    expect(() =>
+      EventSchema.parse(makeEvent('ai.message', { conversationId: id, messageId: id } as never)),
+    ).toThrow();
   });
   it('validates the wave 5 events', () => {
     const id = '11111111-1111-4111-8111-111111111111';

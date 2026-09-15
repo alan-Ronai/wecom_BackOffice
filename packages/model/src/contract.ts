@@ -26,6 +26,39 @@ export interface ProposalContext {
   linkedSteps: LinkedStep[];
   fields: { name: string; status: string }[];
   blocks: { id: string; title: string; actions: string[] }[];
+  /* ── wave 6 (X1): the briefed, impact-aware prompt (spec §1.6, §1.7) ───── */
+  /** The admin-edited company brief (`ai.brief`). Absent means "no brief configured". */
+  brief?: string;
+  /** The admin-edited style rules for agent-facing text (`ai.style`). */
+  style?: string;
+  /** What the change touches beyond its own steps — the whole point of wave 6. */
+  impact?: ImpactSet;
+  /** Accepted suggestions of the same type to imitate; X1 budgets how many fit. */
+  examples?: FewShotExample[];
+  /**
+   * `ai.limits.maxContextChars`. The assembler, not the caller, decides what to drop, but
+   * it has to be told the budget — a CPU-only 7B with everything appended is a timeout.
+   */
+  maxContextChars?: number;
+}
+
+/**
+ * Everything the change reaches, computed by the api from the graph and the embeddings.
+ * `usedBy` counts are what make a model cautious about a shared block: they are the
+ * difference between "rewrite this action" and "this action appears in nine documents".
+ */
+export interface ImpactSet {
+  documents: { id: string; title: string; why: string }[];
+  blocks: { id: string; title: string; usedBy: number }[];
+  fields: { name: string; usedBy: number }[];
+  topics: { id: string; name: string }[];
+  related: { id: string; title: string; similarity: number }[];
+}
+
+/** One accepted suggestion, shown to the model as "this is what a good answer looks like". */
+export interface FewShotExample {
+  diff: string;
+  suggestion: ProposedSuggestion;
 }
 /**
  * What a model returns. Everything the *server* owns is omitted, including wave 6's
@@ -72,11 +105,63 @@ export interface GeneratedQuestion {
   modelConf: number | null;
 }
 
+/* ── wave 6 (X2): chat ──────────────────────────────────────────────────── */
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string;
+  /** Set on an assistant turn that asked for tools. */
+  toolCalls?: ToolCall[];
+  /** Set on a `tool` turn: which call this is the result of. */
+  toolCallId?: string;
+}
+/**
+ * A tool as the model sees it. `parameters` is a JSON Schema object — Ollama's tool calling
+ * takes it verbatim, and the server validates the arguments again with zod before running
+ * anything, because a model's "valid JSON" is not an authorisation.
+ */
+export interface ChatToolSpec {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+export interface ChatResult {
+  content: string;
+  toolCalls: ToolCall[];
+  tokensIn: number;
+  tokensOut: number;
+}
+
 export interface ModelClient {
   name: string;
   available(): Promise<boolean>;
   proposeChanges(ctx: ProposalContext): Promise<ProposedSuggestion[]>;
   embed?(text: string): Promise<number[]>;
+  /**
+   * Wave 6 (X0). Optional, like `generateQuestions`: absent means unsupported, and
+   * `RuleBasedModel` implements neither — there is no deterministic fallback for a chat.
+   *
+   * `onToken` is what makes the SSE stream tokens rather than one blob; `signal` is how a
+   * closed browser tab stops occupying the single CPU inference slot.
+   */
+  chat?(input: {
+    model?: string;
+    messages: ChatMessage[];
+    tools?: ChatToolSpec[];
+    onToken?: (t: string) => void;
+    signal?: AbortSignal;
+  }): Promise<ChatResult>;
+  /**
+   * Wave 6 (X1). One round trip for a batch of texts — the reindex job after an embedder
+   * change is tens of thousands of embeddings, and per-text calls make it hours.
+   * Anything that wraps `embed` must wrap this too (`lib/embedStatus.ts`).
+   */
+  embedBatch?(texts: string[]): Promise<number[][]>;
   /**
    * Wave 5 (V1). Optional: `RuleBasedModel` does not implement it — the api owns the
    * deterministic rules and treats an absent method exactly like a failed call.

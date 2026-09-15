@@ -29,10 +29,14 @@ export const PERMISSIONS = [
   'learning.publish',
   'gaps.read',
   'gaps.manage',
+  // Wave 6 — AI copilot. Appended, never reordered.
+  'ai.ask',
+  'ai.chat',
+  'ai.manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
-const agent: Permission[] = ['docs.read', 'notes.write', 'learning.read'];
+const agent: Permission[] = ['docs.read', 'notes.write', 'learning.read', 'ai.ask'];
 const editor: Permission[] = [
   ...agent,
   'docs.create',
@@ -44,6 +48,9 @@ const editor: Permission[] = [
   'analytics.read',
   'learning.manage',
   'gaps.read',
+  // Wave 6: the editor tool set — read the source and the impact, propose edits, refine a
+  // suggestion. Nothing here writes; `ai.manage` (admin only) is the brief, models and evals.
+  'ai.chat',
 ];
 const lead: Permission[] = [
   ...editor,

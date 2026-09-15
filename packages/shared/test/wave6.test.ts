@@ -33,7 +33,7 @@ describe('wave 6 chat events', () => {
     const events: ChatEvent[] = [
       { type: 'token', text: 'שלום' },
       { type: 'tool_call', id: 'c1', name: 'read_document', args: { documentId: id } },
-      { type: 'tool_result', id: 'c1', ok: true, summary: 'נקרא מסמך אחד' },
+      { type: 'tool_result', id: 'c1', name: 'read_document', ok: true, summary: 'נקרא מסמך אחד' },
       {
         type: 'proposed_edits',
         proposedEditsId: id,
@@ -51,9 +51,9 @@ describe('wave 6 chat events', () => {
   it('defaults tool-call args and tool-result summary', () => {
     const e = ChatEventSchema.parse({ type: 'tool_call', id: 'c1', name: 'search_kb' });
     expect(e).toMatchObject({ type: 'tool_call', args: {} });
-    expect(ChatEventSchema.parse({ type: 'tool_result', id: 'c1', ok: false })).toMatchObject({
-      summary: '',
-    });
+    expect(
+      ChatEventSchema.parse({ type: 'tool_result', id: 'c1', name: 'search_kb', ok: false }),
+    ).toMatchObject({ summary: '' });
   });
 });
 

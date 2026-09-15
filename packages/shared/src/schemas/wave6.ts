@@ -155,9 +155,11 @@ export type AiToolCall = z.infer<typeof AiToolCallSchema>;
 
 export const AiToolResultSchema = z.object({
   id: z.string().min(1),
+  name: z.string().min(1),
   ok: z.boolean(),
   summary: z.string().default(''),
-  data: z.unknown().optional(),
+  /** The tool's own return value — `draft_step` hands the editor dock a step to insert. */
+  payload: z.unknown().optional(),
 });
 export type AiToolResult = z.infer<typeof AiToolResultSchema>;
 
@@ -284,8 +286,11 @@ export const ChatEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('tool_result'),
     id: z.string().min(1),
+    name: z.string().min(1),
     ok: z.boolean(),
     summary: z.string().default(''),
+    /** Structured result for the panes that consume one (`draft_step` → the editor dock). */
+    payload: z.unknown().optional(),
   }),
   /** The overlay renders the hunks against a version, so the frame carries it. */
   z.object({
