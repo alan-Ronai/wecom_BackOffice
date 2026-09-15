@@ -80,7 +80,7 @@ apps/web/test/workspace/WorkspacePage.test.tsx            (new)
 
 | Export | Path | Props / signature |
 |---|---|---|
-| `ChatPane` | `components/ai/ChatPane.tsx` | `{ kind: 'workspace' \| 'editor' \| 'article'; documentId: string; sourceRevisionId?: string; context?: ChatContext; readOnly?: boolean; compact?: boolean; onProposedEdits?: (pe: ProposedEdits) => void; onRefinedSuggestion?: (suggestionId: string, payload: SuggestionPayload) => void; className?: string }` where `ChatContext = { stepKey?: string; suggestionId?: string; selection?: string }` |
+| `ChatPane` | `components/ai/ChatPane.tsx` | `{ kind: 'workspace' \| 'editor' \| 'article'; documentId: string; sourceRevisionId?: string; context?: ChatContext; readOnly?: boolean; compact?: boolean; onProposedEdits?: (pe: ProposedEdits) => void; onRefinedSuggestion?: (suggestionId: string, payload: SuggestionPayload) => void; onToolResult?: (name: AiToolName, payload: unknown, messageId: string) => void; stepIndex?: Record<string /* step num */, string /* step key */>; className?: string }` where `ChatContext = { stepKey?: string; suggestionId?: string; selection?: string }`. `onToolResult` fires once per tool result that carried a `payload`, when the reply seals (the editor dock receives `draft_step` this way — no bespoke prop). `stepIndex` feeds `renderWithStepLinks(content, documentId, stepIndex)` from `components/ai/citations.tsx` (**X4b owns that file**; X4a imports it behind a `try`-free static import only once X4b lands — until then `MessageList` renders through a local `renderAnswer` stub that X6 points at the shared helper; see Task 3). |
 | `useConversationFor` | `api/hooks/ai.ts` | `(kind, documentId, opts?: { enabled?: boolean }) => { conversation: Conversation \| null; create: () => Promise<Conversation>; isPending }` — finds the caller's latest conversation of that kind for the document or creates one on first send |
 | `useSendMessage` | `api/hooks/ai.ts` | `(conversationId: string \| null) => { send(body: SendMessageBody): void; stop(): void; view: ChatViewState; isStreaming: boolean; error: string \| null }` |
 | `streamChat` | `api/aiStream.ts` | `(input: { conversationId: string; body: SendMessageBody; signal: AbortSignal; onEvent: (e: ChatEvent) => void }) => Promise<void>` |
@@ -672,7 +672,8 @@ function emit(frame: string, onEvent: (e: ChatEvent) => void): void {
 ```ts
 import type { ChatEvent, ProposedEditOp, SuggestionPayload } from '@wecom/shared';
 
-export interface ToolChip { id: string; name: string; args: Record<string, unknown>; ok?: boolean; summary?: string }
+/** `payload` is whatever the server attaches to `tool_result` (X0's event carries an optional `payload`; when absent the chip has only a summary). */
+export interface ToolChip { id: string; name: string; args: Record<string, unknown>; ok?: boolean; summary?: string; payload?: unknown }
 export interface StreamingReply {
   content: string;
   tools: ToolChip[];
@@ -695,7 +696,7 @@ export function chatReducer(s: ChatViewState, e: ChatEvent): ChatViewState {
     case 'tool_call':
       return { ...s, streaming: { ...cur, tools: [...cur.tools, { id: e.id, name: e.name, args: e.args }] } };
     case 'tool_result':
-      return { ...s, streaming: { ...cur, tools: cur.tools.map((t) => (t.id === e.id ? { ...t, ok: e.ok, summary: e.summary } : t)) } };
+      return { ...s, streaming: { ...cur, tools: cur.tools.map((t) => (t.id === e.id ? { ...t, ok: e.ok, summary: e.summary, payload: (e as { payload?: unknown }).payload } : t)) } };
     case 'proposed_edits':
       return { ...s, streaming: { ...cur, proposedEditsId: e.proposedEditsId, proposedOps: e.ops } };
     case 'refined_suggestion':
@@ -970,6 +971,19 @@ describe('ChatPane', () => {
     const { container } = renderWithProviders(<ChatPane kind="article" documentId={DOC_1} />);
     await waitFor(() => expect(container.querySelector('.chat-pane')).toBeNull());
   });
+  it('hands tool payloads to onToolResult when the reply seals', async () => {
+    scriptStream([
+      { type: 'tool_call', id: 't9', name: 'draft_step', args: {} },
+      { type: 'tool_result', id: 't9', ok: true, summary: 'טיוטה', payload: { title: 'שלב חדש' } } as never,
+      { type: 'done', messageId: MSG_2, tokensIn: 1, tokensOut: 1, latencyMs: 1 },
+    ]);
+    const user = userEvent.setup();
+    const got: unknown[] = [];
+    renderWithProviders(<ChatPane kind="editor" documentId={DOC_1} onToolResult={(name, payload) => got.push([name, payload])} />);
+    await user.type(await screen.findByRole('textbox', { name: 'הודעה למערכת' }), 'טיוטה');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(got).toEqual([['draft_step', { title: 'שלב חדש' }]]));
+  });
   it('posts feedback from the thumbs', async () => {
     const user = userEvent.setup();
     renderWithProviders(<ChatPane kind="workspace" documentId={DOC_1} />);
@@ -1111,7 +1125,7 @@ export function ProposedEditsCard({ ops, onAccept, onReject, onAcceptAll, disabl
 
 `FeedbackButtons.tsx` — two `<button>`s `aria-label="תשובה טובה"` / `"תשובה לא טובה"`; on 👎 open a one-line `modal.prompt('מה היה חסר?', 'הערה', '')` and post with the note; after posting, render the chosen thumb as pressed (`aria-pressed`).
 
-`MessageList.tsx` — renders history (`AiMessage[]`) then the reducer's `sealed` replies that are not yet in history (dedupe by `messageId`), then the `streaming` bubble with a caret. Assistant bubbles render `content` through `Fmt` (`noCrm`), tool chips above the text, then `ProposedEditsCard` / `RefinedSuggestionCard` when present, then `FeedbackButtons` (only for assistant messages with an id). `aria-live="polite"` on the streaming bubble; auto-scroll to bottom on change unless the user scrolled up (track with a ref + `scrollTop` check).
+`MessageList.tsx` — renders history (`AiMessage[]`) then the reducer's `sealed` replies that are not yet in history (dedupe by `messageId`), then the `streaming` bubble with a caret. Assistant bubbles render `content` through `renderAnswer(content, documentId, stepIndex)` — a local function in `MessageList.tsx` that today returns `<Fmt text={content} noCrm …/>` and that X6 replaces with `renderWithStepLinks` from `components/ai/citations.tsx` (X4b's file; citations "שלב <num>" become `<Link to="/doc/:id/:stepKey">` when `stepIndex[num]` exists). `MessageList` takes `documentId` and `stepIndex` props for that reason. Tool chips above the text, then `ProposedEditsCard` / `RefinedSuggestionCard` when present, then `FeedbackButtons` (only for assistant messages with an id). `aria-live="polite"` on the streaming bubble; auto-scroll to bottom on change unless the user scrolled up (track with a ref + `scrollTop` check).
 
 `ChatPane.tsx`:
 ```tsx
@@ -1135,10 +1149,15 @@ const KIND_LABEL: Record<ChatKind, string> = { workspace: 'סביבת העבוד
  * composer writes (`ai.chat`). Nothing the model returns is applied without a click.
  */
 export function ChatPane({
-  kind, documentId, sourceRevisionId, context, readOnly, compact, onProposedEdits, onRefinedSuggestion, className,
+  kind, documentId, sourceRevisionId, context, readOnly, compact, onProposedEdits, onRefinedSuggestion, onToolResult, stepIndex, className,
 }: {
   kind: ChatKind; documentId: string; sourceRevisionId?: string; context?: ChatContext; readOnly?: boolean; compact?: boolean;
-  onProposedEdits?: (pe: ProposedEdits) => void; onRefinedSuggestion?: (suggestionId: string, payload: SuggestionPayload) => void; className?: string;
+  onProposedEdits?: (pe: ProposedEdits) => void; onRefinedSuggestion?: (suggestionId: string, payload: SuggestionPayload) => void;
+  /** Generic hand-off for tool results that carry a payload (e.g. `draft_step` → the editor dock). */
+  onToolResult?: (name: AiToolName, payload: unknown, messageId: string) => void;
+  /** step num → step key, so citations like "שלב 3א" become links to `/doc/:id/:stepKey`. */
+  stepIndex?: Record<string, string>;
+  className?: string;
 }) {
   const can = useCan();
   const mayAsk = can('ai.ask');
@@ -1155,13 +1174,15 @@ export function ChatPane({
   const [ctx, setCtx] = useState<ChatContext | undefined>(context);
   useEffect(() => setCtx(context), [context]);
 
-  // Hand proposed edits / refinements to the host as soon as the reply seals.
+  // Hand proposed edits / refinements / tool payloads to the host as soon as the reply seals.
   const last = chat.view.sealed.at(-1);
   useEffect(() => {
     if (!last) return;
     if (last.proposedEditsId && last.proposedOps && onProposedEdits)
       onProposedEdits({ id: last.proposedEditsId, messageId: last.messageId, documentId, baseSourceVersion: -1, ops: last.proposedOps, status: 'proposed', decidedBy: null, decidedAt: null, resultingSourceVersion: null });
     if (last.refined && onRefinedSuggestion) onRefinedSuggestion(last.refined.suggestionId, last.refined.editedPayload);
+    if (onToolResult)
+      for (const t of last.tools) if (t.ok && t.payload !== undefined) onToolResult(t.name as AiToolName, t.payload, last.messageId);
   }, [last?.messageId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!mayAsk) return null;
