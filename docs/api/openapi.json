@@ -3104,11 +3104,11 @@
                         },
                         "suggestModel": {
                           "type": "string",
-                          "default": "dictalm2.0-instruct:7b-q4_K_M"
+                          "default": "aya-expanse:8b-q4_K_M"
                         },
                         "chatModel": {
                           "type": "string",
-                          "default": "dictalm2.0-instruct:7b-q4_K_M"
+                          "default": "aya-expanse:8b-q4_K_M"
                         },
                         "embedModel": {
                           "type": "string",
@@ -3219,11 +3219,11 @@
                       },
                       "suggestModel": {
                         "type": "string",
-                        "default": "dictalm2.0-instruct:7b-q4_K_M"
+                        "default": "aya-expanse:8b-q4_K_M"
                       },
                       "chatModel": {
                         "type": "string",
-                        "default": "dictalm2.0-instruct:7b-q4_K_M"
+                        "default": "aya-expanse:8b-q4_K_M"
                       },
                       "embedModel": {
                         "type": "string",
@@ -3341,11 +3341,11 @@
                         },
                         "suggestModel": {
                           "type": "string",
-                          "default": "dictalm2.0-instruct:7b-q4_K_M"
+                          "default": "aya-expanse:8b-q4_K_M"
                         },
                         "chatModel": {
                           "type": "string",
-                          "default": "dictalm2.0-instruct:7b-q4_K_M"
+                          "default": "aya-expanse:8b-q4_K_M"
                         },
                         "embedModel": {
                           "type": "string",
