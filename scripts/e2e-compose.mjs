@@ -178,6 +178,69 @@ async function waitFor(label, check, { timeoutMs = 300_000, everyMs = 2_000 } = 
   throw new Error(`timed out waiting for ${label}${lastErr ? `: ${lastErr.message}` : ''}`);
 }
 
+/** How long the pull may make **no** progress at all before it is called stuck. */
+const PULL_STALL_MS = 300_000;
+/** A ceiling, so a pull that is crawling rather than stuck cannot hang the gate for ever. */
+const PULL_CEILING_MS = 3_600_000;
+
+/**
+ * Waits for the one-shot `ollama-pull` service, on progress rather than on a stopwatch.
+ *
+ * A flat budget cannot be sized correctly here. Preflight's `down -v` destroys the `ollama`
+ * volume — deliberately: a volume still holding yesterday's models would satisfy the two-tag
+ * assertion below without `ollama-pull` having run at all, which is the W-3 bug itself — so the
+ * full ~671 MB is fetched on every run (~397 MB for MODEL_NAME and ~274 MB for the
+ * 768-dimensional EMBED_MODEL the embedding spec needs). How long that takes is a property of
+ * the link, not of the stack: the original 15 minutes, and then 30, both expired mid-download
+ * on a throttled one, and the gate reported "timed out waiting for the model pull" about a
+ * stack with nothing whatever wrong with it.
+ *
+ * So the question asked is the right one — "is it still getting anywhere?" — using the pull's
+ * own log as the progress signal, since `ollama pull` rewrites a percentage line continuously
+ * while bytes are moving and goes silent when they are not. Five minutes of silence is stuck
+ * and is reported as stuck; a slow link is simply waited out, up to an hour.
+ */
+async function waitForPull(pullId) {
+  const status = () =>
+    spawnSync('docker', ['inspect', '-f', '{{.State.Status}}', pullId], {
+      encoding: 'utf8',
+    }).stdout?.trim();
+  // Bytes rather than content: the progress line is rewritten in place with carriage returns, so
+  // its *length* is what grows. Both streams, because ollama writes the progress bar to stderr.
+  const progress = () => {
+    const r = spawnSync('docker', ['logs', pullId], {
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+    });
+    return (r.stdout ?? '').length + (r.stderr ?? '').length;
+  };
+
+  const ceiling = Date.now() + PULL_CEILING_MS;
+  let seen = -1;
+  let movedAt = Date.now();
+  while (Date.now() < ceiling) {
+    if (status() === 'exited') {
+      console.log('✓ the model pull finished');
+      return;
+    }
+    const now = progress();
+    if (now !== seen) {
+      seen = now;
+      movedAt = Date.now();
+    } else if (Date.now() - movedAt > PULL_STALL_MS) {
+      compose(['logs', '--tail', '20', 'ollama-pull']);
+      throw new Error(
+        `the model pull has produced no output for ${PULL_STALL_MS / 60_000} minutes — it is stuck, not slow`,
+      );
+    }
+    await sleep(5_000);
+  }
+  compose(['logs', '--tail', '20', 'ollama-pull']);
+  throw new Error(
+    `the model pull is still going after ${PULL_CEILING_MS / 60_000} minutes (~671 MB on a fresh ollama volume) — the link is too slow for this gate`,
+  );
+}
+
 /* ── setup and teardown of things outside compose ─────────────────────────── */
 
 /**
@@ -391,24 +454,7 @@ async function main() {
   // failure reads as itself instead of as an unexplained health timeout ten minutes later.
   const pullId = composeOut(['ps', '-aq', 'ollama-pull']);
   if (!pullId) throw new Error('the ollama-pull service did not start');
-  await waitFor(
-    'the model pull finished',
-    () =>
-      spawnSync('docker', ['inspect', '-f', '{{.State.Status}}', pullId], {
-        encoding: 'utf8',
-      }).stdout?.trim() === 'exited',
-    /**
-     * 30 minutes, doubled from 15. Preflight's `down -v` destroys the `ollama` volume — which is
-     * deliberate and load-bearing: a cached volume would satisfy the two-tag assertion below
-     * without `ollama-pull` having done anything, which is precisely the W-3 bug — so **both
-     * models are fetched from scratch on every run**. That is now ~671 MB rather than ~443 MB,
-     * because `EMBED_MODEL` moved to the 768-dimensional `nomic-embed-text` so the embedding path
-     * can actually store a vector (deploy/e2e.env). The old budget was ~30 s per 10 MB of
-     * headroom; on a 1–4 MB/s link the larger pull ran past it and the gate failed here with the
-     * stack healthy and nothing wrong with it.
-     */
-    { timeoutMs: 1_800_000, everyMs: 5_000 },
-  );
+  await waitForPull(pullId);
   const pullCode = spawnSync('docker', ['inspect', '-f', '{{.State.ExitCode}}', pullId], {
     encoding: 'utf8',
   }).stdout?.trim();
