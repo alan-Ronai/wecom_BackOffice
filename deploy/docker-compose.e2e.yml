@@ -51,7 +51,11 @@ services:
   # it, because `startWpStub` itself binds 127.0.0.1 and would be unreachable from the api
   # container. Reached as `http://wp:8085`, which is why CONNECTOR_HOST_ALLOWLIST names `wp`.
   wp:
-    image: wecom-kb-api
+    # The same expression docker-compose.yml gives the `api` service, and for the same reason: the
+    # image tags are scoped to the compose project so a second stack's `up --build` cannot replace
+    # the images a run in progress is using. Spelling it `wecom-kb-api` here would have pinned this
+    # service to the *pilot's* image while everything around it ran the gate's.
+    image: ${COMPOSE_PROJECT_NAME:-wecom-kb}-api
     entrypoint: ["pnpm", "--filter", "@wecom/api", "exec", "tsx", "/app/scripts/wp-stub.mjs"]
     environment: { WP_STUB_PUBLIC_PORT: "8085" }
     volumes: ["../scripts/wp-stub.mjs:/app/scripts/wp-stub.mjs:ro"]

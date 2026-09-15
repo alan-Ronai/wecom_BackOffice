@@ -165,7 +165,9 @@ Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST`
 ## Verifying a release on the real stack
 `deploy/smoke.sh` answers "is it up?". `pnpm e2e:compose` answers "does it work?" — it builds the
 images, brings this same compose stack up under its own project name (`wecom-kb-e2e`, so it can
-never touch the pilot's volumes), and drives a browser through nginx over TLS: the security
+never touch the pilot's volumes **or its images** — the built tags are
+`${COMPOSE_PROJECT_NAME}-api`/`-web`/`-backup`, so a second stack's `up --build` writes its own set
+rather than over yours), and drives a browser through nginx over TLS: the security
 headers on the document and on a hashed asset, the Palo Alto fallback signing a LAN client in with
 the role it was granted, an editorial round trip (create → publish → search → article), and the
 two-way WordPress loop. Two stubs stand in for the firewall and for WordPress

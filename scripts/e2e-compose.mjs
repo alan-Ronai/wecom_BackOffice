@@ -65,6 +65,12 @@ const ENV_BACKUP = join(DEPLOY, '.env.before-e2e');
 /**
  * Its own compose project, so `down -v` can never take an operator's pilot stack (which uses the
  * `name: wecom-kb` declared in docker-compose.yml) and its database volume with it.
+ *
+ * It is also what scopes the *images*. `deploy/docker-compose.yml` tags them
+ * `${COMPOSE_PROJECT_NAME}-api`/`-web`/`-backup`; they used to be unprefixed, so every project
+ * built from that file wrote the same three tags and any `up --build` elsewhere on the machine —
+ * a second clone, a walkthrough — silently replaced the images this run was using, mid-run. The
+ * project name was already careful about the volumes; the tags were the hole left in it.
  */
 const PROJECT = process.env.E2E_COMPOSE_PROJECT ?? 'wecom-kb-e2e';
 

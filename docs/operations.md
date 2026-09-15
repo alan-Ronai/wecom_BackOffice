@@ -77,7 +77,20 @@ afterwards comes back with the library intact.
 > backup backup.sh`) and copy it off the VM.
 
 Decommissioning for real is `down -v` followed by deleting `deploy/backups`, `deploy/certs/*.pem`
-and `deploy/.env` — the last two are the TLS key and every secret the deployment holds.
+and `deploy/.env` — the last two are the TLS key and every secret the deployment holds. The three
+built images are named after the compose project (`wecom-kb-api`, `wecom-kb-web`,
+`wecom-kb-backup` for the default one), so `docker image rm` takes them without touching another
+project's: `docker compose -f deploy/docker-compose.yml images` lists exactly this stack's.
+
+> **A second stack on the same machine is now safe.** Those tags used to have no project prefix,
+> so any project built from this file wrote the same three — a `-p something-else … up --build`
+> replaced the images a running stack was using, mid-flight and silently. Each project builds its
+> own set now (`${COMPOSE_PROJECT_NAME}-api` and so on). Two consequences worth knowing. The
+> default project's names are unchanged, so nothing on the pilot VM moves. Any *other* project on
+> a machine — a second clone, `pnpm e2e:compose` — rebuilds under its own names on the next
+> `up --build`, and whatever it last wrote to the shared `wecom-kb-*` tags stays there, now
+> orphaned: `docker image rm wecom-kb-api wecom-kb-web wecom-kb-backup` on such a machine, once
+> the pilot stack is not the thing using them.
 
 ## Rotating secrets
 
