@@ -10,7 +10,19 @@ const STATUS: Record<string, string> = {
   invalidated: 'בוטל (רענון)',
 };
 
-const csvCell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+/**
+ * One CSV cell, safe to open in Excel.
+ *
+ * Quoting alone is not enough: a cell that *starts* with `=`, `+`, `-`, `@` (or a control
+ * character) is a formula to Excel and Sheets no matter how it is quoted, so a display name typed
+ * as `=cmd|...` would execute for the lead who opens the export — and the BOM below exists
+ * precisely so they will open it there. A leading apostrophe makes it text again.
+ */
+const RISKY = /^[=+\-@\t\r]/;
+const csvCell = (v: unknown) => {
+  const s = String(v ?? '');
+  return `"${(RISKY.test(s) ? `'${s}` : s).replace(/"/g, '""')}"`;
+};
 
 /** Per-item completion (spec §5), with the CSV a team lead actually takes to a meeting. */
 export function CompletionDashboard({ itemId }: { itemId: string }) {
@@ -24,10 +36,11 @@ export function CompletionDashboard({ itemId }: { itemId: string }) {
     const body = rows.map((r) =>
       [
         r.displayName,
-        r.worldSlugs.join(' '),
+        r.worldSlugs.map(worldLabel).join(' '),
         STATUS[r.status] ?? r.status,
-        r.dueAt,
-        r.completedAt ?? '',
+        // The dates the table shows, not the raw ISO the API sends.
+        fmtDate(r.dueAt),
+        r.completedAt ? fmtDate(r.completedAt) : '',
         r.score ?? '',
         r.attempts,
       ]
