@@ -105,13 +105,15 @@ explicitly, which `resolveModelSlots`' explicit-env precedence supports) and re-
 | `@wecom/shared` | 123 passed / 17 files |
 | `@wecom/connectors` | 49 passed / 8 files |
 | `@wecom/model` | 61 passed / 11 files |
-| `apps/api` unit | 138 passed / 23 files (`test/unit`); 234 passed in the default run |
+| `apps/api` unit | 256 passed (485 integration-only skipped) |
 | `RUN_INTEGRATION=1 apps/api` | 741 passed / 117 files |
 | `apps/web` (`--minWorkers=1 --maxWorkers=4`) | 884 passed / 134 files |
 | OpenAPI regen + contract + route coverage | clean; 174 paths, allowlist free of dead entries |
 | `pnpm e2e:real` | **17 passed**, including W6-E2E-1 and W6-E2E-2 |
 | `E2E_OIDC=1 pnpm e2e:real` | **18 passed** (the OIDC variant adds one spec) |
-| `pnpm e2e:compose` | see the report |
+| `pnpm e2e:compose` | **15 passed** — the WordPress publish spec, which the per-type target rule repaired |
+| `pnpm --filter @wecom/api perf:check` | PASSED, every endpoint inside its §11 p95 threshold |
+| Migrations | `0050`–`0054`, nothing at `0055`+ |
 
 The two new specs found five real defects between them, each listed in the merge log: the
 scripted model's tool-turn test, its intent matching against the context block, the structured
