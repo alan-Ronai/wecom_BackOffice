@@ -16,9 +16,10 @@ export default async function learningTrackingModule(app: FastifyInstance) {
    * A-C2: the same two holders for `sources/content-adapter.ts`, which implements L5's
    * `ContentApi` and is handed a database client and nothing else. Registered here, the way
    * wave 4 says a lane wires `setNotifier` and friends — the holders are decorated on the root
-   * instance, so this reaches every sibling module and every job.
+   * instance, so this reaches every sibling module and every job. The same thunk is passed, not a
+   * by-value snapshot, so a swapped notifier is honoured there too.
    */
-  setPublishFlagDeps({ notifier: app.notifier, events: app.events });
+  setPublishFlagDeps(deps);
   await app.register(trackingRoutes(deps));
   app.addHook('onReady', async () => {
     await startTrackingJobs(app, deps);

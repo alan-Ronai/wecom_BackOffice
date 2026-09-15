@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { LearningItem, QuizQuestion } from '@wecom/shared';
 import { useGenerateQuestions, usePutQuestions } from '../../../api/hooks/learningManage.js';
+import { counted, questions as questionsCount } from '../../../lib/count.js';
 import { move } from '../../../lib/learning.js';
 import { useToast } from '../../ui/Toast.js';
 import { DocumentPicker, type PickedDoc } from './DocumentPicker.js';
@@ -43,12 +44,9 @@ export function QuizBuilder({ item }: { item: LearningItem }) {
     try {
       const r = await gen.mutateAsync({ documentIds: docs.map((d) => d.id), perDocument: 3 });
       setQuestions((qs) => [...qs, ...r.questions]);
-      toast(
-        r.source === 'model'
-          ? `נוצרו ${r.questions.length} שאלות בעזרת המודל`
-          : `נוצרו ${r.questions.length} שאלות לפי כללים`,
-        'ok',
-      );
+      // The count wording lives in lib/count.ts (A-3): one table of nouns, one agreement rule.
+      const made = counted(r.questions.length, questionsCount, 'נוצרה', 'נוצרו');
+      toast(r.source === 'model' ? `${made} בעזרת המודל` : `${made} לפי כללים`, 'ok');
     } catch {
       toast('יצירת השאלות נכשלה', 'warn');
     }

@@ -18,7 +18,7 @@
  *     second-order version of the same thing: a model-applied change that removes a step is the
  *     textbook significant change.
  *
- * Two publish paths stay deliberately excluded, recorded in `docs/wave5-acceptance.md`:
+ * Three publish paths stay deliberately excluded, recorded in `docs/wave5-acceptance.md`:
  *
  *   - `fields/repo.ts`'s field-rename republish — it rewrites a CRM field's *name* across every
  *     document that references it. The detector's "CRM field changed" rule would fire on all of
@@ -27,6 +27,8 @@
  *   - `connectors/documents-adapter.ts`'s sync publish (`kind: 'sync'`) — the remote is the author
  *     there; a pull is not an editorial decision, and `publishDocument` already treats it as
  *     non-human for the approver and source-review flags.
+ *   - `documents/repo.ts`'s `restoreVersion` (`kind: 'restore'`) — a rollback to an older version
+ *     records no change flag; the version it restores was already flagged when first published.
  */
 import type { ChangeFlag, Document } from '@wecom/shared';
 import type { Tx } from '../../lib/sql.js';
@@ -75,8 +77,13 @@ export async function publishAndFlag(
  * an unregistered holder would mean a refresh assignment nobody is told about, which is the
  * failure mode this whole finding is about.
  */
-let ambient: PublishFlagDeps | null = null;
-export const setPublishFlagDeps = (deps: PublishFlagDeps): void => {
+/**
+ * A thunk, not a value: read at call time, so a test (or anything else) that swaps `app.notifier`
+ * after registration is honoured. Captured by value, the holder froze the notifier that existed
+ * when the tracking module registered, and a swapped double was silently ignored.
+ */
+let ambient: (() => PublishFlagDeps) | null = null;
+export const setPublishFlagDeps = (deps: () => PublishFlagDeps): void => {
   ambient = deps;
 };
 export const publishFlagDeps = (): PublishFlagDeps => {
@@ -84,5 +91,5 @@ export const publishFlagDeps = (): PublishFlagDeps => {
     throw new Error(
       'publishFlagDeps: setPublishFlagDeps was never called — the learning tracking module registers it',
     );
-  return ambient;
+  return ambient();
 };

@@ -71,14 +71,19 @@ export async function msSinceLastRun(d: Pick<DetectDeps, 'db'>): Promise<number 
 export async function runDetection(d: DetectDeps): Promise<GapDetectResult> {
   const started = new Date();
   const client = await d.db.connect();
+  // Unlock only what we actually locked: `pg_advisory_unlock` on a lock this session never took
+  // logs a "you don't own a lock of type ExclusiveLock" warning, which the throttled path — every
+  // refused concurrent click — hit on the way out.
+  let held = false;
   try {
     const got = await client.query<{ locked: boolean }>('select pg_try_advisory_lock($1) locked', [
       DETECT_LOCK,
     ]);
-    if (!got.rows[0].locked) throw new GapRunInProgress();
+    held = got.rows[0].locked;
+    if (!held) throw new GapRunInProgress();
     return await detect(d, started);
   } finally {
-    await client.query('select pg_advisory_unlock($1)', [DETECT_LOCK]).catch(() => undefined);
+    if (held) await client.query('select pg_advisory_unlock($1)', [DETECT_LOCK]).catch(() => undefined);
     client.release();
   }
 }

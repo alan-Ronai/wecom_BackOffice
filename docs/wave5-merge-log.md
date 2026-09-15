@@ -64,7 +64,7 @@ the pipeline fan-out, the proxy-trust lane). Migrations on this branch are exact
    W5-E2E-1 landed on the roles group and ticked a role instead of a world.
 6. **The quiz player can lose a selection mid-quiz** when the assignment's own notification arrives
    over SSE and the player payload refetches. W5-E2E-1 re-ticks until the advance button enables.
-   Logged for V4a rather than fixed here — see "parked" in `docs/wave5-acceptance.md`.
+   Fixed in the fix wave (selection persists across refetch).
 7. **`POST /auth/local` is five attempts a minute per IP** and the whole real-e2e gate shares that
    budget; wave 5's two specs pushed it over. `signInAs` now waits the window out instead of
    reading a refusal as a failed login, the per-test timeout is 150 s, and the two new specs sign

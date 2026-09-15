@@ -3,16 +3,9 @@ import { Link } from 'react-router-dom';
 import type { BriefingEntry, LearningItem } from '@wecom/shared';
 import { useDocument } from '../../../api/hooks/documents.js';
 import { usePutEntries } from '../../../api/hooks/learningManage.js';
+import { move } from '../../../lib/learning.js';
 import { useToast } from '../../ui/Toast.js';
 import { DocumentPicker } from './DocumentPicker.js';
-
-const move = <T,>(xs: T[], i: number, dir: -1 | 1): T[] => {
-  const j = i + dir;
-  if (j < 0 || j >= xs.length) return xs;
-  const n = [...xs];
-  [n[i], n[j]] = [n[j]!, n[i]!];
-  return n;
-};
 
 /**
  * An entry the server sent carries no title — only the document id — so each row resolves its own.
