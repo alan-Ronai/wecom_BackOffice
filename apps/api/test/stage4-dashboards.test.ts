@@ -3,6 +3,7 @@ import pg from 'pg';
 import { startTestDb, integration } from './helpers/db.js';
 import { buildTestApp } from './helpers/app.js';
 import { makeUser, auth } from './helpers/fixtures.js';
+import { CACHE_PREFIX } from '../src/modules/dashboards/cache.js';
 
 const run = integration ? describe : describe.skip;
 
@@ -129,6 +130,50 @@ run('stage 4: dashboards and telemetry', () => {
     } finally {
       await replica.close();
     }
+  });
+
+  /**
+   * L5. A failed cache *read* used to leave `stamp = ''`, and the snapshot was then written
+   * under `''` — a value no later read matches once a stamp exists. That key was then a
+   * permanent miss: every request recomputed the panel and rewrote the same unusable row,
+   * for good. The cache is an optimisation, so a read that failed must skip the write, not
+   * poison it.
+   */
+  it('does not write a snapshot under a stamp it could not read', async () => {
+    const pool = new pg.Pool({ connectionString: db.url });
+    // Reads of `system_state` fail; writes go through, so a write that should not happen is
+    // visible as a row rather than swallowed by a second failure.
+    const readsFail = new Proxy(pool, {
+      get(target, prop, receiver) {
+        if (prop !== 'query') return Reflect.get(target, prop, receiver);
+        return (text: unknown, params?: unknown) => {
+          if (typeof text === 'string' && /select .* from system_state/i.test(text))
+            return Promise.reject(new Error('system_state unreadable'));
+          return (target.query as (t: unknown, p?: unknown) => unknown)(text, params);
+        };
+      },
+    }) as pg.Pool;
+
+    const blind = await buildTestApp(readsFail, db.url);
+    try {
+      await pool.query(`delete from system_state where key like $1`, [CACHE_PREFIX + '%']);
+      const r = await blind.inject({ method: 'GET', url: '/api/v1/dashboards', headers: auth(u) });
+      // The panel is still served — the cache is never a dependency.
+      expect(r.statusCode).toBe(200);
+      expect(r.json().coverage.cards).toBeGreaterThan(0);
+      // …and nothing was stored under a stamp that was never read.
+      const rows = await pool.query(`select key from system_state where key like $1`, [CACHE_PREFIX + '%']);
+      expect(rows.rowCount, 'no snapshot written from a failed read').toBe(0);
+    } finally {
+      await blind.close();
+      await pool.end().catch(() => undefined);
+    }
+
+    // Control: with the read working, the very same request does store a snapshot.
+    expect((await get('/api/v1/dashboards')).statusCode).toBe(200);
+    expect(
+      (await db.pool.query(`select key from system_state where key like $1`, [CACHE_PREFIX + '%'])).rowCount,
+    ).toBeGreaterThan(0);
   });
 
   it('rejects an empty or oversized telemetry batch', async () => {
