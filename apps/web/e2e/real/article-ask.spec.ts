@@ -80,11 +80,20 @@ test('W6-E2E-2 an agent asks and is answered, cannot make the assistant write, a
   ).toBeTruthy();
 
   /* 4. feedback on an answer is recorded (§1.5) ------------------------------ */
+  // As the agent: only a participant rates a message, and an admin browsing transcripts does not
+  // get a vote — `adminApi` just lifts a session out of a browser context, admin or not.
+  const agentApi = await adminApi(a, baseURL!);
+  opened.apis.push(agentApi);
   const last = conv.messages.filter((m: { role: string }) => m.role === 'assistant').at(-1);
-  const fb = await api.post(`/api/v1/ai/messages/${last.id}/feedback`, {
+  const fb = await agentApi.post(`/api/v1/ai/messages/${last.id}/feedback`, {
     data: { rating: 'down', note: 'לא עזר' },
   });
   expect(fb.status(), await fb.text()).toBe(204);
+  // And the admin, who was not in the conversation, is refused.
+  const notMine = await api.post(`/api/v1/ai/messages/${last.id}/feedback`, {
+    data: { rating: 'up' },
+  });
+  expect(notMine.status()).toBe(404);
 
   /* 5. the admin reads the transcript back and exports it -------------------- */
   const exp = await api.get('/api/v1/admin/ai/conversations/export.jsonl');
