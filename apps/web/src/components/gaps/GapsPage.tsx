@@ -4,7 +4,7 @@ import { useDetectGaps, useDismissGap, useGaps, useResolveGap } from '../../api/
 import { useCan } from '../../api/hooks/me.js';
 import { useWorlds } from '../../api/hooks/taxonomy.js';
 import { counted, gaps as nGaps } from '../../lib/count.js';
-import { ago } from '../../lib/format.js';
+import { ago, fmtDate } from '../../lib/format.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { worldLabel } from '../taxonomy/TypeBadge.js';
 import { useModal } from '../ui/Modal.js';
@@ -26,6 +26,53 @@ const ACTION_LABEL: Record<Gap['suggestedAction'], string> = {
   add_question: 'הוסף שאלה',
   review: 'בדוק',
 };
+
+/**
+ * The evidence a heuristic fired on, in Hebrew.
+ *
+ * It used to be `JSON.stringify(evidence, null, 1)` in a `<pre>` — a block of LTR JSON in an RTL
+ * card, with the field names the detector happens to use today. Each heuristic writes its own
+ * shape (`heuristics.ts`), so this labels the keys they write and falls back to the raw key for
+ * anything a later heuristic adds: unreadable beats invisible, but only as the last resort.
+ */
+const EVIDENCE_LABEL: Record<string, string> = {
+  count: 'חיפושים',
+  samples: 'מונחים',
+  lastTerms: 'מונחים',
+  lastAt: 'לאחרונה',
+  windowDays: 'חלון (ימים)',
+  open: 'דיווחים פתוחים',
+  kinds: 'סוגי דיווח',
+  views: 'צפיות',
+  updatedAt: 'עודכן',
+  staleDays: 'סף יישון (ימים)',
+  attempts: 'ניסיונות',
+  failed: 'נכשלו',
+};
+
+const ISO = /^\d{4}-\d{2}-\d{2}T/;
+const evidenceText = (v: unknown): string => {
+  if (Array.isArray(v)) return v.map((x) => String(x)).join(', ');
+  if (typeof v === 'string') return ISO.test(v) ? fmtDate(v) : v;
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+};
+
+function Evidence({ evidence }: { evidence: Record<string, unknown> }) {
+  // Ids are plumbing: the card already links to whatever the gap points at.
+  const rows = Object.entries(evidence).filter(([k, v]) => v !== null && v !== undefined && !/Id$/.test(k));
+  if (!rows.length) return null;
+  return (
+    <dl className="evidence" role="group" aria-label="ממצאים">
+      {rows.map(([k, v]) => (
+        <div key={k}>
+          <dt>{EVIDENCE_LABEL[k] ?? k}</dt>
+          <dd>{evidenceText(v)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
 
 const STATUS_LABEL: Record<Gap['status'], string> = {
   open: 'פתוחים',
@@ -201,7 +248,7 @@ export function GapsPage() {
                 <small>נראה לראשונה {ago(g.firstSeenAt)}</small>
               </div>
               <h3>{g.title}</h3>
-              <pre className="evidence">{JSON.stringify(g.evidence, null, 1)}</pre>
+              <Evidence evidence={g.evidence} />
               {g.dismissedReason ? (
                 <p>
                   <b>נדחה:</b> {g.dismissedReason}

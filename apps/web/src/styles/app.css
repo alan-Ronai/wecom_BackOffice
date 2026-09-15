@@ -1612,7 +1612,11 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .gaps-page .gap-list { display: grid; gap: 10px; }
 .gaps-page .gap { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
 .gaps-page .score { font-size: 22px; font-weight: 700; color: var(--red); }
-.gaps-page .evidence { font-size: 12px; color: var(--muted); font-family: var(--mono); white-space: pre-wrap; }
+.gaps-page .evidence { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0 0; font-size: 12px; }
+.gaps-page .evidence > div { display: flex; gap: 4px; }
+.gaps-page .evidence dt { color: var(--muted); }
+.gaps-page .evidence dt::after { content: ':'; }
+.gaps-page .evidence dd { margin: 0; }
 .workflow-section .form label { display: grid; gap: 4px; }
 .workflow-section .form label.row { display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 900px) { .item-editor { grid-template-columns: 1fr; } .gaps-page .gap { grid-template-columns: 1fr; } }
