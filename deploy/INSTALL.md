@@ -106,7 +106,30 @@ Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST`
 1. Generate the config-encryption key once and put it in `deploy/.env`: `CONNECTOR_KEY=$(openssl rand -hex 32)`. Connector configs are stored AES-256-GCM encrypted with it — rotating the key makes existing connectors unreadable, so keep it with the database backups.
 2. In WordPress, create a dedicated editor user for the KB and issue an **application password** (*Users → Profile → Application Passwords*). The REST API is reached at `https://<wp-host>/wp-json/wp/v2/…`.
 3. Copy `deploy/wp-plugin` to `wp-content/plugins/kb-sync`, activate **KB Sync**, and fill *Settings → KB Sync*: webhook URL `https://<kb-host>/api/v1/connectors/<connectorId>/webhook`, the shared secret, and the post types to sync (see `deploy/wp-plugin/README.md`). Lint the plugin's PHP after editing it: `docker run --rm -v "$PWD/deploy/wp-plugin:/app" php:8.2-cli php -l /app/kb-sync.php` (also run in CI on every push).
-4. In the KB, add the connector under `/admin/connectors` with `baseUrl`, `username`, `applicationPassword`, `postTypes`, `categoryMap` (WP category slug → KB category) and `webhookSecret` (the same secret as step 3), then **Test** and **Run**. The default schedule is every 15 minutes; each connector gets its own cron job. A `json` connector's `path` must resolve inside `CONNECTOR_FILE_ROOT` (default `/data/connectors`) — this is what stops a connector reading arbitrary files on the container. `CONNECTOR_HOST_ALLOWLIST` (comma-separated) restricts which hosts outbound connector HTTP (a WordPress `baseUrl`) may reach — this is the SSRF guard. It is **required** when `NODE_ENV=production`, and the three settings differ in ways worth knowing before you pick one (`docs/operations.md` → *Adding a connector* is the authoritative description):
+4. In the KB, add the connector under `/admin/connectors` with `baseUrl`, `username`, `applicationPassword`, `postTypes`, `categoryMap` (WP category slug → KB category) and `webhookSecret` (the same secret as step 3), then **Test** and **Run**.
+
+   > **Known defect — the wizard cannot do this yet (walkthrough W-1).** Step 2 of
+   > `/admin/connectors → ✚ מחבר` renders only *שם המחבר*: none of the six settings above have
+   > input fields, so **בדוק חיבור** answers `הגדרות המחבר אינן תקינות` and **צור מחבר** 400s with
+   > nowhere to type the fix. `GET /connectors/types` returns the config schema as
+   > `configSchema.fields`, while the wizard reads `configSchema.properties`, so the field list is
+   > empty for every connector type. Until that is fixed, create the connector with one API call
+   > as the admin you made in step 7 — it is the same request the wizard would send, and **Test**,
+   > **Run**, the schedule and the webhook URL all work normally on `/admin/connectors` afterwards:
+   >
+   > ```bash
+   > curl -sk -c jar -X POST https://<kb-host>/api/v1/auth/local \
+   >   -H 'content-type: application/json' \
+   >   -d '{"email":"admin@wecom.local","password":"<the password from step 7>"}'
+   > curl -sk -b jar -X POST https://<kb-host>/api/v1/connectors \
+   >   -H 'content-type: application/json' -d '{
+   >     "type":"wordpress","name":"wordpress","enabled":true,
+   >     "config":{"baseUrl":"https://<wp-host>","username":"<kb editor user>",
+   >               "applicationPassword":"<application password>","postTypes":["posts"],
+   >               "categoryMap":{},"webhookSecret":"<the secret from step 3>"}}'
+   > ```
+   >
+   > `baseUrl`'s host must be named in `CONNECTOR_HOST_ALLOWLIST` (below) or the run is refused. The default schedule is every 15 minutes; each connector gets its own cron job. A `json` connector's `path` must resolve inside `CONNECTOR_FILE_ROOT` (default `/data/connectors`) — this is what stops a connector reading arbitrary files on the container. `CONNECTOR_HOST_ALLOWLIST` (comma-separated) restricts which hosts outbound connector HTTP (a WordPress `baseUrl`) may reach — this is the SSRF guard. It is **required** when `NODE_ENV=production`, and the three settings differ in ways worth knowing before you pick one (`docs/operations.md` → *Adding a connector* is the authoritative description):
 
    - **empty** — unrestricted: any reachable host, **private ranges and loopback included**. Anyone holding `connectors.manage` can point a connector at `http://127.0.0.1:11434` or at the database port and read the answer back through a source revision. This is the dev/LAN shape, and it is why the API refuses to start on it in production.
    - **`*`** — any **public** host, and exactly that: loopback, `10/8`, `172.16/12`, `192.168/16`, carrier-grade NAT (`100.64/10`), `0.0.0.0`, `::1`, `fc00::/7` and `localhost` are all refused under it. Note that the test reads IP literals and `localhost`, so a DNS name that resolves into private space is still admitted — name your hosts if that matters.

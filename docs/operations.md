@@ -99,6 +99,13 @@ connector's `path` must resolve inside `CONNECTOR_FILE_ROOT`. Add the connector 
 `/admin/connectors`, **Test** before **Run**, and watch `GET /api/v1/admin/system` →
 `connectors[]` (`lastStatus`, `lastRunAt`, `conflicts`) after the first scheduled run.
 
+**Creating one needs the API for now (walkthrough W-1):** the wizard's settings step renders no
+configuration fields for any connector type — `GET /connectors/types` answers
+`configSchema.fields` and the wizard reads `configSchema.properties` — so **Test** fails with
+`הגדרות המחבר אינן תקינות` and the save 400s. `deploy/INSTALL.md` → *WordPress connector* step 4
+has the `POST /api/v1/connectors` call to use instead. Everything after creation (Test, Run, the
+schedule, the webhook URL, enable/disable) works from the UI.
+
 > **`CONNECTOR_HOST_ALLOWLIST` is now required when `NODE_ENV=production`** — the API refuses to
 > start with it empty, the same way it refuses the development `SESSION_SECRET` (acceptance
 > review §5 / item 18). The three settings are genuinely different
