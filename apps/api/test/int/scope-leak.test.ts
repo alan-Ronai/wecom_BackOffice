@@ -4,7 +4,10 @@ import { startTestDb, integration } from '../helpers/db.js';
 import { buildTestApp } from '../helpers/app.js';
 import { makeUser, auth } from '../helpers/fixtures.js';
 import { seedQuiz } from '../helpers/v2/learningStub.js';
+import { chatResult, fakeChat } from '../helpers/ai/fakeChat.js';
 import { withTransaction } from '../../src/lib/sql.js';
+import { aiChatHolder } from '../../src/modules/ai/chatModel.js';
+import { parseSseFrames } from '../../src/modules/ai/sse.js';
 
 const run = integration ? describe : describe.skip;
 
@@ -383,6 +386,73 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     });
     expect(mine.statusCode).toBe(200);
     expect(mine.json().resolvedAt).not.toBeNull();
+  });
+
+  /**
+   * Wave 6 (X2): the copilot is a new read surface over every other one, and a model is an
+   * unusually persuasive way to ask for something. Three things have to hold: a conversation
+   * cannot be opened on an out-of-scope document, a tool call the model makes on one returns
+   * nothing (not a 403 body, not a title — "לא נמצא"), and the transcript the admin exports
+   * still carries what the admin was allowed to see, so this is a filter and not a break.
+   */
+  it('X2: the chat opens on no out-of-scope document and its tools leak none of one', async () => {
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/v1/ai/conversations',
+          headers: auth(scoped),
+          payload: { kind: 'article', documentId: billingDoc },
+        })
+      ).statusCode,
+    ).toBe(404);
+
+    // The model asks for the out-of-scope document by id and searches for its title.
+    aiChatHolder.swap(
+      fakeChat(({ messages }) =>
+        messages.some((m) => m.role === 'tool')
+          ? chatResult('לא מצאתי.')
+          : chatResult('', [
+              { id: 't1', name: 'read_document', args: { documentId: billingDoc } },
+              { id: 't2', name: 'search_kb', args: { q: 'סודי' } },
+            ]),
+      ),
+    );
+    const turn = async (u: typeof scoped) => {
+      const c = await app.inject({
+        method: 'POST',
+        url: '/api/v1/ai/conversations',
+        headers: auth(u),
+        payload: { kind: 'editor', documentId: techDoc },
+      });
+      expect(c.statusCode, c.body).toBe(201);
+      const r = await app.inject({
+        method: 'POST',
+        url: `/api/v1/ai/conversations/${c.json().id}/messages`,
+        headers: auth(u),
+        payload: { content: 'ספר לי על המסמך השני' },
+      });
+      return { body: r.body, frames: parseSseFrames(r.body) };
+    };
+
+    const mine = await turn(scoped);
+    expect(mine.body).not.toContain(SECRET);
+    expect(mine.body).not.toContain(SECRET_TAG);
+    expect(mine.frames.filter((e) => e.type === 'tool_result' && e.name === 'read_document')).toMatchObject([
+      { ok: false },
+    ]);
+
+    // The unrestricted user does get it, so the filter is a filter.
+    const theirs = await turn(admin);
+    expect(theirs.body).toContain(SECRET);
+
+    const exported = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/ai/conversations/export.jsonl',
+      headers: auth(admin),
+    });
+    expect(exported.statusCode).toBe(200);
+    expect(exported.body).toContain(SECRET);
   });
 
   /**
