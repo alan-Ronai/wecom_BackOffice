@@ -1,15 +1,19 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
+  AcceptSuggestionBodySchema,
   IdSchema,
   SourceRevisionSchema,
   SourceSchema,
+  SuggestionAnalyticsQuerySchema,
+  SuggestionAnalyticsSchema,
   SuggestionDecisionBodySchema,
   SuggestionSchema,
   SuggestionsQuerySchema,
   paginated,
 } from '@wecom/shared';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { suggestionAnalytics } from './analytics.js';
 import { parseUpload } from './parsers.js';
 import { processRevision, type PipelineDeps } from '../../jobs/pipeline.js';
 
@@ -153,8 +157,65 @@ export default function sourcesRoutes(deps: PipelineDeps) {
       },
     );
 
+    /**
+     * `accept` takes an optional `{ parts }` — the row ids of `rowsOf(payload)` to apply now.
+     * An absent body, or one without `parts`, is the whole suggestion, exactly as before; with
+     * `parts` the rows left out come back as a pending remainder suggestion (`parentId`).
+     */
+    app.post(
+      '/suggestions/:id/accept',
+      {
+        schema: {
+          tags: ['suggestions'],
+          params: z.object({ id: IdSchema }),
+          // `nullish`, not `optional`: a POST with no body at all reaches validation as `null`,
+          // and "accept the whole suggestion" is exactly what an empty body has always meant.
+          body: AcceptSuggestionBodySchema.nullish(),
+          response: { 200: SuggestionSchema },
+        },
+        config: { requires: ['suggestions.review'] },
+      },
+      async (req) => {
+        const before = await deps.suggestions.get(req.params.id);
+        const parts = req.body?.parts;
+        const s = parts?.length
+          ? (await deps.suggestions.acceptParts(req.params.id, parts, actorId(req))).accepted
+          : await deps.suggestions.decide(req.params.id, 'accepted', actorId(req));
+        await app.audit(
+          req,
+          'suggestions.review',
+          'suggestion',
+          s.id,
+          { status: before.status },
+          {
+            status: s.status,
+            type: s.type,
+            targetDocumentId: s.targetDocumentId,
+            ...(parts?.length ? { parts } : {}),
+          },
+        );
+        return s;
+      },
+    );
+
+    /**
+     * Acceptance analytics (spec §1.9). A distinct path, so its registration order against
+     * `/suggestions/:id/*` does not matter. Cached 60 s in `analytics.ts`.
+     */
+    app.get(
+      '/suggestions/analytics',
+      {
+        schema: {
+          tags: ['suggestions'],
+          querystring: SuggestionAnalyticsQuerySchema,
+          response: { 200: SuggestionAnalyticsSchema },
+        },
+        config: { requires: ['suggestions.review'] },
+      },
+      async (req) => suggestionAnalytics(app.db, req.query),
+    );
+
     for (const [action, status] of [
-      ['accept', 'accepted'],
       ['reject', 'rejected'],
       ['reset', 'pending'],
     ] as const)
@@ -195,16 +256,18 @@ export default function sourcesRoutes(deps: PipelineDeps) {
         config: { requires: ['suggestions.review'] },
       },
       async (req) => {
-        if (!req.body.editedPayload) throw err(400, 'VALIDATION', 'חסר editedPayload');
         const before = await deps.suggestions.get(req.params.id);
-        const s = await deps.suggestions.edit(req.params.id, req.body.editedPayload, actorId(req));
+        // The body schema's refine guarantees exactly one of the two is present.
+        const s = req.body.structuredEdit
+          ? await deps.suggestions.editStructured(req.params.id, req.body.structuredEdit, actorId(req))
+          : await deps.suggestions.edit(req.params.id, req.body.editedPayload!, actorId(req));
         await app.audit(
           req,
           'suggestions.edit',
           'suggestion',
           s.id,
           { payload: before.editedPayload ?? before.payload },
-          { payload: s.editedPayload },
+          { payload: s.editedPayload, diff: s.editDiff, structured: !!req.body.structuredEdit },
         );
         return s;
       },
