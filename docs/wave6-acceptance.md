@@ -91,9 +91,15 @@ explicitly, which `resolveModelSlots`' explicit-env precedence supports) and re-
 | `RUN_INTEGRATION=1 apps/api` | 741 passed / 117 files |
 | `apps/web` (`--minWorkers=1 --maxWorkers=4`) | 884 passed / 134 files |
 | OpenAPI regen + contract + route coverage | clean; 174 paths, allowlist free of dead entries |
-| `pnpm e2e:real` | see the report |
-| `E2E_OIDC=1 pnpm e2e:real` | see the report |
+| `pnpm e2e:real` | **17 passed**, including W6-E2E-1 and W6-E2E-2 |
+| `E2E_OIDC=1 pnpm e2e:real` | **18 passed** (the OIDC variant adds one spec) |
 | `pnpm e2e:compose` | see the report |
+
+The two new specs found five real defects between them, each listed in the merge log: the
+scripted model's tool-turn test, its intent matching against the context block, the structured
+editor sending display strings, and — in the specs themselves — two wrong assumptions about the
+product (that "קבל הכל" leaves the decision to a second click, and that an admin may rate a
+message they did not send).
 
 ## Parked
 
