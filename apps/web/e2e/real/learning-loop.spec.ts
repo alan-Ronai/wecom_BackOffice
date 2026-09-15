@@ -89,7 +89,11 @@ test('W5-E2E-1 a quiz is built, assigned, passed, refreshed after a significant 
   const assign = l.getByRole('dialog', { name: 'הקצאת פריט למידה' });
   await assign.getByRole('checkbox', { name: 'agent' }).check();
   // The audience is roles × worlds; a user with an unrestricted scope matches any world.
-  await assign.getByRole('group', { name: 'עולמות תוכן' }).getByRole('checkbox').first().check();
+  // `exact`: the enclosing fieldset's legend is "קהל יעד (תפקידים × עולמות תוכן)", so a substring
+  // match on the group name lands on the roles group and ticks a role instead of a world.
+  const worldBoxes = assign.getByRole('group', { name: 'עולמות תוכן', exact: true }).getByRole('checkbox');
+  await expect.poll(() => worldBoxes.count()).toBeGreaterThan(0);
+  await worldBoxes.first().check();
   await assign.getByRole('button', { name: 'הקצה לקהל' }).click();
   await expect(l.getByText(/הוקצה ל-[1-9]\d* משתמשים/)).toBeVisible();
 
@@ -110,9 +114,28 @@ test('W5-E2E-1 a quiz is built, assigned, passed, refreshed after a significant 
     const asked = await a.locator('.quiz-q legend').innerText();
     const q = questions.find((x) => x.stem.trim() === asked.trim());
     expect(q, `the player asked a question the preview did not list: ${asked}`).toBeTruthy();
-    for (const o of q!.options.filter((x) => x.correct))
-      await a.locator('.quiz-q label').filter({ hasText: o.text }).first().click();
-    await a.getByRole('button', { name: i + 1 < questions.length ? 'הבא' : 'שלח תשובות' }).click();
+    const advance = a.getByRole('button', { name: i + 1 < questions.length ? 'הבא' : 'שלח תשובות' });
+    /*
+     * Tick every correct option, then wait for the button the selection enables — re-ticking if
+     * it is still disabled. A background refetch of the player payload (the assignment's own
+     * notification arrives over SSE while the quiz is open) can re-render the question with the
+     * selection cleared, and a single click would then be silently lost.
+     */
+    const pick = async () => {
+      for (const o of q!.options.filter((x) => x.correct))
+        await a
+          .locator('.quiz-q label')
+          .filter({ hasText: o.text })
+          .first()
+          .locator('input')
+          .check()
+          .catch(() => undefined);
+      return advance.isEnabled();
+    };
+    await expect
+      .poll(pick, { message: `answer question ${i + 1}`, timeout: 30_000, intervals: [200, 500, 1_000] })
+      .toBe(true);
+    await advance.click();
   }
   await expect(a.getByRole('heading', { name: /^עברת! ציון/ })).toBeVisible({ timeout: 30_000 });
 
