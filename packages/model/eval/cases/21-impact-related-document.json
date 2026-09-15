@@ -1,0 +1,69 @@
+{
+  "id": "21-impact-related-document",
+  "title": "השפעה: מסמך קרוב לפי דמיון — ה-rationale חייב לנקוב בשמו",
+  "notes": "Spec 1.6, the embedding half: the impact set carries a document reached by similarity rather than by a goto. The rationale must name it.",
+  "source": {
+    "title": "נהלי תמיכה טכנית"
+  },
+  "diffs": [
+    {
+      "ref": "6.4",
+      "kind": "changed",
+      "before": "אם הלקוח מדווח על ניתוקים, בצע בדיקת רשת.",
+      "after": "אם הלקוח מדווח על ניתוקים, בצע בדיקת רשת ותעד 3 מדידות לפחות.",
+      "similarity": 0.75
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "11111111-1111-4111-8111-111111111111",
+      "documentTitle": "איטיות גלישה",
+      "stepKey": "s16",
+      "stepNum": "16",
+      "stepTitle": "בדיקת רשת",
+      "anchor": "6.4",
+      "actions": [
+        "בצע בדיקת רשת"
+      ]
+    }
+  ],
+  "blocks": [],
+  "fields": [],
+  "impact": {
+    "documents": [],
+    "blocks": [],
+    "fields": [],
+    "topics": [
+      {
+        "id": "55555555-5555-4555-8555-555555555555",
+        "name": "תשתית"
+      }
+    ],
+    "related": [
+      {
+        "id": "33333333-3333-4333-8333-333333333333",
+        "title": "ניתוקים חוזרים",
+        "similarity": 0.82
+      }
+    ]
+  },
+  "expected": [
+    {
+      "type": "update-step",
+      "targetDocumentId": "11111111-1111-4111-8111-111111111111",
+      "targetStepKey": "s16",
+      "mustContain": [
+        "3"
+      ],
+      "mustContainAny": [
+        [
+          "ניתוקים חוזרים",
+          "מסמך קרוב",
+          "דמיון"
+        ]
+      ]
+    }
+  ],
+  "maxItems": 1,
+  "latencyBudgetMs": 30000
+}

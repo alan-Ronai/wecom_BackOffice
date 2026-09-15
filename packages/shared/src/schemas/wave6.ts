@@ -481,7 +481,24 @@ export const EvalExpectationSchema = z.object({
   type: z.string(),
   targetDocumentId: IdSchema.optional(),
   targetStepKey: z.string().optional(),
+  /** Fix wave: an `update-block` case asserts the block, which is the thing being edited. */
+  targetBlockId: IdSchema.optional(),
+  /**
+   * Fix wave (C-I6): the paragraph anchor. A `new-card` has no document and no step — it is
+   * creating them — so before this a new-source case's expectations matched *every* card and
+   * the case reported 1/1/1 for any answer that parsed. The anchor is the one real target a
+   * card has.
+   */
+  anchor: z.string().optional(),
+  /** Facts the answer must reproduce: numbers, field names, latin tokens. Case-insensitive. */
   mustContain: z.array(z.string()).default([]),
+  /**
+   * Fix wave: one group per row, satisfied when *any* alternative appears. `mustContain` is
+   * fair to a model that paraphrases a fact and unfair to one that paraphrases a phrase —
+   * `"ניתוקים החוזרים"` scores zero against `"ניתוקים חוזרים"`. Matching normalises Hebrew
+   * prefix clitics (ב/ל/ה/ו/מ/ש/כ) on both sides, so a case only has to list real synonyms.
+   */
+  mustContainAny: z.array(z.array(z.string())).default([]),
 });
 export type EvalExpectation = z.infer<typeof EvalExpectationSchema>;
 
@@ -518,6 +535,33 @@ export const EvalCaseSchema = z.object({
   fields: z.array(z.object({ name: z.string(), status: z.string() })).default([]),
   /** X1, additive: what the change reaches, as the pipeline would have computed it. */
   impact: EvalImpactSchema.optional(),
+  /* ── fix wave (C-I1, C-I5, C-I6, C-M3) ─────────────────────────────────── */
+  /** Why this case exists and what a correct answer looks like. Documentation, never scored. */
+  notes: z.string().default(''),
+  /**
+   * The most suggestions a correct answer may contain. Scored: a model that answers a
+   * one-suggestion change with six is over-proposing, and until this existed a "shotgun" client
+   * that emitted one suggestion per (type × candidate) scored a perfect 1.000/1.000/1.000.
+   * Defaults to `expected.length` (or 0 for a negative case) when omitted.
+   */
+  maxItems: z.number().int().nonnegative().optional(),
+  /** Latin words this case's answer may legitimately contain, beyond the global allow-list. */
+  allowLatin: z.array(z.string()).default([]),
+  /** Roughly how long a case of this size may take, per tier. Recorded, never asserted. */
+  latencyBudgetMs: z.number().int().positive().optional(),
+  /* ── C-M3: the wave's own features, exercised by the thing that tests them ─ */
+  brief: z.string().optional(),
+  style: z.string().optional(),
+  /** Accepted suggestions to imitate; the harness renders them exactly as the pipeline does. */
+  examples: z
+    .array(z.object({ diff: z.string(), suggestion: z.record(z.unknown()) }))
+    .default([]),
+  maxContextChars: z.number().int().positive().optional(),
+  /**
+   * Empty means: **this change deserves no suggestion at all.** Six of these carry the negative
+   * half of the set — a typo, a reorder, a whitespace edit, a `same` revision, punctuation, a
+   * heading rename — and they are scored 1 when nothing is emitted and 0 when anything is.
+   */
   expected: z.array(EvalExpectationSchema).default([]),
 });
 export type EvalCase = z.infer<typeof EvalCaseSchema>;

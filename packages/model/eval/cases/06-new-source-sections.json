@@ -1,9 +1,17 @@
 {
   "id": "06-new-source-sections",
   "title": "מקור חדש עם שלוש כותרות — כרטיס לכל סעיף",
-  "source": { "title": "נוהל החלפת מכשיר" },
+  "source": {
+    "title": "נוהל החלפת מכשיר"
+  },
   "diffs": [
-    { "ref": "h2-1", "kind": "added", "before": null, "after": "זיהוי הלקוח", "similarity": 0 },
+    {
+      "ref": "h2-1",
+      "kind": "added",
+      "before": null,
+      "after": "זיהוי הלקוח",
+      "similarity": 0
+    },
     {
       "ref": "h2-1.p-1",
       "kind": "added",
@@ -11,7 +19,13 @@
       "after": "ודא את זהות הלקוח מול תעודה מזהה.",
       "similarity": 0
     },
-    { "ref": "h2-2", "kind": "added", "before": null, "after": "בדיקת זכאות", "similarity": 0 },
+    {
+      "ref": "h2-2",
+      "kind": "added",
+      "before": null,
+      "after": "בדיקת זכאות",
+      "similarity": 0
+    },
     {
       "ref": "h2-2.p-1",
       "kind": "added",
@@ -19,7 +33,13 @@
       "after": "בדוק זכאות לשדרוג באזור האישי של הלקוח.",
       "similarity": 0
     },
-    { "ref": "h2-3", "kind": "added", "before": null, "after": "ביצוע ההחלפה", "similarity": 0 },
+    {
+      "ref": "h2-3",
+      "kind": "added",
+      "before": null,
+      "after": "ביצוע ההחלפה",
+      "similarity": 0
+    },
     {
       "ref": "h2-3.p-1",
       "kind": "added",
@@ -32,8 +52,43 @@
   "blocks": [],
   "fields": [],
   "expected": [
-    { "type": "new-card", "mustContain": ["זיהוי הלקוח"] },
-    { "type": "new-card", "mustContain": ["זכאות"] },
-    { "type": "new-card", "mustContain": ["SIM"] }
-  ]
+    {
+      "type": "new-card",
+      "anchor": "h2-1",
+      "mustContain": [],
+      "mustContainAny": [
+        [
+          "זיהוי הלקוח",
+          "זהות הלקוח"
+        ]
+      ]
+    },
+    {
+      "type": "new-card",
+      "anchor": "h2-2",
+      "mustContain": [],
+      "mustContainAny": [
+        [
+          "זכאות",
+          "שדרוג"
+        ]
+      ]
+    },
+    {
+      "type": "new-card",
+      "anchor": "h2-3",
+      "mustContain": [
+        "SIM"
+      ],
+      "mustContainAny": [
+        [
+          "הנפק",
+          "החלפה"
+        ]
+      ]
+    }
+  ],
+  "notes": "C-I6: the expectations carried no target at all, so targets() returned true for every card and the case reported 1/1/1 for any answer that parsed. Each section anchor is the one real target a new-card has, and maxItems 3 fails a card-per-paragraph answer.",
+  "maxItems": 3,
+  "latencyBudgetMs": 60000
 }

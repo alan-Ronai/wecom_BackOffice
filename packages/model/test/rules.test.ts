@@ -57,13 +57,19 @@ const ctx: ProposalContext = {
 };
 
 describe('RuleBasedModel', () => {
-  it('maps changed paragraph with a linked step to update-step, added paragraph to new-card, block-linked to update-block', async () => {
+  it('maps changed paragraph with a linked step to update-step, a new paragraph beside mapped ones to new-step, block-linked to update-block', async () => {
     const out = await new RuleBasedModel().proposeChanges(ctx);
+    /**
+     * §4.14 is a new paragraph in a source whose other paragraphs are already mapped, so it is a
+     * new *step* in that document. Filing it as a `new-card` created a one-step card next to the
+     * document it belonged in; `propose-v4` rule 5 says the same thing to the model.
+     */
     expect(out.map((s) => [s.anchor, s.type])).toEqual([
       ['§4.8', 'update-step'],
-      ['§4.14', 'new-card'],
+      ['§4.14', 'new-step'],
       ['§4.11', 'update-block'],
     ]);
+    expect(out[1].targetDocumentId).toBe(D);
     const upd = out[0];
     if (upd.payload.type !== 'update-step') throw new Error();
     /**

@@ -1,0 +1,57 @@
+{
+  "id": "16-single-document-connector",
+  "title": "פריט WordPress יחיד — כרטיס אחד עם phase לכל סעיף",
+  "notes": "The set had no new-card on a singleDocument connector item. One remote item is one document: its sections become phases of a single card, never a card each, or the one (connector, external_id) sync link can only point at one of them.",
+  "source": {
+    "title": "נוהל חסימת גלישה בחו\"ל",
+    "singleDocument": true
+  },
+  "diffs": [
+    {
+      "ref": "h2-1",
+      "kind": "added",
+      "before": null,
+      "after": "בדיקת זכאות",
+      "similarity": 0
+    },
+    {
+      "ref": "h2-1.p-1",
+      "kind": "added",
+      "before": null,
+      "after": "ודא שהלקוח מחזיק חבילת גלישה בחו\"ל פעילה.",
+      "similarity": 0
+    },
+    {
+      "ref": "h2-2",
+      "kind": "added",
+      "before": null,
+      "after": "ביצוע החסימה",
+      "similarity": 0
+    },
+    {
+      "ref": "h2-2.p-1",
+      "kind": "added",
+      "before": null,
+      "after": "חסום גלישה בנדידה מתוך מסך החבילות.",
+      "similarity": 0
+    }
+  ],
+  "linkedSteps": [],
+  "blocks": [],
+  "fields": [],
+  "expected": [
+    {
+      "type": "new-card",
+      "anchor": "h2-1",
+      "mustContain": [],
+      "mustContainAny": [
+        [
+          "זכאות",
+          "חבילת גלישה"
+        ]
+      ]
+    }
+  ],
+  "maxItems": 1,
+  "latencyBudgetMs": 60000
+}

@@ -58,6 +58,7 @@ async function main(): Promise<void> {
   const cases: EvalCase[] = loadCases(dir);
   const rows: Record<string, string | number>[] = [];
   const scores = [];
+  const latencies: number[] = [];
   for (const c of cases) {
     const started = Date.now();
     let items: Awaited<ReturnType<ModelClient['proposeChanges']>> = [];
@@ -69,27 +70,40 @@ async function main(): Promise<void> {
     }
     const s = scoreCase(c, items);
     scores.push(s);
+    const ms = Date.now() - started;
+    latencies.push(ms);
     rows.push({
       case: c.id,
       hitTarget: Number(s.hitTarget.toFixed(2)),
       hitType: Number(s.hitType.toFixed(2)),
       overlap: Number(s.contentOverlap.toFixed(2)),
+      precision: Number(s.precision.toFixed(2)),
+      lang: s.languageFailures,
       items: items.length,
-      ms: Date.now() - started,
+      ms,
+      /** Recorded, never asserted: a tier that scores well at 90 s/case is not shippable. */
+      ...(c.latencyBudgetMs ? { budget: ms <= c.latencyBudgetMs ? 'ok' : 'over' } : {}),
       ...(error ? { error } : {}),
     });
   }
   const total = aggregate(scores);
   console.table(rows);
+  const sorted = [...latencies].sort((a, b) => a - b);
+  const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
   const summary = {
     model: model.name,
     promptVersion: arg('prompt') ?? PROMPT_VERSION,
-    schema: flag('flat') ? 'flat' : 'envelope',
+    schema: flag('legacy-envelope') ? 'envelope (legacy)' : 'flat',
+    guards: !flag('no-guards'),
     embedModel: embed ?? '',
     cases: cases.length,
     hitTarget: Number(total.hitTarget.toFixed(3)),
     hitType: Number(total.hitType.toFixed(3)),
     contentOverlap: Number(total.contentOverlap.toFixed(3)),
+    precision: Number(total.precision.toFixed(3)),
+    languageFailures: total.languageFailures,
+    schemaFailures: rows.filter((r) => 'error' in r).length,
+    medianSecPerCase: Number((median / 1000).toFixed(2)),
   };
   console.log(summary);
   if (out) {

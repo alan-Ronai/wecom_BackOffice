@@ -64,6 +64,13 @@ export function coerceBlockUpdates(
 /** Every `"…"` / «…» / '…' run in a paragraph — how both the docx and the WordPress sources quote a field. */
 const QUOTED = /["«'׳"]([^"«»'׳"]{2,60})["»'׳"]/g;
 const quoted = (text: string): string[] => [...text.matchAll(QUOTED)].map((m) => m[1].trim());
+/**
+ * A CRM field name, as against a quoted *value*. Every field in the platform is a latin
+ * identifier (`sim block lbl`, `billing hold`); a quoted `"לא חסום"` or `"כן"` is what the agent
+ * is asked to type into it. Requiring latin is what stops every quoted value being reported as
+ * an unknown field.
+ */
+const FIELDISH = /^[A-Za-z][A-Za-z0-9 _.-]{2,}$/;
 
 /**
  * A CRM field the source renamed: a known field name is quoted in `before`, and `after` quotes a
@@ -79,34 +86,60 @@ export function detectFieldAlerts(
   const known = new Set(ctx.fields.map((f) => f.name.toLowerCase()));
   if (!known.size) return items;
   const out: ProposedSuggestion[] = [];
+  const raised = new Set(
+    items
+      .filter((s) => s.payload.type === 'field-alert')
+      .map((s) => (s.payload as { fieldName: string }).fieldName.toLowerCase()),
+  );
+  const add = (d: { ref: string }, fieldName: string, issue: 'renamed' | 'unknown', title: string, why: string) => {
+    if (raised.has(fieldName.toLowerCase())) return;
+    raised.add(fieldName.toLowerCase());
+    const step = ctx.linkedSteps.find((l) => stripRef(l.anchor) === stripRef(d.ref));
+    out.push({
+      anchor: '§' + stripRef(d.ref),
+      type: 'field-alert',
+      title,
+      targetDocumentId: step?.documentId ?? null,
+      targetStepKey: step?.stepKey ?? null,
+      targetBlockId: null,
+      payload: { type: 'field-alert', fieldName, issue },
+      confidence: confidenceFor('field-alert'),
+      rationale: why,
+    });
+  };
   for (const d of ctx.diffs) {
     if (d.kind !== 'changed' || !d.before || !d.after) continue;
     const beforeQ = quoted(d.before);
     const afterQ = quoted(d.after);
     const oldField = beforeQ.find((q) => known.has(q.toLowerCase()) && !afterQ.includes(q));
-    if (!oldField) continue;
-    const newField = afterQ.find((q) => !known.has(q.toLowerCase()) && !beforeQ.includes(q));
-    if (!newField) continue;
-    const already = items.some(
-      (s) => s.type === 'field-alert' && s.payload.type === 'field-alert' && s.payload.fieldName === oldField,
-    );
-    if (already) continue;
-    const step = ctx.linkedSteps.find((l) => stripRef(l.anchor) === stripRef(d.ref));
-    const usedBy = ctx.impact?.fields.find((f) => f.name === oldField)?.usedBy;
-    out.push({
-      anchor: '§' + stripRef(d.ref),
-      type: 'field-alert',
-      title: `שדה CRM שונה: ${oldField} → ${newField}`,
-      targetDocumentId: step?.documentId ?? null,
-      targetStepKey: step?.stepKey ?? null,
-      targetBlockId: null,
-      payload: { type: 'field-alert', fieldName: oldField, issue: 'renamed' },
-      confidence: confidenceFor('field-alert'),
-      rationale:
+    const newField = afterQ.find((q) => !known.has(q.toLowerCase()) && !beforeQ.includes(q) && FIELDISH.test(q));
+    if (oldField && newField) {
+      const usedBy = ctx.impact?.fields.find((f) => f.name === oldField)?.usedBy;
+      add(
+        d,
+        oldField,
+        'renamed',
+        `שדה CRM שונה: ${oldField} → ${newField}`,
         `המקור מפנה ל"${newField}" במקום ל"${oldField}", שאינו ברשימת שדות ה-CRM המוכרים` +
-        (usedBy ? ` ומשמש ב-${usedBy} מסמכים` : '') +
-        '.',
-    });
+          (usedBy ? ` ומשמש ב-${usedBy} מסמכים` : '') +
+          '.',
+      );
+      continue;
+    }
+    /**
+     * `issue: 'unknown'` — the source names a CRM field nobody has heard of, without replacing
+     * one that exists. The rename branch above cannot see it (no known name left the paragraph),
+     * and it is the more common case in practice: a new field is added to a procedure before
+     * anyone tells the knowledge platform it exists.
+     */
+    if (newField)
+      add(
+        d,
+        newField,
+        'unknown',
+        `שדה CRM לא מוכר: ${newField}`,
+        `הפסקה מפנה לשדה "${newField}" שאינו מופיע ברשימת שדות ה-CRM המוכרים; יש לאשר שהשדה קיים לפני שהשלב מפנה אליו.`,
+      );
   }
   return [...items, ...out];
 }

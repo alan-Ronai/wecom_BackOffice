@@ -1,0 +1,54 @@
+{
+  "id": "12-same-revision",
+  "title": "גרסה זהה — כל הפסקאות same",
+  "notes": "A re-upload of an unchanged file. Every diff is kind=same; the answer is silence.",
+  "source": {
+    "title": "נהלי תמיכה טכנית"
+  },
+  "diffs": [
+    {
+      "ref": "4.8",
+      "kind": "same",
+      "before": "בקש מהלקוח להריץ Speedtest.",
+      "after": "בקש מהלקוח להריץ Speedtest.",
+      "similarity": 1
+    },
+    {
+      "ref": "4.9",
+      "kind": "same",
+      "before": "הרץ בדיקת מהירות מול השרת הקרוב.",
+      "after": "הרץ בדיקת מהירות מול השרת הקרוב.",
+      "similarity": 1
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "11111111-1111-4111-8111-111111111111",
+      "documentTitle": "איטיות גלישה",
+      "stepKey": "s8",
+      "stepNum": "8",
+      "stepTitle": "בדיקת מהירות גלישה",
+      "anchor": "4.8",
+      "actions": [
+        "בקש מהלקוח להריץ Speedtest",
+        "רשום את התוצאה בכרטיס הפנייה"
+      ]
+    },
+    {
+      "documentId": "11111111-1111-4111-8111-111111111111",
+      "documentTitle": "איטיות גלישה",
+      "stepKey": "s9",
+      "stepNum": "9",
+      "stepTitle": "בדיקת מהירות מול שרת",
+      "anchor": "4.9",
+      "actions": [
+        "הרץ בדיקת מהירות מול השרת הקרוב"
+      ]
+    }
+  ],
+  "blocks": [],
+  "fields": [],
+  "expected": [],
+  "maxItems": 0,
+  "latencyBudgetMs": 30000
+}

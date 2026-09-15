@@ -1,0 +1,36 @@
+{
+  "id": "14-heading-renamed",
+  "title": "כותרת סעיף נוסחה מחדש — אין שלב חדש",
+  "notes": "A heading is a table of contents, not an instruction. Renaming one used to produce a new-card because the heading anchor has no linked step.",
+  "source": {
+    "title": "נהלי תמיכה טכנית"
+  },
+  "diffs": [
+    {
+      "ref": "h2-4",
+      "kind": "changed",
+      "before": "בדיקות מהירות",
+      "after": "בדיקות מהירות גלישה",
+      "similarity": 0.8
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "11111111-1111-4111-8111-111111111111",
+      "documentTitle": "איטיות גלישה",
+      "stepKey": "s8",
+      "stepNum": "8",
+      "stepTitle": "בדיקת מהירות גלישה",
+      "anchor": "4.8",
+      "actions": [
+        "בקש מהלקוח להריץ Speedtest",
+        "רשום את התוצאה בכרטיס הפנייה"
+      ]
+    }
+  ],
+  "blocks": [],
+  "fields": [],
+  "expected": [],
+  "maxItems": 0,
+  "latencyBudgetMs": 30000
+}

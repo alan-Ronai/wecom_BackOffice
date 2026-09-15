@@ -12,6 +12,29 @@ const sentences = (t: string) =>
 const anchorOf = (ref: string) => (ref.startsWith('§') ? ref : '§' + ref);
 const stripRef = (ref: string) => ref.replace(/^§/, '');
 
+const MAX_TITLE = 48;
+const shortTitle = (t: string) =>
+  t.replace(/\s+/g, ' ').replace(/[.:]$/, '').trim().slice(0, MAX_TITLE - 1) + (t.length >= MAX_TITLE ? '…' : '');
+
+/**
+ * The mapped step this new paragraph most likely belongs after: the nearest one whose anchor
+ * sorts below the paragraph's, comparing anchors the way a document numbers them (`4.9` before
+ * `4.10`), falling back to the last mapped step of the only mapped document.
+ */
+const anchorKey = (ref: string) => stripRef(ref).split(/[.\-]/).map((p) => Number(p) || 0);
+const below = (a: string, b: string) => {
+  const [x, y] = [anchorKey(a), anchorKey(b)];
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
+  }
+  return false;
+};
+const nearestMapped = (ctx: ProposalContext, ref: string) => {
+  const before = ctx.linkedSteps.filter((s) => below(s.anchor, ref));
+  const pool = before.length ? before : ctx.linkedSteps;
+  return pool.length ? pool[pool.length - 1] : undefined;
+};
+
 /** Deterministic fallback: no language model, only alignment + heuristics. */
 export class RuleBasedModel implements ModelClient {
   name = 'rules';
@@ -63,6 +86,34 @@ export class RuleBasedModel implements ModelClient {
       if (d.kind === 'added' || !linked.length) {
         const after = d.after ?? '';
         const ss = sentences(after);
+        /**
+         * `propose-v4` rule 5, which the engine never had: a new paragraph in a source whose
+         * other paragraphs are already mapped is a new *step* in that document, not a new
+         * document. Filing it as a `new-card` created a one-step card next to the document it
+         * belonged in — cases `07` and `19` scored zero on exactly that.
+         */
+        const host = nearestMapped(ctx, d.ref);
+        if (d.kind === 'added' && host && ss.length) {
+          out.push({
+            anchor,
+            type: 'new-step',
+            title: shortTitle(ss[0]),
+            targetDocumentId: host.documentId,
+            targetStepKey: null,
+            targetBlockId: null,
+            payload: {
+              type: 'new-step',
+              afterStepKey: host.stepKey,
+              title: shortTitle(ss[0]),
+              actions: ss.slice(0, 8),
+              outcomes: [{ kind: 'ok', text: '✓ הסתדר – סיום' }],
+            },
+            confidence: confidenceFor('new-step', 0.7),
+            rationale:
+              'פסקה חדשה ' + d.ref + ' ללא שלב ממופה, אחרי שלב ' + host.stepNum + ' ב"' + host.documentTitle + '".',
+          });
+          continue;
+        }
         const title = (ss[0] ?? after).replace(/[.:]$/, '').slice(0, 80);
         const steps = (ss.length > 1 ? ss.slice(1) : ss).slice(0, 8).map((s, i, arr) => ({
           key: 's' + (i + 1),

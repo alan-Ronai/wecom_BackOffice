@@ -1,0 +1,77 @@
+{
+  "id": "20-impact-shared-block",
+  "title": "השפעה: הבלוק מוטמע ב-12 מסמכים — ה-rationale חייב לומר זאת",
+  "notes": "Spec 1.6. The impact set is in the prompt; the assertion is that the rationale names it, because that is the sentence an editor reads before approving a change to twelve documents at once.",
+  "source": {
+    "title": "נהלי תמיכה טכנית"
+  },
+  "diffs": [
+    {
+      "ref": "7.2",
+      "kind": "changed",
+      "before": "אפס את הגדרות ה-APN למצב ברירת מחדל.",
+      "after": "אפס את הגדרות ה-APN למצב ברירת מחדל והמתן 60 שניות לרישום מחדש ברשת.",
+      "similarity": 0.7
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "33333333-3333-4333-8333-333333333333",
+      "documentTitle": "ניתוקים חוזרים",
+      "stepKey": "s4",
+      "stepNum": "4",
+      "stepTitle": "איפוס APN",
+      "anchor": "7.2",
+      "actions": [
+        "אפס את הגדרות ה-APN"
+      ],
+      "blockId": "66666666-6666-4666-8666-666666666666"
+    }
+  ],
+  "blocks": [
+    {
+      "id": "66666666-6666-4666-8666-666666666666",
+      "title": "איפוס APN",
+      "actions": [
+        "אפס את הגדרות ה-APN"
+      ]
+    }
+  ],
+  "fields": [],
+  "impact": {
+    "documents": [],
+    "blocks": [
+      {
+        "id": "66666666-6666-4666-8666-666666666666",
+        "title": "איפוס APN",
+        "usedBy": 12
+      }
+    ],
+    "fields": [],
+    "topics": [
+      {
+        "id": "55555555-5555-4555-8555-555555555555",
+        "name": "תשתית"
+      }
+    ],
+    "related": []
+  },
+  "expected": [
+    {
+      "type": "update-block",
+      "targetBlockId": "66666666-6666-4666-8666-666666666666",
+      "mustContain": [
+        "12"
+      ],
+      "mustContainAny": [
+        [
+          "מסמכים",
+          "בלוק",
+          "משותף"
+        ]
+      ]
+    }
+  ],
+  "maxItems": 1,
+  "latencyBudgetMs": 30000
+}
