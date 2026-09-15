@@ -3,12 +3,15 @@ import {
   AI_SETTINGS_KEYS,
   AI_TOOLS,
   AiSettingsSchema,
+  AiSettingVersionSchema,
+  AiSettingVersionsResponseSchema,
   AiToolNameSchema,
   ChatEventSchema,
   ConversationSchema,
   CreateConversationBodySchema,
   DecideProposedEditsBodySchema,
   EvalRunSchema,
+  JobQueuedSchema,
   MODEL_TIER_PRESETS,
   ModelTestResultSchema,
   ProposedEditsSchema,
@@ -34,6 +37,8 @@ describe('wave 6 chat events', () => {
       {
         type: 'proposed_edits',
         proposedEditsId: id,
+        documentId: other,
+        baseSourceVersion: 4,
         ops: [{ id: 'op1', anchor: '4.8', kind: 'replace', before: 'א', after: 'ב' }],
       },
       { type: 'refined_suggestion', suggestionId: id, editedPayload: { type: 'deprecate-step' } },
@@ -124,6 +129,19 @@ describe('wave 6 AI settings and tiers', () => {
     for (const tier of [0, 1, 2, 3, 4] as const)
       expect(MODEL_TIER_PRESETS[tier].tier, String(tier)).toBe(tier);
   });
+  it('names the author of a settings version and envelopes a queued job', () => {
+    const v = AiSettingVersionSchema.parse({
+      key: 'ai.brief',
+      version: 2,
+      value: { text: 'רונאי' },
+      updatedBy: null,
+      updatedAt: now,
+    });
+    expect(v.updatedByName).toBeNull();
+    expect(AiSettingVersionsResponseSchema.parse({ items: [v] }).items).toHaveLength(1);
+    expect(JobQueuedSchema.parse({ queued: true, jobId: null })).toEqual({ queued: true, jobId: null });
+    expect(() => JobQueuedSchema.parse({ queued: false, jobId: null })).toThrow();
+  });
   it('validates a model test result', () => {
     expect(
       ModelTestResultSchema.parse({ slot: 'embed', tag: 'bge-m3', reachable: true, dims: 1024 }).dims,
@@ -142,7 +160,14 @@ describe('wave 6 conversations and proposed edits', () => {
       createdAt: now,
       updatedAt: now,
     });
-    expect(c).toMatchObject({ documentId: null, sourceRevisionId: null, title: '', messageCount: 0 });
+    expect(c).toMatchObject({
+      documentId: null,
+      documentTitle: null,
+      sourceRevisionId: null,
+      userName: '',
+      title: '',
+      messageCount: 0,
+    });
     expect(CreateConversationBodySchema.parse({ kind: 'article', documentId: id }).kind).toBe('article');
     expect(() => CreateConversationBodySchema.parse({ kind: 'sidebar' })).toThrow();
   });

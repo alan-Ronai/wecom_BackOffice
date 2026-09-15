@@ -106,8 +106,11 @@ export const ConversationSchema = z.object({
   id: IdSchema,
   kind: ConversationKindSchema,
   documentId: IdSchema.nullable().default(null),
+  /** Joined for the transcript browser and the pane header, so neither needs a second fetch. */
+  documentTitle: z.string().nullable().default(null),
   sourceRevisionId: IdSchema.nullable().default(null),
   userId: IdSchema,
+  userName: z.string().default(''),
   title: z.string().default(''),
   model: z.string().nullable().default(null),
   promptVersion: z.string().nullable().default(null),
@@ -284,9 +287,12 @@ export const ChatEventSchema = z.discriminatedUnion('type', [
     ok: z.boolean(),
     summary: z.string().default(''),
   }),
+  /** The overlay renders the hunks against a version, so the frame carries it. */
   z.object({
     type: z.literal('proposed_edits'),
     proposedEditsId: IdSchema,
+    documentId: IdSchema,
+    baseSourceVersion: z.number().int().nonnegative(),
     ops: z.array(ProposedEditOpSchema),
   }),
   z.object({
@@ -412,6 +418,8 @@ export const AiSettingVersionSchema = z.object({
   version: z.number().int().nonnegative(),
   value: z.unknown(),
   updatedBy: IdSchema.nullable(),
+  /** Joined display name, so the version list needs no second lookup per row. */
+  updatedByName: z.string().nullable().default(null),
   updatedAt: IsoDateSchema,
 });
 export type AiSettingVersion = z.infer<typeof AiSettingVersionSchema>;
@@ -419,6 +427,17 @@ export const AiSettingVersionsResponseSchema = z.object({
   items: z.array(AiSettingVersionSchema),
 });
 export type AiSettingVersionsResponse = z.infer<typeof AiSettingVersionsResponseSchema>;
+
+/**
+ * 202 envelope for the two admin jobs (`POST /admin/ai/eval`, `POST /admin/ai/reindex`).
+ * `jobId` is null when pg-boss is down — the call still reports what it did rather than
+ * pretending a job exists.
+ */
+export const JobQueuedSchema = z.object({
+  queued: z.literal(true),
+  jobId: z.string().nullable(),
+});
+export type JobQueued = z.infer<typeof JobQueuedSchema>;
 
 export const ModelSlotSchema = z.enum(['suggest', 'chat', 'embed']);
 export type ModelSlot = z.infer<typeof ModelSlotSchema>;
