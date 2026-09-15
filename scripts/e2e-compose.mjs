@@ -65,6 +65,12 @@ const ENV_BACKUP = join(DEPLOY, '.env.before-e2e');
 /**
  * Its own compose project, so `down -v` can never take an operator's pilot stack (which uses the
  * `name: wecom-kb` declared in docker-compose.yml) and its database volume with it.
+ *
+ * It is also what scopes the *images*. `deploy/docker-compose.yml` tags them
+ * `${COMPOSE_PROJECT_NAME}-api`/`-web`/`-backup`; they used to be unprefixed, so every project
+ * built from that file wrote the same three tags and any `up --build` elsewhere on the machine —
+ * a second clone, a walkthrough — silently replaced the images this run was using, mid-run. The
+ * project name was already careful about the volumes; the tags were the hole left in it.
  */
 const PROJECT = process.env.E2E_COMPOSE_PROJECT ?? 'wecom-kb-e2e';
 
@@ -391,6 +397,29 @@ async function main() {
     compose(['logs', '--tail', '20', 'ollama-pull']);
     throw new Error(`ollama-pull exited ${pullCode}`);
   }
+  /**
+   * W-3: exit 0 is not the assertion. `ollama-pull` exited 0 on every install that shipped with
+   * `EMBED_MODEL` configured and never fetched — one tag in `ollama list`, no error anywhere, and
+   * search silently demoted to lexical ranking. `deploy/e2e.env` configures two different tags so
+   * this can be asked, and this asks it.
+   */
+  const listing = composeOut(['exec', '-T', 'ollama', 'ollama', 'list']);
+  const present = listing
+    .split('\n')
+    .slice(1)
+    .map((l) => l.trim().split(/\s+/)[0])
+    .filter(Boolean);
+  const envText = readFileSync(ENV_SOURCE, 'utf8');
+  for (const key of ['MODEL_NAME', 'EMBED_MODEL']) {
+    const tag = envText.match(new RegExp(`^${key}=(.*)$`, 'm'))?.[1]?.trim();
+    if (!tag) throw new Error(`deploy/e2e.env sets no ${key} — the W-3 coverage needs both`);
+    if (!present.includes(tag))
+      throw new Error(
+        `${key}='${tag}' is not in \`ollama list\` (${present.join(', ') || 'nothing'}) — ` +
+          'deploy/ollama-pull.sh did not pull it',
+      );
+  }
+  console.log(`✓ both configured model tags are pulled: ${present.join(', ')}`);
 
   console.log('\n── 5. health through nginx ──────────────────────────────────');
   /**

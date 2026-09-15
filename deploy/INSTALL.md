@@ -15,25 +15,36 @@ command you run *outside* compose will use), and `MODEL_NAME`/`EMBED_MODEL` if y
 the shipped tags.
 4. TLS: place `cert.pem` and `key.pem` in `deploy/certs/` (see "TLS certificate").
 5. Start: `docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build`.
-   First start pulls the model (~2 GB, 5–20 min on the LAN); progress: `docker compose -f deploy/docker-compose.yml logs -f ollama-pull`.
-   The `ollama-pull` service pulls **`MODEL_NAME` only** — compose does not pass it `EMBED_MODEL`
-   at all. The search re-rank model (`nomic-embed-text` by default) is therefore never pulled by
-   any step on this page, and step 6 does not check it, so pull it once by hand:
+   First start pulls the models (~2 GB, 5–20 min on the LAN); progress: `docker compose -f deploy/docker-compose.yml logs -f ollama-pull`.
+   The `ollama-pull` service pulls **both tags your `.env` names** — `MODEL_NAME` (chat and
+   suggestions) and `EMBED_MODEL` (the search vector re-rank, `nomic-embed-text` by default). It
+   skips either one that is already in the volume, and does nothing extra when the two are the same
+   tag or `EMBED_MODEL` is empty, so it is safe to re-run. Nothing here needs doing by hand; the
+   service's last line names what it ended up with (`model ready: <tag> <tag>`), and
    ```bash
-   docker compose -f deploy/docker-compose.yml exec ollama ollama pull nomic-embed-text
+   docker compose -f deploy/docker-compose.yml exec ollama ollama list
    ```
-   Skip it and nothing fails: search silently falls back to lexical ranking, with no error in the
-   logs and `model:true` in health. `docker compose -f deploy/docker-compose.yml exec ollama
-   ollama list` is what tells you both tags are actually there.
+   shows the volume's contents directly. (Before this, only `MODEL_NAME` was pulled: the embedding
+   model was missing on every install, nothing reported it, and search quietly ranked lexically.
+   An existing stack picks the missing tag up with `docker compose -f deploy/docker-compose.yml up
+   -d ollama-pull`.)
 6. Verify: `deploy/smoke.sh https://<PUBLIC_URL host>` prints `smoke passed`. The argument is a
    whole origin, so include the port if you changed `WEB_HTTPS_PORT` away from 443
-   (`deploy/smoke.sh https://kb.wecom.local:9443`). Run it from the repository root: the script
-   looks for `deploy/.env` next to itself.
+   (`deploy/smoke.sh https://kb.wecom.local:9443`) — leave it out and every request goes to 443,
+   where nothing answers, and the only symptom is sixty rounds of `waiting for api`. A bare
+   `kb.wecom.local:9443` is taken as https, a trailing slash is ignored, and a URL with a path is
+   refused rather than quietly prefixed onto every check. Run it from the repository root: the
+   script looks for `deploy/.env` next to itself.
    The check waits for the database **and** for the exact `MODEL_NAME` tag to appear in Ollama's
    `ollama list` — not merely for Ollama to answer — so a mistyped `MODEL_NAME` fails here
    (`waiting for the model tag '<tag>' to be pulled`) instead of at the first suggestion job. It
-   also asserts the five security response headers on `GET /`. Run it with
-   `SMOKE_REQUIRE_MODEL=false deploy/smoke.sh …` if you are deliberately running without a model.
+   then asserts your `EMBED_MODEL` is pulled as well, which health does not report: a mistyped
+   embedding tag costs you vector re-ranking with no error anywhere, so this is the only place it
+   surfaces. That one is asked of Ollama through `docker compose … exec ollama ollama list`
+   (Ollama has no published port); run from a host without docker it prints a "not verified" note
+   and carries on rather than failing. It also asserts the five security response headers on
+   `GET /`. Run it with `SMOKE_REQUIRE_MODEL=false deploy/smoke.sh …` if you are deliberately
+   running without a model, or `SMOKE_REQUIRE_EMBED=false` for the embedding check alone.
 7. Create the break-glass admin. There is no `--password` flag: `pnpm` echoes the resolved command
    line, so a password given there lands in the terminal transcript and in your shell history
    (acceptance review O-6). Either answer the prompt on a terminal —
@@ -157,7 +168,9 @@ Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST`
 ## Verifying a release on the real stack
 `deploy/smoke.sh` answers "is it up?". `pnpm e2e:compose` answers "does it work?" — it builds the
 images, brings this same compose stack up under its own project name (`wecom-kb-e2e`, so it can
-never touch the pilot's volumes), and drives a browser through nginx over TLS: the security
+never touch the pilot's volumes **or its images** — the built tags are
+`${COMPOSE_PROJECT_NAME}-api`/`-web`/`-backup`, so a second stack's `up --build` writes its own set
+rather than over yours), and drives a browser through nginx over TLS: the security
 headers on the document and on a hashed asset, the Palo Alto fallback signing a LAN client in with
 the role it was granted, an editorial round trip (create → publish → search → article), and the
 two-way WordPress loop. Two stubs stand in for the firewall and for WordPress
@@ -191,7 +204,11 @@ One spec asserts that a browser forging `X-Forwarded-For` stays signed out. See
   and not a failure: `system.backup-check` runs at API start-up and after the nightly backup job,
   and at install time there is no dump yet. It clears itself after 02:15, or immediately with
   `docker compose -f deploy/docker-compose.yml exec backup backup.sh` followed by
-  `docker compose -f deploy/docker-compose.yml restart api`.
+  `docker compose -f deploy/docker-compose.yml restart api`. `deploy/smoke.sh` says as much
+  (`backup: none yet — expected on a fresh install`) rather than letting the red status be the
+  only thing you see. On a pilot that has been running, the same script warns instead — a stale or
+  failed backup is printed as `smoke WARNING` on stderr. Neither fails the smoke test: it answers
+  "is the stack up", and an install-time backup status is not that question.
 - Logs, all four on stdout — nothing is written to a file, so `docker compose logs` is the whole
   story and Docker's rotation is what bounds it:
   - `docker compose logs -f api` — the application (JSON lines; filter by `requestId`, which is

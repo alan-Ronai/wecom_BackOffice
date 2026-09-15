@@ -77,7 +77,20 @@ afterwards comes back with the library intact.
 > backup backup.sh`) and copy it off the VM.
 
 Decommissioning for real is `down -v` followed by deleting `deploy/backups`, `deploy/certs/*.pem`
-and `deploy/.env` — the last two are the TLS key and every secret the deployment holds.
+and `deploy/.env` — the last two are the TLS key and every secret the deployment holds. The three
+built images are named after the compose project (`wecom-kb-api`, `wecom-kb-web`,
+`wecom-kb-backup` for the default one), so `docker image rm` takes them without touching another
+project's: `docker compose -f deploy/docker-compose.yml images` lists exactly this stack's.
+
+> **A second stack on the same machine is now safe.** Those tags used to have no project prefix,
+> so any project built from this file wrote the same three — a `-p something-else … up --build`
+> replaced the images a running stack was using, mid-flight and silently. Each project builds its
+> own set now (`${COMPOSE_PROJECT_NAME}-api` and so on). Two consequences worth knowing. The
+> default project's names are unchanged, so nothing on the pilot VM moves. Any *other* project on
+> a machine — a second clone, `pnpm e2e:compose` — rebuilds under its own names on the next
+> `up --build`, and whatever it last wrote to the shared `wecom-kb-*` tags stays there, now
+> orphaned: `docker image rm wecom-kb-api wecom-kb-web wecom-kb-backup` on such a machine, once
+> the pilot stack is not the thing using them.
 
 ## Rotating secrets
 
@@ -159,21 +172,22 @@ To upgrade:
    `ollama` volume (progress: `docker compose logs -f ollama-pull`). The old model stays
    available until you prune it.
 
-   **This pulls `MODEL_NAME` and nothing else.** `deploy/docker-compose.yml`'s `ollama-pull`
-   service passes only `MODEL_NAME` into `deploy/ollama-pull.sh`, so a changed `EMBED_MODEL` is
-   never fetched by this step — pull that one directly, and check both are there:
+   **This pulls whichever of the two changed**, `MODEL_NAME` or `EMBED_MODEL`: the service is
+   handed both and skips every tag already in the volume, so re-running it after any `.env` edit
+   is the whole procedure. Its last line names what the volume now holds
+   (`model ready: <tag> <tag>`), and `docker compose -f deploy/docker-compose.yml exec ollama
+   ollama list` shows it directly.
 
-   ```bash
-   docker compose -f deploy/docker-compose.yml exec ollama ollama pull <new-embed-tag>
-   docker compose -f deploy/docker-compose.yml exec ollama ollama list
-   ```
-
-   An `EMBED_MODEL` tag that was never pulled does not fail anything: `GET /system/health` still
-   answers `model:true` (it only looks for `MODEL_NAME`), and search quietly drops to lexical
-   ranking. `ollama list` is the only place it shows.
+   It used to pull `MODEL_NAME` alone — compose did not pass `EMBED_MODEL` in at all — so on a
+   stack installed before that fix the embedding tag is missing however many times this step was
+   run. Nothing announced it: `GET /system/health` answers `model:true` (it looks at `MODEL_NAME`
+   only), no log line mentions it, and search quietly drops to lexical ranking. Run this step once
+   after upgrading and `deploy/smoke.sh` will confirm both tags.
 3. `docker compose -f deploy/docker-compose.yml up -d api` — the API picks up the new
    `MODEL_NAME`/`EMBED_MODEL` on restart (`app.model`, `plugins/model.ts`).
-4. Confirm: `GET /api/v1/admin/system` → `modelName` reflects the new tag, `model: true`.
+4. Confirm: `GET /api/v1/admin/system` → `modelName` reflects the new tag, `model: true`; and
+   `deploy/smoke.sh https://<host>` → `model ok` for `MODEL_NAME` and `embed ok` for `EMBED_MODEL`.
+   Health reports only the first of the two, which is why the embedding tag is checked there.
 5. **If `EMBED_MODEL` changed**, every stored `documents.embedding` was computed with the old
    model and is no longer comparable to new query embeddings. Rebuild them: trigger the
    `search.reindex` job (its schedule, or `POST` the job manually if your ops tooling exposes
@@ -232,7 +246,15 @@ What holds this in place:
 
 - `deploy/nginx-check.sh` fails if the production config mentions `$proxy_add_x_forwarded_for`
   outside a comment, or if any `location` with a `proxy_pass` is missing
-  `proxy_set_header X-Forwarded-For $remote_addr;`.
+  `proxy_set_header X-Forwarded-For $remote_addr;`. The same script reads the live
+  `Content-Security-Policy` off a running container and holds it to two things: `script-src`,
+  `style-src` and `font-src` must each allow `'self'` (the theme script and the self-hosted
+  Hebrew web fonts are same-origin files — drop `'self'` and they are blocked, with the only
+  evidence in a browser console), and `script-src` must carry neither `'unsafe-inline'` nor
+  `'unsafe-eval'`. The browser names `'unsafe-inline'` in the violation it prints, and taking
+  that suggestion would re-admit every injected inline script; the inline script goes in a file
+  instead. `style-src` keeps its `'unsafe-inline'` for React's inline `style` attributes, which
+  is the documented exception and is not asserted against.
 - `deploy/smoke.sh` sends seven `POST /auth/local` attempts from the VM, each with a different
   forged `X-Forwarded-For`, and insists on a 429. The route is rate-limited to five a minute per
   `req.ip`, so seven 401s would mean each forged address got its own bucket — i.e. the API was
