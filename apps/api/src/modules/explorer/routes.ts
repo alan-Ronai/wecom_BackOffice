@@ -17,6 +17,7 @@ import { requireUser } from '../../lib/user.js';
 import { canReadUnpublished } from '../../lib/visibility.js';
 import { parseDataFile } from '../sources/parsers.js';
 import { SourceRevisionService } from '../sources/revisions.js';
+import { ImpactService } from '../sources/impact.js';
 import { MappingService } from '../sources/mapping.js';
 import { ProposalService } from '../sources/proposal.js';
 import { SuggestionService } from '../sources/suggestions.js';
@@ -44,6 +45,7 @@ function pipeline(app: FastifyInstance): PipelineDeps {
       mapping,
       proposal: new ProposalService(app.db, mapping, content),
       suggestions: new SuggestionService(app.db, content, app.events),
+      impact: new ImpactService(app.db),
     };
   }
   return cache.__explorerPipeline;

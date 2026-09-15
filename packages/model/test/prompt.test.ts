@@ -31,8 +31,8 @@ describe('prompt', () => {
     expect(msgs[0].content).toContain('update-step');
     expect(msgs[1].content).toContain('§4.8');
     expect(msgs[1].content).toContain('s8');
-    // v2: the prompt now carries the section rule for a brand-new source (pipeline fan-out).
-    expect(PROMPT_VERSION).toBe('propose-v2');
+    // v2 kept the section rule for a brand-new source; v3 (wave 6) adds the briefed system message.
+    expect(PROMPT_VERSION).toBe('propose-v3');
     expect(RESPONSE_FORMAT.required).toEqual(['suggestions']);
   });
 

@@ -2,6 +2,7 @@ import type pg from 'pg';
 import {
   SuggestionPayloadSchema,
   makeEvent,
+  type AffectsItem,
   type Document,
   type Event,
   type Step,
@@ -60,6 +61,9 @@ const row = (r: Record<string, unknown>): Suggestion => ({
    * than a parse failure. X1 computes it; X3's structured editor and analytics read it.
    */
   affects: (r.affects as Suggestion['affects']) ?? [],
+  /** Wave 6 (X1): which prompt (`v3.<brief>.<style>`) and which model produced the row. */
+  promptVersion: (r.prompt_version as string | null) ?? null,
+  model: (r.model as string | null) ?? null,
   createdAt: (r.created_at as Date).toISOString(),
 });
 
@@ -101,7 +105,21 @@ export class SuggestionService {
    * ever see committed writes; publishing on the pool fired the event even when the
    * insert later failed. Both write paths therefore open one transaction.
    */
-  async createFromProposals(revisionId: string, items: ProposedSuggestion[]): Promise<Suggestion[]> {
+  /**
+   * `meta` is wave 6 (X1) provenance, all optional so every existing caller is unchanged:
+   * which prompt version and model produced the batch, and a function that computes what each
+   * suggestion touches. `affects` is deliberately *not* read off the model's answer (spec §1.6)
+   * — a model must not be able to claim a change reaches a document it never saw.
+   */
+  async createFromProposals(
+    revisionId: string,
+    items: ProposedSuggestion[],
+    meta: {
+      promptVersion?: string;
+      model?: string;
+      affects?: (s: ProposedSuggestion) => AffectsItem[];
+    } = {},
+  ): Promise<Suggestion[]> {
     const out: Suggestion[] = [];
     const srcRow = await this.pool.query(`select source_id from source_revisions where id=$1`, [revisionId]);
     if (!srcRow.rowCount) throw httpErr(404, 'NOT_FOUND', 'גרסת המקור לא נמצאה');
@@ -111,8 +129,8 @@ export class SuggestionService {
       await client.query('begin');
       for (const it of items) {
         const r = await client.query(
-          `insert into suggestions(source_revision_id, anchor, type, title, target_document_id, target_step_key, target_block_id, payload, confidence, rationale)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *`,
+          `insert into suggestions(source_revision_id, anchor, type, title, target_document_id, target_step_key, target_block_id, payload, confidence, rationale, affects, prompt_version, model)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) returning *`,
           [
             revisionId,
             it.anchor,
@@ -124,6 +142,9 @@ export class SuggestionService {
             JSON.stringify(it.payload),
             clamp01(it.confidence),
             it.rationale,
+            JSON.stringify(meta.affects?.(it) ?? []),
+            meta.promptVersion ?? null,
+            meta.model ?? null,
           ],
         );
         const s = row(r.rows[0]);

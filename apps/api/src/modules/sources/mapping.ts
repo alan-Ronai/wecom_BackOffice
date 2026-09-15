@@ -1,6 +1,6 @@
 import type pg from 'pg';
 import { similarity, stripFmt, paragraphText, type Paragraph } from '@wecom/shared';
-import type { LinkedStep } from '@wecom/model';
+import type { LinkedStep, ModelClient } from '@wecom/model';
 
 const anchor = (ref: string) => ref.replace(/^§/, '');
 
@@ -16,7 +16,11 @@ export interface MappingProposal {
 
 /** Keeps `document_links(derived_from_source)` and `steps.source_ref` in sync with a source. */
 export class MappingService {
-  constructor(private readonly pool: pg.Pool) {}
+  constructor(
+    private readonly pool: pg.Pool,
+    /** Wave 6 (X1): embedding-based mapping when the model can embed; trigram otherwise. */
+    private readonly model: ModelClient | null = null,
+  ) {}
 
   /** Every step anchored to a paragraph of this source, with the actions the model should see. */
   async linkedSteps(sourceId: string): Promise<LinkedStep[]> {
