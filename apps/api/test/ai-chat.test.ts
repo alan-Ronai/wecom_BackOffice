@@ -1,12 +1,23 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { AiSettingsSchema, DEFAULT_ROLES, PERMISSIONS, toolsFor } from '@wecom/shared';
+import {
+  AiSettingsSchema,
+  DEFAULT_ROLES,
+  PERMISSIONS,
+  toolsFor,
+  type ChatEvent,
+} from '@wecom/shared';
 import { integration } from './helpers/db.js';
-import { makeUser, type TestUser } from './helpers/fixtures.js';
+import { auth, makeUser, type TestUser } from './helpers/fixtures.js';
 import { makeAiFixture, SECRET } from './helpers/ai/fixture.js';
 import { chatResult, fakeChat } from './helpers/ai/fakeChat.js';
+import { putAiSettings } from '../src/lib/aiSettings.js';
 import { withTransaction } from '../src/lib/sql.js';
 import type { ReqUser } from '../src/lib/user.js';
 import * as repo from '../src/modules/ai/repo.js';
+import { MAX_TOOL_ROUNDS } from '../src/modules/ai/chat.js';
+import { aiChatHolder, unavailableChatModel } from '../src/modules/ai/chatModel.js';
+import { resetRateLimit } from '../src/modules/ai/rateLimit.js';
+import { parseSseFrames } from '../src/modules/ai/sse.js';
 import { runTool, specsFor, type ToolCtx } from '../src/modules/ai/tools/index.js';
 
 const run = integration ? describe : describe.skip;
@@ -26,6 +37,10 @@ run('ai chat', () => {
 
   describe('tools', () => {
     runToolTests();
+  });
+
+  describe('routes', () => {
+    runRouteTests();
   });
 });
 
@@ -398,5 +413,177 @@ function runToolTests() {
       properties: { q: { type: 'string', minLength: 2, maxLength: 120 } },
       required: ['q'],
     });
+  });
+}
+
+function runRouteTests() {
+  const send = (cid: string, content: string, u: TestUser) =>
+    fx.app.inject({
+      method: 'POST',
+      url: `/api/v1/ai/conversations/${cid}/messages`,
+      headers: auth(u),
+      payload: { content },
+    });
+
+  const newConversation = async (kind: string, u: TestUser, documentId: string | null = fx.techDoc) =>
+    fx.post('/api/v1/ai/conversations', { kind, documentId }, u);
+
+  it('streams tool_call → tool_result → token → done and persists them in order', async () => {
+    aiChatHolder.swap(
+      fakeChat(({ messages }) =>
+        messages.some((m) => m.role === 'tool')
+          ? chatResult('לפי שלב 2, יש לאפס APN.')
+          : chatResult('', [{ id: 'c1', name: 'read_document', args: { documentId: fx.techDoc } }]),
+      ),
+    );
+    const c = await newConversation('editor', fx.editor);
+    expect(c.statusCode).toBe(201);
+    const cid = c.json().id as string;
+    const r = await send(cid, 'מה עושים כשאין גלישה?', fx.editor);
+    expect(r.statusCode).toBe(200);
+    expect(r.headers['content-type']).toMatch(/text\/event-stream/);
+
+    const ev = parseSseFrames(r.body);
+    const kinds = ev.map((e) => e.type);
+    expect(kinds[0]).toBe('tool_call');
+    expect(kinds[1]).toBe('tool_result');
+    expect(kinds.at(-1)).toBe('done');
+    expect(kinds.filter((k) => k === 'token').length).toBeGreaterThan(0);
+    const done = ev.at(-1) as Extract<ChatEvent, { type: 'done' }>;
+    expect(done.tokensOut).toBeGreaterThan(0);
+    // Contract: a tool_result carries the tool's name.
+    expect(ev[1]).toMatchObject({ type: 'tool_result', name: 'read_document', ok: true });
+
+    const detail = (await fx.get(`/api/v1/ai/conversations/${cid}`, fx.editor)).json();
+    expect(detail.messages.map((m: { role: string }) => m.role)).toEqual([
+      'user',
+      'assistant',
+      'tool',
+      'assistant',
+    ]);
+    expect(detail.messages.at(-1).id).toBe(done.messageId);
+    expect(detail.messages.at(-1).content).toContain('שלב 2');
+    expect(detail.messages[2].toolResults[0].ok).toBe(true);
+    expect(detail.conversation.title).toBe('מה עושים כשאין גלישה?');
+  });
+
+  it('an agent gets only the ask tools and cannot make the model run a write tool', async () => {
+    const seen: string[][] = [];
+    aiChatHolder.swap(
+      fakeChat(({ tools, messages }) => {
+        seen.push(tools);
+        return messages.some((m) => m.role === 'tool')
+          ? chatResult('לא אוכל לערוך.')
+          : chatResult('', [
+              { id: 'x', name: 'propose_source_edit', args: { documentId: fx.techDoc, instruction: 'x' } },
+            ]);
+      }),
+    );
+    const before = await fx.db.pool.query('select count(*)::int n from ai_proposed_edits');
+    const c = await newConversation('article', fx.agent);
+    expect(c.statusCode).toBe(201);
+    const r = await send(c.json().id, 'שנה את המסמך', fx.agent);
+    const ev = parseSseFrames(r.body);
+    expect([...seen[0]].sort()).toEqual(['explain_step', 'read_document', 'read_topic', 'search_kb']);
+    expect(ev.find((e) => e.type === 'tool_result')).toMatchObject({ ok: false });
+    const after = await fx.db.pool.query('select count(*)::int n from ai_proposed_edits');
+    expect(after.rows[0].n).toBe(before.rows[0].n);
+  });
+
+  it('caps an article conversation at the ask tools even for an editor', async () => {
+    const seen: string[][] = [];
+    aiChatHolder.swap(
+      fakeChat(({ tools }) => {
+        seen.push(tools);
+        return chatResult('הבנתי.');
+      }),
+    );
+    const c = await newConversation('article', fx.editor);
+    await send(c.json().id, 'שאלה', fx.editor);
+    expect(seen[0]).not.toContain('propose_source_edit');
+    expect(seen[0]).not.toContain('read_source');
+  });
+
+  it('stops after MAX_TOOL_ROUNDS and still ends with done', async () => {
+    aiChatHolder.swap(
+      fakeChat(() => chatResult('', [{ id: 'l', name: 'search_kb', args: { q: 'APN' } }])),
+    );
+    const c = await newConversation('editor', fx.editor);
+    const ev = parseSseFrames((await send(c.json().id, 'לולאה', fx.editor)).body);
+    expect(ev.filter((e) => e.type === 'tool_call').length).toBe(MAX_TOOL_ROUNDS);
+    expect(ev.at(-1)?.type).toBe('done');
+  });
+
+  it('turns a model failure into an error frame followed by done', async () => {
+    aiChatHolder.swap({
+      name: 'broken',
+      available: async () => true,
+      proposeChanges: async () => [],
+      chat: async () => {
+        throw new Error('boom');
+      },
+    });
+    const c = await newConversation('editor', fx.editor);
+    const ev = parseSseFrames((await send(c.json().id, 'שלום', fx.editor)).body);
+    expect(ev.map((e) => e.type)).toEqual(['error', 'done']);
+    expect(ev[0]).toMatchObject({ code: 'AI_FAILED' });
+  });
+
+  it('503s when the chat model is unavailable', async () => {
+    aiChatHolder.swap(unavailableChatModel('disabled'));
+    const c = await newConversation('editor', fx.editor);
+    const r = await send(c.json().id, 'שלום', fx.editor);
+    expect(r.statusCode).toBe(503);
+    expect(r.json().code).toBe('AI_UNAVAILABLE');
+    aiChatHolder.swap(fakeChat(() => chatResult('הבנתי.')));
+  });
+
+  it('403s an agent opening an editor conversation and 404s a conversation of another user', async () => {
+    expect((await newConversation('editor', fx.agent)).statusCode).toBe(403);
+    const mine = await newConversation('editor', fx.editor);
+    expect(
+      (await fx.get(`/api/v1/ai/conversations/${mine.json().id}`, fx.otherEditor)).statusCode,
+    ).toBe(404);
+    expect((await send(mine.json().id, 'שלום', fx.otherEditor)).statusCode).toBe(404);
+  });
+
+  it('404s a conversation on a document the caller may not see', async () => {
+    const r = await fx.post(
+      '/api/v1/ai/conversations',
+      { kind: 'article', documentId: fx.billingDraft },
+      fx.editor,
+    );
+    expect(r.statusCode).toBe(404);
+  });
+
+  it('lists only the caller’s own conversations', async () => {
+    await newConversation('editor', fx.otherEditor);
+    const mine = await fx.get('/api/v1/ai/conversations?page=1&pageSize=50', fx.editor);
+    expect(mine.statusCode).toBe(200);
+    expect(
+      (mine.json().items as { userId: string }[]).every((c) => c.userId === fx.editor.id),
+    ).toBe(true);
+  });
+
+  it('429s past ai.limits.chatPerUserPerHour', async () => {
+    aiChatHolder.swap(fakeChat(() => chatResult('הבנתי.')));
+    resetRateLimit(fx.editor.id);
+    await withTransaction(fx.db.pool, (tx) =>
+      putAiSettings(tx, { limits: { chatPerUserPerHour: 1 } }, fx.admin.id),
+    );
+    try {
+      const c = await newConversation('editor', fx.editor);
+      const cid = c.json().id as string;
+      expect((await send(cid, '1', fx.editor)).statusCode).toBe(200);
+      const r = await send(cid, '2', fx.editor);
+      expect(r.statusCode).toBe(429);
+      expect(r.json().code).toBe('AI_RATE_LIMITED');
+      expect(r.headers['retry-after']).toBeDefined();
+    } finally {
+      await withTransaction(fx.db.pool, (tx) =>
+        putAiSettings(tx, { limits: { chatPerUserPerHour: 60 } }, fx.admin.id),
+      );
+      resetRateLimit(fx.editor.id);
+    }
   });
 }
