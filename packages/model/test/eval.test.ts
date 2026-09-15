@@ -4,6 +4,7 @@ import {
   aggregate,
   contextForCase,
   EVAL_CASES_DIR,
+  failedCase,
   languageOffences,
   LATIN_ALLOW_LIST,
   loadCases,
@@ -143,6 +144,32 @@ describe('eval scoring', () => {
     const s = scoreCase(caseOf(), [suggestion({ rationale: 'ערך שונה, его блок' })]);
     expect(s.languageOk).toBe(0);
     expect(s.languageFailures).toBe(1);
+  });
+
+  it('never throws on a suggestion with no text, whatever produced it', () => {
+    // The api's eval job passed `[{} as never]` as a placeholder for a failed case, and this read
+    // `undefined.match(…)` out of a `catch` — killing the whole run. A metric must not be the
+    // thing that takes a run down.
+    const allow = new Set<string>(LATIN_ALLOW_LIST);
+    expect(languageOffences(undefined as unknown as string, allow)).toEqual([]);
+    expect(languageOffences(null as unknown as string, allow)).toEqual([]);
+    expect(() => scoreCase(caseOf(), [{} as never])).not.toThrow();
+  });
+
+  it('scores an unanswered case zero, and keeps it out of the precision and language means', () => {
+    const f = failedCase();
+    expect(f.failed).toBe(true);
+    expect([f.hitTarget, f.hitType, f.contentOverlap]).toEqual([0, 0, 0]);
+    // A crash on a negative case must not read as a correct refusal to propose.
+    expect(scoreCase(caseOf({ expected: [], maxItems: 0 }), []).hitTarget).toBe(1);
+    expect(f.hitTarget).toBe(0);
+    // Recall averages over everything; precision and language average over what was answered.
+    const mixed = aggregate([perfect, f]);
+    expect(mixed.hitTarget).toBe(0.5);
+    expect(mixed.precision).toBe(1);
+    expect(mixed.languageOk).toBe(1);
+    // …and a run where nothing was answered reports 0, not a vacuous 1.000.
+    expect(aggregate([f, f]).precision).toBe(0);
   });
 
   it('aggregates rates to a mean and language failures to a sum', () => {

@@ -12,11 +12,17 @@ export const ARCHITECTURE_BLOCK = [
 ].join('\n');
 
 /**
- * The prompt version the two editable blocks add up to — the same `v3.<brief>.<style>` the API
+ * The prompt version the two editable blocks add up to — the same `v4.<brief>.<style>` the API
  * stamps on every suggestion and message, so an admin can read a row in the eval table or the
  * analytics breakdown and know which text produced it.
+ *
+ * The major is the *system prompt file* (`packages/model/prompts/propose-v4.md`), so it moved to
+ * `v4` with the fix wave. This is a hand-kept mirror of `currentPromptVersion` in
+ * `apps/api/src/lib/aiSettings.ts`: the preview is rendered in the browser from the settings the
+ * admin is editing, before anything is saved, so it cannot ask the server. Changing one means
+ * changing the other, or an admin reads a version label that no stored row will ever carry.
  */
-export const promptVersionOf = (s: AiSettings): string => `v3.${s.brief.version}.${s.style.version}`;
+export const promptVersionOf = (s: AiSettings): string => `v4.${s.brief.version}.${s.style.version}`;
 
 /**
  * Client-side rendering of the v3 system-prompt layout, for the admin preview.
