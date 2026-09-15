@@ -556,6 +556,32 @@ run('migrations', () => {
     await pool.query(`delete from ai_setting_versions where key='ai.brief'`);
   });
 
+  it('0053 adds the structured-edit columns and indexes to suggestions', async () => {
+    const cols = await pool.query(
+      `select column_name, data_type, is_nullable from information_schema.columns
+        where table_name='suggestions' and column_name in ('edit_diff','applied_parts','parent_id') order by 1`,
+    );
+    expect(cols.rows).toEqual([
+      { column_name: 'applied_parts', data_type: 'jsonb', is_nullable: 'YES' },
+      { column_name: 'edit_diff', data_type: 'jsonb', is_nullable: 'YES' },
+      { column_name: 'parent_id', data_type: 'uuid', is_nullable: 'YES' },
+    ]);
+    const idx = await pool.query(
+      `select indexname from pg_indexes where tablename='suggestions' and indexname in ('suggestions_status_decided_idx','suggestions_parent_idx') order by 1`,
+    );
+    expect(idx.rows.map((r) => r.indexname)).toEqual([
+      'suggestions_parent_idx',
+      'suggestions_status_decided_idx',
+    ]);
+    // `on delete set null`: purging a parent suggestion must not cascade into an editor's
+    // pending remainder — the remainder simply loses its link.
+    const fk = await pool.query(
+      `select confdeltype from pg_constraint where conrelid='suggestions'::regclass and contype='f'
+         and conkey = array[(select attnum from pg_attribute where attrelid='suggestions'::regclass and attname='parent_id')]`,
+    );
+    expect(fk.rows[0]?.confdeltype).toBe('n');
+  });
+
   it('rolls back cleanly', async () => {
     await runner({
       databaseUrl: c.getConnectionUri(),
