@@ -39,4 +39,16 @@ describe('<HistoryPage>', () => {
     expect(await screen.findByRole('heading', { name: 'היסטוריית גרסאות' })).toBeInTheDocument();
     expect(await screen.findByText('איטיות גלישה / חוסר גלישה')).toBeInTheDocument();
   });
+
+  /**
+   * L5 — the picker row printed `v7` as a chip and `7 גרסאות` right beside it, which reads as two
+   * different facts about the same document. The chip is the count; the count is the chip's title.
+   */
+  it('states the version once per row in the picker', async () => {
+    renderWithProviders(<App />, { route: '/history' });
+    const row = (await screen.findByText('איטיות גלישה / חוסר גלישה')).closest('.hist-doc, [role="button"]')!;
+    const chip = within(row as HTMLElement).getByText('v7');
+    expect(chip).toHaveAttribute('title', '7 גרסאות');
+    expect(row.textContent).not.toContain('7 גרסאות');
+  });
 });

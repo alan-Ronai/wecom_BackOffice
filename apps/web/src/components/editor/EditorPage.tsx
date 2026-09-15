@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { Block, Category, Document, Step } from '@wecom/shared';
 import {
   useCreateDocument,
+  useDocRefsByIds,
   useDocument,
   useDocuments,
   usePatchDocument,
@@ -320,11 +321,45 @@ export function EditorPage() {
     [doc, update],
   );
 
-  /** The corpus as `<Fmt>` wants it — names a `[[doc:id]]` target in the step editor (G10). */
-  const docRefs = useMemo(
-    () => (cards.data?.items ?? []).map((c) => ({ id: c.id, title: c.title })),
-    [cards.data],
-  );
+  /**
+   * Every `[[doc:<id>]]` this document actually contains. Read off the whole document rather than
+   * off the action list alone, because `<Fmt>` resolves the token anywhere text is rendered.
+   */
+  const linkedIds = useMemo(() => {
+    if (!doc) return [];
+    const out = new Set<string>();
+    for (const m of JSON.stringify(doc).matchAll(/\[\[doc:([\w-]+)/g)) out.add(m[1]!);
+    return [...out];
+  }, [doc]);
+
+  /**
+   * H2 — a link target the editor has just picked, kept by id → title for as long as the page is
+   * open. `[[doc:<id>]]` carries no title by design, so without this the action the editor
+   * inserted a second ago reads back as a raw uuid until the card list happens to contain it.
+   */
+  const [pickedRefs, setPickedRefs] = useState<Record<string, string>>({});
+
+  /** The remainder: ids that neither page 1 nor the picker can name, resolved one `GET` each. */
+  const unresolvedIds = useMemo(() => {
+    const known = new Set([...(cards.data?.items ?? []).map((c) => c.id), ...Object.keys(pickedRefs)]);
+    return linkedIds.filter((x) => !known.has(x));
+  }, [linkedIds, cards.data, pickedRefs]);
+  const resolved = useDocRefsByIds(unresolvedIds);
+
+  /**
+   * The corpus as `<Fmt>` wants it — names a `[[doc:id]]` target in the step editor (G10).
+   *
+   * Three sources, most specific last: page 1 of the library, the targeted lookups, and what the
+   * picker itself resolved. A later entry wins, so a title the editor just saw in the picker is
+   * never overwritten by a staler copy of the same card.
+   */
+  const docRefs = useMemo(() => {
+    const by = new Map<string, { id: string; title: string }>();
+    for (const c of cards.data?.items ?? []) by.set(c.id, { id: c.id, title: c.title });
+    for (const r of resolved) by.set(r.id, { id: r.id, title: r.title });
+    for (const [id_, title] of Object.entries(pickedRefs)) by.set(id_, { id: id_, title });
+    return [...by.values()];
+  }, [cards.data, resolved, pickedRefs]);
 
   /**
    * G10 — `+ שדה CRM` and `+ קישור`, from the block library and from the `/` menu. Both end in
@@ -333,7 +368,10 @@ export function EditorPage() {
    */
   const pickers = useEditorPickers({
     excludeId: isNew ? undefined : id,
-    onInsert: (text) => {
+    onInsert: (text, picked) => {
+      // Remember the title before anything can fail: the token about to be written names nothing
+      // on its own, and this is the only moment the app is holding both halves (H2).
+      if (picked) setPickedRefs((m) => ({ ...m, [picked.id]: picked.title }));
       if (!doc) return;
       const next = addAction(doc, selected, text);
       // `addAction` is a no-op on a shared block — say so rather than swallowing the click.

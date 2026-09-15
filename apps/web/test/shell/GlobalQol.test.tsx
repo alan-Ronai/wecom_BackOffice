@@ -68,7 +68,11 @@ describe('onboarding tour', () => {
   it('greets a first-time user and stores the dismissal in preferences', async () => {
     renderWithProviders(<App />, { route: '/library' });
 
-    const tour = await screen.findByRole('dialog', { name: 'סיור היכרות' });
+    // L4: a labelled region. It was a `role="dialog"` with no `aria-modal` and no focus trap —
+    // a promise to a screen reader that the component never kept.
+    const tour = await screen.findByRole('region', { name: 'סיור היכרות' });
+    expect(tour).not.toHaveAttribute('aria-modal');
+    expect(screen.queryByRole('dialog', { name: 'סיור היכרות' })).not.toBeInTheDocument();
     expect(within(tour).getByText('שלב 1 מתוך 5')).toBeInTheDocument();
 
     await userEvent.click(within(tour).getByRole('button', { name: 'הבא' }));
@@ -78,17 +82,26 @@ describe('onboarding tour', () => {
     await userEvent.click(within(tour).getByRole('button', { name: 'דלג על הסיור' }));
 
     await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'סיור היכרות' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('region', { name: 'סיור היכרות' })).not.toBeInTheDocument(),
     );
     const saved = JSON.parse(window.localStorage.getItem(LS_KEY) ?? '{}') as { tourDone?: boolean };
     expect(saved.tourDone).toBe(true);
+  });
+
+  it('leaves the app behind it reachable — it is a coach mark, not a modal', async () => {
+    renderWithProviders(<App />, { route: '/library' });
+    await screen.findByRole('region', { name: 'סיור היכרות' });
+    // Nothing is inert and nothing is trapped: the agent can keep working with the tour on screen.
+    const link = screen.getAllByText('סל מיחזור')[0]!.closest('[role="button"]') as HTMLElement;
+    link.focus();
+    expect(document.activeElement).toBe(link);
   });
 
   it('stays away once it has been completed', async () => {
     tourDone();
     renderWithProviders(<App />, { route: '/library' });
     await screen.findByTestId('library-grid');
-    expect(screen.queryByRole('dialog', { name: 'סיור היכרות' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'סיור היכרות' })).not.toBeInTheDocument();
   });
 });
 

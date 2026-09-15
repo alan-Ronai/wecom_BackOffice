@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
+import * as fx from '../msw/fixtures.js';
 import {
   counted,
   documents,
@@ -57,20 +58,29 @@ describe('Hebrew counters', () => {
   });
 });
 
+/**
+ * L6 — these two asserted a *pattern* (`נושא אחד|שני נושאים|\d+ נושאים`) that any count at all
+ * satisfies, under names promising a specific one. The fixture count is knowable, so it is
+ * asserted: a regex that cannot fail is a test that cannot catch the next `1 נושאים`.
+ *
+ * L5 — and the noun is `פריט`. The library lists knowledge items, the topic page counts the same
+ * objects with `items()`, and every bulk message on the library page already says `פריט`; only the
+ * header said `נושא`, which is the taxonomy topic — a different thing entirely.
+ */
 describe('the screens the review named', () => {
-  it('the library header counts topics in Hebrew rather than "N נושאים" unconditionally', async () => {
+  it('the library header counts its rows as items, with the exact fixture count', async () => {
     renderWithProviders(<App />, { route: '/library' });
-    const head = (await screen.findAllByRole('heading', { level: 1 }))[0];
-    const text = head.textContent ?? '';
-    // Whatever the fixture's count is, the header must never read "1 נושאים".
-    expect(text).not.toMatch(/\b1 נושאים/);
-    expect(text).toMatch(/נושא אחד|שני נושאים|\d+ נושאים/);
+    const head = (await screen.findAllByRole('heading', { level: 1 }))[0]!;
+    const shown = fx.cards.length + fx.scriptCards.length;
+    // Three or more, so the assertion exercises the digit form rather than a spelled-out one.
+    expect(shown).toBeGreaterThan(2);
+    expect(head.textContent).toContain(items(shown));
+    expect(head.textContent).not.toMatch(/נושא/);
   });
 
-  it('the pinned view — one fixture card — reads "נושא אחד"', async () => {
+  it('the pinned view — one fixture card — reads "פריט אחד"', async () => {
     renderWithProviders(<App />, { route: '/pinned' });
     const head = await screen.findByRole('heading', { level: 1, name: /מוצמדים/ });
-    expect(within(head).getByText(/נושא אחד|שני נושאים|\d+ נושאים/)).toBeInTheDocument();
-    expect(head.textContent).not.toMatch(/\b1 נושאים/);
+    expect(within(head).getByText('פריט אחד')).toBeInTheDocument();
   });
 });

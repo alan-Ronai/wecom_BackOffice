@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from 'react';
 import type { Block, CrmField, Document } from '@wecom/shared';
 import { crmIn, stepText, stripFmt } from '@wecom/shared';
 import type { ResolvedStep } from '../../lib/steps.js';
-import { nextHints, type NextHint } from '../../lib/nextHint.js';
+import { MAX_OUTCOME_KEYS, nextHints, type NextHint } from '../../lib/nextHint.js';
 import type { CallResult } from '../../lib/callState.js';
 import { Fmt } from '../Fmt.js';
 import type { DocRef, FieldInfo } from '../../lib/format.js';
@@ -285,7 +285,9 @@ export function StepView({ step, ctx, hint }: { step: ResolvedStep; ctx: StepCtx
                   >
                     <span className={'lbl ' + (o.kind ?? 'if')}>{o.label}</span>
                     <Fmt text={o.text} fields={ctx.fields} docs={ctx.docs} />
-                    {ctx.callMode && cur ? <kbd style={{ marginInlineStart: 'auto' }}>{i + 1}</kbd> : null}
+                    {ctx.callMode && cur && i < MAX_OUTCOME_KEYS ? (
+                      <kbd style={{ marginInlineStart: 'auto' }}>{i + 1}</kbd>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -314,7 +316,9 @@ export function StepView({ step, ctx, hint }: { step: ResolvedStep; ctx: StepCtx
                     }}
                   >
                     <Fmt text={o.text} fields={ctx.fields} docs={ctx.docs} />
-                    {ctx.callMode && cur && !step.branch ? <kbd>{i + 1}</kbd> : null}
+                    {/* L1: a keycap only where the key works — `1`-`3` are bound, a fourth
+                        outcome is click-only. */}
+                    {ctx.callMode && cur && !step.branch && i < MAX_OUTCOME_KEYS ? <kbd>{i + 1}</kbd> : null}
                   </span>
                 ))}
                 {ctx.callMode && cur && ctx.onNote ? (

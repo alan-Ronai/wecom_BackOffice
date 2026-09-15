@@ -28,14 +28,36 @@ describe('A-4 · the doc type reads the same everywhere', () => {
     expect(docTypeLabel('Z')).toBe('Z');
   });
 
-  it('the feedback modal shows "סוג T · תסריט", not "סוג T"', async () => {
+  /**
+   * M3 — this used to assert `not.toMatch(/סוג [A-Z](?! ·)/)` against the `נשמר אוטומטית` line,
+   * which stopped carrying the type the day it moved into the dialog's header: the regex was
+   * being run over a string that could not contain what it was looking for, so it passed whatever
+   * the dialog rendered. What A-4 is actually about — the type as a badge rather than as `סוג T` —
+   * has real coverage in `test/feedback/FeedbackButton.test.tsx`, which mounts the button with an
+   * explicit `docType` (`docBrowsing` predates the field and carries none, which is the other
+   * reason this spec could never have seen a badge).
+   *
+   * What this spec is placed to see is the *App*: that opening the dialog from a real article
+   * names the item being reported on, and that no surface anywhere in it prints the storage code
+   * on its own.
+   */
+  it('names the item in the dialog header, and prints no bare storage code anywhere', async () => {
     renderWithProviders(<App />, { route: `/doc/${D_BROWSING}` });
     const open = await screen.findAllByRole('button', { name: 'דיווח על בעיה / משוב' });
     await userEvent.click(open[0]);
     const dialog = await screen.findByRole('dialog', { name: 'דיווח על בעיה / משוב' });
+
+    // The header (`subtitle`) is what tells an agent — on a phone, where the modal covers the
+    // article — which item they are about to report on.
+    expect(within(dialog).getByText(fx.docBrowsing.title)).toBeInTheDocument();
+    expect(dialog.textContent).not.toMatch(/סוג [A-Z]\b/);
+    // Whatever type chip a document does carry spells its label out; `docTypeLabel` is the one
+    // formatter for that, and `T` alone is never what it produces for a known code.
+    expect(docTypeLabel('T')).toContain(' · ');
+
+    // The world reads as its Hebrew label too, for the same reason the type does — and it is on
+    // the autosave line, which is the one thing the old assertion did look at.
     const context = within(dialog).getByText(/^נשמר אוטומטית/).parentElement as HTMLElement;
-    expect(context.textContent).not.toMatch(/סוג [A-Z](?! ·)/);
-    // The world reads as its Hebrew label too, for the same reason the type does.
     expect(context.textContent).toContain('תמיכה טכנית');
   });
 });

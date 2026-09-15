@@ -30,7 +30,7 @@ import { LibraryToolbar } from './LibraryToolbar.js';
 import { DocList } from './DocList.js';
 import { BulkBar } from './BulkBar.js';
 import type { ListDocumentsQuery } from '../../api/types.js';
-import { counted, items as nItems, topics as nTopics } from '../../lib/count.js';
+import { counted, items as nItems } from '../../lib/count.js';
 
 export type LibraryMode = 'library' | 'pinned' | 'recent' | 'drafts';
 
@@ -438,7 +438,10 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
               <h1>
                 {title}
                 <span>
-                  {nTopics(items.length)}
+                  {/* L5: these rows are knowledge items — `פריט`, the same noun the topic page
+                      uses for the same things and the same noun every bulk message on this page
+                      already uses. `נושא` is a taxonomy topic, which is a different object. */}
+                  {nItems(items.length)}
                   {mode === 'library' ? ` · ${waves} גלי כתיבה` : ''}
                 </span>
               </h1>

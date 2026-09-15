@@ -175,3 +175,58 @@ describe('a document whose steps carry no rule', () => {
     expect(line).toHaveAttribute('data-terminal');
   });
 });
+
+/**
+ * L1 — the keycaps and the hint have to agree about what the keyboard does.
+ *
+ * `ArticlePage` binds `1`–`3` and nothing else, and `nextHint` caps `choices` at three for exactly
+ * that reason — but `StepView` drew a `<kbd>4</kbd>` beside a fourth outcome, so the step
+ * advertised a key that does nothing. The destination itself is real: a fourth outcome is one click
+ * away, which is why the hint still names where it leads.
+ */
+describe('a step with more outcomes than the keyboard has digits', () => {
+  const four = {
+    ...fx.docBrowsing,
+    phases: [
+      {
+        id: 'p1',
+        label: '',
+        steps: [
+          {
+            ...step({
+              key: 'a',
+              num: '1',
+              title: 'ארבע תוצאות',
+              outcomes: [
+                { kind: 'ok', text: 'ראשונה', goto: 'b' },
+                { kind: 'next', text: 'שנייה', goto: 'c' },
+                { kind: 'next', text: 'שלישית', goto: 'd' },
+                { kind: 'alert', text: 'רביעית', goto: 'e' },
+              ],
+            }),
+            phase: undefined,
+          },
+          { ...step({ key: 'b', num: '2', title: 'יעד ב' }), phase: undefined },
+          { ...step({ key: 'c', num: '3', title: 'יעד ג' }), phase: undefined },
+          { ...step({ key: 'd', num: '4', title: 'יעד ד' }), phase: undefined },
+          { ...step({ key: 'e', num: '5', title: 'יעד ה' }), phase: undefined },
+        ].map(({ phase: _p, ...s }) => s as Step),
+      },
+    ],
+  } as unknown as Document;
+
+  const callCtx: StepCtx = { fields: [], docs: [], callMode: true, activeKey: 'a', results: {} };
+
+  it('draws a keycap only where the key is bound', () => {
+    render(<DocBody doc={four} ctx={callCtx} steps={resolvedSteps(four, [])} />);
+    const box = screen.getByText('ארבע תוצאות').closest('.step') as HTMLElement;
+    expect([...box.querySelectorAll('.outs .out kbd')].map((k) => k.textContent)).toEqual(['1', '2', '3']);
+  });
+
+  it('still names the fourth destination, which a click can reach', () => {
+    const steps = resolvedSteps(four, []);
+    const h = nextHint(steps[0]!, steps);
+    expect(h.choices).toBe(3);
+    expect(h.text).toContain('שלב 5: יעד ה');
+  });
+});
