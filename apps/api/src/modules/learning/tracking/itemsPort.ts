@@ -278,8 +278,19 @@ export async function assignmentStats(
 ): Promise<Map<string, { assignedUsers: number; completionRate: number | null }>> {
   const out = new Map(itemIds.map((id) => [id, { assignedUsers: 0, completionRate: null as number | null }]));
   if (!itemIds.length) return out;
+  /**
+   * A-M1: both halves count *users*.
+   *
+   * `count(*) filter (status='completed')` over `count(distinct user_id)` mixed rows with people,
+   * and a user can legitimately hold both an `audience` and a `manual` row at the same
+   * `item_version` — `reason` is part of the unique key precisely so they can. Two completed rows
+   * for one user made the rate exceed 1, which `LearningItemCardSchema.completionRate`
+   * (`z.number().min(0).max(1)`) then refused at serialization: the card 500s rather than reads
+   * wrong.
+   */
   const r = await q.query(
-    `select a.item_id, count(distinct a.user_id)::int assigned, count(*) filter (where a.status='completed')::int completed
+    `select a.item_id, count(distinct a.user_id)::int assigned,
+            count(distinct a.user_id) filter (where a.status='completed')::int completed
        from learning_assignments a join learning_items i on i.id=a.item_id and a.item_version=i.current_version
       where a.item_id = any($1::uuid[]) group by a.item_id`,
     [itemIds],

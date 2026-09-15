@@ -397,6 +397,48 @@ run('migrations', () => {
     expect(cols.rowCount).toBe(3);
   });
 
+  /**
+   * A-M7: 0049's whole content is two foreign keys and nothing asserted them — not their
+   * existence, and not the CASCADE its comment promises. They are the reason the tracking tables
+   * stop accumulating rows that point at a `learning_items` row nobody deleted them with.
+   */
+  it('0049 adds the learning_items foreign keys, and they cascade', async () => {
+    const fks = await pool.query(
+      `select tc.table_name, rc.delete_rule
+         from information_schema.table_constraints tc
+         join information_schema.referential_constraints rc on rc.constraint_name = tc.constraint_name
+        where tc.constraint_name in ('learning_audiences_item_id_fkey','learning_assignments_item_id_fkey')
+        order by tc.table_name`,
+    );
+    expect(fks.rows.map((r) => [r.table_name, r.delete_rule])).toEqual([
+      ['learning_assignments', 'CASCADE'],
+      ['learning_audiences', 'CASCADE'],
+    ]);
+    const u = await pool.query(
+      `insert into users(subject, source, display_name) values (gen_random_uuid()::text,'local','מחיקה') returning id`,
+    );
+    const item = await pool.query(
+      `insert into learning_items(kind, title, status, current_version) values ('quiz','לבדיקת מחיקה','published',1) returning id`,
+    );
+    const itemId = item.rows[0].id as string;
+    await pool.query(
+      `insert into learning_audiences(item_id, due_days) values ($1, 7)`,
+      [itemId],
+    );
+    await pool.query(
+      `insert into learning_assignments(item_id, item_version, user_id, reason, due_at)
+       values ($1, 1, $2, 'manual', now() + interval '7 days')`,
+      [itemId, u.rows[0].id],
+    );
+    await pool.query('delete from learning_items where id=$1', [itemId]);
+    for (const table of ['learning_audiences', 'learning_assignments'])
+      expect(
+        (await pool.query(`select count(*)::int n from ${table} where item_id=$1`, [itemId])).rows[0].n,
+        table,
+      ).toBe(0);
+    await pool.query('delete from users where id=$1', [u.rows[0].id]);
+  });
+
   it('rolls back cleanly', async () => {
     await runner({
       databaseUrl: c.getConnectionUri(),

@@ -163,6 +163,25 @@ export async function canSee(q: Q, item: LearningItem, v: Viewer): Promise<boole
   return worlds.length === 0 || worlds.some((w) => v.user.worldScopes!.includes(w));
 }
 
+/**
+ * "This item is in one of my worlds", as SQL over a `learning_items` alias.
+ *
+ * An item's worlds are its own `world_slug` or, when it has none, the union of its referenced
+ * documents' worlds; an item with neither is visible to everyone. Extracted from `listCards`
+ * because V2's dashboard needs the same rule — its `totals.items` counted the whole org next to
+ * scoped assignment counts (A-M2), so the two numbers on the tile did not mean the same thing.
+ *
+ * `push` is the caller's parameter appender; it is called once, and the second reference reuses
+ * the placeholder it returned.
+ */
+export function itemWorldScopeSql(alias: string, scopes: readonly string[], push: (v: unknown) => string) {
+  const p = push([...scopes]);
+  return `(${alias}.world_slug is null and not exists (select 1 from briefing_entries e where e.item_id = ${alias}.id union select 1 from quiz_questions x where x.item_id = ${alias}.id)
+      or ${alias}.world_slug = any(${p})
+      or exists (select 1 from (select item_id, document_id from briefing_entries union select item_id, document_id from quiz_questions) ref
+                 join document_worlds dw on dw.document_id = ref.document_id where ref.item_id = ${alias}.id and dw.world_slug = any(${p})))`;
+}
+
 /* ── cards & list ──────────────────────────────────────────────────────── */
 /** V2 replaces the two `0`/`null` subqueries with counts from learning_assignments. */
 const cardSql = `
@@ -211,11 +230,7 @@ export async function listCards(
     where.push(
       `(li.title ilike '%' || ${p(query.q)} || '%' or li.description ilike '%' || $${params.length} || '%')`,
     );
-  if (v.user.worldScopes !== null)
-    where.push(`(li.world_slug is null and not exists (select 1 from briefing_entries e where e.item_id = li.id union select 1 from quiz_questions x where x.item_id = li.id)
-      or li.world_slug = any(${p(v.user.worldScopes)})
-      or exists (select 1 from (select item_id, document_id from briefing_entries union select item_id, document_id from quiz_questions) ref
-                 join document_worlds dw on dw.document_id = ref.document_id where ref.item_id = li.id and dw.world_slug = any($${params.length})))`);
+  if (v.user.worldScopes !== null) where.push(itemWorldScopeSql('li', v.user.worldScopes, p));
   const w = ' where ' + where.join(' and ');
   const total = (await q.query(`select count(*)::int n from learning_items li${w}`, params)).rows[0]
     .n as number;
@@ -326,6 +341,19 @@ export async function replaceQuestions(
 ): Promise<LearningItem> {
   await validateReferences(tx, questions);
   for (const qn of questions) {
+    /**
+     * Recorded deviation (web review): `free` stays in `QuestionKindSchema` but no surface
+     * implements it. `scoring.ts` has no grader for free text, the player has no control for it
+     * and the generator never emits it, so a saved `free` question would be a quiz item no
+     * learner can answer and no attempt can pass. Refused here rather than dropped silently, and
+     * refused at save rather than at publish, so the editor hears about it while they are
+     * looking at the question. The schema keeps the value for the wave that grades it.
+     */
+    if (qn.kind === 'free')
+      throw httpError(400, 'UNSUPPORTED_KIND', 'שאלה פתוחה אינה נתמכת עדיין', {
+        kind: 'free',
+        stem: qn.stem,
+      });
     if (qn.kind === 'single' && qn.options.filter((o) => o.correct).length !== 1)
       throw httpError(400, 'INVALID_QUIZ', 'בשאלה עם תשובה אחת חייבת להיות בדיוק תשובה נכונה אחת', {
         reason: 'single',

@@ -12,13 +12,15 @@ import {
   makeEvent,
 } from '@wecom/shared';
 import { audit } from '../../lib/audit.js';
-import { notFound } from '../../lib/http.js';
+import { httpError, notFound } from '../../lib/http.js';
 import { withTransaction } from '../../lib/sql.js';
 import { hasScope, requireUser } from '../../lib/user.js';
-import { runDetection, type DetectDeps } from './detect.js';
+import { msSinceLastRun, runDetection, type DetectDeps } from './detect.js';
 import * as repo from './repo.js';
 
 const Params = z.object({ id: IdSchema });
+/** A-M12: the floor between two on-demand detection runs. */
+const DETECT_MIN_INTERVAL_MS = 60_000;
 
 /** V3 gap routes. `deps` is resolved lazily so the notifier/taxonomy in force at call time is used. */
 export default function gapsRoutes(deps: () => DetectDeps) {
@@ -144,6 +146,17 @@ export default function gapsRoutes(deps: () => DetectDeps) {
       },
       async (req) => {
         const user = requireUser(req);
+        /**
+         * A-M12: a run is five full-table heuristics, and this button had no throttle at all.
+         * A minute is the floor — the numbers behind a gap move on the scale of a day, so a
+         * second run inside a minute can only be an impatient click or a double submit.
+         * `runDetection`'s advisory lock handles the concurrent case, including the nightly job.
+         */
+        const since = await msSinceLastRun(deps());
+        if (since !== null && since < DETECT_MIN_INTERVAL_MS)
+          throw httpError(429, 'GAP_RUN_TOO_SOON', 'זיהוי פערים רץ ממש עכשיו — נסו שוב בעוד דקה', {
+            retryAfterMs: Math.ceil(DETECT_MIN_INTERVAL_MS - since),
+          });
         const r = await runDetection({
           ...deps(),
           publish: (tx, gapId, kind) => app.events.publish(tx, makeEvent('gap.detected', { gapId, kind })),

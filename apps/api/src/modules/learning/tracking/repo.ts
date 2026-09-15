@@ -16,6 +16,8 @@ import { makeEvent } from '@wecom/shared';
 import { httpError, notFound } from '../../../lib/http.js';
 import type { Queryable, Tx } from '../../../lib/sql.js';
 import { iso } from '../../documents/repo.js';
+import { itemWorldScopeSql } from '../repo.js';
+import { FAILED_QUESTION_MIN_ATTEMPTS } from '../../gaps/heuristics.js';
 import {
   assignmentStats,
   documentSnapshotFor,
@@ -453,16 +455,34 @@ export async function dashboard(
   const scopeTerm = userScopeTerm(params, scopes);
   const base = `from learning_assignments a join learning_items i on i.id=a.item_id
       where a.item_version=i.current_version${worldTerm}${scopeTerm}`;
+  /**
+   * A-M2: the published-item count is narrowed to the caller's worlds too.
+   *
+   * `userScopeTerm` is about the assignment's *user*, so it cannot apply here, and the subquery
+   * had only `worldTerm` — which is empty unless the caller passed `?world`. A world-scoped
+   * manager therefore read the org-wide item count sitting next to their own scoped assignment
+   * counts, and the two numbers on the same tile did not mean the same thing.
+   */
+  // Its own parameter list: every other query below reuses `params`, and Postgres refuses a bind
+  // whose value count exceeds the placeholders the statement actually carries.
+  const totalsParams = [...params];
+  const itemScope = scopes
+    ? ' and ' +
+      itemWorldScopeSql('i', scopes, (v) => {
+        totalsParams.push(v);
+        return '$' + totalsParams.length;
+      })
+    : '';
   const totals = (
     await q.query(
       `select (select count(*)::int from learning_items i
-                where i.status='published' and i.deleted_at is null${worldTerm}) items,
+                where i.status='published' and i.deleted_at is null${worldTerm}${itemScope}) items,
               count(*)::int assigned,
               count(*) filter (where a.status='completed')::int completed,
               count(*) filter (where a.status='overdue')::int overdue,
               count(*) filter (where a.reason='refresh' and a.status in ('open','overdue'))::int refresh_pending
          ${base}`,
-      params,
+      totalsParams,
     )
   ).rows[0];
   const byWorld = (
@@ -480,6 +500,13 @@ export async function dashboard(
     overdue: r.overdue as number,
     rate: (r.assigned as number) ? (r.completed as number) / (r.assigned as number) : 0,
   }));
+  /**
+   * A-M4: the same floor the `failed_question` heuristic uses. This tile hardcoded 3 and
+   * `heuristics.ts` hardcoded 5, so the dashboard and the gap list disagreed about which
+   * questions were "failing" while only the *rate* came from settings. Interpolated, not bound:
+   * `params` is shared with the queries around it and a trailing unused value is a bind error.
+   */
+  const failedMin = FAILED_QUESTION_MIN_ATTEMPTS;
   const failed = (
     await q.query(
       `select ans.key question_id, i.id item_id, i.title item_title, qq.stem,
@@ -491,7 +518,7 @@ export async function dashboard(
          cross join lateral jsonb_each(t.answers) ans
          join quiz_questions qq on qq.id::text = ans.key
         where t.finished_at is not null${worldTerm}${scopeTerm}
-        group by 1,2,3,4 having count(*) >= 3
+        group by 1,2,3,4 having count(*) >= ${failedMin}
         order by (count(*) filter (where (ans.value->>'correct')::boolean = false))::float / count(*) desc
         limit 10`,
       params,

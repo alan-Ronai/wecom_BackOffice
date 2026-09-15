@@ -226,6 +226,27 @@ run('learning content', () => {
     });
     expect(bad.json().code).toBe('DOCUMENT_NOT_PUBLISHED');
   });
+  it('refuses an open question: `free` is in the schema and in no surface', async () => {
+    const item = await createItem('quiz');
+    const r = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/learning/items/${item.id}/questions`,
+      headers: auth(editor),
+      payload: {
+        questions: [
+          { documentId: pubDoc, stem: 'ספרו במילים שלכם', kind: 'free', options: [] },
+        ],
+      },
+    });
+    expect(r.statusCode, r.body).toBe(400);
+    expect(r.json().code).toBe('UNSUPPORTED_KIND');
+    // Nothing was written: a refused save leaves the item as it was.
+    expect(
+      (await db.pool.query('select count(*)::int n from quiz_questions where item_id=$1', [item.id]))
+        .rows[0].n,
+    ).toBe(0);
+  });
+
   it('validates quiz questions on save', async () => {
     const item = await createItem('quiz');
     const r = await app.inject({
