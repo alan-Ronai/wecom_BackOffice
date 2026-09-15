@@ -56,12 +56,15 @@ function Picker() {
               >
                 <div className="chips">
                   <span className="chip chip-blue">{cat(d.category).short}</span>
-                  <span className="chip chip-gray">v{d.currentVersion}</span>
+                  {/* L5: the chip *is* the version count — `v7` is the seventh version. The meta
+                      line used to print "7 גרסאות" beside it, which read as two different numbers
+                      about the same thing; the count lives here now, as the chip's own title. */}
+                  <span className="chip chip-gray" title={nVersions(d.currentVersion)}>
+                    v{d.currentVersion}
+                  </span>
                 </div>
                 <div className="title">{d.title}</div>
                 <div className="meta">
-                  <span>{nVersions(d.currentVersion)}</span>
-                  <span>·</span>
                   <span>
                     {d.authorName ?? ''} · {fmtDate(d.updatedAt)}
                   </span>

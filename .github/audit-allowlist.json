@@ -1,0 +1,26 @@
+{
+  "$schema": "see scripts/audit-check.mjs — this file has no schema of its own",
+  "$comment": [
+    "The machine-readable half of the 'Accepted, with reasons' table in docs/security-advisories.md.",
+    "scripts/audit-check.mjs runs `pnpm audit --prod` in CI and fails on: an advisory that is not",
+    "listed here; an entry past its reviewBy date; an entry whose advisory is no longer reported (so",
+    "a list entry cannot outlive the thing it excuses); and an entry whose voidIf grep now matches,",
+    "which is how a 'not reachable' reason stops being taken on trust.",
+    "Never add an entry here without the row in docs/security-advisories.md that explains it."
+  ],
+  "allow": [
+    {
+      "ghsa": "GHSA-gh4j-gqv2-49f6",
+      "package": "fast-xml-parser",
+      "severity": "moderate",
+      "reason": "XMLBuilder only. Every call site in this repo imports XMLParser and nothing here ever constructs XML; the fix is a major version whose parser option semantics change, which would need the docx and Palo Alto parsers re-verified.",
+      "voidIf": {
+        "sourceMatches": "XMLBuilder",
+        "in": ["apps", "packages"],
+        "because": "the acceptance rests on XMLBuilder never being imported — if one appears, this stops being unreachable and the entry is void."
+      },
+      "reviewBy": "2026-12-15",
+      "documented": "docs/security-advisories.md — 'Accepted, with reasons'"
+    }
+  ]
+}

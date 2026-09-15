@@ -474,7 +474,10 @@ html[data-theme="dark"] .palette .ri .ic.round { background: var(--surface-3); c
 .modal { width: min(520px, 100%); background: var(--surface); border-radius: 16px; padding: 22px; box-shadow: var(--shadow-lg); max-height: 85vh; overflow-y: auto; }
 .modal.wide { width: min(860px, 100%); }
 .modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
-.modal h2 .x { margin-inline-start: auto; font-size: 16px; color: var(--muted); cursor: pointer; padding: 2px 8px; }
+.modal h2 .x { margin-inline-start: auto; font-size: 16px; color: var(--muted); cursor: pointer; padding: 2px 8px;
+  /* L3: the close control is a real <button> now, so the native chrome is reset away and the
+     appearance is exactly what the <span> had. */
+  background: none; border: 0; font: inherit; line-height: 1; }
 /* Names the item a dialog acts on, under the title. The border is what keeps it from reading as
    the first line of the body. */
 /* A-6. The `⋯` overflow the article topbar collapses into at ≤480px.

@@ -1,6 +1,6 @@
 import { DOC_TYPE_LABELS } from '@wecom/shared';
-import { cat } from '../../lib/constants.js';
-import type { SearchHit } from '../../api/types.js';
+import { cat, STATUS_LABEL } from '../../lib/constants.js';
+import type { LocalHit } from './localHits.js';
 
 /**
  * A-2 (review §3, §7 item 8) — what a search result is *called*.
@@ -30,7 +30,7 @@ const INGEST_FILE = /\.json$/;
 
 export interface HitLabel {
   /** Item type chip, when the hit is backed by a knowledge item. */
-  docType: SearchHit['docType'];
+  docType: LocalHit['docType'];
   /** World slug for the chip, when known. */
   world: string | null;
   /**
@@ -44,7 +44,7 @@ export interface HitLabel {
   aria: string;
 }
 
-export function hitLabel(hit: SearchHit): HitLabel {
+export function hitLabel(hit: LocalHit): HitLabel {
   const worldLabel = hit.world ? cat(hit.world).label : null;
   const rest = hit.meta
     .split('·')
@@ -62,6 +62,9 @@ export function hitLabel(hit: SearchHit): HitLabel {
     KIND_LABEL[hit.type] ?? hit.type,
     hit.title,
     hit.docType ? `${hit.docType} · ${DOC_TYPE_LABELS[hit.docType]}` : null,
+    // M5. Only where a chip is rendered — `published` is the normal state and `StatusChip` draws
+    // nothing for it, so announcing it would tell the keyboard something the eye is not told.
+    hit.status && hit.status !== 'published' ? STATUS_LABEL[hit.status] : null,
     worldLabel,
     item,
     ...rest,

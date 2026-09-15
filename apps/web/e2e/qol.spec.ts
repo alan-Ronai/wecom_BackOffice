@@ -8,7 +8,7 @@ import { seedUiPrefs, skipTour } from './fixtures/prefs.js';
 
 test('the onboarding tour greets a first-time user and can be skipped', async ({ page }) => {
   await page.goto('/library');
-  const tour = page.getByRole('dialog', { name: 'סיור היכרות' });
+  const tour = page.getByRole('region', { name: 'סיור היכרות' });
   await expect(tour).toBeVisible();
   await expect(tour.getByText('שלב 1 מתוך 5')).toBeVisible();
 
@@ -21,7 +21,7 @@ test('the onboarding tour greets a first-time user and can be skipped', async ({
   // Dismissal is a preference, so a reload does not greet them again.
   await page.reload();
   await expect(page.getByTestId('library-grid')).toBeVisible();
-  await expect(page.getByRole('dialog', { name: 'סיור היכרות' })).toBeHidden();
+  await expect(page.getByRole('region', { name: 'סיור היכרות' })).toBeHidden();
 });
 
 test('list mode: J/K move, X selects, and a bulk action applies to the selection', async ({ page }) => {

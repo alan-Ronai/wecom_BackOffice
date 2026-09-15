@@ -97,7 +97,10 @@ describe('<FeedbackPage>', () => {
     // The drawer closes on Escape; its ✕ used to be an inert `<span role="button">`.
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'פרטי משוב' })).toBeNull());
-  });
+    // Whole-app render plus ~10 user-event round trips: under machine load (several lanes running
+    // vitest at once) this sequence alone crossed the 15 s default three times today while every
+    // step passed on its own. The budget is the test's, not the suite's.
+  }, 40_000);
 
   it('analytics tab renders the PRD metrics', async () => {
     renderWithProviders(<App />, { route: '/feedback/analytics' });

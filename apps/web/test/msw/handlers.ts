@@ -156,6 +156,15 @@ export const handlers: RequestHandler[] = [
     if (topic) items = items.filter((c) => (c.topics ?? []).includes(topic));
     const tags = u.searchParams.getAll('tag');
     if (tags.length) items = items.filter((c) => tags.every((t) => (c.tags ?? []).includes(t)));
+    /**
+     * `q` — the same free-text narrowing the route does (H2). Until this existed the handler
+     * returned the whole fixture set whatever was asked, so a component that filtered client-side
+     * and one that sent `q` were indistinguishable in a test: the picker could stay blind to
+     * everything past page 1 with every editor spec still green.
+     */
+    const q = u.searchParams.get('q')?.trim().toLowerCase();
+    if (q)
+      items = items.filter((c) => [c.title, c.description].some((v) => (v ?? '').toLowerCase().includes(q)));
     if (u.searchParams.get('pinned') === 'true') items = items.filter((c) => c.pinned);
     if (u.searchParams.get('recent') === 'true') items = items.filter((c) => c.views > 0);
     if (u.searchParams.get('drafts') === 'true') items = items.filter((c) => c.status === 'draft');

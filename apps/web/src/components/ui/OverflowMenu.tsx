@@ -134,13 +134,20 @@ export function OverflowMenu({
               e.preventDefault();
               setActive(enabled[enabled.length - 1]);
             } else if (e.key === 'Tab') {
-              close(false);
+              // L2. Without `preventDefault` the browser moves focus to whatever follows *this*
+              // item, and the menu then unmounts from under it — focus lands on `<body>` and the
+              // keyboard is nowhere. Closing back onto the trigger is the WAI-ARIA answer: the next
+              // Tab continues from the menu button, which is where the user was.
+              e.preventDefault();
+              close();
             }
           }}
         >
           {items.map((it, i) => (
             <div
-              key={it.label}
+              // L2: two items may legitimately read the same — a world and a topic with one name.
+              // Keying on the label alone collapsed them into a single React child.
+              key={`${i}:${it.label}`}
               ref={(el) => {
                 itemRefs.current[i] = el;
               }}

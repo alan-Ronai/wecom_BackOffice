@@ -323,6 +323,68 @@ run('migrations', () => {
     expect(names).not.toContain('blocks_title_trgm');
   });
 
+  /**
+   * Post-pilot M2. `0043` widens `telemetry_events.kind` for `client_error` *and* gives the row
+   * the two columns that make it worth reading. Both halves are asserted here, up and down:
+   * a `down` that narrowed the kind list but left the columns behind would pass a "rolls back
+   * cleanly" check (the table is dropped by `0010.down` either way) and still leave a database
+   * that no longer matches any migration.
+   */
+  it('0043 adds nullable path and message to telemetry_events, and down removes exactly them', async () => {
+    const shape = async () =>
+      (
+        await pool.query(
+          `select column_name, data_type, is_nullable from information_schema.columns
+            where table_name='telemetry_events' and column_name in ('path','message') order by 1`,
+        )
+      ).rows;
+    expect(await shape()).toEqual([
+      { column_name: 'message', data_type: 'text', is_nullable: 'YES' },
+      { column_name: 'path', data_type: 'text', is_nullable: 'YES' },
+    ]);
+    // Nullable is load-bearing: every other emitter (`palette`, `jump`, …) writes neither.
+    const u = await pool.query(
+      `insert into users(subject, source, display_name) values ('m2-cols','local','m2') returning id`,
+    );
+    await pool.query(`insert into telemetry_events(user_id, kind) values ($1,'palette')`, [u.rows[0].id]);
+    await pool.query(
+      `insert into telemetry_events(user_id, kind, path, message) values ($1,'client_error','/doc/x','boom')`,
+      [u.rows[0].id],
+    );
+    expect(
+      (await pool.query(`select 1 from telemetry_events where path is null and kind='palette'`)).rowCount,
+    ).toBe(1);
+
+    // Everything from 0043 up, so the rollback really stops at 0042 whatever lands above it.
+    const above = (await readdir('migrations')).filter((f) => {
+      const n = Number(/^(\d{4})_/.exec(f)?.[1] ?? NaN);
+      return n >= 43;
+    }).length;
+    const move = (direction: 'up' | 'down', count?: number) =>
+      runner({
+        databaseUrl: c.getConnectionUri(),
+        dir: 'migrations',
+        direction,
+        count,
+        migrationsTable: 'pgmigrations',
+        ignorePattern: 'package\\.json',
+        log: () => undefined,
+      });
+    await move('down', above);
+    expect(await shape()).toEqual([]);
+    // The kind list narrows with them, and `down` deletes the rows it would otherwise reject
+    // rather than failing the rollback on a crash report.
+    expect((await pool.query(`select 1 from telemetry_events where kind='client_error'`)).rowCount).toBe(0);
+    await expect(
+      pool.query(`insert into telemetry_events(user_id, kind) values ($1,'client_error')`, [u.rows[0].id]),
+    ).rejects.toThrow(/telemetry_events_kind_check/);
+
+    await move('up');
+    expect(await shape()).toHaveLength(2);
+    await pool.query(`delete from users where id=$1`, [u.rows[0].id]);
+    await pool.query(`delete from telemetry_events`);
+  }, 120000);
+
   it('0035 keeps both the tags term and the Hebrew stopword filter in the search vector', async () => {
     // 0030 added tags but dropped 0027's stopword filter; 0035 is the one definition with both.
     await pool.query(

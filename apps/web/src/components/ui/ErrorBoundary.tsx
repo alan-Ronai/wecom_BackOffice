@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { API_BASE } from '../../api/client.js';
+import { isChunkLoadError, pageReload } from '../../lib/chunkError.js';
 
 /**
  * The missing floor under the whole SPA (acceptance review §3 A-8, §6.2, §7 item 4).
@@ -35,13 +36,79 @@ import { API_BASE } from '../../api/client.js';
 const CLIENT_ERROR = 'client_error';
 
 /**
+ * M2 — which document the agent was on when the screen went blank.
+ *
+ * `client_error` rows were arriving with nothing but `{ kind, at }`, which answers "did anything
+ * crash this week" and nothing else: the one column `telemetry_events` already has for context is
+ * `document_id`, and the boundary knows the route it guards, so the two were simply never joined.
+ * A crash on `/doc/<id>` is now attributable to an item somebody can open and reproduce.
+ *
+ * The id has to *look* like one — `/edit/new` is a route, not a document, and `document_id` is a
+ * foreign key into `documents`, so anything else would be a 23503 on insert and the crash report
+ * would itself fail. `/edit/:id` is included for the same reason `/doc/:id` is: a malformed step
+ * breaks both screens, and the editor is where it gets fixed.
+ *
+ * The *path* and the *message* now travel with it too: `0043_telemetry_client_error.js` adds the
+ * nullable `path` and `message` columns the table never had, and `TelemetryEventSchema` appends the
+ * two optional fields. "Something crashed on a document this week" became "this route threw this
+ * message", which is the difference between a number on a dashboard and a bug somebody can fix.
+ */
+const DOC_ROUTE = /^\/(?:doc|edit)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/i;
+
+export function documentIdFromPath(path: string): string | undefined {
+  return DOC_ROUTE.exec(path)?.[1];
+}
+
+/** `TelemetryEventSchema` caps both; over the cap the API answers 400 and the report is lost. */
+const MAX_PATH = 512;
+const MAX_MESSAGE = 1000;
+
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+/** Deliberately loose on the local part: the job is to catch an address, not to validate one. */
+const EMAIL = /[^\s@<>()[\],;:"']+@[^\s@<>()[\],;:"']+\.[a-z]{2,}/gi;
+
+/**
+ * What a crash report is allowed to say.
+ *
+ * `error.message` only. Not `error.stack` — it names minified bundle frames, it is long enough to
+ * blow the column on its own, and nobody reading `telemetry_events` can act on it; the developer
+ * who can already has it in `console.error` one line above. Not the URL either: `location.search`
+ * and `location.hash` are exactly where a search term, a filter or a scroll anchor live, so the
+ * row gets `useLocation().pathname` and stops there.
+ *
+ * Then the redaction, which exists because a *message* is not a field anyone designed. It is
+ * whatever string the throwing code happened to interpolate, and the two things that turn up in
+ * one by accident are an address (`no mailbox for dana@ronai.example`) and an id (`no such step
+ * for 9f3…`). `telemetry_events` is readable by anyone with `analytics.read`, so both are replaced
+ * with a marker that keeps the sentence legible.
+ *
+ * The one uuid that stays is the `documentId` already going out on the same row: redacting it
+ * would hide nothing that is not in the next column over, and the message usually reads as
+ * nonsense without it.
+ *
+ * Truncation is last, so a redaction can never be cut in half into something that still looks like
+ * half an address.
+ */
+export function safeErrorMessage(message: string, documentId?: string): string {
+  const keep = documentId?.toLowerCase();
+  const clean = message
+    .replace(EMAIL, '[email]')
+    .replace(UUID, (m) => (m.toLowerCase() === keep ? m : '[id]'))
+    .replace(/\s+/g, ' ')
+    .trim();
+  return clean.length > MAX_MESSAGE ? clean.slice(0, MAX_MESSAGE - 1) + '…' : clean;
+}
+
+/**
  * Fire-and-forget, and deliberately not `useTelemetry`'s 10-second buffer: the batch that matters
  * is the one describing a screen the agent is about to reload away from, and a boundary is a class
  * component that cannot hold the hook anyway. Wrapped twice — `try` for a `fetch` that is missing
  * or throws synchronously (jsdom without a network stub), `.catch` for the rejection — because the
  * one thing this reporter must never do is throw from inside a component that is already broken.
  */
-export function reportClientError(documentId?: string): void {
+export function reportClientError(path: string, error?: Error): void {
+  const documentId = documentIdFromPath(path);
+  const message = error?.message ? safeErrorMessage(error.message, documentId) : '';
   try {
     void fetch(`${API_BASE}/telemetry`, {
       method: 'POST',
@@ -49,7 +116,15 @@ export function reportClientError(documentId?: string): void {
       headers: { 'content-type': 'application/json' },
       keepalive: true,
       body: JSON.stringify({
-        events: [{ kind: CLIENT_ERROR, at: new Date().toISOString(), ...(documentId ? { documentId } : {}) }],
+        events: [
+          {
+            kind: CLIENT_ERROR,
+            at: new Date().toISOString(),
+            ...(documentId ? { documentId } : {}),
+            ...(path ? { path: path.slice(0, MAX_PATH) } : {}),
+            ...(message ? { message } : {}),
+          },
+        ],
       }),
     }).catch(() => undefined);
   } catch {
@@ -61,15 +136,29 @@ interface Props {
   children: ReactNode;
   /** Where the throw happened, for the console line: `shell`, or the route path. */
   where: string;
+  /**
+   * The route pathname, which is *not* `where`: the shell's boundary and the three overlay ones
+   * are named for the thing they guard, not for a route, and a crash under any of them still
+   * happened on a screen worth naming. Defaulted from `useLocation()` by the wrapper below, so a
+   * boundary rendered outside a router (a unit test) still has a string to report.
+   */
+  path?: string;
   /** Changing this clears a caught error — the route path, so navigating away recovers. */
   resetKey?: string;
+  /**
+   * What to render instead of the panel (review M1). The panel is right for a *page*: it is the
+   * whole screen and it owns the recovery. It is wrong for an overlay — a palette that throws
+   * should close, not paint a crash report over a working app — so `Shell` passes `null` for the
+   * three it wraps, and the throw is still logged and still reported.
+   */
+  fallback?: ReactNode;
 }
 
 interface State {
   error: Error | null;
 }
 
-export class ErrorBoundary extends Component<Props, State> {
+class ErrorBoundaryBase extends Component<Props, State> {
   override state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
@@ -80,7 +169,8 @@ export class ErrorBoundary extends Component<Props, State> {
     // The console line is what a developer with the tab open sees; the telemetry row is what
     // anybody looking at the deployed VM a day later sees. Both, not one.
     console.error(`[ErrorBoundary:${this.props.where}]`, error, info.componentStack);
-    reportClientError();
+    // The route, and the message with the stack and anything personal stripped out of it (M2).
+    reportClientError(this.props.path ?? '', error);
   }
 
   override componentDidUpdate(prev: Props): void {
@@ -89,9 +179,20 @@ export class ErrorBoundary extends Component<Props, State> {
 
   private readonly reset = () => this.setState({ error: null });
 
+  /** The only "retry" a stale lazy chunk can honour — see `lib/chunkError.ts`. */
+  private readonly reload = () => pageReload.run();
+
   override render(): ReactNode {
     const { error } = this.state;
     if (!error) return this.props.children;
+    if (this.props.fallback !== undefined) return this.props.fallback;
+    /**
+     * A chunk that 404s after a deploy is the one error `reset()` cannot fix: React caches the
+     * rejected `import()` inside the `lazy()` wrapper, so re-rendering the same subtree replays
+     * the same rejection forever (review H1). Only a document load reaches the new asset names,
+     * so for this error the primary action *is* the reload — and it says so.
+     */
+    const stale = isChunkLoadError(error);
     return (
       <div className="error-boundary" role="alert" dir="rtl" data-where={this.props.where}>
         <div className="eb-card">
@@ -101,11 +202,19 @@ export class ErrorBoundary extends Component<Props, State> {
           <h2>משהו השתבש</h2>
           {/* The message, not the stack: an agent cannot act on a stack, and a support call that
               can quote one line is worth more than a screen that says only "error". */}
-          <p className="eb-msg">{error.message || 'שגיאה לא צפויה'}</p>
+          <p className="eb-msg">
+            {stale ? 'גרסה חדשה של המערכת פורסמה. יש לטעון את הדף מחדש.' : error.message || 'שגיאה לא צפויה'}
+          </p>
           <div className="eb-actions">
-            <button type="button" className="btn primary" onClick={this.reset}>
-              נסה שוב
-            </button>
+            {stale ? (
+              <button type="button" className="btn primary" onClick={this.reload}>
+                טען מחדש
+              </button>
+            ) : (
+              <button type="button" className="btn primary" onClick={this.reset}>
+                נסה שוב
+              </button>
+            )}
             <a className="btn ghost" href="/library">
               חזרה לספרייה
             </a>
@@ -118,9 +227,32 @@ export class ErrorBoundary extends Component<Props, State> {
 }
 
 /**
- * The per-route boundary. A function component only so it can read the path and hand it down as
- * the reset key — everything else is the class above.
+ * The boundary everything uses. A function component only so it can read the path and default the
+ * reset key to it — everything else is the class above.
+ *
+ * The default is the fix for M1. The shell boundary was mounted with no `resetKey` at all, and
+ * `Palette`, `Peek`, `Tour`, `Sidebar`, `TabStrip` and the notification bell all render under it:
+ * one throw from any overlay replaced the entire application with the panel, and nothing short of
+ * the user thinking to reload ever brought it back — `נסה שוב` re-rendered the same overlay in the
+ * same state that had just thrown. Keying on the path means navigating anywhere is a recovery,
+ * which is what the route boundary has always done and what nobody wired to the outer one.
  */
+export function ErrorBoundary({ children, where, path, resetKey, fallback }: Props) {
+  const loc = useLocation();
+  return (
+    <ErrorBoundaryBase
+      where={where}
+      // `pathname` only — never `loc.search` or `loc.hash`, which is where a query would be.
+      path={path ?? loc.pathname}
+      resetKey={resetKey ?? loc.pathname}
+      fallback={fallback}
+    >
+      {children}
+    </ErrorBoundaryBase>
+  );
+}
+
+/** The per-route boundary: the same thing, named by the route it guards. */
 export function RouteBoundary({ children }: { children: ReactNode }) {
   const loc = useLocation();
   return (

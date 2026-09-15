@@ -180,6 +180,9 @@ export interface TelemetryRow {
   documentId?: string;
   stepKey?: string;
   at?: string;
+  /** Post-pilot M2 — `0043_telemetry_client_error.js`; set by `client_error`, null for the rest. */
+  path?: string;
+  message?: string;
 }
 
 /**
@@ -194,10 +197,10 @@ export interface TelemetryRow {
 export async function recordTelemetry(q: Q, userId: string, events: TelemetryRow[]): Promise<number> {
   if (!events.length) return 0;
   const r = await q.query(
-    `insert into telemetry_events(user_id, kind, document_id, step_key, at)
-     select $1, e.kind, e.document_id::uuid, e.step_key, coalesce(e.at::timestamptz, now())
-       from unnest($2::text[], $3::text[], $4::text[], $5::text[])
-            as e(kind, document_id, step_key, at)
+    `insert into telemetry_events(user_id, kind, document_id, step_key, at, path, message)
+     select $1, e.kind, e.document_id::uuid, e.step_key, coalesce(e.at::timestamptz, now()), e.path, e.message
+       from unnest($2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[])
+            as e(kind, document_id, step_key, at, path, message)
       where e.document_id is null
          or exists (select 1 from documents d where d.id = e.document_id::uuid and d.deleted_at is null)`,
     [
@@ -206,6 +209,10 @@ export async function recordTelemetry(q: Q, userId: string, events: TelemetryRow
       events.map((e) => e.documentId ?? null),
       events.map((e) => e.stepKey ?? null),
       events.map((e) => e.at ?? null),
+      // M2: where the screen was and what it threw. Null for every emitter but the boundary —
+      // `unnest` needs the arrays the same length, so the nulls are written, not skipped.
+      events.map((e) => e.path ?? null),
+      events.map((e) => e.message ?? null),
     ],
   );
   return r.rowCount ?? 0;

@@ -12,6 +12,7 @@
     "test": "pnpm -r build && pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "openapi": "pnpm --filter @wecom/api openapi && pnpm --filter @wecom/web generate:client",
+    "audit:check": "node scripts/audit-check.mjs",
     "e2e:real": "node scripts/e2e-real.mjs",
     "e2e:compose": "node scripts/e2e-compose.mjs",
     "test:int": "pnpm -r build && RUN_INTEGRATION=1 pnpm --filter @wecom/api test:int"

@@ -20,14 +20,35 @@ services:
   ollama-pull:
     image: ollama/ollama:latest
     entrypoint: ["/bin/bash", "/ollama-pull.sh"]
-    environment: { OLLAMA_HOST: "http://ollama:11434", MODEL_NAME: "${MODEL_NAME}" }
+    # EMBED_MODEL as well as MODEL_NAME (W-3). It used to pass only the generation tag, so the
+    # embedding model deploy/.env.example configures was never pulled on any install and search
+    # silently ranked lexically for ever. `:-` because an empty value is a real configuration
+    # (no embedding model) and must not become an interpolation error.
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+      MODEL_NAME: "${MODEL_NAME}"
+      EMBED_MODEL: "${EMBED_MODEL:-}"
     volumes: ["./ollama-pull.sh:/ollama-pull.sh:ro"]
     depends_on: { ollama: { condition: service_healthy } }
     restart: "no"
 
+  # ── on ${COMPOSE_PROJECT_NAME} in the three `image:` tags below ──────────────────────────────
+  # They were unprefixed — `wecom-kb-api`, `-web`, `-backup` — so *every* compose project built
+  # from this file wrote the same three tags. A second stack (`-p wecom-walk2 … up --build`, a
+  # walkthrough, a colleague's clone) therefore replaced the images a running `pnpm e2e:compose`
+  # was using, mid-run, with no warning and nothing in either run's output to explain the result.
+  # scripts/e2e-compose.mjs is careful about the project name and the volumes for exactly this
+  # reason; the image tags were the hole left in it.
+  #
+  # `${COMPOSE_PROJECT_NAME}` is compose's own effective project name — the `name:` at the top of
+  # this file, or whatever `-p` / COMPOSE_PROJECT_NAME overrides it with — so these are precisely
+  # the names compose would pick itself with no `image:` at all. The default project still builds
+  # `wecom-kb-api`/`-web`/`-backup`, unchanged for an operator on the VM; `-p wecom-kb-e2e` now
+  # builds `wecom-kb-e2e-api` and can no longer touch them. `:-wecom-kb` is belt and braces for a
+  # compose old enough not to export the variable.
   api:
     build: { context: .., dockerfile: deploy/Dockerfile.api }
-    image: wecom-kb-api
+    image: ${COMPOSE_PROJECT_NAME:-wecom-kb}-api
     env_file: .env
     environment:
       DATABASE_URL: postgres://kb:${POSTGRES_PASSWORD}@db:5432/kb
@@ -41,7 +62,7 @@ services:
 
   web:
     build: { context: .., dockerfile: deploy/Dockerfile.web }
-    image: wecom-kb-web
+    image: ${COMPOSE_PROJECT_NAME:-wecom-kb}-web
     ports: ["${WEB_HTTPS_PORT:-443}:443", "${WEB_HTTP_PORT:-80}:80"]
     volumes:
       - ${TLS_CERT_PATH}:/etc/nginx/certs/cert.pem:ro
@@ -51,7 +72,7 @@ services:
 
   backup:
     build: { context: .., dockerfile: deploy/backup.Dockerfile }
-    image: wecom-kb-backup
+    image: ${COMPOSE_PROJECT_NAME:-wecom-kb}-backup
     environment:
       DATABASE_URL: postgres://kb:${POSTGRES_PASSWORD}@db:5432/kb
       BACKUP_DIR: /backups

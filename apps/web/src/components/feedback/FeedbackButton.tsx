@@ -40,9 +40,21 @@ function FeedbackForm({
   const [text, setText] = useState('');
   const create = useCreateFeedback(documentId);
   const toast = useToast();
+  /**
+   * L7 — the failure is handled here, so the click handler has nothing to discard.
+   *
+   * `onClick={() => void submit()}` threw a rejected promise into the void on every failed
+   * submit: an unhandled rejection in the console, on top of an error the component had already
+   * dealt with. `create.isError` renders the banner below the buttons, the dialog stays open with
+   * what the agent typed still in it, and nothing claims the report was sent.
+   */
   const submit = async () => {
     if (!kind) return;
-    await create.mutateAsync({ kind, text: text.trim(), stepKey });
+    try {
+      await create.mutateAsync({ kind, text: text.trim(), stepKey });
+    } catch {
+      return;
+    }
     toast('תודה! המשוב נשלח לעורכי התוכן', 'ok');
     onDone();
   };

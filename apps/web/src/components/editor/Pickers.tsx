@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { DocRef } from '@wecom/shared';
 import { useFields } from '../../api/hooks/content.js';
 import { useDocuments } from '../../api/hooks/documents.js';
+import { useDebounced } from '../../lib/useDebounced.js';
 import { useModal } from '../ui/Modal.js';
 import { TypeBadge, worldShort } from '../taxonomy/TypeBadge.js';
 
@@ -164,30 +166,51 @@ function CrmPicker({ onChange, onSubmit }: { onChange: (v: string) => void; onSu
   );
 }
 
+/**
+ * H2 — the search runs on the server, not over whatever page 1 happened to contain.
+ *
+ * The first version asked for `pageSize: 200` and filtered the result in the browser, which is
+ * only a search while the corpus fits in 200 cards. At pilot scale it does not: everything past
+ * that page was invisible to the picker, so an editor looking for a document that exists was told
+ * "אין מסמך תואם". `ListDocumentsQuerySchema` has always accepted `q` — the picker simply never
+ * sent it.
+ *
+ * Debounced, because this is a keystroke-driven query against `ilike` predicates on a VM that also
+ * runs the model service; 200 ms is the same budget the admin user search uses. The empty query
+ * still asks for a page of the corpus, so the list is never blank before the first keystroke.
+ */
 function DocPicker({
   excludeId,
   onChange,
   onSubmit,
 }: {
   excludeId?: string;
-  onChange: (v: string) => void;
+  onChange: (v: DocRef | undefined) => void;
   onSubmit: () => void;
 }) {
-  // The whole corpus, not page 1: a picker that searches client-side has to hold what it searches.
-  const docs = useDocuments({ pageSize: 200, sort: 'title' });
   const [q, setQ] = useState('');
-  const items = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return (docs.data?.items ?? [])
-      .filter((d) => d.id !== excludeId)
-      .filter(
-        (d) =>
-          !needle || d.title.toLowerCase().includes(needle) || d.description.toLowerCase().includes(needle),
-      );
-  }, [docs.data, excludeId, q]);
+  const needle = useDebounced(q.trim(), 200);
+  const docs = useDocuments({ ...(needle ? { q: needle } : {}), pageSize: 200, sort: 'title' });
+  const items = useMemo(
+    () => (docs.data?.items ?? []).filter((d) => d.id !== excludeId),
+    [docs.data, excludeId],
+  );
+  /**
+   * The selection is reported up as `{ id, title }`, not as a bare id: the editor writes
+   * `[[doc:<id>]]` into the action text and then has to *name* that target beside the field, and
+   * the picker is the one place in the app that already knows the title. Handing it over here is
+   * what keeps a freshly linked document from rendering as a raw uuid (H2).
+   */
+  const report = useCallback(
+    (id: string) => {
+      const d = items.find((x) => x.id === id);
+      onChange(d ? { id: d.id, title: d.title } : undefined);
+    },
+    [items, onChange],
+  );
   const [value, setValue] = useSelection(
     items.map((d) => d.id),
-    onChange,
+    report,
   );
   const sel = items.find((d) => d.id === value);
 
@@ -203,7 +226,7 @@ function DocPicker({
       value={value}
       onValue={setValue}
       onSubmit={onSubmit}
-      empty={docs.isPending ? 'טוען מסמכים…' : 'אין מסמך תואם'}
+      empty={docs.isPending || docs.isFetching ? 'מחפש מסמכים…' : 'אין מסמך תואם'}
       detail={
         sel ? (
           <>
@@ -229,26 +252,35 @@ export type PickerKind = 'crm' | 'link';
  * Opens either picker and hands the finished action text back. The text is legacy's, verbatim:
  * `פתח CRM ↗ שדה <name>` and `המשך לפי [[doc:<id>]]` — the second is the token `<Fmt>` resolves,
  * not a rendered title, so the link keeps working when the target is renamed.
+ *
+ * The link picker also hands back the `DocRef` it resolved. The token is deliberately id-only, so
+ * without this the editor would have to find the title again — and the only list it had was page 1
+ * of the library, which is how a freshly linked document ended up displayed as a raw uuid (H2).
  */
 export function useEditorPickers({
   excludeId,
   onInsert,
 }: {
   excludeId?: string;
-  onInsert: (text: string) => void;
+  onInsert: (text: string, picked?: DocRef) => void;
 }) {
   const modal = useModal();
 
   const open = (kind: PickerKind) => {
-    const picked = { current: '' };
+    const picked = { current: '', ref: undefined as DocRef | undefined };
     let dispose = () => {};
-    const set = (v: string) => {
+    const setField = (v: string) => {
       picked.current = v;
+    };
+    const setDoc = (ref: DocRef | undefined) => {
+      picked.current = ref?.id ?? '';
+      picked.ref = ref;
     };
     /** `false` keeps the dialog open — nothing is selected, so there is nothing to insert. */
     const apply = () => {
       if (!picked.current) return false;
-      onInsert(kind === 'crm' ? `פתח CRM ↗ שדה ${picked.current}` : `המשך לפי [[doc:${picked.current}]]`);
+      if (kind === 'crm') onInsert(`פתח CRM ↗ שדה ${picked.current}`);
+      else onInsert(`המשך לפי [[doc:${picked.current}]]`, picked.ref);
       return true;
     };
     const submit = () => {
@@ -258,9 +290,9 @@ export function useEditorPickers({
       title: kind === 'crm' ? 'שדה CRM' : 'קישור למסמך',
       body:
         kind === 'crm' ? (
-          <CrmPicker onChange={set} onSubmit={submit} />
+          <CrmPicker onChange={setField} onSubmit={submit} />
         ) : (
-          <DocPicker excludeId={excludeId} onChange={set} onSubmit={submit} />
+          <DocPicker excludeId={excludeId} onChange={setDoc} onSubmit={submit} />
         ),
       buttons: [
         { label: 'ביטול' },

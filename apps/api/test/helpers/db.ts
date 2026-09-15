@@ -46,6 +46,7 @@ export async function startTestDb(): Promise<TestDb> {
     const dbUrl = url.toString();
     await migrate(dbUrl);
     const pool = new pg.Pool({ connectionString: dbUrl });
+    pool.on('error', () => undefined); // see plugins/db.ts — the pool is shared with the app
     return {
       pool,
       url: dbUrl,
@@ -64,6 +65,7 @@ export async function startTestDb(): Promise<TestDb> {
   const url = container.getConnectionUri();
   await migrate(url);
   const pool = new pg.Pool({ connectionString: url });
+  pool.on('error', () => undefined); // see plugins/db.ts — the pool is shared with the app
   return {
     pool,
     url,

@@ -2,6 +2,16 @@ node_modules
 dist
 coverage
 .env
+# Every sibling of it, not just the exact name. `scripts/e2e-compose.mjs` moves an operator's real
+# deploy/.env aside to deploy/.env.before-e2e for the length of a run; a SIGKILL, a crash or
+# KEEP_STACK=1 leaves that file sitting in the worktree holding SESSION_SECRET, CONNECTOR_KEY,
+# POSTGRES_PASSWORD, PALOALTO_API_KEY and OIDC_CLIENT_SECRET, and `git add -A` would commit it.
+.env.*
+# …but the checked-in template is one of those siblings, and it is meant to be tracked.
+!.env.example
+# The nightly dumps: whole-database pg_dump files, written by the backup container into the
+# worktree through a bind mount. Copy them off the VM (deploy/INSTALL.md, "Backup") — never commit.
+deploy/backups/
 *.log
 .playwright-mcp
 .superpowers

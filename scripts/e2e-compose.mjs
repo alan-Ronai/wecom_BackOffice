@@ -51,9 +51,10 @@ import { spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { runPlaywright } from './lib/playwright-run.mjs';
+import { assertPortsFree as assertFree } from './lib/ports.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DEPLOY = join(ROOT, 'deploy');
@@ -64,11 +65,17 @@ const ENV_BACKUP = join(DEPLOY, '.env.before-e2e');
 /**
  * Its own compose project, so `down -v` can never take an operator's pilot stack (which uses the
  * `name: wecom-kb` declared in docker-compose.yml) and its database volume with it.
+ *
+ * It is also what scopes the *images*. `deploy/docker-compose.yml` tags them
+ * `${COMPOSE_PROJECT_NAME}-api`/`-web`/`-backup`; they used to be unprefixed, so every project
+ * built from that file wrote the same three tags and any `up --build` elsewhere on the machine —
+ * a second clone, a walkthrough — silently replaced the images this run was using, mid-run. The
+ * project name was already careful about the volumes; the tags were the hole left in it.
  */
 const PROJECT = process.env.E2E_COMPOSE_PROJECT ?? 'wecom-kb-e2e';
 
 /**
- * Fixed, not configurable: `deploy/docker-compose.ci.yml` hard-codes 8443/8080, and compose
+ * Fixed, not configurable: `deploy/e2e.env` pins WEB_HTTPS_PORT/WEB_HTTP_PORT to 127.0.0.1:8443/8080, and compose
  * concatenates `ports` across overlay files rather than replacing them — a second mapping would
  * publish the stack twice instead of moving it.
  */
@@ -174,17 +181,79 @@ async function waitFor(label, check, { timeoutMs = 300_000, everyMs = 2_000 } = 
 /* ── setup and teardown of things outside compose ─────────────────────────── */
 
 /**
+ * A leftover `deploy/.env.before-e2e` is a *previous run's* rescued `deploy/.env` — the operator's
+ * real one, with their real secrets — that never got put back: a SIGKILL, a crash, or a
+ * `KEEP_STACK=1` run nobody tore down. This used to `rm -f` it and carry on, which destroyed the
+ * only copy and left the e2e config installed as `deploy/.env` permanently. Refuse instead, and
+ * say which file is which, because from the outside they are indistinguishable.
+ */
+function assertNoLeftoverEnvBackup() {
+  if (!existsSync(ENV_BACKUP)) return;
+  throw new Error(
+    `${ENV_BACKUP} already exists — a previous e2e:compose run did not finish (SIGKILL, a crash,\n` +
+      '  or KEEP_STACK=1 with no teardown), and that file is the deploy/.env it moved aside. It holds\n' +
+      '  real secrets; this run will not overwrite or delete it.\n\n' +
+      '  To recover, from the repo root:\n' +
+      `    docker compose -p ${PROJECT} -f ${COMPOSE_FILES.join(' -f ')} down -v   # if a stack is still up\n` +
+      `    mv ${ENV_BACKUP} ${ENV_TARGET}   # put the real deploy/.env back (it overwrites the e2e copy)\n` +
+      '  Then re-run this gate. If deploy/.env is the one you want to keep and the backup is stale,\n' +
+      `    rm ${ENV_BACKUP}\n` +
+      '  but read it first — the two files look alike and only one has your production secrets.',
+  );
+}
+
+/**
+ * The key `deploy/e2e.env` uses to name itself as the end-to-end configuration, and the escape
+ * hatch that lets this runner past the refusal it triggers.
+ *
+ * The configuration this gate installs is not a deployment: its SESSION_SECRET is committed to
+ * git, its Postgres password is `e2e`, and it runs `AUTH_FALLBACK=paloalto` pointed at a stub. If
+ * a run is hard-killed that file stays at `deploy/.env`, and nothing about the resulting stack
+ * looks wrong from the outside — so the file says what it is, and `deploy/smoke.sh` refuses to
+ * certify a stack configured from it unless `WECOM_E2E_RUNNER=1` is set, which only this script
+ * sets, and the API's own production config check refuses to boot on `NODE_ENV=production`
+ * together with this key unless `WECOM_E2E_RUNNER=1` reaches it (docker-compose.e2e.yml sets it).
+ */
+const E2E_SENTINEL = 'WECOM_E2E_STACK';
+const SENTINEL_RE = /^[ \t]*WECOM_E2E_STACK[ \t]*=[ \t]*1[ \t]*$/m;
+
+/**
+ * If the sentinel is ever dropped from `deploy/e2e.env`, the refusal in `deploy/smoke.sh` silently
+ * stops protecting anything — and a check that has quietly stopped working is worse than none.
+ * Fail here, where it is one line to fix, rather than on the VM months later.
+ */
+function assertEnvSourceIsMarked() {
+  if (SENTINEL_RE.test(readFileSync(ENV_SOURCE, 'utf8'))) return;
+  throw new Error(
+    `${ENV_SOURCE} no longer sets ${E2E_SENTINEL}=1.\n` +
+      '  That line is how a deploy/.env left behind by a killed run is recognised as the e2e\n' +
+      "  configuration rather than a deployment's — deploy/smoke.sh refuses to certify a stack\n" +
+      '  built from it. Put it back, or this gate is installing an unmarked config over\n' +
+      "  an operator's deploy/.env.",
+  );
+}
+
+/**
  * `deploy/.env` is what `env_file:` reads, and an operator's own may be sitting there. Move it
  * aside rather than overwrite it, and put it back on the way out.
  */
 function swapEnv() {
-  rmSync(ENV_BACKUP, { force: true });
+  assertNoLeftoverEnvBackup();
+  assertEnvSourceIsMarked();
   if (existsSync(ENV_TARGET)) {
     renameSync(ENV_TARGET, ENV_BACKUP);
+    // Immediately, and not after the copy below. `envSwapped` is what teardown consults to decide
+    // whether there is anything to put back; between this rename and that assignment the
+    // operator's deploy/.env existed *only* as the backup, so a copyFileSync that threw (a full
+    // disk, a read-only mount, a missing e2e.env) left them with no deploy/.env at all and a
+    // restoreEnv() that returned immediately.
+    envSwapped = true;
     console.log(`  deploy/.env moved aside to ${ENV_BACKUP}`);
   }
-  copyFileSync(ENV_SOURCE, ENV_TARGET);
+  // True before the copy for the same reason from the other side: a copy that throws part-written
+  // leaves a truncated deploy/.env that teardown still has to remove.
   envSwapped = true;
+  copyFileSync(ENV_SOURCE, ENV_TARGET);
 }
 function restoreEnv() {
   if (!envSwapped) return;
@@ -219,26 +288,27 @@ function ensureCerts() {
   console.log('✓ minted a self-signed certificate in deploy/certs');
 }
 
+/**
+ * See scripts/lib/ports.mjs: `lsof`, then `ss`, then an actual bind — so that a runner without
+ * `lsof` (a plain Ubuntu image, a GitHub runner) cannot read every port as free and fail later as
+ * an unexplained collision inside docker.
+ */
 function assertPortsFree() {
-  const busy = [];
-  for (const [name, port] of [
-    ['nginx https', HTTPS_PORT],
-    ['nginx http', HTTP_PORT],
-    ['paloalto stub control', PANOS_PORT],
-    ['wordpress stub', WP_PORT],
-    ['lan client', LAN_CLIENT_PORT],
-    ['lan client (unknown address)', LAN_UNKNOWN_CLIENT_PORT],
-    ['offsite client', OFFSITE_CLIENT_PORT],
-  ]) {
-    const r = spawnSync('lsof', ['-ti', `tcp:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' });
-    const pids = (r.stdout ?? '').trim().split('\n').filter(Boolean);
-    if (pids.length) busy.push(`  :${port} (${name}) held by pid ${pids.join(', ')}`);
-  }
-  if (busy.length)
-    throw new Error(
-      `ports already in use — the pilot stack, or a leftover run:\n${busy.join('\n')}\n` +
-        '  stop whatever holds them (the ports are fixed by deploy/docker-compose.ci.yml) and retry',
-    );
+  return assertFree(
+    [
+      ['nginx https', HTTPS_PORT],
+      ['nginx http', HTTP_PORT],
+      ['paloalto stub control', PANOS_PORT],
+      ['wordpress stub', WP_PORT],
+      ['lan client', LAN_CLIENT_PORT],
+      ['lan client (unknown address)', LAN_UNKNOWN_CLIENT_PORT],
+      ['offsite client', OFFSITE_CLIENT_PORT],
+    ],
+    {
+      intro: 'ports already in use — the pilot stack, or a leftover run:',
+      remedy: '  stop whatever holds them (the ports are fixed by deploy/e2e.env) and retry',
+    },
+  );
 }
 
 function teardown() {
@@ -256,7 +326,9 @@ function teardown() {
         `  wordpress  http://127.0.0.1:${WP_PORT}/wp-json/wp/v2/posts/101\n` +
         `  logs       docker compose -p ${PROJECT} logs\n` +
         `  down       docker compose -p ${PROJECT} -f ${COMPOSE_FILES.join(' -f ')} down -v\n` +
-        `  (deploy/.env is still the e2e one; ${ENV_BACKUP} holds what was there)\n`,
+        `  (deploy/.env is still the e2e one — it sets ${E2E_SENTINEL}=1, so deploy/smoke.sh will\n` +
+        `   refuse to certify anything brought up from it; ${ENV_BACKUP} holds what was there,\n` +
+        '   and `mv` it back when you are done here)\n',
     );
     return;
   }
@@ -280,6 +352,12 @@ async function main() {
   console.log('\n── 1. preflight ─────────────────────────────────────────────');
   if (spawnSync('docker', ['version'], { stdio: 'ignore' }).status !== 0)
     throw new Error('docker is not available — this gate runs the real Compose stack');
+  // Before anything is built, minted or started: a leftover backup means an operator's real
+  // deploy/.env is sitting unrestored, and nothing here should run until they have it back.
+  assertNoLeftoverEnvBackup();
+  // This process, and everything it spawns, is the one context in which a deploy/.env marked
+  // `WECOM_E2E_STACK=1` is expected — see the comment on E2E_SENTINEL.
+  process.env.WECOM_E2E_RUNNER = '1';
   ensureCerts();
   swapEnv();
   // `./backups` is bind-mounted read-only into the api container; compose would create it as
@@ -287,7 +365,7 @@ async function main() {
   mkdirSync(join(DEPLOY, 'backups'), { recursive: true });
   // Any stack left by a previous run, volumes included: the seed below assumes an empty database.
   compose(['down', '-v', '--remove-orphans'], { stdio: 'ignore' });
-  assertPortsFree();
+  await assertPortsFree();
 
   if (process.env.E2E_SKIP_BUILD === '1') {
     console.log('\n── 2. build (skipped: E2E_SKIP_BUILD=1) ─────────────────────');
@@ -319,6 +397,29 @@ async function main() {
     compose(['logs', '--tail', '20', 'ollama-pull']);
     throw new Error(`ollama-pull exited ${pullCode}`);
   }
+  /**
+   * W-3: exit 0 is not the assertion. `ollama-pull` exited 0 on every install that shipped with
+   * `EMBED_MODEL` configured and never fetched — one tag in `ollama list`, no error anywhere, and
+   * search silently demoted to lexical ranking. `deploy/e2e.env` configures two different tags so
+   * this can be asked, and this asks it.
+   */
+  const listing = composeOut(['exec', '-T', 'ollama', 'ollama', 'list']);
+  const present = listing
+    .split('\n')
+    .slice(1)
+    .map((l) => l.trim().split(/\s+/)[0])
+    .filter(Boolean);
+  const envText = readFileSync(ENV_SOURCE, 'utf8');
+  for (const key of ['MODEL_NAME', 'EMBED_MODEL']) {
+    const tag = envText.match(new RegExp(`^${key}=(.*)$`, 'm'))?.[1]?.trim();
+    if (!tag) throw new Error(`deploy/e2e.env sets no ${key} — the W-3 coverage needs both`);
+    if (!present.includes(tag))
+      throw new Error(
+        `${key}='${tag}' is not in \`ollama list\` (${present.join(', ') || 'nothing'}) — ` +
+          'deploy/ollama-pull.sh did not pull it',
+      );
+  }
+  console.log(`✓ both configured model tags are pulled: ${present.join(', ')}`);
 
   console.log('\n── 5. health through nginx ──────────────────────────────────');
   /**

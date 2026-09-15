@@ -55,7 +55,17 @@ export function Tour() {
   const finish = () => save({ tourDone: true });
 
   return (
-    <div className="tour" role="dialog" aria-label="סיור היכרות" aria-live="polite">
+    /**
+     * L4 — a labelled region, not a dialog.
+     *
+     * It claimed `role="dialog"` without `aria-modal` and without a focus trap, which is a promise
+     * the component does not keep: a screen reader announces a dialog and waits for one to behave
+     * like one, while this is a coach mark the user is meant to ignore and keep working around.
+     * A region is what it is — named, findable in the landmarks list, and leaving the rest of the
+     * app exactly as reachable as it was. `aria-live` stays, because the *content* changes under a
+     * static label as the stops advance, and that is the one thing a reader must be told.
+     */
+    <div className="tour" role="region" aria-label="סיור היכרות" aria-live="polite">
       <div className="tour-head">
         <span className="eyebrow">
           שלב {i + 1} מתוך {STOPS.length}

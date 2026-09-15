@@ -173,9 +173,18 @@ test('W4-E2E-3 WordPress → source version → review flag → publish → push
   await page.goto(`/edit/${docId}/source`);
   const editor = page.getByRole('textbox', { name: 'מסמך המקור' });
   await expect(editor).toBeVisible();
-  await editor.click();
-  await page.keyboard.press('End');
-  await page.keyboard.type(` נערך במערכת ${stamp}.`);
+  // The editor is visible before TipTap has loaded the document, and a click that lands in an
+  // empty editor puts the caret where the content will *later* be inserted around it (the typed
+  // text once surfaced inside a list item). Wait for the imported text, then place the caret at
+  // the end of the document explicitly and prove the typed sentence landed before saving.
+  await expect(editor).toContainText('6 מגה');
+  const edit = ` נערך במערכת ${stamp}.`;
+  await expect(async () => {
+    await editor.click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(edit);
+    await expect(editor).toContainText(edit);
+  }).toPass({ timeout: 15_000 });
   await page.getByRole('button', { name: 'שמור גרסה' }).click();
   await page.getByLabel('תיאור הגרסה').fill('עריכה במערכת');
   await page.getByRole('dialog').getByRole('button', { name: 'אישור' }).click();

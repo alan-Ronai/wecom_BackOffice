@@ -8,6 +8,18 @@
 #
 # Hand-formatted, like the other two compose files, and listed in .prettierignore for the same
 # reason.
+#
+# ── on `127.0.0.1:` in front of every published port ─────────────────────────────────────────────
+# A compose `ports` entry of "8186:8086" binds 0.0.0.0 — the whole LAN, not this machine. What this
+# overlay publishes is not the product: the firewall stub's /_control/ plane, which decides who the
+# API believes a client is and takes no authentication at all; a WordPress stub; and three
+# forwarders that reach nginx *from* an address inside PALOALTO_SUBNETS, which is the one thing a
+# real attacker on the pilot LAN cannot arrange for themselves. The break-glass admin password of
+# the stack behind them is a constant in scripts/e2e-compose.mjs, in this repo.
+#
+# A gate run on a laptop in an office therefore offered every one of those to the office. Every
+# mapping below is bound to the loopback interface, as scripts/e2e-real.mjs already does for its
+# own servers. The specs reach them at 127.0.0.1/localhost, which is unchanged.
 services:
   ollama:
     # Back to the production value, over docker-compose.ci.yml's 1 m. That file is tuned for a
@@ -28,7 +40,7 @@ services:
       PALOALTO_STUB_KEY: "${PALOALTO_API_KEY}"
       PALOALTO_STUB_MAPPINGS: "${PALOALTO_STUB_MAPPINGS:-}"
     volumes: ["../scripts/paloalto-stub.mjs:/paloalto-stub.mjs:ro"]
-    ports: ["${PALOALTO_STUB_HOST_PORT:-8186}:8086"]
+    ports: ["127.0.0.1:${PALOALTO_STUB_HOST_PORT:-8186}:8086"]
     # No restart policy: if the stub cannot start, the run should stop and say so rather than
     # loop while the identity specs time out against a port nothing is listening on.
     restart: "no"
@@ -39,13 +51,17 @@ services:
   # it, because `startWpStub` itself binds 127.0.0.1 and would be unreachable from the api
   # container. Reached as `http://wp:8085`, which is why CONNECTOR_HOST_ALLOWLIST names `wp`.
   wp:
-    image: wecom-kb-api
+    # The same expression docker-compose.yml gives the `api` service, and for the same reason: the
+    # image tags are scoped to the compose project so a second stack's `up --build` cannot replace
+    # the images a run in progress is using. Spelling it `wecom-kb-api` here would have pinned this
+    # service to the *pilot's* image while everything around it ran the gate's.
+    image: ${COMPOSE_PROJECT_NAME:-wecom-kb}-api
     entrypoint: ["pnpm", "--filter", "@wecom/api", "exec", "tsx", "/app/scripts/wp-stub.mjs"]
     environment: { WP_STUB_PUBLIC_PORT: "8085" }
     volumes: ["../scripts/wp-stub.mjs:/app/scripts/wp-stub.mjs:ro"]
     # Published as well as reachable on the compose network: the round-trip spec has to edit a
     # post "in WordPress" from outside the stack, the way an author would.
-    ports: ["${WP_STUB_HOST_PORT:-8085}:8085"]
+    ports: ["127.0.0.1:${WP_STUB_HOST_PORT:-8085}:8085"]
     # Ordering only: `wp` runs the image the `api` service builds.
     depends_on: [api]
     # …and inherits that image's HEALTHCHECK, which probes the API on :3000 and would mark this
@@ -57,6 +73,9 @@ services:
   api:
     # The fallback client is constructed at boot from these, so they have to be right before the
     # first request rather than settable later (see deploy/e2e.env for the values and why).
+    # WECOM_E2E_RUNNER is what lets the API accept deploy/e2e.env's WECOM_E2E_STACK=1 sentinel in
+    # NODE_ENV=production; a stack started any other way from that file refuses to boot.
+    environment: { WECOM_E2E_RUNNER: "1" }
     depends_on:
       db: { condition: service_healthy }
       ollama: { condition: service_healthy }
@@ -81,7 +100,7 @@ services:
     image: node:22-alpine
     command: ["node", "/lan-forwarder.mjs"]
     volumes: ["../scripts/lan-forwarder.mjs:/lan-forwarder.mjs:ro"]
-    ports: ["${LAN_CLIENT_HOST_PORT:-8444}:443"]
+    ports: ["127.0.0.1:${LAN_CLIENT_HOST_PORT:-8444}:443"]
     networks: { lan: { ipv4_address: 10.44.0.7 } }
     depends_on: [web]
     restart: "no"
@@ -91,7 +110,7 @@ services:
     image: node:22-alpine
     command: ["node", "/lan-forwarder.mjs"]
     volumes: ["../scripts/lan-forwarder.mjs:/lan-forwarder.mjs:ro"]
-    ports: ["${LAN_UNKNOWN_CLIENT_HOST_PORT:-8445}:443"]
+    ports: ["127.0.0.1:${LAN_UNKNOWN_CLIENT_HOST_PORT:-8445}:443"]
     networks: { lan: { ipv4_address: 10.44.0.9 } }
     depends_on: [web]
     restart: "no"
@@ -101,7 +120,7 @@ services:
     image: node:22-alpine
     command: ["node", "/lan-forwarder.mjs"]
     volumes: ["../scripts/lan-forwarder.mjs:/lan-forwarder.mjs:ro"]
-    ports: ["${OFFSITE_CLIENT_HOST_PORT:-8446}:443"]
+    ports: ["127.0.0.1:${OFFSITE_CLIENT_HOST_PORT:-8446}:443"]
     networks: { offsite: { ipv4_address: 198.51.100.7 } }
     depends_on: [web]
     restart: "no"

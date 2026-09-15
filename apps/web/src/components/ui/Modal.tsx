@@ -70,9 +70,19 @@ function Dialog({ entry: m, topmost, onDismiss }: { entry: Entry; topmost: boole
       >
         <h2>
           {m.title}
-          <span className="x" role="button" tabIndex={0} title="סגור (Esc)" onClick={dismissWithDefault}>
+          {/* L3: a real `<button>`, not a `<span role="button">`. The app does carry a delegated
+              Enter/Space bridge for its ~100 span-buttons, but a dialog's close control is the one
+              that must not depend on it — it is the escape hatch, it lives inside a focus trap, and
+              it is the first thing a keyboard user reaches for. */}
+          <button
+            type="button"
+            className="x"
+            title="סגור (Esc)"
+            aria-label="סגור"
+            onClick={dismissWithDefault}
+          >
             ✕
-          </span>
+          </button>
         </h2>
         {m.subtitle ? <div className="modal-subtitle">{m.subtitle}</div> : null}
         <div>{m.body}</div>

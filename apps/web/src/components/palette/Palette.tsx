@@ -15,9 +15,10 @@ import { useTelemetry } from '../../api/hooks/collab.js';
 import { Html } from '../Fmt.js';
 import { TypeBadge, worldShort } from '../taxonomy/TypeBadge.js';
 import { hitLabel } from './hitLabel.js';
-import { localGroups } from './localHits.js';
+import { localGroups, type LocalHit } from './localHits.js';
+import { StatusChip } from '../governance/StatusChip.js';
 import { useFocusTrap } from '../ui/useFocusTrap.js';
-import type { ListDocumentsResponse, SearchHit } from '../../api/types.js';
+import type { ListDocumentsResponse } from '../../api/types.js';
 import { results as nResults } from '../../lib/count.js';
 
 /**
@@ -54,7 +55,9 @@ interface LocalAction {
 }
 type Row =
   | { kind: 'group'; label: string }
-  | { kind: 'hit'; hit: SearchHit }
+  // `LocalHit` is a `SearchHit` with an optional `status` (M5): the rows the palette builds out of
+  // the card cache know whether the item is a draft, and a server hit simply has none.
+  | { kind: 'hit'; hit: LocalHit }
   | { kind: 'action'; action: LocalAction };
 
 const hi = (text: string, q: string): string => {
@@ -70,6 +73,39 @@ const hi = (text: string, q: string): string => {
   );
 };
 
+/**
+ * L8 — the documents already in the query cache, *and* a re-render when that changes.
+ *
+ * The local sections below the search threshold are read straight out of TanStack's cache rather
+ * than fetched, which is the point: two letters cost no request. But reading a cache inside a
+ * `useMemo` keyed on `qc` — an object that never changes — meant the palette took one snapshot when
+ * it opened and kept it. Open `/doc/:id` cold, hit `Ctrl K` before the sidebar's document list has
+ * answered, type two letters: the sections stayed empty until another keystroke moved a dep.
+ *
+ * Subscribing to the cache is what makes the read live. Only while the palette is open, so the
+ * subscription costs nothing the rest of the time.
+ */
+function useCachedDocumentCards(enabled: boolean): DocumentCard[] {
+  const qc = useQueryClient();
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    if (!enabled) return;
+    return qc.getQueryCache().subscribe((event) => {
+      const key = event.query.queryKey;
+      if (Array.isArray(key) && key[0] === 'documents') setVersion((n) => n + 1);
+    });
+  }, [qc, enabled]);
+  return useMemo(() => {
+    const byId = new Map<string, DocumentCard>();
+    for (const [, page] of qc.getQueriesData<ListDocumentsResponse>({ queryKey: ['documents'] }))
+      for (const c of page?.items ?? []) if (!byId.has(c.id)) byId.set(c.id, c);
+    return [...byId.values()];
+    // `version` is the subscription's signal that the cache moved; `enabled` re-reads on the open,
+    // since the snapshot taken while the palette was closed is exactly the stale one. `qc` never
+    // changes, which is the whole reason this needed the other two.
+  }, [qc, version, enabled]);
+}
+
 /** Port of legacy KB.palette — server search merged with local actions. */
 export function Palette() {
   const palette = usePalette();
@@ -83,7 +119,6 @@ export function Palette() {
   const prefs = usePreferences();
   const savePrefs = useSavePreferences();
   const ui = useUiPrefs();
-  const qc = useQueryClient();
   const can = useCan();
   const track = useTelemetry();
 
@@ -94,6 +129,7 @@ export function Palette() {
   const trap = useFocusTrap<HTMLDivElement>(true);
   const debounced = useDebounced(q, 120);
   const search = useSearch(debounced, type);
+  const cachedCards = useCachedDocumentCards(open);
 
   /**
    * Below `MIN_SEARCH_CHARS` no request was made for what is typed now — but `keepPreviousData`
@@ -239,11 +275,8 @@ export function Palette() {
      * `fields`/`blocks`/`scripts` tab that the local cache cannot speak for.
      */
     if (!isSearchable(debounced) && (type === 'all' || type === 'documents')) {
-      const byId = new Map<string, DocumentCard>();
-      for (const [, page] of qc.getQueriesData<ListDocumentsResponse>({ queryKey: ['documents'] }))
-        for (const c of page?.items ?? []) if (!byId.has(c.id)) byId.set(c.id, c);
       for (const g of localGroups({
-        cards: [...byId.values()],
+        cards: cachedCards,
         lastSeen: ui.prefs.lastSeen,
         needle: debounced,
       })) {
@@ -262,7 +295,7 @@ export function Palette() {
       }
     }
     return out;
-  }, [data, actions, debounced, mode, type, qc, ui.prefs.lastSeen]);
+  }, [data, actions, cachedCards, debounced, mode, type, ui.prefs.lastSeen]);
 
   const selectable = rows.filter((r) => r.kind !== 'group');
   const current = selectable[Math.min(sel, Math.max(0, selectable.length - 1))];
@@ -325,7 +358,24 @@ export function Palette() {
   };
 
   let selIdx = -1;
-  const stat = `${nResults(data?.total ?? selectable.length)} ב-${data?.files ?? 0} קבצים · ${Math.max(1, Math.round(data?.tookMs ?? 1))}ms`;
+  /**
+   * M4 — the footer states what the search said, and says nothing when there was no search.
+   *
+   * Below `MIN_SEARCH_CHARS` there is no response to report, and the line was inventing one out of
+   * whatever was to hand: `selectable.length` (which counts the local *actions* as results), `0`
+   * files, and a `1ms` that no query ever took. A measurement nobody measured is worse than no
+   * measurement — an operator reading "7 תוצאות ב-0 קבצים · 1ms" has been told the corpus was
+   * searched and holds nothing.
+   *
+   * So the server's row is the server's numbers, and below the threshold it is a plain count of
+   * the local rows — hits only, never the actions — or nothing at all when there are none.
+   */
+  const localHitCount = rows.reduce((n, r) => n + (r.kind === 'hit' ? 1 : 0), 0);
+  const stat = data
+    ? `${nResults(data.total)} ב-${data.files} קבצים · ${Math.max(1, Math.round(data.tookMs))}ms`
+    : localHitCount
+      ? nResults(localHitCount)
+      : '';
 
   return (
     <div
@@ -452,6 +502,9 @@ export function Palette() {
                           result and a card describe an item identically (A-2). */}
                       {label.world ? <span className="chip chip-blue">{worldShort(label.world)}</span> : null}
                       {label.docType ? <TypeBadge docType={label.docType} compact /> : null}
+                      {/* M5: a draft offered beside a published procedure must say so — the same
+                          chip the library card and the article header render. */}
+                      {h.status ? <StatusChip status={h.status} /> : null}
                       {label.item ? <span className="hit-item">{label.item}</span> : null}
                       {label.rest.length ? <span className="hit-rest">{label.rest.join(' · ')}</span> : null}
                     </div>
@@ -467,7 +520,7 @@ export function Palette() {
           <span>↵ פתיחה</span>
           <span>Tab סוג תוצאה</span>
           <span>Ctrl ↵ בלשונית</span>
-          <span className="stat">{stat}</span>
+          {stat ? <span className="stat">{stat}</span> : null}
         </div>
       </div>
     </div>

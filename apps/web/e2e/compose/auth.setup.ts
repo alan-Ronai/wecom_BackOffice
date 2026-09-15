@@ -33,7 +33,7 @@ setup('signs in with the break-glass local account through nginx', async ({ page
 
   // The first-login tour covers the library and swallows clicks aimed beneath it. Dismissing it
   // once here settles the preference for every spec that reuses this session.
-  const tour = page.getByRole('dialog', { name: 'סיור היכרות' });
+  const tour = page.getByRole('region', { name: 'סיור היכרות' });
   await expect(tour).toBeVisible();
   await tour.getByRole('button', { name: 'דלג על הסיור' }).click();
   await expect(tour).toHaveCount(0);

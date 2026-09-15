@@ -45,7 +45,7 @@ setup('signs in with the break-glass local account', async ({ page }) => {
    * here settles it for every spec and every context this account signs in from — and asserting
    * on it means the tour itself stays covered rather than quietly disabled.
    */
-  const tour = page.getByRole('dialog', { name: 'סיור היכרות' });
+  const tour = page.getByRole('region', { name: 'סיור היכרות' });
   await expect(tour).toBeVisible();
   await tour.getByRole('button', { name: 'דלג על הסיור' }).click();
   await expect(tour).toHaveCount(0);
