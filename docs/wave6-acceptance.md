@@ -145,7 +145,21 @@ message they did not send).
 ## Fix wave — API
 
 Package A of the wave 6 review (`findings-A.md`). A-C1, A-I1…A-I8 and the minors A-M1, A-M2,
-A-M3, A-M5, A-M6, A-M8, A-M9, A-M10, A-M11 are **fixed** on `fix/wave6-api`; the report is
+A-M3, A-M5, A-M6, A-M8, A-M9, A-M10, A-M11 are **fixed** on `fix/wave6-api`. The re-review of that
+branch found two rows the new A-I6 predicate made unreachable by *anyone*; both are carve-outs on
+`fix/wave6-api-2`, with the pair of states asserted in `int/scope-leak.test.ts` so neither quietly
+becomes "visible to everybody, always":
+
+- **a source that feeds no live document yet** is in nobody's world, so its null-target rows stay
+  visible to every `suggestions.review` holder — `new-card` is the suggestion that gives a fresh
+  import its first document, and scoping it through the empty set meant only an unscoped user
+  could bootstrap a source. The scope applies again from the moment the source feeds one;
+- **a soft-deleted target** no longer erases the suggestion for an unscoped caller. `deleted_at is
+  null` sat outside the scope branch, so deleting a document dropped every suggestion against it
+  from the queue *and* from the dashboard counts, admins included, leaving rows that could be
+  neither rejected nor restored.
+
+The report is
 `.superpowers/sdd/program/fix-wave6-api-report.md` and the contract changes are in
 `docs/api/CONTRACTS-wave6.md`. What is left, and what it costs if the ruling is wrong:
 

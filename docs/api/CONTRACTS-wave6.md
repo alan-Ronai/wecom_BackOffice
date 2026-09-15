@@ -102,9 +102,14 @@ Existing routes keep their paths and their permissions (`suggestions.review`, `s
 
 **World scope (fix wave, A-I6).** The review queue is world-scoped like every other reader, and one predicate says so for all of it — `suggestionVisibleSql` in `apps/api/src/modules/sources/suggestionScope.ts`:
 
-- a suggestion **with** a target document is visible when that document is: live, status-visible to the caller, and inside the caller's world scope;
-- a suggestion with **no** target (`new-card`, which carries a whole proposed document in its payload, and `field-alert`) is visible when its source feeds at least one document in the caller's scope (`source_revisions → sources → documents → document_worlds`);
+- a suggestion **with** a target document is visible when that document is status-visible to the caller and inside the caller's world scope;
+- a suggestion with **no** target (`new-card`, which carries a whole proposed document in its payload, and `field-alert`) is visible when its source feeds at least one live document in the caller's scope (`source_revisions → sources → documents → document_worlds`);
 - a caller with no world scope sees everything, as everywhere else. A row outside the caller's reach answers **404**, never 403.
+
+Two carve-outs, because the plain rule made some rows unreachable by **anyone**:
+
+- **A source that feeds no live document yet is in nobody's world, so its null-target rows are visible to every reviewer.** A brand-new import has no `documents.source_id` row, and `new-card` is precisely the suggestion that creates the first one, so scoping those rows through "the worlds of the documents this source feeds" scoped them through the empty set: only an unscoped user could bootstrap a source. From the moment the source feeds one live document, the world scope applies and keeps applying. (Who may ask at all is still the route's `suggestions.review` — the carve-out widens what a reviewer sees, never who counts as one.)
+- **A soft-deleted target does not erase the suggestion for an unscoped caller.** Deleting a document used to take every suggestion against it out of the queue *and* out of the dashboard counts, admins included, leaving rows that could be neither rejected nor restored. An admin or lead (no world scope) still sees them; a scoped caller does not, because a deleted document has no world left to check them against.
 
 It applies to `GET /suggestions`, `GET /suggestions/:id`, the `before` snapshot every decision route audits against (so `accept`/`reject`/`reset`/`edit` cannot reach past the read), the chat's `list_suggestions` and `refine_suggestion` tools, and the dashboard's `pipeline` panel — whose `bySource` returns source *titles* and therefore cannot stay org-wide while the queue it links to is scoped. `list_suggestions` additionally requires at least one of `documentId` / `sourceRevisionId`: with neither it used to return the 30 most recent suggestions on the instance.
 

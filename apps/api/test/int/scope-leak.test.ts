@@ -563,6 +563,126 @@ run('category scope: an out-of-scope document leaks through no route', () => {
   });
 
   /**
+   * Re-review of the fix wave. The A-I6 predicate, read plainly, made two classes of row
+   * unreachable by **anyone**; both are carve-outs now, and both need the pair of states asserted
+   * or the carve-out quietly becomes "visible to everybody, always".
+   *
+   * 1. A source that feeds no live document has no worlds to scope its null-target rows by — and
+   *    `new-card` is the suggestion that gives a source its first document. Scoping through the
+   *    empty set meant only an unscoped user could bootstrap a fresh import.
+   * 2. `deleted_at is null` sat outside the scope branch, so soft-deleting a document took every
+   *    suggestion against it out of the queue and out of the dashboard counts — for admins too,
+   *    leaving rows that could be neither rejected nor restored.
+   */
+  it('a null-target row on a source with no documents is reviewable; once the source is linked, scope applies', async () => {
+    // A brand-new import: a source, a revision, and a `new-card` that would create its first
+    // document. Nothing links the source to a world yet, because nothing derives from it.
+    const freshSource = (
+      await db.pool.query(`insert into sources(kind, title) values ('text','ייבוא חדש') returning id`)
+    ).rows[0].id as string;
+    const freshRevision = (
+      await db.pool.query(
+        `insert into source_revisions(source_id, hash, paragraphs) values ($1,'fresh','[]') returning id`,
+        [freshSource],
+      )
+    ).rows[0].id as string;
+    const newCard = (
+      await db.pool.query(
+        `insert into suggestions(source_revision_id, anchor, type, title, payload, confidence, rationale)
+         values ($1, '§1', 'new-card', 'כרטיס חדש', $2, 0.75, 'r') returning id`,
+        [
+          freshRevision,
+          JSON.stringify({
+            type: 'new-card',
+            title: 'כרטיס חדש',
+            description: '',
+            category: 'billing', // deliberately a world the reviewer does NOT hold
+            wave: 1,
+            priority: 'm',
+            phases: [],
+          }),
+        ],
+      )
+    ).rows[0].id as string;
+
+    // The scoped reviewer can see it — the source belongs to no world, so it belongs to the queue.
+    // The payload's own `category` is not the test: a proposed card is not a document yet, and
+    // the reviewer is the person who decides whether it becomes one.
+    const seen = await get(`/api/v1/suggestions/${newCard}`);
+    expect(seen.statusCode, seen.body).toBe(200);
+    expect(seen.json().type).toBe('new-card');
+    expect((await get('/api/v1/suggestions?pageSize=100')).body).toContain(newCard);
+    // …and can act on it, so the write half is reachable too.
+    const accepted = await app.inject({
+      method: 'POST',
+      url: `/api/v1/suggestions/${newCard}/accept`,
+      headers: auth(scoped),
+    });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(accepted.json().status).toBe('accepted');
+
+    // The paired state: the same reviewer, a null-target row whose source feeds a document in a
+    // world they do not hold. `billingSource` feeds `billingDoc`, so the carve-out is spent and
+    // the world scope is what answers.
+    expect((await get(`/api/v1/suggestions/${billingNullSuggestion}`)).statusCode).toBe(404);
+    expect((await get('/api/v1/suggestions?pageSize=100')).body).not.toContain(billingNullSuggestion);
+    // And the admin sees both, so this is a filter and not a break.
+    expect((await get(`/api/v1/suggestions/${billingNullSuggestion}`, admin)).statusCode).toBe(200);
+    expect((await get(`/api/v1/suggestions/${newCard}`, admin)).statusCode).toBe(200);
+
+    // The carve-out really is spent once the source feeds something: link the fresh source to the
+    // billing document and the scoped reviewer loses the row they could read a moment ago.
+    await db.pool.query('update documents set source_id=$1 where id=$2', [freshSource, billingDoc]);
+    try {
+      expect((await get(`/api/v1/suggestions/${newCard}`)).statusCode).toBe(404);
+      expect((await get(`/api/v1/suggestions/${newCard}`, admin)).statusCode).toBe(200);
+    } finally {
+      await db.pool.query('update documents set source_id=$1 where id=$2', [billingSource, billingDoc]);
+    }
+  });
+
+  it('a suggestion whose target document was soft-deleted stays visible to an unscoped reviewer', async () => {
+    // A tech document the scoped reviewer *can* see, so the only thing the delete changes is the
+    // `deleted_at` axis — not the world one.
+    const doomed = await makeDoc('מסמך שיימחק', 'tech');
+    const rev = (
+      await db.pool.query(
+        `insert into source_revisions(source_id, hash, paragraphs) values ($1,'doomed','[]') returning id`,
+        [billingSource],
+      )
+    ).rows[0].id as string;
+    const sug = (
+      await db.pool.query(
+        `insert into suggestions(source_revision_id, anchor, type, title, target_document_id, target_step_key, payload, confidence, rationale)
+         values ($1, '§9', 'deprecate-step', 'להסיר שלב', $2, 's2', $3, 0.7, 'r') returning id`,
+        [rev, doomed, JSON.stringify({ type: 'deprecate-step', reason: 'לא רלוונטי' })],
+      )
+    ).rows[0].id as string;
+
+    // Alive: both see it, because the target is a tech document.
+    expect((await get(`/api/v1/suggestions/${sug}`)).statusCode).toBe(200);
+    expect((await get(`/api/v1/suggestions/${sug}`, admin)).statusCode).toBe(200);
+    const before = (await get('/api/v1/dashboards', admin)).json().pipeline.pending as number;
+
+    await app.inject({ method: 'DELETE', url: `/api/v1/documents/${doomed}`, headers: auth(admin) });
+
+    // Deleted: the admin keeps the row — it is theirs to reject, or to restore the document for —
+    // and it keeps counting on the dashboard. The scoped reviewer loses it, because a deleted
+    // document has no world left to check them against.
+    const asAdmin = await get(`/api/v1/suggestions/${sug}`, admin);
+    expect(asAdmin.statusCode, asAdmin.body).toBe(200);
+    expect((await get(`/api/v1/suggestions/${sug}`)).statusCode).toBe(404);
+    expect((await get('/api/v1/dashboards', admin)).json().pipeline.pending).toBe(before);
+    // The admin can still decide it, which is the point of keeping it.
+    const rejected = await app.inject({
+      method: 'POST',
+      url: `/api/v1/suggestions/${sug}/reject`,
+      headers: auth(admin),
+    });
+    expect(rejected.statusCode, rejected.body).toBe(200);
+  });
+
+  /**
    * I4(a): the read leak has a write counterpart. `POST /fields/:name/rename` required only
    * `fields.edit` and never consulted `categoryScopes`, so a narrowly scoped editor rewrote step
    * text in every category. Left last in the file because it mutates the catalogue.
