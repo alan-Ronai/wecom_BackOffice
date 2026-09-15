@@ -85,6 +85,8 @@ Two `.env` settings decide how the API reads the result. Set both:
 ## TLS certificate
 Request a server certificate for `PUBLIC_URL`'s host from the internal CA (`deploy/certs/README.md`). Users' machines already trust the internal CA through GlobalProtect / domain policy, so no browser warning appears. Renewal: replace the two files and `docker compose -f deploy/docker-compose.yml restart web`.
 
+Whatever issues it, the certificate must name the host in a **subjectAltName**, not only in the CN: every current browser ignores the CN and refuses a SAN-less certificate outright, trusted CA or not. Verify before you hand the link out — `openssl x509 -in deploy/certs/cert.pem -noout -text | grep -A1 "Subject Alternative Name"` must print your host.
+
 ## Microsoft Entra ID
 Ask IT for an app registration: Web platform, redirect URI = `OIDC_REDIRECT_URI`, ID tokens enabled, optional claim `groups` (security groups), API permission `GroupMember.Read.All` (application, admin-consented) for the nightly sync. Put `OIDC_ISSUER` (`https://login.microsoftonline.com/<tenant-id>/v2.0`), `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` in `deploy/.env`, restart `api`, and map groups to roles in the admin UI (`/admin/groups-map`).
 
