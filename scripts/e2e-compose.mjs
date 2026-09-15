@@ -360,6 +360,15 @@ async function main() {
   process.env.WECOM_E2E_RUNNER = '1';
   ensureCerts();
   swapEnv();
+  /**
+   * W-8: every service in the base compose file caps its container log. Asserted here rather
+   * than only in CI because it is the cheapest possible check — `docker compose config` renders
+   * the file and nothing is started — and because the failure it catches is a *new* service that
+   * never referenced the shared anchor, which is silent until a pilot VM's disk fills. Run after
+   * `swapEnv()` so deploy/.env is in place for the api service's `env_file:`.
+   */
+  if (spawnSync('bash', [join(DEPLOY, 'compose-check.sh')], { stdio: 'inherit' }).status !== 0)
+    throw new Error('deploy/compose-check.sh failed — see above (W-8: container logs are capped)');
   // `./backups` is bind-mounted read-only into the api container; compose would create it as
   // root, which is a surprise to find in a worktree afterwards.
   mkdirSync(join(DEPLOY, 'backups'), { recursive: true });

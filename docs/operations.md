@@ -92,6 +92,49 @@ project's: `docker compose -f deploy/docker-compose.yml images` lists exactly th
 > orphaned: `docker image rm wecom-kb-api wecom-kb-web wecom-kb-backup` on such a machine, once
 > the pilot stack is not the thing using them.
 
+## Logs
+
+Every service writes to stdout/stderr and nothing writes a log file of its own — nginx is
+configured with `access_log /dev/stdout` and `error_log /dev/stderr`, the API's pino logger writes
+JSON to stdout, and `backup.sh` simply echoes. So all of it is Docker's, under
+`/var/lib/docker/containers/<id>/<id>-json.log`, and `docker compose logs` is the only way in.
+
+The four streams an operator actually reads:
+
+| stream | command | shape |
+| --- | --- | --- |
+| API | `docker compose -f deploy/docker-compose.yml logs -f api` | pino JSON, one object per line; `requestId` matches the `X-Request-Id` the browser saw, and `authorization`/`cookie` headers are redacted |
+| nginx | `… logs -f web` | JSON access lines on stdout, `warn`-and-above error lines on stderr |
+| Postgres | `… logs -f db` | the `pgvector/pgvector:pg16` image's own output — start-up, checkpoints, and any FATAL |
+| backup | `… logs backup` | one `backup written: …` line per night, plus `pruned:` lines for dumps past `BACKUP_RETENTION_DAYS` |
+
+`ollama` and `ollama-pull` are the other two; the pull service's log is the model download
+progress (`docker compose logs -f ollama-pull`) and is what step 2 of **Model upgrade** points at.
+
+### Retention (W-8)
+
+**Each container's log is capped at 20 MB × 5 files — 100 MB, or ~600 MB for the stack.** Docker's
+`json-file` driver has *no* size limit by default, and every service here runs
+`restart: unless-stopped` for months at a time: an API logging a line per request and an Ollama
+logging per token will fill a pilot VM's single partition, and the first symptom is not a large
+file, it is Postgres refusing writes. The cap is one `logging:` block per service in
+`deploy/docker-compose.yml`, shared through a YAML anchor.
+
+- **To change it**, edit the `x-logging` anchor at the top of `deploy/docker-compose.yml`, then
+  `docker compose -f deploy/docker-compose.yml up -d`. A logging change is applied when the
+  container is **re-created**, not on `restart` — `up -d` does that; `restart` leaves the old
+  cap in place, which is the usual reason an edit appears to have done nothing.
+- **`max-file` counts the active file**, so `5` is the current log plus four rotations. Rotated
+  files are dropped oldest-first, so the window is "the last ~100 MB", not "the last N days";
+  under a burst that can be minutes. For an incident you want to keep, copy it out
+  (`docker compose logs --no-color api > api.log`) before it rotates away.
+- **`bash deploy/compose-check.sh`** asserts, through `docker compose config`, that every service
+  in the base file resolves to that block. Run it after adding a service: the failure mode of a
+  shared anchor is a new service that never references it, and that is silent until the disk goes.
+  (It renders the file only — nothing is started. On a machine with no `deploy/.env` it creates an
+  empty one for the length of the run and removes it again.)
+- The `ci`/`e2e` overlays are deliberately not checked: their stub containers live for one run.
+
 ## Rotating secrets
 
 | secret | rotate by | effect |
