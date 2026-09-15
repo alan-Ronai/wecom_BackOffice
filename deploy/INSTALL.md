@@ -37,7 +37,11 @@ Target: one VMware VM, Ubuntu 22.04/24.04, 4 vCPU, 16 GB RAM, 80 GB disk, Docker
 ## Upgrade
 ```bash
 cd /opt/wecom-kb && git pull
-deploy/backup.sh   # or wait for the nightly one; see Backup
+# Take a pre-upgrade dump — in the `backup` container, the same spelling as under Backup below.
+# Not `deploy/backup.sh` on the host: it is `set -u` and needs DATABASE_URL and `pg_dump`, neither
+# of which the VM's shell has, so it aborts on the unbound variable and the upgrade proceeds with
+# no backup taken. (Or wait for the nightly one; see Backup.)
+docker compose -f deploy/docker-compose.yml exec backup backup.sh
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 deploy/smoke.sh https://<host>
 ```
