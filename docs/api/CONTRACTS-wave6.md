@@ -107,7 +107,7 @@ A row id outside `STRUCTURED_EDIT_ROW_GROUPS[type]` is a 400 (X3 widened those l
 
 **Partial apply.** `accept` with `parts` narrows the row's `edited_payload` to the selected rows, records `applied_parts`, and re-queues everything left over as a **new pending suggestion** of the same type, revision, anchor and targets, with `parentId` set, the title suffixed ` (המשך)`, and a `suggestion.created` event — so nothing an editor did not explicitly reject leaves the queue. Selecting every row is an ordinary accept: no remainder, `appliedParts` stays null. Two selections leave no appliable remainder and so produce none: an `update-block` whose `script` was left out (the action list *is* the change), and a payload whose remaining rows are all required.
 
-**Analytics** (`GET /suggestions/analytics`, cached 60 s): **decided** = `accepted|rejected|applied`; **accepted** = `accepted|applied`; **edited** = accepted *and* (`edit_diff` has ≥1 row **or** `applied_parts` is set) — always server-derived; **rejected** = `status='rejected'`. `rates.*` are shares of the decided rows (`0` when none). `meanMinutesToDecision` averages `decided_at - created_at` over decided rows, `null` when nothing is decided. Every bucket is `{ key, total, accepted, edited, rejected, pending }`; `key` is the type, the source id, the model tag or the prompt version. Remainder rows count in their own right. `byModel` / `byPromptVersion` bucket under `'—'` until X1's 0051 adds `suggestions.model` / `suggestions.prompt_version`.
+**Analytics** (`GET /suggestions/analytics`, cached 60 s): **decided** = `accepted|rejected|applied`; **accepted** = `accepted|applied`; **edited** = accepted *and* (`edit_diff` has ≥1 row **or** `applied_parts` is set) — always server-derived; **rejected** = `status='rejected'`. `rates.*` are shares of the decided rows (`0` when none). `meanMinutesToDecision` averages `decided_at - created_at` over decided rows, `null` when nothing is decided. Every bucket is `{ key, total, accepted, edited, rejected, pending }`; `key` is the type, the source id, the model tag or the prompt version. Remainder rows count in their own right. `byModel` / `byPromptVersion` read `suggestions.model` / `suggestions.prompt_version` (X1's 0051) and bucket a row that carries neither — anything generated before the wave, or by the rule-based fallback — under `'—'`.
 
 `affects` is computed **server-side** by X1 from the graph and the embeddings and is not part of `ProposedSuggestion`: a model cannot claim a change touches a document it never saw.
 
@@ -120,6 +120,7 @@ A row id outside `STRUCTURED_EDIT_ROW_GROUPS[type]` is a 400 (X3 widened those l
 | GET | `/ai/conversations/:id` | — | `ConversationDetailSchema` | ai.ask, own conversation (or ai.manage) |
 | POST | `/ai/conversations/:id/messages` | `SendMessageBodySchema` | **SSE** stream of `ChatEventSchema`, persisted as it streams | ai.ask for `article`, ai.chat otherwise |
 | POST | `/ai/messages/:id/feedback` | `MessageFeedbackBodySchema` | 204 | ai.ask, own message |
+| GET | `/ai/proposed-edits/:id` | — | `ProposedEditsSchema` | ai.ask, own conversation (or ai.manage) |
 | POST | `/ai/proposed-edits/:id/decide` | `DecideProposedEditsBodySchema` | `DecideProposedEditsResultSchema` | ai.chat + docs.edit |
 | GET | `/admin/ai/conversations` | `ConversationsQuerySchema` (`userId`, `documentId`, `from`, `to`) | `ConversationsResponseSchema` | ai.manage |
 | GET | `/admin/ai/conversations/export.jsonl` | same filters | `application/x-ndjson` | ai.manage |
@@ -161,9 +162,26 @@ No tool writes. `propose_source_edit` returns hunks and `refine_suggestion` retu
 
 `ai.message { conversationId, messageId, userId }`, per-user SSE only.
 
-## Web routes (owner in parentheses)
+## Web routes and components, as shipped (owner in parentheses)
 
-`/workspace/:id` (X4a) · `/admin/ai` (X4b). Chat panes inside `EditorPage` and `ArticlePage` are X4b components; X6 mounts them, as it does the sidebar entries and the `affects` chips on the existing suggestion cards.
+Routes: `/workspace/:id` (X4a) · `/admin/ai` (X4b).
+
+| Component | Path | Mounted by X6 at |
+|---|---|---|
+| `ChatPane` (X4a) | `components/ai/ChatPane.tsx` | inside the three panes below; X4b's placeholder of the same name was deleted at the merge |
+| `MessageList`, `Composer`, `ToolCallChip`, `ProposedEditsCard`, `RefinedSuggestionCard`, `FeedbackButtons` (X4a) | `components/ai/*` | inside `ChatPane` |
+| `WorkspacePage`, `SuggestionsPanel`, `StructuredEditDrawer`, `AffectsChips`, `ProposedEditsOverlay`, `PaneResizer` (X4a) | `components/workspace/*` | `/workspace/:id`; `SuggestionsPanel` **also** replaces `SourcesPage`'s own card list, so the two review surfaces cannot diverge |
+| `ArticleAskPane` (X4b) | `components/ai/ArticleAskPane.tsx` | `ArticlePage`'s work view, under `RefreshBanner`, never in the print frame |
+| `EditorChatDock` (X4b) | `components/ai/EditorChatDock.tsx` | the end of `EditorPage`'s `.ed-main` |
+| `renderWithStepLinks` (X4b) | `components/ai/citations.tsx` | inside `MessageList`; both mounts pass a step **number → key** map, because the article's deep link is `/doc/:id/:stepKey` |
+| `AiPage` + `PromptsTab`, `ModelsTab`, `EvalTab`, `SuggestionAnalyticsTab`, `ConversationsTab` (X4b) | `components/admin/{AiPage.tsx,ai/*}` | `/admin/ai`, listed in both `Sidebar`'s admin links and `AdminLayout`'s tabs behind `ai.manage` |
+
+Two web-side gates are worth stating because they are not the route's own:
+
+- `SuggestionAnalyticsTab` is gated on **`analytics.read`** (X4b's choice, matching the other analytics surfaces) while `GET /suggestions/analytics` enforces **`suggestions.review`** (X3's, matching the other suggestion routes). Both seeded roles that hold either hold both, so the pair is consistent in practice; an operator granted only `analytics.read` would see the tab and a 403 inside it.
+- The admin transcript browser's `feedback` filter is applied in the browser: `ConversationsQuerySchema` has `userId`, `documentId`, `from` and `to`, and no feedback field.
+
+The workspace link ("🧭 סביבת עבודה") is shown to an `ai.chat` holder who can also edit the document, from the article topbar (and its narrow overflow menu) and the editor toolbar. There is no top-level nav entry for it: the workspace is reached from a document (spec §5).
 
 ## Deploy checklist (X1 owns)
 
