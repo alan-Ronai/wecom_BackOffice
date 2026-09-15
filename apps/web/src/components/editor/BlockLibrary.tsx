@@ -8,7 +8,16 @@ const BASICS: { type: BasicType; label: string; ic: string; cls: string }[] = [
   { type: 'branch', label: 'הסתעפות אם/אז', ic: '?', cls: 'navy' },
   { type: 'outcomes', label: 'תוצאות', ic: '✓', cls: 'ok' },
   { type: 'script', label: 'תסריט שיחה', ic: '“', cls: 'quote' },
-  { type: 'description', label: 'תיאור / הנחיה', ic: '¶', cls: '' },
+  { type: 'description', label: 'תיאור · הנחיה', ic: '¶', cls: '' },
+];
+
+/**
+ * G10 — the two quick-commands that open a picker instead of inserting something fixed. They are
+ * not `BasicType`s: nothing is added until a field or a document has been chosen.
+ */
+const PICKERS: { kind: 'crm' | 'link'; label: string; ic: string; cls: string }[] = [
+  { kind: 'crm', label: '+ שדה CRM', ic: '⌗', cls: 'navy' },
+  { kind: 'link', label: '+ קישור', ic: '↗', cls: 'ok' },
 ];
 
 /** Port of the legacy left pane: basics, shared blocks and the wording presets. */
@@ -16,6 +25,7 @@ export function BlockLibrary({
   blocks,
   usage,
   onBasic,
+  onPick,
   onShared,
   onPreset,
   onNewBlock,
@@ -23,6 +33,7 @@ export function BlockLibrary({
   blocks: Block[];
   usage: Record<string, number>;
   onBasic: (t: BasicType) => void;
+  onPick: (kind: 'crm' | 'link') => void;
   onShared: (b: Block) => void;
   onPreset: (text: string) => void;
   onNewBlock: () => void;
@@ -30,6 +41,7 @@ export function BlockLibrary({
   const [q, setQ] = useState('');
   const match = (t: string) => !q || t.toLowerCase().includes(q.toLowerCase());
   const basics = BASICS.filter((b) => match(b.label));
+  const pickers = PICKERS.filter((p) => match(p.label));
   const shared = blocks.filter((b) => match(b.title + ' ' + b.actions.map((a) => a.text).join(' ')));
 
   return (
@@ -48,7 +60,7 @@ export function BlockLibrary({
         onChange={(e) => setQ(e.target.value)}
       />
       <div className="list">
-        {basics.length ? (
+        {basics.length || pickers.length ? (
           <>
             <div className="gl">
               <span>יסודות</span>
@@ -69,6 +81,26 @@ export function BlockLibrary({
               >
                 <span className={'ic ' + b.cls}>{b.ic}</span>
                 {b.label}
+              </div>
+            ))}
+            {pickers.map((p) => (
+              <div
+                key={p.kind}
+                className="blk"
+                style={{ cursor: 'pointer' }}
+                title="בחר מתוך רשימה והוסף כפעולה לשלב"
+                role="button"
+                tabIndex={0}
+                onClick={() => onPick(p.kind)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onPick(p.kind);
+                  }
+                }}
+              >
+                <span className={'ic ' + p.cls}>{p.ic}</span>
+                <span>{p.label}</span>
               </div>
             ))}
           </>

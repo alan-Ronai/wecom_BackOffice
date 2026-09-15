@@ -1,4 +1,4 @@
-import type { Block, CrmField, Document, Phase, Step } from '@wecom/shared';
+import type { Block, CrmField, DocRef, Document, Phase, Step } from '@wecom/shared';
 import { crmIn } from '@wecom/shared';
 import { allSteps } from '../../lib/steps.js';
 import { Fmt } from '../Fmt.js';
@@ -41,6 +41,7 @@ export function StepEditor({
   selected,
   fields,
   blocks,
+  docs,
   onSelect,
   onPatch,
   onMove,
@@ -55,6 +56,8 @@ export function StepEditor({
   selected: boolean;
   fields: CrmField[];
   blocks: Block[];
+  /** The corpus, for naming the target of a `[[doc:id]]` an action carries (G10). */
+  docs: DocRef[];
   /** Receives whether Shift was held, so the page can extend a multi-step selection (6c). */
   onSelect: (shift: boolean) => void;
   onPatch: Patch;
@@ -66,6 +69,15 @@ export function StepEditor({
 }) {
   const block = step.blockId ? blocks.find((b) => b.id === step.blockId) : undefined;
   const names = fields.map((f) => f.name);
+  /**
+   * G10 — an action's `[[doc:<uuid>]]` is unreadable in a raw text field, which is exactly why the
+   * link picker exists. Naming the target beside the field is what makes the token reviewable
+   * without leaving the editor.
+   */
+  const linkTarget = (text: string) => {
+    const m = /\[\[doc:([\w-]+)/.exec(text);
+    return m ? docs.find((d) => d.id === m[1]) : undefined;
+  };
 
   return (
     <div className="estep" data-estep={step.key}>
@@ -178,7 +190,7 @@ export function StepEditor({
                     : block.actions.map((a) => a.text).join(' · ')
                 }
                 fields={fields}
-                docs={[]}
+                docs={docs}
               />
             ) : (
               'הבלוק בסל המיחזור'
@@ -189,7 +201,10 @@ export function StepEditor({
             {step.description != null ? (
               <input
                 type="text"
-                placeholder="תיאור / הנחיה"
+                // "·" and not "/": a slash between two Hebrew words is a bidi-neutral character
+                // that can land on the wrong side of the run, and every other separator in the
+                // editor is already the middle dot.
+                placeholder="תיאור · הנחיה"
                 aria-label="תיאור"
                 style={{ fontSize: 12.5 }}
                 value={step.description}
@@ -198,6 +213,7 @@ export function StepEditor({
             ) : null}
             {step.actions.map((a, ai) => {
               const detected = crmIn(a.text, names);
+              const target = linkTarget(a.text);
               return (
                 <div className="eact" key={a.id}>
                   <span className="caret">›</span>
@@ -218,8 +234,14 @@ export function StepEditor({
                       }
                     }}
                   />
-                  <span className={'st' + (detected.length ? ' ok' : '')}>
-                    {detected.length ? 'שדה מזוהה ✓' : /"[^"]+"/.test(a.text) ? 'ציטוט · לא שדה CRM' : ''}
+                  <span className={'st' + (detected.length || target ? ' ok' : '')}>
+                    {detected.length
+                      ? 'שדה מזוהה ✓'
+                      : target
+                        ? `↗ ${target.title}`
+                        : /"[^"]+"/.test(a.text)
+                          ? 'ציטוט · לא שדה CRM'
+                          : ''}
                   </span>
                   <span
                     className="x"
