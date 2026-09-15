@@ -116,6 +116,34 @@ export async function getItem(q: Q, id: string): Promise<LearningItem | null> {
   return (await assemble(q, r.rows, await needsUpdateFor(q, [id])))[0];
 }
 
+/**
+ * A-C1: the answer key never leaves the authoring view.
+ *
+ * `GET /learning/items/:id` is `learning.read`, which 0038 grants to the `agent` role, and
+ * `canSee` lets a non-manager see any *published* item — which is the state every assigned quiz
+ * is in. Returned verbatim, `LearningItemSchema.questions[].options[].correct` handed every agent
+ * `correct: true` for every question before attempt #1, and `explanation` with it. The player
+ * (`tracking/repo.playerItem`) and the preview both strip it; this route was the hole between
+ * them.
+ *
+ * The response schema stays `LearningItemSchema` so the contract shape does not fork per caller;
+ * what changes is that for a non-manager every answer-bearing field reads as its empty value —
+ * `correct: false` on every option, no `explanation`, and no authoring provenance (`generated`,
+ * `modelConf`), which is the same projection `PlayerQuestionSchema` expresses by omission.
+ */
+export function projectForLearner(item: LearningItem): LearningItem {
+  return {
+    ...item,
+    questions: item.questions.map((q) => ({
+      ...q,
+      options: q.options.map((o) => ({ ...o, correct: false })),
+      explanation: '',
+      generated: false,
+      modelConf: null,
+    })),
+  };
+}
+
 /* ── visibility & scope (spec §1.8 + world scope) ──────────────────────── */
 /** Worlds an item belongs to: its own world_slug, else the union of its referenced documents' worlds. */
 export async function worldsOfItem(q: Q, id: string): Promise<string[]> {
@@ -133,6 +161,25 @@ export async function canSee(q: Q, item: LearningItem, v: Viewer): Promise<boole
   if (v.user.worldScopes === null) return true;
   const worlds = await worldsOfItem(q, item.id);
   return worlds.length === 0 || worlds.some((w) => v.user.worldScopes!.includes(w));
+}
+
+/**
+ * "This item is in one of my worlds", as SQL over a `learning_items` alias.
+ *
+ * An item's worlds are its own `world_slug` or, when it has none, the union of its referenced
+ * documents' worlds; an item with neither is visible to everyone. Extracted from `listCards`
+ * because V2's dashboard needs the same rule — its `totals.items` counted the whole org next to
+ * scoped assignment counts (A-M2), so the two numbers on the tile did not mean the same thing.
+ *
+ * `push` is the caller's parameter appender; it is called once, and the second reference reuses
+ * the placeholder it returned.
+ */
+export function itemWorldScopeSql(alias: string, scopes: readonly string[], push: (v: unknown) => string) {
+  const p = push([...scopes]);
+  return `(${alias}.world_slug is null and not exists (select 1 from briefing_entries e where e.item_id = ${alias}.id union select 1 from quiz_questions x where x.item_id = ${alias}.id)
+      or ${alias}.world_slug = any(${p})
+      or exists (select 1 from (select item_id, document_id from briefing_entries union select item_id, document_id from quiz_questions) ref
+                 join document_worlds dw on dw.document_id = ref.document_id where ref.item_id = ${alias}.id and dw.world_slug = any(${p})))`;
 }
 
 /* ── cards & list ──────────────────────────────────────────────────────── */
@@ -183,11 +230,7 @@ export async function listCards(
     where.push(
       `(li.title ilike '%' || ${p(query.q)} || '%' or li.description ilike '%' || $${params.length} || '%')`,
     );
-  if (v.user.worldScopes !== null)
-    where.push(`(li.world_slug is null and not exists (select 1 from briefing_entries e where e.item_id = li.id union select 1 from quiz_questions x where x.item_id = li.id)
-      or li.world_slug = any(${p(v.user.worldScopes)})
-      or exists (select 1 from (select item_id, document_id from briefing_entries union select item_id, document_id from quiz_questions) ref
-                 join document_worlds dw on dw.document_id = ref.document_id where ref.item_id = li.id and dw.world_slug = any($${params.length})))`);
+  if (v.user.worldScopes !== null) where.push(itemWorldScopeSql('li', v.user.worldScopes, p));
   const w = ' where ' + where.join(' and ');
   const total = (await q.query(`select count(*)::int n from learning_items li${w}`, params)).rows[0]
     .n as number;
@@ -298,6 +341,19 @@ export async function replaceQuestions(
 ): Promise<LearningItem> {
   await validateReferences(tx, questions);
   for (const qn of questions) {
+    /**
+     * Recorded deviation (web review): `free` stays in `QuestionKindSchema` but no surface
+     * implements it. `scoring.ts` has no grader for free text, the player has no control for it
+     * and the generator never emits it, so a saved `free` question would be a quiz item no
+     * learner can answer and no attempt can pass. Refused here rather than dropped silently, and
+     * refused at save rather than at publish, so the editor hears about it while they are
+     * looking at the question. The schema keeps the value for the wave that grades it.
+     */
+    if (qn.kind === 'free')
+      throw httpError(400, 'UNSUPPORTED_KIND', 'שאלה פתוחה אינה נתמכת עדיין', {
+        kind: 'free',
+        stem: qn.stem,
+      });
     if (qn.kind === 'single' && qn.options.filter((o) => o.correct).length !== 1)
       throw httpError(400, 'INVALID_QUIZ', 'בשאלה עם תשובה אחת חייבת להיות בדיוק תשובה נכונה אחת', {
         reason: 'single',
@@ -314,23 +370,47 @@ export async function replaceQuestions(
         stem: qn.stem,
       });
   }
-  await tx.query('delete from quiz_questions where item_id=$1', [id]);
-  for (const [i, qn] of questions.entries())
+  /**
+   * A-I2: an incoming `id` is preserved.
+   *
+   * This used to `delete from quiz_questions where item_id=$1` and re-insert, minting a new uuid
+   * for every question on every save. Those uuids are the keys of `learning_attempts.answers`,
+   * and both the dashboard's failed-question tile (`join quiz_questions qq on qq.id::text =
+   * ans.key`) and `heuristics.failedQuestions` join on them — so an editor fixing one typo
+   * silently dropped the entire attempt history of the quiz. The tile and the heuristic went
+   * quiet rather than wrong, which is the harder failure to notice.
+   *
+   * A question the caller did not send is gone; one it sent with an id it already owns is
+   * updated in place; one with no id, or an id this item does not own, is inserted fresh. There
+   * is no unique index on `(item_id, position)`, so the positions can be rewritten row by row.
+   */
+  const keep = questions.map((q) => q.id).filter((x): x is string => !!x);
+  await tx.query(`delete from quiz_questions where item_id=$1 and not (id = any($2::uuid[]))`, [id, keep]);
+  for (const [i, qn] of questions.entries()) {
+    const values = [
+      qn.documentId,
+      qn.stepKey ?? null,
+      qn.stem,
+      qn.kind,
+      JSON.stringify(qn.options),
+      qn.explanation ?? '',
+      !!qn.generated,
+      qn.modelConf ?? null,
+    ];
+    if (qn.id) {
+      const updated = await tx.query(
+        `update quiz_questions set position=$3, document_id=$4, step_key=$5, stem=$6, kind=$7,
+                options=$8, explanation=$9, generated=$10, model_conf=$11
+          where id=$2 and item_id=$1`,
+        [id, qn.id, i, ...values],
+      );
+      if (updated.rowCount) continue;
+    }
     await tx.query(
       'insert into quiz_questions(item_id, position, document_id, step_key, stem, kind, options, explanation, generated, model_conf) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
-      [
-        id,
-        i,
-        qn.documentId,
-        qn.stepKey ?? null,
-        qn.stem,
-        qn.kind,
-        JSON.stringify(qn.options),
-        qn.explanation ?? '',
-        !!qn.generated,
-        qn.modelConf ?? null,
-      ],
+      [id, i, ...values],
     );
+  }
   await tx.query('update learning_items set updated_by=$2, updated_at=now() where id=$1', [id, userId]);
   return (await getItem(tx, id))!;
 }

@@ -126,12 +126,12 @@ run('workflow settings and approver gate', () => {
         headers: auth(lead),
         payload: {},
       });
-    const decide = (h: Record<string, string>) =>
+    const decide = (h: Record<string, string>, decision: 'changes' | 'approve' = 'changes') =>
       app.inject({
         method: 'POST',
         url: `/api/v1/documents/${docId}/review-decision`,
         headers: h,
-        payload: { decision: 'changes', note: 'x' },
+        payload: { decision, note: 'x' },
       });
 
     it('off: docs.publish alone decides', async () => {
@@ -150,7 +150,9 @@ run('workflow settings and approver gate', () => {
         payload: { requireApprover: true },
       });
       expect((await requestReview()).statusCode).toBe(201);
-      const denied = await decide(auth(lead));
+      // A-M5: the gate is on the decision that publishes. `changes` is a withdrawal and is
+      // checked in its own test below; this is the one the switch exists for.
+      const denied = await decide(auth(lead), 'approve');
       expect(denied.statusCode).toBe(403);
       expect(denied.json().code).toBe('APPROVER_REQUIRED');
       const q1 = await app.inject({
@@ -167,6 +169,65 @@ run('workflow settings and approver gate', () => {
         headers: auth(admin),
         payload: { requireApprover: false },
       });
+    });
+
+    /**
+     * A-M5. Every test above sends `decision: 'changes'`, so the gate was only ever exercised on
+     * the one decision it should not apply to: sending your own document back to draft publishes
+     * nothing and is a withdrawal. With the whole route gated, `requireApprover` took that away
+     * from the author.
+     */
+    it('on: the author may still withdraw their own request with `changes`', async () => {
+      await app.inject({
+        method: 'PUT',
+        url: '/api/v1/admin/workflow',
+        headers: auth(admin),
+        payload: { requireApprover: true },
+      });
+      expect((await requestReview()).statusCode).toBe(201);
+      const withdrawn = await decide(auth(lead), 'changes');
+      expect(withdrawn.statusCode, withdrawn.body).toBe(200);
+      expect(withdrawn.json().status).toBe('changes');
+      // …and the same caller still cannot approve.
+      expect((await requestReview()).statusCode).toBe(201);
+      const denied = await decide(auth(lead), 'approve');
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json().code).toBe('APPROVER_REQUIRED');
+      await app.inject({
+        method: 'PUT',
+        url: '/api/v1/admin/workflow',
+        headers: auth(admin),
+        payload: { requireApprover: false },
+      });
+    });
+
+    /**
+     * A-M5 second half: the approve path itself, which no test reached. SELF_APPROVAL refuses the
+     * requester, a second holder publishes, and the publish is what makes the version.
+     */
+    it('approve: SELF_APPROVAL refuses the requester and a second holder publishes', async () => {
+      const other = await makeUser(db.pool, {
+        name: 'מאשרת',
+        perms: ['docs.read', 'docs.read_unpublished', 'docs.publish'],
+      });
+      expect((await requestReview()).statusCode).toBe(201);
+      const self = await decide(auth(lead), 'approve');
+      expect(self.statusCode).toBe(403);
+      expect(self.json().code).toBe('SELF_APPROVAL');
+      const before = (await db.pool.query('select current_version from documents where id=$1', [docId]))
+        .rows[0].current_version as number;
+      const ok = await decide(auth(other), 'approve');
+      expect(ok.statusCode, ok.body).toBe(200);
+      expect(ok.json().status).toBe('approved');
+      const after = await db.pool.query('select current_version, status from documents where id=$1', [docId]);
+      expect(after.rows[0].current_version).toBe(before + 1);
+      expect(after.rows[0].status).toBe('published');
+      // A-C2: the approve publish records §1.5's change flag like any other editorial publish.
+      const flag = await db.pool.query(
+        'select version from document_change_flags where document_id=$1 and version=$2',
+        [docId, before + 1],
+      );
+      expect(flag.rowCount).toBe(1);
     });
   });
 });

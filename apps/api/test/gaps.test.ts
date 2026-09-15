@@ -92,7 +92,16 @@ run('gaps', () => {
   });
 
   describe('heuristics', () => {
-    const T = { zeroResultMin: 3, feedbackClusterMin: 2, staleDays: 180, failedQuestionRate: 0.5 };
+    // A-M4: `failedQuestionMin` and `topicViewsMin` are settings now, not two hardcoded numbers
+    // that disagreed with the dashboard and with nothing at all respectively.
+    const T = {
+      zeroResultMin: 3,
+      feedbackClusterMin: 2,
+      staleDays: 180,
+      failedQuestionRate: 0.5,
+      failedQuestionMin: 5,
+      topicViewsMin: 1,
+    };
     let docId: string;
     let topicId: string;
 
@@ -167,7 +176,7 @@ run('gaps', () => {
     });
 
     it('flags viewed topics that have no published R/O item', async () => {
-      const out = await heur.topicsWithoutProcedure(db.pool);
+      const out = await heur.topicsWithoutProcedure(db.pool, T);
       const g = out.find((c) => c.title.includes('APN בלי נוהל'));
       expect(g).toMatchObject({
         kind: 'topic_without_procedure',
@@ -184,7 +193,7 @@ run('gaps', () => {
         g!.topicId,
       ]);
       expect(
-        (await heur.topicsWithoutProcedure(db.pool)).find((c) => c.topicId === g!.topicId),
+        (await heur.topicsWithoutProcedure(db.pool, T)).find((c) => c.topicId === g!.topicId),
       ).toBeUndefined();
     });
 
@@ -220,7 +229,21 @@ run('gaps', () => {
       const body = r1.json();
       expect(body.detected).toBeGreaterThan(0);
       expect(seen.filter((s) => s.kind === 'gap').length).toBe(body.detected);
+      /**
+       * A-M12: a second run straight away is refused. Five full-table heuristics — a `cume_dist`
+       * window over every published document among them — is not something an impatient click
+       * should be able to queue up behind itself.
+       */
+      const tooSoon = await app.inject({
+        method: 'POST',
+        url: '/api/v1/gaps/detect',
+        headers: auth(lead),
+      });
+      expect(tooSoon.statusCode).toBe(429);
+      expect(tooSoon.json().code).toBe('GAP_RUN_TOO_SOON');
+      await db.pool.query(`update gap_runs set started_at = started_at - interval '2 minutes'`);
       const r2 = await app.inject({ method: 'POST', url: '/api/v1/gaps/detect', headers: auth(lead) });
+      expect(r2.statusCode, r2.body).toBe(200);
       expect(r2.json().detected).toBe(0);
       expect(r2.json().updated).toBeGreaterThan(0);
       const runs = await db.pool.query('select count(*)::int n from gap_runs');

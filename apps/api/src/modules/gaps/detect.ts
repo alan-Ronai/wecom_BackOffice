@@ -38,8 +38,52 @@ async function recipientsFor(d: DetectDeps, worldSlug: string | null): Promise<s
  * One detection run: heuristics → idempotent upsert → auto-resolve → notify the new gaps → run log.
  * Every outcome, failure included, lands in `gap_runs`, which is what `lastRunAt` reports to the UI.
  */
+/**
+ * A-M12: one detection run at a time, across every API instance.
+ *
+ * A run is five full-table heuristics — a `cume_dist` window over every published document and a
+ * `jsonb_each` over 90 days of attempts among them — and `POST /gaps/detect` offered it on demand
+ * to any `gaps.manage` holder with no throttle and no guard against the nightly job. A session
+ * advisory lock is the cheap version: Postgres releases it if the process dies, so a crashed run
+ * cannot wedge the button, and the whole thing costs one round trip.
+ *
+ * `0x9a95` is an arbitrary constant; `pg_try_advisory_lock` takes an int, and a literal keeps the
+ * key greppable and stable across releases in a way `hashtext('gaps.detect')` would not be.
+ */
+const DETECT_LOCK = 0x9a95;
+export class GapRunInProgress extends Error {
+  readonly statusCode = 429;
+  readonly code = 'GAP_RUN_IN_PROGRESS';
+  constructor() {
+    super('זיהוי פערים כבר רץ כעת — נסו שוב בעוד רגע');
+  }
+}
+
+/** How recently a run started, in milliseconds, or null if there has never been one. */
+export async function msSinceLastRun(d: Pick<DetectDeps, 'db'>): Promise<number | null> {
+  const r = await d.db.query<{ ms: string }>(
+    `select extract(epoch from (now() - max(started_at))) * 1000 ms from gap_runs`,
+  );
+  const ms = r.rows[0]?.ms;
+  return ms == null ? null : Number(ms);
+}
+
 export async function runDetection(d: DetectDeps): Promise<GapDetectResult> {
   const started = new Date();
+  const client = await d.db.connect();
+  try {
+    const got = await client.query<{ locked: boolean }>('select pg_try_advisory_lock($1) locked', [
+      DETECT_LOCK,
+    ]);
+    if (!got.rows[0].locked) throw new GapRunInProgress();
+    return await detect(d, started);
+  } finally {
+    await client.query('select pg_advisory_unlock($1)', [DETECT_LOCK]).catch(() => undefined);
+    client.release();
+  }
+}
+
+async function detect(d: DetectDeps, started: Date): Promise<GapDetectResult> {
   try {
     const s = await getWorkflowSettings(d.db);
     const cands = await allHeuristics(d.db, s.gaps);

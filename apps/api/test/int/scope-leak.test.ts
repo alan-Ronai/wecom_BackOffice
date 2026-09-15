@@ -3,6 +3,7 @@ import { makeEvent } from '@wecom/shared';
 import { startTestDb, integration } from '../helpers/db.js';
 import { buildTestApp } from '../helpers/app.js';
 import { makeUser, auth } from '../helpers/fixtures.js';
+import { seedQuiz } from '../helpers/v2/learningStub.js';
 import { withTransaction } from '../../src/lib/sql.js';
 
 const run = integration ? describe : describe.skip;
@@ -573,5 +574,90 @@ run('category scope: an out-of-scope document leaks through no route', () => {
       headers: auth(admin),
     });
     expect(asAdmin.body).toContain(draft);
+  });
+
+  /**
+   * Wave 5 fix wave: the *write* side of the same boundary.
+   *
+   * A-I1 — V1's learning routes carry `assertScope`; V2's manager routes (audiences, assign,
+   * completion) gated on `learning.manage` and nothing else, so a manager scoped to one world
+   * could assign another world's item to arbitrary users, delete its audiences, and read its
+   * card. A-I5 — `POST …/generate` read any published document id it was handed and rendered its
+   * steps, actions, outcomes and CRM field names back as questions. A-I6 — gap reads were scoped
+   * and gap mutations were not, and `resolve` read the row back afterwards, which put the
+   * out-of-scope gap's title in the response.
+   */
+  it('A-I1/A-I5/A-I6: the wave 5 write surfaces refuse an out-of-scope item, document and gap', async () => {
+    const billingQuiz = await seedQuiz(db.pool, {
+      documentId: billingDoc,
+      title: `שאלון ${SECRET}`,
+      worldSlug: 'billing',
+      passMark: 80,
+      maxAttempts: null,
+      questions: [{ stem: 'שאלה', kind: 'single', options: [{ id: 'a', text: 'נכון', correct: true }] }],
+    });
+    const audience = await db.pool.query(
+      `insert into learning_audiences(item_id, role_names, world_slugs, user_ids, due_days)
+       values ($1, '{}', '{}', '{}', 14) returning id`,
+      [billingQuiz],
+    );
+    const billingGap = (
+      await db.pool.query(`select id from knowledge_gaps where world_slug='billing' limit 1`)
+    ).rows[0].id as string;
+    // A tech item, so the generate call is refused for the *document* rather than the item.
+    const techItem = (
+      await post('/api/v1/learning/items', { kind: 'quiz', title: 'בוחן טכני', worldSlug: 'tech' }, scoped)
+    ).json().id as string;
+
+    const attempts: [string, string, unknown][] = [
+      [
+        'POST',
+        `/api/v1/learning/items/${billingQuiz}/audiences`,
+        { roleNames: ['agent'], worldSlugs: [], userIds: [], dueDays: 14 },
+      ],
+      ['DELETE', `/api/v1/learning/audiences/${audience.rows[0].id}`, undefined],
+      ['POST', `/api/v1/learning/items/${billingQuiz}/assign`, { userIds: [admin.id], dueDays: 14 }],
+      ['GET', `/api/v1/learning/items/${billingQuiz}/completion`, undefined],
+      ['POST', `/api/v1/learning/items/${techItem}/generate`, { documentIds: [billingDoc], perDocument: 3 }],
+      ['POST', `/api/v1/gaps/${billingGap}/dismiss`, { reason: 'לא רלוונטי' }],
+      ['POST', `/api/v1/gaps/${billingGap}/resolve`, { documentId: billingDoc }],
+    ];
+    for (const [method, url, payload] of attempts) {
+      const r = await app.inject({
+        method: method as 'GET' | 'POST' | 'DELETE',
+        url,
+        headers: auth(scoped),
+        payload: payload as never,
+      });
+      expect([403, 404], `${method} ${url} -> ${r.statusCode} ${r.body}`).toContain(r.statusCode);
+      expect(r.body, url).not.toContain(SECRET);
+    }
+    // The gap is still open and the audience still there: a refused write wrote nothing.
+    expect(
+      (await db.pool.query(`select status from knowledge_gaps where id=$1`, [billingGap])).rows[0].status,
+    ).toBe('open');
+    expect(
+      (await db.pool.query(`select 1 from learning_audiences where id=$1`, [audience.rows[0].id])).rowCount,
+    ).toBe(1);
+    // …and the unrestricted user can still do every one of them, so this is a filter.
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/v1/learning/items/${billingQuiz}/completion`,
+          headers: auth(admin),
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/v1/gaps/${billingGap}/dismiss`,
+          headers: auth(admin),
+          payload: { reason: 'טופל' },
+        })
+      ).statusCode,
+    ).toBe(200);
   });
 });

@@ -39,7 +39,16 @@ Run on `wave5/integration` after the last `main` merge.
 ### Search performance (`docs/perf.md`)
 
 `perf:sql --docs 800`: the landed union predicate returns **row-identical** results to the
-reconstructed pre-V6 baseline for every sampled query. `perf:load --compare --docs 5000
+reconstructed pre-V6 baseline for every sampled query.
+
+> **One caveat the sampling cannot show (A-M10).** The rewrite is not row-identical *by
+> construction*, and `search/repo.ts` says so: the old form could match a substring spanning the
+> `' '` that joined two of a step's actions, and the new form matches within one action. A query
+> whose words straddle that join — `"…סכם שיחה פתח"` where "סכם שיחה" ends one action and "פתח"
+> begins the next — matched before and does not now. No sampled query did, and arguably the new
+> behaviour is the correct one (a phrase that exists only because two actions were concatenated is
+> not a phrase in the document), but "row-identical for every sampled query" is a statement about
+> the sample, not a proof. `perf:load --compare --docs 5000
 --seconds 20 --clients 20`, both passes of each configuration combined:
 
 | Configuration | req/s | p95 (all) | p95 single | p95 two-word | p95 stopword | p95 prefix |
@@ -47,9 +56,25 @@ reconstructed pre-V6 baseline for every sampled query. `perf:load --compare --do
 | legacy (pre-V6 `string_agg` or) | 32 | 1,200 ms | 1,167 ms | 1,341 ms | 1,194 ms | 1,328 ms |
 | current (union + stopword drop) | 104 | 453 ms | 322 ms | 368 ms | 398 ms | 557 ms |
 
-Four of the five classes are inside the 500 ms budget; `prefix` is the one `docs/perf.md` says
+Four of the five classes are inside the 500 ms budget; `prefix` was the one `docs/perf.md` says
 cannot be fixed in the database (no index type serves `ilike '%חב%'`). Main's `MIN_SEARCH_CHARS`
-is that fix, on the client, and the load generator still issues two-character prefixes.
+is that fix, on the client, and the load generator was still issuing two-character prefixes.
+
+**Fix wave.** The generator's `prefix` class now cuts at three characters, which is
+`MIN_SEARCH_CHARS` — below that the palette sends no request at all, so the two-character
+measurement was of a query the product never issues, and the gate was red by construction. Re-run
+after the fix (`perf:load --docs 5000 --seconds 20 --clients 20`, one configuration, this
+machine):
+
+| Run | req/s | p95 (all) | p95 single | p95 two-word | p95 stopword | p95 prefix | Gate |
+|---|---|---|---|---|---|---|---|
+| 1 | 135 | 349 ms | 294 ms | 525 ms | 377 ms | **324 ms** | FAILED (`two-word` 525 ms) |
+| 2 | 127 | 303 ms | 303 ms | 338 ms | 365 ms | **282 ms** | PASSED |
+
+`prefix` is comfortably inside budget in both runs — the class the gate used to fail on is no longer the one at risk. The first run tripped on `two-word` at 525 ms, 5 % over, and the second put the same class at 338 ms with nothing else changed: that spread is the machine, not the code. Two invocations of this script are not
+comparable (`docs/perf.md` and the script header both say so: identical configurations measured
+minutes apart have varied 10x on a laptop), so the number to act on is a `--compare` run on a
+quiet machine, not either row above.
 
 ## Parked
 
@@ -89,3 +114,46 @@ is parked here with the cost of being wrong, in the same shape as the table abov
 | `pnpm --filter @wecom/web test -- --minWorkers=1 --maxWorkers=4` | 102 files, 708 tests |
 | `eslint apps/web --max-warnings 0` + `prettier --check apps/web` | clean |
 | `pnpm e2e:real` | **pending the merged tree** — W5-E2E-1 stage 3 now plays an `order` question and W5-E2E-1/2 assert the new count strings, which need the API half of the fix wave to run against. |
+
+
+## Fix wave — API
+
+The API/shared half of the wave 5 final review (`review5/findings-A.md`). Every Critical and
+Important is fixed, along with A-M1..A-M5, A-M7, A-M9, A-M10 and A-M12.
+
+Migrations were renumbered (**A-C3**): V1–V3 are now `0046_learning_content.js`,
+`0047_learning_tracking.js`, `0048_knowledge_gaps.js` and V6 is `0049_wave5_seams.js`, all above
+main's 0043–0045. Verified against a real Postgres both ways — a fresh database migrates 0001 →
+0049 clean, and a database that first applied only main's set (through 0045, with main's own 0043
+body) then applies 0046–0049 with no order complaint; the same drill on the old numbering
+reproduces *"Not run migration 0039_learning_content is preceding already run migration
+0043_telemetry_client_error"*. `checkOrder` stays on.
+
+| Gate (fix wave, API half) | Result |
+|---|---|
+| `pnpm -r build`, `pnpm typecheck` | clean |
+| `pnpm --filter @wecom/shared test` | 79 tests |
+| `pnpm --filter @wecom/model test` | 30 tests |
+| `pnpm --filter @wecom/connectors test` | 49 tests |
+| `RUN_INTEGRATION=1 pnpm --filter @wecom/api test:int` | 98 files, **592** tests, 0 failures (the known `boss.test.ts` / `sources/routes.test.ts` flakes did not reproduce) |
+| `pnpm openapi` + `route-coverage.test.ts` | no diff after regeneration; route coverage green |
+| `pnpm lint` | clean |
+| `pnpm --filter @wecom/api perf:load` | see **Search performance** above |
+
+Two pre-existing tests failed *because of* the fixes and were corrected rather than worked
+around. `pilot-hardening.test.ts` rolled back "one migration" to reach 0045's backfill, which
+stopped meaning 0045 once wave 5 sorted above it — it now counts the files at or above 0045, the
+same lesson `migrations.test.ts` already carries. `perf-rewrite.test.ts` swaps what the stopword
+table answers between captures, which A-M3's process-wide cache cannot see, so it drops the cache
+per capture.
+
+What follows is what was deliberately *not* done, each with the cost of the ruling being wrong.
+
+| Item | Ruling | Cost if wrong |
+|---|---|---|
+| **A-M6** — `hasScope` is "any overlap", so a manager holding one of a multi-world item's worlds may edit, publish and delete an item that also lives in worlds they do not hold. | Parked. It is the product's scope semantics everywhere (documents, blocks, fields), not a wave 5 decision, and narrowing it here alone would make the learning surface behave unlike the rest of the app. Wave 5 is the first place an entity spans worlds by *derivation* (`worldsOfItem` unions its documents' worlds), so the blast radius is new even though the rule is not. | A manager scoped to `billing` can edit a briefing that cites one `billing` document and four `tech` ones. Bounded by the fact that they must already be able to see it, and visible in the audit log. Changing the rule is a one-line change in `lib/user.ts` and a wave-wide behaviour change; it belongs to whoever owns the scope model, not to a fix wave. |
+| **A-M8** — `visible()` calls `repo.getItem`, which assembles entries, questions and source versions with three extra queries, purely to make a visibility decision; most handlers then throw the result away and re-read. | Parked. It is three queries on an authoring route, and the fix is a second, leaner loader whose visibility rule would have to be kept in step with `canSee` by hand — the class of duplication this codebase has already been bitten by. Worth doing with a proper `canSeeById`, not as a fix-wave shortcut. | Noticeable only on `DELETE` and `publish`, and only at authoring scale (a handful of managers). Measured: nothing in `perf:load` touches these routes. |
+| **A-M11** — E-1 *raises* the source-review flag, not only keeps it: with a `pending_push` link, a human publish sets `source_review_needed=true` even when it was false before, and `pending_push` is durable. | Parked for the spec owner, as the review itself recommends. The behaviour is consistent with the spec's wording ("keeps … with reason ממתין לדחיפה/קונפליקט") and the test asserts only the "keeps" direction. This is a question, not a defect. | Every publish of a read-only-linked document is flagged for source review, so the queue fills with documents whose only problem is that the connector cannot write back. One line in `documents/repo.ts` either way once the owner answers. |
+| **A-M4 follow-up** — `failedQuestionMin` and `topicViewsMin` are constants in `gaps/heuristics.ts`, not `WorkflowSettings.gaps` keys. | The disagreement the finding is about (5 in the heuristic, 3 in the dashboard tile) is fixed: both read one constant. Promoting them to settings means a shared-schema change and a field on the admin workflow form, which the web half of this fix wave owns and is editing concurrently. | An operator who wants a different floor needs a deploy. The promotion is additive — two zod keys with the same defaults, plus two inputs on the form — and nothing has to move to accept it. |
+| **A-C2 exclusions** — the field-rename republish (`fields/repo.ts`) and the connector sync publish (`connectors/documents-adapter.ts`) do **not** go through `publishAndFlag`. | Deliberate, and recorded in `documents/publishWithFlag.ts`'s header. A field rename rewrites a CRM field's *name* across every document that references it, so the detector's "CRM field changed" rule would fire on all of them at once and one rename would invalidate every completion in the system for a change that taught nobody anything. A sync pull is not an editorial decision — the remote is the author, and `publishDocument` already treats `kind: 'sync'` as non-human for the approver and source-review flags. | A genuinely significant change that arrives *only* through a connector pull does not trigger a refresh; an editor has to republish for it to count. For the field rename, a rename that really does change what an agent must do goes unflagged until the next editorial publish of those documents. |
+| **A-I3 attempt budget** — a re-opened refresh resets the attempt count by moving `assigned_at`, rather than modelling assignment *cycles*. | Accepted. `learning_assignments` is unique on `(item_id, user_id, item_version, reason)`, so a second refresh row for the same item version cannot exist and should not: the learner owes one refresh, for a newer reason. Counting attempts from `assigned_at` is one predicate, no migration, and every non-refresh assignment is unaffected because it never moves. | `attemptsUsed` and `lastScore` on a re-opened refresh describe the current cycle only; the earlier cycle's attempts are still in `learning_attempts` (the heuristics and the dashboard read them) but no API surface shows them per cycle. A real cycle column is a migration whenever the product asks for that history. |

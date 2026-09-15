@@ -24,6 +24,28 @@ const ALL_TYPES = new Set(GROUP_ORDER);
 
 const words = (q: string) => q.trim().split(/\s+/).filter(Boolean);
 
+/**
+ * A-M3: `search_hebrew_stopwords` is read once a minute, not once a request.
+ *
+ * The list is seeded by migration 0023 and changes approximately never, but it was re-read
+ * before the group filter on *every* search — so even a `types=docs` query, which never uses it,
+ * paid a round trip. A short TTL rather than a boot-time load: the table is editable in principle
+ * and a minute of staleness in a stopword list costs nothing, while a process that has to be
+ * restarted to pick up a row is the kind of cache that gets found out during an incident.
+ */
+const STOPWORDS_TTL_MS = 60_000;
+let stopwordCache: { at: number; words: ReadonlySet<string> } | null = null;
+const hebrewStopwords = async (q: Q): Promise<ReadonlySet<string>> => {
+  if (stopwordCache && Date.now() - stopwordCache.at < STOPWORDS_TTL_MS) return stopwordCache.words;
+  const r = await q.query<{ word: string }>('select word from search_hebrew_stopwords');
+  stopwordCache = { at: Date.now(), words: new Set(r.rows.map((x) => x.word)) };
+  return stopwordCache.words;
+};
+/** Tests that edit the table (and `migrations.test.ts`'s rollback) drop the cache explicitly. */
+export const resetStopwordCache = (): void => {
+  stopwordCache = null;
+};
+
 const wordClause = (cols: string[], w: string, params: unknown[]): string => {
   params.push(w);
   const i = likeEscape('$' + params.length);
@@ -66,9 +88,7 @@ export async function search(
    * all-stopword query keeps today's behaviour rather than matching everything.
    */
   const typed = words(text);
-  const stop = new Set(
-    (await q.query<{ word: string }>('select word from search_hebrew_stopwords')).rows.map((r) => r.word),
-  );
+  const stop = await hebrewStopwords(q);
   const content = typed.filter((w) => !stop.has(w));
   const ws = content.length ? content : typed;
   const files = new Set<string>();

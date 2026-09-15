@@ -368,6 +368,68 @@ run('learning tracking', () => {
     expect(again.json().code).toBe('ATTEMPTS_EXHAUSTED');
   });
 
+  /**
+   * A-M7: `submitAttempt` joins `a.user_id=$2`, so another learner's attempt is a 404 — and
+   * nothing asserted it, unlike `GET /learning/my/:assignmentId`, whose cross-user 404 has had a
+   * test since V2. Submitting for someone else would write a score and a completion under their
+   * name.
+   */
+  it('PUT /learning/attempts/:id refuses another learner’s attempt', async () => {
+    const solo = await seedQuiz(db.pool, {
+      documentId: docId,
+      title: 'חידון פרטי',
+      worldSlug: 'tech',
+      passMark: 50,
+      maxAttempts: null,
+      questions: [
+        {
+          stem: 'ש',
+          kind: 'single',
+          options: [
+            { id: 'a', text: 'A', correct: true },
+            { id: 'b', text: 'B', correct: false },
+          ],
+        },
+      ],
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/learning/items/${solo}/assign`,
+      headers: auth(manager),
+      payload: { userIds: [agentA.id] },
+    });
+    const mine = (
+      await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agentA) })
+    ).json();
+    const aid = (mine.open as { itemId: string; id: string }[]).find((a) => a.itemId === solo)!.id;
+    const started = await app.inject({
+      method: 'POST',
+      url: `/api/v1/learning/my/${aid}/attempts`,
+      headers: auth(agentA),
+    });
+    expect(started.statusCode).toBe(201);
+    const qid = (await db.pool.query(`select id from quiz_questions where item_id=$1`, [solo])).rows[0]
+      .id as string;
+    const stolen = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/learning/attempts/${started.json().attemptId}`,
+      headers: auth(agentB),
+      payload: { answers: [{ questionId: qid, optionIds: ['a'] }] },
+    });
+    expect(stolen.statusCode, stolen.body).toBe(404);
+    // Untouched: still open, still unfinished.
+    expect(
+      (
+        await db.pool.query(`select finished_at from learning_attempts where id=$1`, [
+          started.json().attemptId,
+        ])
+      ).rows[0].finished_at,
+    ).toBeNull();
+    expect(
+      (await db.pool.query(`select status from learning_assignments where id=$1`, [aid])).rows[0].status,
+    ).toBe('open');
+  });
+
   it('briefings complete by acknowledgement; quizzes cannot be acknowledged', async () => {
     await app.inject({
       method: 'POST',
@@ -591,17 +653,53 @@ run('learning tracking', () => {
 
   it('completion and dashboard are world-scoped for managers', async () => {
     const billingLead = await makeUser(db.pool, { scopes: ['billing'], name: 'ראש צוות חיובים' });
+    /**
+     * A-I1: the quiz lives in `tech`, so a `billing` manager does not get its completion page at
+     * all. `userScopeTerm` filtered the *rows*, but the item was never checked — and `itemCard`
+     * returns its title, description, counts and completion rate next to them.
+     */
+    const denied = await app.inject({
+      method: 'GET',
+      url: `/api/v1/learning/items/${quizId}/completion`,
+      headers: auth(billingLead),
+    });
+    expect(denied.statusCode, denied.body).toBe(403);
+    // The row filter still holds for a manager who may see the item: a `tech` lead gets the
+    // `tech` agent's row and not the `billing` one's.
+    const techLead = await makeUser(db.pool, { scopes: ['tech'], name: 'ראש צוות טכני' });
+    const outsider = await makeUser(db.pool, {
+      perms: ['docs.read', 'learning.read'],
+      scopes: ['sim'],
+      name: 'נציג סים',
+    });
+    await grantRole(outsider.id, 'agent', ['sim']);
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/learning/items/${quizId}/assign`,
+      headers: auth(manager),
+      payload: { userIds: [outsider.id], dueDays: 14 },
+    });
     const c = (
       await app.inject({
         method: 'GET',
         url: `/api/v1/learning/items/${quizId}/completion`,
-        headers: auth(billingLead),
+        headers: auth(techLead),
       })
     ).json();
     expect(c.rows.length).toBeGreaterThanOrEqual(1);
-    expect(c.rows.every((r: { worldSlugs: string[] }) => r.worldSlugs.includes('billing'))).toBe(true);
+    expect(c.rows.every((r: { worldSlugs: string[] }) => r.worldSlugs.includes('tech'))).toBe(true);
+    expect(c.rows.some((r: { userId: string }) => r.userId === outsider.id)).toBe(false);
+    // The unscoped manager, who assigned it, does see them.
+    const allRows = (
+      await app.inject({
+        method: 'GET',
+        url: `/api/v1/learning/items/${quizId}/completion`,
+        headers: auth(manager),
+      })
+    ).json();
+    expect(allRows.rows.some((r: { userId: string }) => r.userId === outsider.id)).toBe(true);
     const d = (
-      await app.inject({ method: 'GET', url: '/api/v1/learning/dashboard', headers: auth(billingLead) })
+      await app.inject({ method: 'GET', url: '/api/v1/learning/dashboard', headers: auth(techLead) })
     ).json();
     expect(d.totals.assigned).toBeGreaterThanOrEqual(1);
     const all = (

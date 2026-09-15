@@ -33,7 +33,7 @@ import { inboundFor } from '../graph/repo.js';
 import { clearSourceReview } from './sourceReview.js';
 import { updateEmbedding } from '../search/repo.js';
 import { resolveFeedback } from '../feedback/repo.js'; // W3: close reports with the published version
-import { applyChangeFlag } from '../learning/tracking/refresh.js'; // V2: knowledge refresh on publish
+import { publishAndFlag } from './publishWithFlag.js'; // V2: knowledge refresh on publish (A-C2)
 
 const Params = z.object({ id: IdSchema });
 
@@ -353,21 +353,17 @@ export default async function routes(app: FastifyInstance) {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
         if (!hasScope(user, before.worlds)) throw forbidden();
-        const { doc, version } = await repo.publishDocument(tx, id, {
-          actorId: user.id,
-          label: body.label,
-          markPartial: body.markPartial,
-        });
-        // V2: knowledge refresh — record the change flag; a significant change fans out refresh assignments.
-        const changeFlag = await applyChangeFlag(
+        // V2: knowledge refresh — `publishAndFlag` pairs the publish with §1.5's change flag, so a
+        // significant change fans out refresh assignments from every editorial path, not just this one.
+        const { doc, version, changeFlag } = await publishAndFlag(
           tx,
           { notifier: app.notifier, events: app.events },
           {
-            documentId: id,
-            version,
-            after: doc,
-            override: body.significantChange,
+            doc: id,
             actorId: user.id,
+            label: body.label,
+            markPartial: body.markPartial,
+            significantChange: body.significantChange,
           },
         );
         if (body.resolveFeedbackIds?.length) {

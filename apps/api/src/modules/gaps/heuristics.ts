@@ -9,7 +9,24 @@ export interface Thresholds {
   feedbackClusterMin: number;
   staleDays: number;
   failedQuestionRate: number;
+  /**
+   * A-M4, both optional so `WorkflowSettings.gaps` still satisfies this interface as it stands.
+   *
+   * `failedQuestionMin` was hardcoded 5 here and 3 in the manager dashboard's failed-question
+   * tile, so the two surfaces disagreed about which questions were "failing" while only the
+   * *rate* came from settings; `topicViewsMin` did not exist at all, so one view on one topic
+   * produced a gap and `topicsWithoutProcedure` was the one heuristic taking no thresholds.
+   * Constants rather than settings keys: promoting them would mean a field on the admin workflow
+   * form, which is the web side's to add — parked in `docs/wave5-acceptance.md`.
+   */
+  failedQuestionMin?: number;
+  topicViewsMin?: number;
 }
+
+/** How many finished answers a question needs before its fail rate means anything (A-M4). */
+export const FAILED_QUESTION_MIN_ATTEMPTS = 5;
+/** How many views a topic needs before "no procedure covers it" is worth an operator's time. */
+export const TOPIC_VIEWS_MIN = 3;
 
 /** Zero-result searches in the last 7 days, clustered by normalised stem (the stem is not SQL-expressible). */
 export async function zeroResultClusters(q: Q, t: Thresholds): Promise<GapCandidate[]> {
@@ -116,7 +133,7 @@ export async function staleHighTraffic(q: Q, t: Thresholds): Promise<GapCandidat
 }
 
 /** Topics agents actually open that hold no published R (route) or O (operation) item. */
-export async function topicsWithoutProcedure(q: Q): Promise<GapCandidate[]> {
+export async function topicsWithoutProcedure(q: Q, t: Thresholds): Promise<GapCandidate[]> {
   const r = await q.query<{ id: string; name: string; slug: string; views: string }>(
     `select t.id, t.name, w.slug, sum(tv.count) views
      from topics t join worlds w on w.id = t.world_id
@@ -128,7 +145,8 @@ export async function topicsWithoutProcedure(q: Q): Promise<GapCandidate[]> {
            and d.status in ('published','partial') and d.doc_type in ('R','O')
        )
      group by t.id, t.name, w.slug
-     having sum(tv.count) > 0`,
+     having sum(tv.count) >= $1`,
+    [t.topicViewsMin ?? TOPIC_VIEWS_MIN],
   );
   return r.rows.map((x) => ({
     kind: 'topic_without_procedure' as const,
@@ -192,7 +210,7 @@ export async function allHeuristics(q: Q, t: Thresholds): Promise<GapCandidate[]
     zeroResultClusters(q, t),
     feedbackClusters(q, t),
     staleHighTraffic(q, t),
-    topicsWithoutProcedure(q),
+    topicsWithoutProcedure(q, t),
     failedQuestions(q, t),
   ]);
   return parts.flat();

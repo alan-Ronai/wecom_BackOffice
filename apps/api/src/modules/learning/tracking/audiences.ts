@@ -3,7 +3,23 @@ import type { FastifyBaseLogger } from 'fastify';
 import { makeEvent, type Notifier } from '@wecom/shared';
 import { withTransaction, type Queryable, type Tx } from '../../../lib/sql.js';
 import type { EventBus } from '../../../lib/events.js';
-import { getPublishedItem, type PublishedItem } from './itemsPort.js';
+import { getPublishedItem, needsUpdateFor, type PublishedItem } from './itemsPort.js';
+
+/**
+ * Spec §1.8's second clause, which was computed and surfaced everywhere but never enforced: "an
+ * item whose document becomes `invalid`/`archived` is flagged 'דורש עדכון' **and hidden from new
+ * assignments**" (A-I4). Without it, a briefing whose only document was just invalidated was
+ * still handed to every joiner by tonight's `learning.resolve_audiences` run.
+ *
+ * `needsUpdateFor`, not `needsUpdate`: the flag is the OR of two halves, and only V1's half — a
+ * referenced document is invalid, archived or gone — means the material is unfit to teach. V2's
+ * half is "a referenced document changed significantly", which is precisely the condition that
+ * *creates* a refresh assignment; guarding on the union would make the refresh fan-out cancel
+ * itself.
+ */
+export async function isAssignable(q: Queryable, itemId: string): Promise<boolean> {
+  return !(await needsUpdateFor(q, [itemId])).get(itemId);
+}
 
 export interface TrackingDeps {
   db: pg.Pool;
@@ -57,6 +73,10 @@ export async function createAssignments(
   deps: Pick<TrackingDeps, 'notifier' | 'events'>,
   i: CreateAssignmentsInput,
 ): Promise<{ assigned: number; skipped: number; assignmentIds: string[] }> {
+  // A-I4: the last line of defence, so the nightly re-resolution cannot hand out a flagged item
+  // either. The two manager routes check first and answer 409, which is the honest error there.
+  if (!(await isAssignable(tx, i.item.id)))
+    return { assigned: 0, skipped: i.userIds.length, assignmentIds: [] };
   const ids: string[] = [];
   let skipped = 0;
   for (const userId of i.userIds) {

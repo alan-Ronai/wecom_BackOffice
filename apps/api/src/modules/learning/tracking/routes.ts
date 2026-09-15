@@ -20,15 +20,16 @@ import {
   StartAttemptResponseSchema,
 } from '@wecom/shared';
 import { audit } from '../../../lib/audit.js';
-import { notFound } from '../../../lib/http.js';
-import { withTransaction } from '../../../lib/sql.js';
-import { requireUser } from '../../../lib/user.js';
+import { forbidden, httpError, notFound } from '../../../lib/http.js';
+import { withTransaction, type Queryable } from '../../../lib/sql.js';
+import { hasScope, requireUser } from '../../../lib/user.js';
 import { getWorkflowSettings } from '../../../lib/workflowSettings.js';
 import { assertVisibleDocument } from '../../../lib/visibility.js';
 import * as repo from './repo.js';
-import { createAssignments, type TrackingDeps } from './audiences.js';
+import { createAssignments, isAssignable, type TrackingDeps } from './audiences.js';
 import { getPublishedItem } from './itemsPort.js';
 import { previewChangeFlag } from './refresh.js';
+import { worldsOfItem } from '../repo.js';
 
 const Id = z.object({ id: IdSchema });
 const AssignmentId = z.object({ assignmentId: IdSchema });
@@ -36,6 +37,31 @@ const AssignmentId = z.object({ assignmentId: IdSchema });
 /** The eleven V2 routes of `docs/api/CONTRACTS-wave5.md`. */
 export default function trackingRoutes(deps: () => TrackingDeps) {
   return async function routes(app: FastifyInstance) {
+    /**
+     * A-I1: V1's routes have this; V2's equivalents never adopted it.
+     *
+     * `learning.manage` alone let a manager scoped to `billing` assign a `tech` item to arbitrary
+     * users, delete an audience belonging to any item, and read the completion state — title,
+     * description, counts and rate — of a quiz they cannot see in their own list. The item's
+     * worlds are its own `world_slug` or, when it has none, the union of its referenced
+     * documents' worlds, which is exactly what V1's `assertScope` compares. An item with no
+     * world at all stays visible to everyone, as it is in V1.
+     */
+    const assertItemScope = async (q: Queryable, id: string, user: ReturnType<typeof requireUser>) => {
+      const worlds = await worldsOfItem(q, id);
+      if (worlds.length && !hasScope(user, worlds)) throw forbidden();
+    };
+    /**
+     * A-I4: spec §1.8 — an item whose referenced document is invalid or archived is "hidden from
+     * new assignments". `createAssignments` enforces it silently for the nightly job; a manager
+     * asking for it by hand gets told why.
+     */
+    const assertAssignable = async (q: Queryable, id: string) => {
+      if (!(await isAssignable(q, id)))
+        throw httpError(409, 'ITEM_NEEDS_UPDATE', 'הפריט מסומן "דורש עדכון" ואינו ניתן להקצאה חדשה', {
+          itemId: id,
+        });
+    };
     app.post(
       '/learning/items/:id/audiences',
       {
@@ -52,6 +78,8 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
         const { id } = req.params as { id: string };
         const body = req.body as z.infer<typeof AudienceCreateSchema>;
         return withTransaction(app.db, async (tx) => {
+          await assertItemScope(tx, id, user);
+          await assertAssignable(tx, id);
           const a = await repo.createAudience(tx, deps(), id, body, user.id);
           await audit(tx, {
             actorId: user.id,
@@ -75,6 +103,11 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
         const user = requireUser(req);
         const { id } = req.params as { id: string };
         await withTransaction(app.db, async (tx) => {
+          // A-I1: the audience is addressed by its own id, so its item has to be resolved before
+          // the delete to know whose it is.
+          const itemId = await repo.audienceItemId(tx, id);
+          if (!itemId) throw notFound('קהל היעד');
+          await assertItemScope(tx, itemId, user);
           if (!(await repo.deleteAudience(tx, id))) throw notFound('קהל היעד');
           await audit(tx, {
             actorId: user.id,
@@ -108,8 +141,18 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
         const { id } = req.params as { id: string };
         const body = req.body as z.infer<typeof AssignBodySchema>;
         return withTransaction(app.db, async (tx) => {
+          await assertItemScope(tx, id, user);
+          await assertAssignable(tx, id);
           const pub = await getPublishedItem(tx, id);
           if (!pub) throw notFound('פריט הלמידה');
+          // A-I1: and the recipients. Scoping the item alone still let a `billing` manager hand a
+          // `billing` item to 500 arbitrary user ids, the `tech` floor included.
+          const out = await repo.userIdsOutOfScope(tx, body.userIds, user.worldScopes);
+          if (out.length)
+            throw httpError(403, 'USER_OUT_OF_SCOPE', 'חלק מהמשתמשים אינם בעולמות התוכן שלך', {
+              userIds: out.slice(0, 10),
+              count: out.length,
+            });
           const r = await createAssignments(tx, deps(), {
             item: pub.item,
             userIds: body.userIds,
@@ -227,8 +270,15 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
         config: { requires: ['learning.manage'] },
         schema: { tags: ['learning'], params: Id, response: { 200: CompletionResponseSchema } },
       },
-      async (req) =>
-        repo.completionFor(app.db, (req.params as { id: string }).id, requireUser(req).worldScopes),
+      async (req) => {
+        const user = requireUser(req);
+        const { id } = req.params as { id: string };
+        // A-I1: `completionFor` filters the *rows* to users in the caller's worlds, but the item
+        // itself was never checked — so its card (title, description, counts, completion rate)
+        // came back for a quiz in a world the caller cannot see.
+        await assertItemScope(app.db, id, user);
+        return repo.completionFor(app.db, id, user.worldScopes);
+      },
     );
 
     app.get(

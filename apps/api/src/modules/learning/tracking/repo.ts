@@ -16,12 +16,14 @@ import { makeEvent } from '@wecom/shared';
 import { httpError, notFound } from '../../../lib/http.js';
 import type { Queryable, Tx } from '../../../lib/sql.js';
 import { iso } from '../../documents/repo.js';
+import { itemWorldScopeSql } from '../repo.js';
+import { FAILED_QUESTION_MIN_ATTEMPTS } from '../../gaps/heuristics.js';
 import {
   assignmentStats,
   documentSnapshotFor,
   getItem,
   getPublishedItem,
-  itemQuestions,
+  itemQuestionsAt,
   itemSourceVersions,
   needsUpdate,
   type PublishedItem,
@@ -30,10 +32,20 @@ import { createAssignments, resolveAudience, type TrackingDeps } from './audienc
 import { gradeAttempt, type AnswerInput } from './scoring.js';
 
 /* ── row mapping ──────────────────────────────────────────────────────────── */
+/**
+ * `t.started_at >= a.assigned_at` scopes the attempt budget to the current cycle (A-I3).
+ *
+ * A refresh assignment a second significant publish re-opens moves `assigned_at` forward; without
+ * this the attempts of the *previous* cycle would still count, and a quiz with `maxAttempts` set
+ * would hand the learner a refresh they answer `ATTEMPTS_EXHAUSTED` to. Every other assignment is
+ * created once and never moves, so its attempts all start after `assigned_at` and nothing changes.
+ * `last_score` takes the same window for the same reason: the previous cycle's score is not this
+ * assignment's result any more.
+ */
 const ASSIGNMENT_SELECT = `
   select a.*, i.kind, i.title, i.world_slug, i.estimated_minutes, i.pass_mark, i.max_attempts,
-         (select count(*)::int from learning_attempts t where t.assignment_id=a.id and t.finished_at is not null) attempts_used,
-         (select t.score from learning_attempts t where t.assignment_id=a.id and t.finished_at is not null order by t.attempt_no desc limit 1) last_score
+         (select count(*)::int from learning_attempts t where t.assignment_id=a.id and t.finished_at is not null and t.started_at >= a.assigned_at) attempts_used,
+         (select t.score from learning_attempts t where t.assignment_id=a.id and t.finished_at is not null and t.started_at >= a.assigned_at order by t.attempt_no desc limit 1) last_score
     from learning_assignments a join learning_items i on i.id=a.item_id`;
 
 const toAssignment = (r: Record<string, unknown>): Assignment => ({
@@ -98,6 +110,36 @@ export async function deleteAudience(tx: Tx, id: string): Promise<boolean> {
   return (r.rowCount ?? 0) > 0;
 }
 
+/** The item an audience belongs to, so a delete can be scope-checked before it happens (A-I1). */
+export async function audienceItemId(q: Queryable, id: string): Promise<string | null> {
+  const r = await q.query(`select item_id from learning_audiences where id=$1`, [id]);
+  return r.rowCount ? (r.rows[0].item_id as string) : null;
+}
+
+/**
+ * A-I1: the users a world-scoped manager may hand an item to.
+ *
+ * Scoping the *item* is only half of `POST /learning/items/:id/assign`: `AssignBodySchema` takes
+ * up to 500 arbitrary user ids, so a `billing` manager could still assign a `billing` item to the
+ * whole `tech` floor. A user is in scope when the caller is unscoped, or when the user holds a
+ * role whose `world_scope` is null (they work everywhere) or overlaps the caller's — the same
+ * rule `userScopeTerm` applies to the completion and dashboard reads.
+ */
+export async function userIdsOutOfScope(
+  q: Queryable,
+  userIds: string[],
+  scopes: readonly string[] | null,
+): Promise<string[]> {
+  if (!scopes || !userIds.length) return [];
+  const r = await q.query(
+    `select u.id from unnest($1::uuid[]) u(id)
+      where not exists (select 1 from user_roles ur
+                         where ur.user_id = u.id and (ur.world_scope is null or ur.world_scope && $2::text[]))`,
+    [userIds, [...scopes]],
+  );
+  return r.rows.map((x) => x.id as string);
+}
+
 /* ── the agent's own view ─────────────────────────────────────────────────── */
 export async function myLearning(q: Queryable, userId: string): Promise<MyLearningResponse> {
   const r = await q.query(
@@ -144,7 +186,8 @@ export async function playerItem(
     );
     entries.push({ ...e, changedSinceAssigned: (changed.rowCount ?? 0) > 0 });
   }
-  const questions = (await itemQuestions(q, item.id)).map((qq) => ({
+  // A-I2: the questions the assignment pins, not whatever the editor last saved.
+  const questions = (await itemQuestionsAt(q, item.id, assignment.itemVersion)).map((qq) => ({
     id: qq.id,
     documentId: qq.documentId,
     stepKey: qq.stepKey,
@@ -269,7 +312,9 @@ export async function submitAttempt(
   if (!t.rowCount) throw notFound('הניסיון');
   if (t.rows[0].finished_at) throw httpError(409, 'ATTEMPT_FINISHED', 'הניסיון כבר הוגש');
   const a = await lockOpen(tx, t.rows[0].assignment_id as string, userId);
-  const questions = await itemQuestions(tx, a.itemId);
+  // A-I2: graded against the version the learner was assigned, so an edit mid-attempt cannot
+  // change the answer key under them — nor orphan the `answers` keys this row is about to store.
+  const questions = await itemQuestionsAt(tx, a.itemId, a.itemVersion);
   const graded = gradeAttempt(questions, answers, effectivePass(a, settings));
   // Pinned storage shape (V3's failed-question heuristic reads it): { [questionId]: { selected, correct } }.
   const stored: Record<string, { selected: string[] | string | null; correct: boolean }> = {};
@@ -410,16 +455,34 @@ export async function dashboard(
   const scopeTerm = userScopeTerm(params, scopes);
   const base = `from learning_assignments a join learning_items i on i.id=a.item_id
       where a.item_version=i.current_version${worldTerm}${scopeTerm}`;
+  /**
+   * A-M2: the published-item count is narrowed to the caller's worlds too.
+   *
+   * `userScopeTerm` is about the assignment's *user*, so it cannot apply here, and the subquery
+   * had only `worldTerm` — which is empty unless the caller passed `?world`. A world-scoped
+   * manager therefore read the org-wide item count sitting next to their own scoped assignment
+   * counts, and the two numbers on the same tile did not mean the same thing.
+   */
+  // Its own parameter list: every other query below reuses `params`, and Postgres refuses a bind
+  // whose value count exceeds the placeholders the statement actually carries.
+  const totalsParams = [...params];
+  const itemScope = scopes
+    ? ' and ' +
+      itemWorldScopeSql('i', scopes, (v) => {
+        totalsParams.push(v);
+        return '$' + totalsParams.length;
+      })
+    : '';
   const totals = (
     await q.query(
       `select (select count(*)::int from learning_items i
-                where i.status='published' and i.deleted_at is null${worldTerm}) items,
+                where i.status='published' and i.deleted_at is null${worldTerm}${itemScope}) items,
               count(*)::int assigned,
               count(*) filter (where a.status='completed')::int completed,
               count(*) filter (where a.status='overdue')::int overdue,
               count(*) filter (where a.reason='refresh' and a.status in ('open','overdue'))::int refresh_pending
          ${base}`,
-      params,
+      totalsParams,
     )
   ).rows[0];
   const byWorld = (
@@ -437,6 +500,13 @@ export async function dashboard(
     overdue: r.overdue as number,
     rate: (r.assigned as number) ? (r.completed as number) / (r.assigned as number) : 0,
   }));
+  /**
+   * A-M4: the same floor the `failed_question` heuristic uses. This tile hardcoded 3 and
+   * `heuristics.ts` hardcoded 5, so the dashboard and the gap list disagreed about which
+   * questions were "failing" while only the *rate* came from settings. Interpolated, not bound:
+   * `params` is shared with the queries around it and a trailing unused value is a bind error.
+   */
+  const failedMin = FAILED_QUESTION_MIN_ATTEMPTS;
   const failed = (
     await q.query(
       `select ans.key question_id, i.id item_id, i.title item_title, qq.stem,
@@ -448,7 +518,7 @@ export async function dashboard(
          cross join lateral jsonb_each(t.answers) ans
          join quiz_questions qq on qq.id::text = ans.key
         where t.finished_at is not null${worldTerm}${scopeTerm}
-        group by 1,2,3,4 having count(*) >= 3
+        group by 1,2,3,4 having count(*) >= ${failedMin}
         order by (count(*) filter (where (ans.value->>'correct')::boolean = false))::float / count(*) desc
         limit 10`,
       params,
@@ -540,6 +610,21 @@ export async function documentLearning(
         }
       : null,
   };
+}
+
+/**
+ * A-I4, second half. `DELETE /learning/items/:id` on a published item archives it, and left its
+ * open assignments `open`: learners kept owing an archived item and the reminder job kept nagging
+ * them about it. Archiving withdraws the obligation, with a reason, the same way a significant
+ * publish does. Completed and already-invalidated rows are history and are left alone.
+ */
+export async function invalidateForArchivedItem(tx: Tx, itemId: string, reason: string): Promise<number> {
+  const r = await tx.query(
+    `update learning_assignments set status='invalidated', invalidated_at=now(), invalidated_reason=$2
+      where item_id=$1 and status in ('open','overdue')`,
+    [itemId, reason],
+  );
+  return r.rowCount ?? 0;
 }
 
 /** Idempotent: open assignments past due become overdue. Returns how many changed. */

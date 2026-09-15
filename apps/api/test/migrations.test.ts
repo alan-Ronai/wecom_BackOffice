@@ -353,7 +353,7 @@ run('migrations', () => {
       });
     // Everything from 0030 up — wave 4 and whatever later waves added on top of it — so the
     // rollback really stops at 0029 whatever the highest number currently is. Counting only
-    // `003x` silently stopped short once wave 5 added 0040+, leaving 0030 — the migration that
+    // `003x` silently stopped short once wave 5 added 0046+, leaving 0030 — the migration that
     // drops 0027's Hebrew stopword filter — still applied, and the assertion below failing.
     const fromWave4 = (await readdir('migrations')).filter((f) => {
       const n = Number(/^(\d{4})_/.exec(f)?.[1] ?? NaN);
@@ -380,7 +380,7 @@ run('migrations', () => {
     await move('up');
   }, 120000);
 
-  it('creates the wave 5 tracking tables (0040)', async () => {
+  it('creates the wave 5 tracking tables (0047)', async () => {
     const r = await pool.query(
       "select table_name from information_schema.tables where table_schema='public' and table_name in ('learning_audiences','learning_assignments','learning_attempts','learning_acknowledgements','document_change_flags') order by 1",
     );
@@ -395,6 +395,45 @@ run('migrations', () => {
       "select column_name from information_schema.columns where table_name='learning_assignments' and column_name in ('reminded_at','refresh_reason','item_version')",
     );
     expect(cols.rowCount).toBe(3);
+  });
+
+  /**
+   * A-M7: 0049's whole content is two foreign keys and nothing asserted them — not their
+   * existence, and not the CASCADE its comment promises. They are the reason the tracking tables
+   * stop accumulating rows that point at a `learning_items` row nobody deleted them with.
+   */
+  it('0049 adds the learning_items foreign keys, and they cascade', async () => {
+    const fks = await pool.query(
+      `select tc.table_name, rc.delete_rule
+         from information_schema.table_constraints tc
+         join information_schema.referential_constraints rc on rc.constraint_name = tc.constraint_name
+        where tc.constraint_name in ('learning_audiences_item_id_fkey','learning_assignments_item_id_fkey')
+        order by tc.table_name`,
+    );
+    expect(fks.rows.map((r) => [r.table_name, r.delete_rule])).toEqual([
+      ['learning_assignments', 'CASCADE'],
+      ['learning_audiences', 'CASCADE'],
+    ]);
+    const u = await pool.query(
+      `insert into users(subject, source, display_name) values (gen_random_uuid()::text,'local','מחיקה') returning id`,
+    );
+    const item = await pool.query(
+      `insert into learning_items(kind, title, status, current_version) values ('quiz','לבדיקת מחיקה','published',1) returning id`,
+    );
+    const itemId = item.rows[0].id as string;
+    await pool.query(`insert into learning_audiences(item_id, due_days) values ($1, 7)`, [itemId]);
+    await pool.query(
+      `insert into learning_assignments(item_id, item_version, user_id, reason, due_at)
+       values ($1, 1, $2, 'manual', now() + interval '7 days')`,
+      [itemId, u.rows[0].id],
+    );
+    await pool.query('delete from learning_items where id=$1', [itemId]);
+    for (const table of ['learning_audiences', 'learning_assignments'])
+      expect(
+        (await pool.query(`select count(*)::int n from ${table} where item_id=$1`, [itemId])).rows[0].n,
+        table,
+      ).toBe(0);
+    await pool.query('delete from users where id=$1', [u.rows[0].id]);
   });
 
   it('rolls back cleanly', async () => {

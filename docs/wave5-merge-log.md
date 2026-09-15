@@ -8,15 +8,24 @@ turned out to be, and every deliberate deviation from `docs/superpowers/plans/20
 
 | Lane | Branch | Head | Scope | Report |
 |---|---|---|---|---|
-| V1 | `worktree-agent-aae33f36b9ad37211` | `c77b12c` | learning content: items, briefings, quizzes, generation, publish (0039) | `.superpowers/sdd/program/V1-report.md` |
+| V1 | `worktree-agent-aae33f36b9ad37211` | `c77b12c` | learning content: items, briefings, quizzes, generation, publish (0046) | `.superpowers/sdd/program/V1-report.md` |
 | V4a | `worktree-agent-a2ffed0b25de876bc` | `9924ecb` | the learner's web surface: my learning, briefing reader, quiz player, refresh banner, badge | `V4a-report.md` |
-| V3 | `worktree-agent-aadcb4b261a2b42b1` | `32d171d` | knowledge gaps, approver gate, `GET/PUT /admin/workflow` (0041) | `V3-report.md` |
-| V2 | `worktree-agent-a9b5cd118d2534681` | `8cb306f` | tracking: audiences, assignments, attempts, completion, significant change (0040) | `V2-report.md` |
+| V3 | `worktree-agent-aadcb4b261a2b42b1` | `32d171d` | knowledge gaps, approver gate, `GET/PUT /admin/workflow` (0048) | `V3-report.md` |
+| V2 | `worktree-agent-a9b5cd118d2534681` | `8cb306f` | tracking: audiences, assignments, attempts, completion, significant change (0047) | `V2-report.md` |
 | V4b | `worktree-agent-aedc99a9b77b7c3b3` | `5082c3b` | the manager's web surface: builder, assign, dashboard, gaps page, workflow settings | `V4b-report.md` |
 
 `main` was merged four times as it moved under us (pilot-readiness app lane, hardening lane 0045,
 the pipeline fan-out, the proxy-trust lane). Migrations on this branch are exactly 0037 (wave 3),
-0038–0041 (V0–V3), **0042 (V6)** and main's own 0043–0045.
+0038 (V0), main's own 0043–0045, and then **0046–0048 (V1–V3) and 0049 (V6)**.
+
+> **Renumbered in the fix wave (A-C3).** The lanes authored V1–V3 as 0039–0041 and V6 as 0042,
+> which sit *below* main's already-applied 0043–0045. `migrate.ts` passes `checkOrder: true` and
+> `server.ts` runs the migration at boot, so on any database that had already applied the pilot
+> and hardening lanes the API would have refused to start with "Not run migration
+> 0039_learning_content is preceding already run migration 0043_telemetry_client_error".
+> `migrations.test.ts` could not catch it: it always builds a fresh database and runs every file
+> in filename order. The tables are new, so no deployed database has them and the renumber is a
+> pure rename — the check stays on.
 
 ## Conflicts and how they were resolved
 
@@ -37,7 +46,7 @@ the pipeline fan-out, the proxy-trust lane). Migrations on this branch are exact
 
 1. **`migrations.test.ts` › "a wave-4-only rollback leaves 0027 in force"** failed on every lane
    branch. The guard sized its rollback from `/^003[0-9]_/`, which stopped short of 0030 — the
-   migration that drops 0027's Hebrew stopword filter — as soon as wave 5 added 0040+. Reproduced
+   migration that drops 0027's Hebrew stopword filter — as soon as wave 5 added 0046+. Reproduced
    against `main` (0030..0038, count 9, still correct there): the regression is the counting
    heuristic, not migration 0037 or its `down`. Now counts every migration numbered ≥ 0030.
 2. **Two MSW stubs for `GET /documents/:id/learning`.** msw takes the first match, so V4b's
@@ -102,8 +111,8 @@ Copy that differs from the plan's draft, and what the mounts assert instead:
 3. **`GET /learning/audience-options` is new** (controller ruling). The assign dialog read
    `GET /admin/roles`, which needs `roles.manage`; a lead holding only `learning.manage` therefore
    saw an empty audience picker against the real API while the MSW fixture answered happily.
-4. **`0042_wave5_fixups.js`** (not `0042_wave5_seams.js`) adds the `learning_items` foreign keys
-   0040 could not declare. It does **not** add an `asset_refs` trigger: `learning_items.description`
+4. **`0049_wave5_seams.js`** adds the `learning_items` foreign keys
+   0047 could not declare. It does **not** add an `asset_refs` trigger: `learning_items.description`
    is the only wave 5 HTML column, and it is edited by `RichText … compact`, which drops the image
    extension precisely because the learning surface has no asset pipeline. Nothing can reference
    `/api/v1/assets/…` from there. `briefing_entries.note` and `quiz_questions.*` are plain text.

@@ -1,9 +1,9 @@
 import type pg from 'pg';
 
 /**
- * V1's migration 0039 creates the learning item tables. This lane's worktree may predate it, so
+ * V1's migration 0046 creates the learning item tables. This lane's worktree may predate it, so
  * tests create the spec-§3 shape when absent. Column names match the spec verbatim; V6 verifies
- * parity against 0039 when both are on main.
+ * parity against 0046 when both are on main.
  */
 export async function ensureLearningTables(pool: pg.Pool): Promise<void> {
   const r = await pool.query(`select to_regclass('learning_items') as t`);
@@ -93,11 +93,32 @@ export async function seedQuiz(
   );
   const id = r.rows[0].id as string;
   let pos = 0;
-  for (const q of o.questions)
-    await pool.query(
-      `insert into quiz_questions(item_id, position, document_id, stem, kind, options, explanation) values ($1,$2,$3,$4,$5,$6,$7)`,
+  /**
+   * A-I2: the snapshot carries the questions, with the ids the rows actually got.
+   *
+   * The player and the grader read `learning_item_versions.snapshot` for the version the
+   * assignment pins, exactly as V1's `publishItem` writes it (`{ item: LearningItem,
+   * sourceVersions }` with `item.questions` and `item.entries` inside). A stub whose snapshot
+   * held only the item header would make every seeded quiz answer with no questions at all.
+   */
+  const questions = [];
+  for (const q of o.questions) {
+    const qr = await pool.query(
+      `insert into quiz_questions(item_id, position, document_id, stem, kind, options, explanation) values ($1,$2,$3,$4,$5,$6,$7) returning id`,
       [id, pos++, o.documentId, q.stem, q.kind, JSON.stringify(q.options), q.explanation ?? ''],
     );
+    questions.push({
+      id: qr.rows[0].id as string,
+      documentId: o.documentId,
+      stepKey: null,
+      stem: q.stem,
+      kind: q.kind,
+      options: q.options,
+      explanation: q.explanation ?? '',
+      generated: false,
+      modelConf: null,
+    });
+  }
   await pool.query(
     `insert into learning_item_versions(item_id, version, snapshot, label) values ($1, 1, $2, 'v1')`,
     [
@@ -110,6 +131,8 @@ export async function seedQuiz(
           worldSlug: o.worldSlug,
           passMark: o.passMark,
           maxAttempts: o.maxAttempts,
+          entries: [],
+          questions,
         },
         sourceVersions: await pins(pool, [o.documentId]),
       }),
@@ -129,17 +152,20 @@ export async function seedBriefing(
   );
   const id = r.rows[0].id as string;
   let pos = 0;
-  for (const d of o.documentIds)
-    await pool.query(
-      `insert into briefing_entries(item_id, position, document_id, note) values ($1,$2,$3,'')`,
+  const entries = [];
+  for (const d of o.documentIds) {
+    const er = await pool.query(
+      `insert into briefing_entries(item_id, position, document_id, note) values ($1,$2,$3,'') returning id`,
       [id, pos++, d],
     );
+    entries.push({ id: er.rows[0].id as string, documentId: d, stepKey: null, note: '' });
+  }
   await pool.query(
     `insert into learning_item_versions(item_id, version, snapshot, label) values ($1, 1, $2, 'v1')`,
     [
       id,
       JSON.stringify({
-        item: { id, kind: 'briefing', title: o.title, worldSlug: o.worldSlug },
+        item: { id, kind: 'briefing', title: o.title, worldSlug: o.worldSlug, entries, questions: [] },
         sourceVersions: await pins(pool, o.documentIds),
       }),
     ],

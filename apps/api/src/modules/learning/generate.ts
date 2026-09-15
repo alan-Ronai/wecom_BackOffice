@@ -62,7 +62,10 @@ export async function generateQuestions(
     try {
       const allowed = new Set(docs.map((d) => d.id));
       modelQs = (await deps.model.generateQuestions(ctx))
-        .filter((q) => allowed.has(q.documentId))
+        // `free` is in the schema and in no surface: no grader, no player control, and
+        // `PUT …/questions` refuses it. Dropping it here keeps the model from offering the
+        // editor a question they cannot save.
+        .filter((q) => allowed.has(q.documentId) && q.kind !== 'free')
         .map((q) => ({
           ...q,
           generated: true,
