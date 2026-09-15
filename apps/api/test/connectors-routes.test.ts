@@ -451,6 +451,76 @@ run('connector routes', () => {
     await app.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
   });
 
+  /**
+   * Post-pilot M1. The claim has to be taken before the enqueue, or two copies of one delivery
+   * could both queue a sync run. That ordering left one hole: an enqueue that failed answered
+   * 500 with the claim already taken, so WordPress's retry of the same signed bytes was a 409
+   * REPLAY for a sync that had never run — the author's edit lost until the next full pass.
+   */
+  it('gives the claim back when the enqueue fails, so the retry is not a false REPLAY', async () => {
+    let failNext = true;
+    const flaky = await buildL6TestApp({
+      pool,
+      databaseUrl: c.getConnectionUri(),
+      testUser: { id: userId, permissions: ['connectors.manage', 'suggestions.apply'] },
+      revisions: memoryRevisions(),
+      documents: sqlDocumentsService(pool),
+      enqueue: async () => {
+        if (failNext) {
+          failNext = false;
+          throw new Error('queue unavailable');
+        }
+        return 'job-after-retry';
+      },
+    });
+    try {
+      const conn = (
+        await flaky.inject({ method: 'POST', url: '/api/v1/connectors', payload: body() })
+      ).json();
+      const raw = JSON.stringify({
+        event: 'save_post',
+        post_type: 'posts',
+        post_id: 31,
+        modified_gmt: '2025-06-12T10:00:00',
+        sent_at: new Date().toISOString(),
+        nonce: 'n-31',
+      });
+      const deliver = () =>
+        flaky.inject({
+          method: 'POST',
+          url: `/api/v1/connectors/${conn.id}/webhook`,
+          payload: raw,
+          headers: {
+            'content-type': 'application/json',
+            'x-kb-signature': signBody('topsecret1', raw),
+            'x-kb-nonce': 'n-31',
+          },
+        });
+
+      expect((await deliver()).statusCode).toBe(500);
+      // Nothing was queued, so nothing may be remembered as delivered.
+      expect(
+        (
+          await pool.query<{ n: number }>(
+            'select count(*)::int n from webhook_nonces where connector_id=$1',
+            [conn.id],
+          )
+        ).rows[0].n,
+      ).toBe(0);
+
+      // WordPress retries the same signed bytes; that retry is a first delivery, not a replay.
+      const retry = await deliver();
+      expect(retry.statusCode).toBe(202);
+      expect(retry.json().jobId).toBe('job-after-retry');
+      // And the replay protection is intact: a *third* copy of the same bytes is still a 409.
+      expect((await deliver()).statusCode).toBe(409);
+
+      await flaky.inject({ method: 'DELETE', url: `/api/v1/connectors/${conn.id}` });
+    } finally {
+      await flaky.close();
+    }
+  });
+
   /** The flag is the deprecation switch, not the protection: it makes a pre-header plugin loud. */
   it('refuses a webhook with no nonce header once WEBHOOK_REQUIRE_NONCE is on', async () => {
     const strict = await buildL6TestApp({

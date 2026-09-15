@@ -50,6 +50,20 @@ export async function claimWebhookNonce(q: Q, connectorId: string, nonce: string
   return (r.rowCount ?? 0) > 0;
 }
 
+/**
+ * Gives a claim back, for a delivery that was claimed and then could not be acted on.
+ *
+ * The claim has to be taken *before* the work is enqueued — taking it after would let two
+ * copies of the same delivery both enqueue a sync run, which is the thing replay protection
+ * exists to stop. That ordering leaves one hole: if the enqueue then fails, the claim outlives
+ * the delivery it was claimed for, and WordPress's retry of the same bytes answers 409 REPLAY
+ * for a sync that never ran — the author's edit lost, silently, until the next full run.
+ * Releasing the row on that path closes it: the retry is a first delivery again.
+ */
+export async function releaseWebhookNonce(q: Q, connectorId: string, nonce: string): Promise<void> {
+  await q.query(`delete from webhook_nonces where connector_id=$1 and nonce=$2`, [connectorId, nonce]);
+}
+
 /** Drops deliveries older than the TTL. Runs on the nightly `trash.purge` housekeeping job. */
 export async function purgeWebhookNonces(q: Q, ttlMs: number = NONCE_TTL_MS): Promise<number> {
   const r = await q.query(
