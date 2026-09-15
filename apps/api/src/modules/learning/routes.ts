@@ -30,6 +30,7 @@ import { audit } from '../../lib/audit.js';
 import { forbidden, httpError, notFound } from '../../lib/http.js';
 import { withTransaction } from '../../lib/sql.js';
 import { hasScope, requireUser } from '../../lib/user.js';
+import { getDocument } from '../documents/repo.js';
 import * as repo from './repo.js';
 import { generateQuestions } from './generate.js';
 
@@ -48,6 +49,22 @@ export default async function learningRoutes(app: FastifyInstance) {
   const assertScope = async (id: string, user: ReturnType<typeof requireUser>) => {
     const worlds = await repo.worldsOfItem(app.db, id);
     if (worlds.length && !hasScope(user, worlds)) throw forbidden();
+  };
+  /**
+   * A-I5: the documents a generate call may read.
+   *
+   * `generateQuestions` checks only that each id is published, so a `billing`-scoped manager
+   * could pass any published `tech` document id and get its step titles, action texts, outcome
+   * texts, branch labels and CRM field names back rendered as question stems and options — a
+   * content read `GET /documents/:id` would refuse them. 404, not 403, for the same reason the
+   * document routes do it: a 403 would confirm the document exists.
+   */
+  const assertDocumentsInScope = async (ids: string[], user: ReturnType<typeof requireUser>) => {
+    if (user.worldScopes === null) return;
+    for (const id of new Set(ids)) {
+      const doc = await getDocument(app.db, id);
+      if (!doc || !hasScope(user, doc.worlds)) throw notFound('המסמך');
+    }
   };
 
   app.get(
@@ -285,6 +302,7 @@ export default async function learningRoutes(app: FastifyInstance) {
       const item = await visible(id, user);
       await assertScope(id, user);
       if (item.kind !== 'quiz') throw httpError(400, 'WRONG_KIND', 'הפעולה מתאימה לבוחן בלבד');
+      await assertDocumentsInScope(body.documentIds, user);
       // `app.model` is read at call time: the plugin decorates it on this scope, and tests swap it.
       const model = (app as FastifyInstance & { model?: ModelClient }).model ?? null;
       // Nothing is saved — the editor curates and then PUTs the questions.

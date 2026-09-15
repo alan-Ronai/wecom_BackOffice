@@ -98,6 +98,36 @@ export async function deleteAudience(tx: Tx, id: string): Promise<boolean> {
   return (r.rowCount ?? 0) > 0;
 }
 
+/** The item an audience belongs to, so a delete can be scope-checked before it happens (A-I1). */
+export async function audienceItemId(q: Queryable, id: string): Promise<string | null> {
+  const r = await q.query(`select item_id from learning_audiences where id=$1`, [id]);
+  return r.rowCount ? (r.rows[0].item_id as string) : null;
+}
+
+/**
+ * A-I1: the users a world-scoped manager may hand an item to.
+ *
+ * Scoping the *item* is only half of `POST /learning/items/:id/assign`: `AssignBodySchema` takes
+ * up to 500 arbitrary user ids, so a `billing` manager could still assign a `billing` item to the
+ * whole `tech` floor. A user is in scope when the caller is unscoped, or when the user holds a
+ * role whose `world_scope` is null (they work everywhere) or overlaps the caller's — the same
+ * rule `userScopeTerm` applies to the completion and dashboard reads.
+ */
+export async function userIdsOutOfScope(
+  q: Queryable,
+  userIds: string[],
+  scopes: readonly string[] | null,
+): Promise<string[]> {
+  if (!scopes || !userIds.length) return [];
+  const r = await q.query(
+    `select u.id from unnest($1::uuid[]) u(id)
+      where not exists (select 1 from user_roles ur
+                         where ur.user_id = u.id and (ur.world_scope is null or ur.world_scope && $2::text[]))`,
+    [userIds, [...scopes]],
+  );
+  return r.rows.map((x) => x.id as string);
+}
+
 /* ── the agent's own view ─────────────────────────────────────────────────── */
 export async function myLearning(q: Queryable, userId: string): Promise<MyLearningResponse> {
   const r = await q.query(

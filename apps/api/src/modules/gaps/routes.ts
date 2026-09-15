@@ -14,7 +14,7 @@ import {
 import { audit } from '../../lib/audit.js';
 import { notFound } from '../../lib/http.js';
 import { withTransaction } from '../../lib/sql.js';
-import { requireUser } from '../../lib/user.js';
+import { hasScope, requireUser } from '../../lib/user.js';
 import { runDetection, type DetectDeps } from './detect.js';
 import * as repo from './repo.js';
 
@@ -24,6 +24,25 @@ const Params = z.object({ id: IdSchema });
 export default function gapsRoutes(deps: () => DetectDeps) {
   return async function routes(instance: FastifyInstance) {
     const app = instance.withTypeProvider<ZodTypeProvider>();
+
+    /**
+     * A-I6: the reads were scoped and the writes were not.
+     *
+     * `listGaps` narrows by `worldScopes` (treating a world-less gap as visible to all, because a
+     * zero-result search carries no world and those are the most actionable kind). `dismiss` and
+     * `resolve` took only `gaps.manage` and acted on the row by id, so a `billing` lead could
+     * dismiss a `tech` gap they cannot see in their own list — and `resolve` read the row back
+     * afterwards, leaking the out-of-scope gap's title in the response, which is exactly what
+     * `scope-leak.test.ts` was extended to prevent on the list route.
+     *
+     * 404 rather than 403, matching the list: a gap the caller may not see does not exist for them.
+     */
+    const visibleGap = async (tx: Parameters<typeof repo.getGap>[0], id: string, user: ReturnType<typeof requireUser>) => {
+      const gap = await repo.getGap(tx, id);
+      if (!gap) throw notFound('הפער');
+      if (user.worldScopes && gap.worldSlug && !hasScope(user, gap.worldSlug)) throw notFound('הפער');
+      return gap;
+    };
 
     app.get(
       '/gaps',
@@ -56,8 +75,7 @@ export default function gapsRoutes(deps: () => DetectDeps) {
         const { id } = req.params;
         const { reason } = req.body;
         return withTransaction(app.db, async (tx) => {
-          const before = await repo.getGap(tx, id);
-          if (!before) throw notFound('הפער');
+          const before = await visibleGap(tx, id, user);
           const g = await repo.dismissGap(tx, id, reason, user.id);
           if (!g) throw notFound('הפער');
           await audit(tx, {
@@ -86,12 +104,21 @@ export default function gapsRoutes(deps: () => DetectDeps) {
         const { id } = req.params;
         const { documentId } = req.body;
         return withTransaction(app.db, async (tx) => {
-          const doc = await tx.query('select id from documents where id=$1 and deleted_at is null', [
-            documentId,
-          ]);
+          const before = await visibleGap(tx, id, user);
+          /**
+           * A-I6: the *document* is scope-checked too. `resolve` only asked that the row exist,
+           * so a lead could link a gap to a document in a world they cannot read — and the gap's
+           * `resolved_document_id` is what `autoResolvePublished` then watches.
+           */
+          const doc = await tx.query<{ id: string; worlds: string[] }>(
+            `select d.id, coalesce(array_agg(dw.world_slug) filter (where dw.world_slug is not null), '{}') worlds
+               from documents d left join document_worlds dw on dw.document_id = d.id
+              where d.id=$1 and d.deleted_at is null group by d.id`,
+            [documentId],
+          );
           if (!doc.rowCount) throw notFound('המסמך');
-          const before = await repo.getGap(tx, id);
-          if (!before) throw notFound('הפער');
+          const worlds = doc.rows[0].worlds ?? [];
+          if (worlds.length && !hasScope(user, worlds)) throw notFound('המסמך');
           const g = await repo.resolveGap(tx, id, documentId);
           if (!g) throw notFound('הפער');
           await audit(tx, {
