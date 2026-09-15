@@ -50,6 +50,13 @@ describe('/learning/manage', () => {
     // Only the quiz anchors questions to that document.
     expect(await within(list).findAllByRole('article')).toHaveLength(1);
     expect(screen.getByText(/מסונן לפי פריט ידע/)).toBeInTheDocument();
+    // The document-scoped list ignores all four facets, so they say so instead of writing to the
+    // URL and changing nothing.
+    expect(screen.getByLabelText('סוג')).toBeDisabled();
+    expect(screen.getByLabelText('סטטוס')).toBeDisabled();
+    expect(screen.getByLabelText('עולם תוכן')).toBeDisabled();
+    expect(screen.getByLabelText('חיפוש')).toBeDisabled();
+    expect(screen.getByText('הסינון אינו זמין בתצוגה של פריט ידע יחיד')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'בטל סינון לפי פריט ידע' }));
     expect(await within(await screen.findByTestId('learning-items')).findAllByRole('article')).toHaveLength(
       2,

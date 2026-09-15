@@ -29,6 +29,9 @@ export const LSTATUS_TONE: Record<LearningStatus, string> = {
   archived: 'chip-gray',
 };
 
+/** Why the facets are inert while the list is scoped to one knowledge item (B-I7). */
+const FACETS_OFF = 'הסינון אינו זמין בתצוגה של פריט ידע יחיד';
+
 /** The editor's learning manager (spec §5): list, filters, create, dashboard strip. */
 export function LearningManagePage() {
   const can = useCan();
@@ -92,12 +95,19 @@ export function LearningManagePage() {
         </button>
       </div>
       <LearningDashboardPanel world={world} />
+      {/*
+        The document-scoped list comes from `GET /documents/:id/learning`, which takes none of
+        these four: leaving them live meant controls that wrote to the URL and changed nothing.
+        They are disabled with the reason on them until the chip is cleared.
+      */}
       <div className="facets" aria-label="סינון">
         <label className="small">
           סוג
           <select
             aria-label="סוג"
             value={kind ?? ''}
+            disabled={!!documentId}
+            title={documentId ? FACETS_OFF : undefined}
             onChange={(e) => set('kind', e.target.value || undefined)}
           >
             <option value="">הכל</option>
@@ -110,6 +120,8 @@ export function LearningManagePage() {
           <select
             aria-label="סטטוס"
             value={status ?? ''}
+            disabled={!!documentId}
+            title={documentId ? FACETS_OFF : undefined}
             onChange={(e) => set('status', e.target.value || undefined)}
           >
             <option value="">הכל</option>
@@ -125,6 +137,8 @@ export function LearningManagePage() {
           <select
             aria-label="עולם תוכן"
             value={world ?? ''}
+            disabled={!!documentId}
+            title={documentId ? FACETS_OFF : undefined}
             onChange={(e) => set('world', e.target.value || undefined)}
           >
             <option value="">הכל</option>
@@ -139,11 +153,14 @@ export function LearningManagePage() {
           aria-label="חיפוש"
           placeholder="חיפוש…"
           value={q}
+          disabled={!!documentId}
+          title={documentId ? FACETS_OFF : undefined}
           onChange={(e) => {
             setQ(e.target.value);
             set('q', e.target.value || undefined);
           }}
         />
+        {documentId ? <span className="small muted">{FACETS_OFF}</span> : null}
       </div>
       {documentId ? (
         <div className="chips" aria-live="polite">
