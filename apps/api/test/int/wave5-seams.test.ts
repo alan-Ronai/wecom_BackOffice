@@ -490,6 +490,130 @@ run('wave 5 seams', () => {
     expect(flags.rows[0].significant).toBe(false);
   });
 
+  /**
+   * A-I2. The player and the grader read the *live* `quiz_questions` rows, so an editor touching
+   * a published quiz changed what learners mid-assignment saw and were graded on — and, because
+   * `replaceQuestions` deleted and re-inserted, minted new uuids and orphaned every stored
+   * `learning_attempts.answers` key, which is what the dashboard tile and the failed-question
+   * heuristic join on.
+   */
+  it('A-I2: an edit to a published quiz does not reach a learner mid-assignment, and keeps the ids', async () => {
+    const docId = await makeDoc('מסמך לשאלון גרסאות');
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/learning/items',
+      headers: auth(lead),
+      payload: { kind: 'quiz', title: 'בוחן גרסאות', worldSlug: 'tech', passMark: 50 },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const itemId = created.json().id as string;
+    const putQuestions = (questions: unknown[]) =>
+      app.inject({
+        method: 'PUT',
+        url: `/api/v1/learning/items/${itemId}/questions`,
+        headers: auth(lead),
+        payload: { questions },
+      });
+    const first = await putQuestions([
+      {
+        documentId: docId,
+        stepKey: 's3',
+        stem: 'שאלת גרסה א',
+        kind: 'single',
+        options: [
+          { id: 'o1', text: 'תשובת גרסה א', correct: true },
+          { id: 'o2', text: 'מוטעה', correct: false },
+        ],
+      },
+    ]);
+    expect(first.statusCode, first.body).toBe(200);
+    const questionId = first.json().questions[0].id as string;
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/v1/learning/items/${itemId}/publish`,
+          headers: auth(lead),
+          payload: { label: 'v1' },
+        })
+      ).statusCode,
+    ).toBe(200);
+    const assigned = await app.inject({
+      method: 'POST',
+      url: `/api/v1/learning/items/${itemId}/assign`,
+      headers: auth(lead),
+      payload: { userIds: [agent.id], dueDays: 14 },
+    });
+    expect(assigned.statusCode, assigned.body).toBe(200);
+    const mine = await app.inject({ method: 'GET', url: '/api/v1/learning/my', headers: auth(agent) });
+    const assignmentId = mine
+      .json()
+      .open.find((a: { itemId: string }) => a.itemId === itemId).id as string;
+
+    // The editor now rewrites the question — same id, different stem, different correct option —
+    // and does *not* republish the item.
+    const second = await putQuestions([
+      {
+        id: questionId,
+        documentId: docId,
+        stepKey: 's3',
+        stem: 'שאלת גרסה ב',
+        kind: 'single',
+        options: [
+          { id: 'o1', text: 'תשובת גרסה א', correct: false },
+          { id: 'o2', text: 'מוטעה', correct: true },
+        ],
+      },
+    ]);
+    expect(second.statusCode, second.body).toBe(200);
+    // Preserved, so the stored attempt answers below still join.
+    expect(second.json().questions[0].id).toBe(questionId);
+    expect(
+      (await db.pool.query('select id from quiz_questions where item_id=$1', [itemId])).rows.map(
+        (r) => r.id,
+      ),
+    ).toEqual([questionId]);
+
+    const player = await app.inject({
+      method: 'GET',
+      url: `/api/v1/learning/my/${assignmentId}`,
+      headers: auth(agent),
+    });
+    expect(player.statusCode, player.body).toBe(200);
+    expect(player.json().questions[0].stem).toBe('שאלת גרסה א');
+
+    // …and the grader uses the pinned key too: `o1` was correct at v1 and is not any more.
+    const started = await app.inject({
+      method: 'POST',
+      url: `/api/v1/learning/my/${assignmentId}/attempts`,
+      headers: auth(agent),
+    });
+    expect(started.statusCode, started.body).toBe(201);
+    const graded = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/learning/attempts/${started.json().attemptId}`,
+      headers: auth(agent),
+      payload: { answers: [{ questionId, optionIds: ['o1'] }] },
+    });
+    expect(graded.statusCode, graded.body).toBe(200);
+    expect(graded.json().passed).toBe(true);
+    // The stored answer key is the question that still exists, so the history survives the edit.
+    const stored = await db.pool.query(
+      `select answers from learning_attempts where id=$1`,
+      [started.json().attemptId],
+    );
+    expect(Object.keys(stored.rows[0].answers as Record<string, unknown>)).toEqual([questionId]);
+    expect(
+      (
+        await db.pool.query(
+          `select 1 from learning_attempts t, jsonb_each(t.answers) kv
+             join quiz_questions qq on qq.id::text = kv.key where t.id=$1`,
+          [started.json().attemptId],
+        )
+      ).rowCount,
+    ).toBe(1);
+  });
+
   it('GET /learning/audience-options answers a manager who has no roles.manage', async () => {
     const r = await app.inject({
       method: 'GET',

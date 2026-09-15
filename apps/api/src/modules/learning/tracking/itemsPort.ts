@@ -108,6 +108,72 @@ export async function itemEntries(q: Queryable, itemId: string): Promise<StoredE
   }));
 }
 
+/**
+ * A-I2 — what the learner was assigned, not what the editor is currently typing.
+ *
+ * `learning/repo.ts`'s own header states the rule: "Learners never read the live rows:
+ * `getPublishedItem` returns the latest snapshot, so an editor may keep editing a published item
+ * without changing what anyone is currently learning." The V2 port never honoured it — the player
+ * and the grader both read `select * from quiz_questions where item_id=$1`, the *current* rows,
+ * regardless of the version the assignment pins.
+ *
+ * Two things went wrong at once, and the second is the quiet one. `replaceQuestions` used to
+ * delete and re-insert, minting new uuids, so an editor touching a published quiz changed what
+ * learners mid-assignment saw and were graded on *and* orphaned every stored
+ * `learning_attempts.answers` key — those keys are question ids, and both the dashboard's
+ * failed-question tile and `heuristics.failedQuestions` join on them. The history did not go
+ * wrong, it went silent.
+ *
+ * `learning_item_versions.snapshot` already carries the whole item, questions and entries
+ * included, so the pinned read is a jsonb lookup rather than a new table. An item with no version
+ * row at that number was never published at it — the only way to reach that is a draft, which has
+ * no assignments — so the live rows are the honest answer there and the fallback says so.
+ */
+interface Snapshot {
+  item?: { questions?: StoredQuestion[]; entries?: Omit<StoredEntry, 'position'>[] };
+}
+const snapshotOf = async (q: Queryable, itemId: string, version: number): Promise<Snapshot | null> => {
+  const r = await q.query(`select snapshot from learning_item_versions where item_id=$1 and version=$2`, [
+    itemId,
+    version,
+  ]);
+  return r.rowCount ? ((r.rows[0].snapshot as Snapshot) ?? null) : null;
+};
+
+/** The questions frozen into `version`'s snapshot; the live rows only for an item never published at it. */
+export async function itemQuestionsAt(
+  q: Queryable,
+  itemId: string,
+  version: number,
+): Promise<StoredQuestion[]> {
+  const snap = await snapshotOf(q, itemId, version);
+  const frozen = snap?.item?.questions;
+  if (!frozen) return itemQuestions(q, itemId);
+  return frozen.map((x) => ({
+    id: x.id,
+    documentId: x.documentId,
+    stepKey: x.stepKey ?? null,
+    stem: x.stem,
+    kind: x.kind,
+    options: x.options ?? [],
+    explanation: x.explanation ?? '',
+  }));
+}
+
+/** The entries frozen into `version`'s snapshot, in their published order. */
+export async function itemEntriesAt(q: Queryable, itemId: string, version: number): Promise<StoredEntry[]> {
+  const snap = await snapshotOf(q, itemId, version);
+  const frozen = snap?.item?.entries;
+  if (!frozen) return itemEntries(q, itemId);
+  return frozen.map((e, i) => ({
+    id: e.id,
+    documentId: e.documentId,
+    stepKey: e.stepKey ?? null,
+    note: e.note ?? '',
+    position: i,
+  }));
+}
+
 /** Items (any status) whose current version pins `documentId`. */
 export async function listItemsReferencing(
   q: Queryable,
@@ -189,7 +255,7 @@ export async function documentSnapshotFor(q: Queryable, itemId: string, version:
     phases: NonNullable<Awaited<ReturnType<typeof getVersion>>>['phases'];
     changedSinceAssigned: false;
   }[] = [];
-  for (const e of await itemEntries(q, itemId)) {
+  for (const e of await itemEntriesAt(q, itemId, version)) {
     const at = pinned.get(e.documentId);
     const doc = at != null ? await getVersion(q, e.documentId, at) : null;
     out.push({

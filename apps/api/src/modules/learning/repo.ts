@@ -342,23 +342,47 @@ export async function replaceQuestions(
         stem: qn.stem,
       });
   }
-  await tx.query('delete from quiz_questions where item_id=$1', [id]);
-  for (const [i, qn] of questions.entries())
+  /**
+   * A-I2: an incoming `id` is preserved.
+   *
+   * This used to `delete from quiz_questions where item_id=$1` and re-insert, minting a new uuid
+   * for every question on every save. Those uuids are the keys of `learning_attempts.answers`,
+   * and both the dashboard's failed-question tile (`join quiz_questions qq on qq.id::text =
+   * ans.key`) and `heuristics.failedQuestions` join on them — so an editor fixing one typo
+   * silently dropped the entire attempt history of the quiz. The tile and the heuristic went
+   * quiet rather than wrong, which is the harder failure to notice.
+   *
+   * A question the caller did not send is gone; one it sent with an id it already owns is
+   * updated in place; one with no id, or an id this item does not own, is inserted fresh. There
+   * is no unique index on `(item_id, position)`, so the positions can be rewritten row by row.
+   */
+  const keep = questions.map((q) => q.id).filter((x): x is string => !!x);
+  await tx.query(`delete from quiz_questions where item_id=$1 and not (id = any($2::uuid[]))`, [id, keep]);
+  for (const [i, qn] of questions.entries()) {
+    const values = [
+      qn.documentId,
+      qn.stepKey ?? null,
+      qn.stem,
+      qn.kind,
+      JSON.stringify(qn.options),
+      qn.explanation ?? '',
+      !!qn.generated,
+      qn.modelConf ?? null,
+    ];
+    if (qn.id) {
+      const updated = await tx.query(
+        `update quiz_questions set position=$3, document_id=$4, step_key=$5, stem=$6, kind=$7,
+                options=$8, explanation=$9, generated=$10, model_conf=$11
+          where id=$2 and item_id=$1`,
+        [id, qn.id, i, ...values],
+      );
+      if (updated.rowCount) continue;
+    }
     await tx.query(
       'insert into quiz_questions(item_id, position, document_id, step_key, stem, kind, options, explanation, generated, model_conf) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
-      [
-        id,
-        i,
-        qn.documentId,
-        qn.stepKey ?? null,
-        qn.stem,
-        qn.kind,
-        JSON.stringify(qn.options),
-        qn.explanation ?? '',
-        !!qn.generated,
-        qn.modelConf ?? null,
-      ],
+      [id, i, ...values],
     );
+  }
   await tx.query('update learning_items set updated_by=$2, updated_at=now() where id=$1', [id, userId]);
   return (await getItem(tx, id))!;
 }

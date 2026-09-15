@@ -21,7 +21,7 @@ import {
   documentSnapshotFor,
   getItem,
   getPublishedItem,
-  itemQuestions,
+  itemQuestionsAt,
   itemSourceVersions,
   needsUpdate,
   type PublishedItem,
@@ -174,7 +174,8 @@ export async function playerItem(
     );
     entries.push({ ...e, changedSinceAssigned: (changed.rowCount ?? 0) > 0 });
   }
-  const questions = (await itemQuestions(q, item.id)).map((qq) => ({
+  // A-I2: the questions the assignment pins, not whatever the editor last saved.
+  const questions = (await itemQuestionsAt(q, item.id, assignment.itemVersion)).map((qq) => ({
     id: qq.id,
     documentId: qq.documentId,
     stepKey: qq.stepKey,
@@ -299,7 +300,9 @@ export async function submitAttempt(
   if (!t.rowCount) throw notFound('הניסיון');
   if (t.rows[0].finished_at) throw httpError(409, 'ATTEMPT_FINISHED', 'הניסיון כבר הוגש');
   const a = await lockOpen(tx, t.rows[0].assignment_id as string, userId);
-  const questions = await itemQuestions(tx, a.itemId);
+  // A-I2: graded against the version the learner was assigned, so an edit mid-attempt cannot
+  // change the answer key under them — nor orphan the `answers` keys this row is about to store.
+  const questions = await itemQuestionsAt(tx, a.itemId, a.itemVersion);
   const graded = gradeAttempt(questions, answers, effectivePass(a, settings));
   // Pinned storage shape (V3's failed-question heuristic reads it): { [questionId]: { selected, correct } }.
   const stored: Record<string, { selected: string[] | string | null; correct: boolean }> = {};
