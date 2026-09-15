@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useCan } from '../../../api/hooks/me.js';
 import { useSuggestionAnalytics } from '../../../api/hooks/suggestionAnalytics.js';
-import { Empty } from '../../ui/index.js';
+import { Empty, LoadError } from '../../ui/index.js';
 
 const pct = (x: number) => Math.round(x * 100) + '%';
 const GROUPS = [
@@ -51,7 +51,13 @@ export function SuggestionAnalyticsTab() {
   const [group, setGroup] = useState<GroupKey>('byType');
   const from = sp.get('from') ?? undefined;
   const to = sp.get('to') ?? undefined;
-  const mayRead = can('analytics.read');
+  /*
+   * `suggestions.review`, which is what `GET /suggestions/analytics` itself enforces — not
+   * `analytics.read`, which the other analytics surfaces use. The two happen to travel together
+   * in both seeded roles, but gating the tab on a permission the route does not check ships a tab
+   * that 403s inside itself for any role grant where they come apart.
+   */
+  const mayRead = can('suggestions.review');
   const a = useSuggestionAnalytics({ from, to }, mayRead);
 
   const set = (k: string, v: string) => {
@@ -62,6 +68,9 @@ export function SuggestionAnalyticsTab() {
   };
 
   if (!mayRead) return <Empty title="אין הרשאה לצפייה באנליטיקה" />;
+  // A failed read is not a slow read: without this branch a 403 or a 500 left "טוען…" on screen
+  // for good, which is the one state an operator cannot act on.
+  if (a.isError) return <LoadError what="אנליטיקת ההצעות" error={a.error} />;
   if (!a.data) return <p className="muted">טוען…</p>;
   const rows = a.data[group];
 

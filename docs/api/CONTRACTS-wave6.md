@@ -173,13 +173,13 @@ Routes: `/workspace/:id` (X4a) · `/admin/ai` (X4b).
 | `WorkspacePage`, `SuggestionsPanel`, `StructuredEditDrawer`, `AffectsChips`, `ProposedEditsOverlay`, `PaneResizer` (X4a) | `components/workspace/*` | `/workspace/:id`; `SuggestionsPanel` **also** replaces `SourcesPage`'s own card list, so the two review surfaces cannot diverge |
 | `ArticleAskPane` (X4b) | `components/ai/ArticleAskPane.tsx` | `ArticlePage`'s work view, under `RefreshBanner`, never in the print frame |
 | `EditorChatDock` (X4b) | `components/ai/EditorChatDock.tsx` | the end of `EditorPage`'s `.ed-main` |
-| `renderWithStepLinks` (X4b) | `components/ai/citations.tsx` | inside `MessageList`; both mounts pass a step **number → key** map, because the article's deep link is `/doc/:id/:stepKey` |
+| `renderWithStepLinks` (X4b) | `components/ai/citations.tsx` | called by `MessageList` for every assistant reply — the prose between citations goes through `<Fmt>`, the citation becomes a `<Link>`; all **three** mounts (article, editor dock, workspace) pass a step **number → key** map, because the article's deep link is `/doc/:id/:stepKey` |
 | `AiPage` + `PromptsTab`, `ModelsTab`, `EvalTab`, `SuggestionAnalyticsTab`, `ConversationsTab` (X4b) | `components/admin/{AiPage.tsx,ai/*}` | `/admin/ai`, listed in both `Sidebar`'s admin links and `AdminLayout`'s tabs behind `ai.manage` |
 
 Two web-side gates are worth stating because they are not the route's own:
 
 - `SuggestionAnalyticsTab` is gated on **`analytics.read`** (X4b's choice, matching the other analytics surfaces) while `GET /suggestions/analytics` enforces **`suggestions.review`** (X3's, matching the other suggestion routes). Both seeded roles that hold either hold both, so the pair is consistent in practice; an operator granted only `analytics.read` would see the tab and a 403 inside it.
-- The admin transcript browser's `feedback` filter is applied in the browser: `ConversationsQuerySchema` has `userId`, `documentId`, `from` and `to`, and no feedback field.
+- The admin transcript browser has **no** `feedback` filter. `ConversationsQuerySchema` has `userId`, `documentId`, `from` and `to` and no feedback field, and the list row carries no message-level rating to filter on in the browser either, so the control was removed in the X6 fix wave rather than left changing only the query key. A rating is shown per message inside a transcript; filtering the list by one needs the field on the route first.
 
 The workspace link ("🧭 סביבת עבודה") is shown to an `ai.chat` holder who can also edit the document, from the article topbar (and its narrow overflow menu) and the editor toolbar. There is no top-level nav entry for it: the workspace is reached from a document (spec §5).
 

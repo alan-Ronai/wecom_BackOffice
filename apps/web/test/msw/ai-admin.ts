@@ -189,6 +189,8 @@ export const aiAdminState = {
   lastPut: null as unknown,
   lastTest: null as ModelSlot | null,
   exportCalls: 0,
+  /** How many times the admin conversation *list* was fetched — the debounce is asserted on it. */
+  listCalls: 0,
   analytics: sampleAnalytics(),
   /** The query string the analytics tab last asked with, so a filter can be asserted end to end. */
   lastAnalyticsQuery: null as Record<string, string> | null,
@@ -206,6 +208,7 @@ export const resetAiAdminState = (): void => {
   aiAdminState.lastPut = null;
   aiAdminState.lastTest = null;
   aiAdminState.exportCalls = 0;
+  aiAdminState.listCalls = 0;
   aiAdminState.analytics = sampleAnalytics();
   aiAdminState.lastAnalyticsQuery = null;
 };
@@ -226,6 +229,17 @@ export const aiAdminHandlers: RequestHandler[] = [
   http.put(`${B}/admin/ai/settings`, async ({ request }) => {
     const patch = (await request.json()) as Record<string, unknown>;
     aiAdminState.lastPut = patch;
+    /*
+     * The model slots are resolved from the environment at boot — the pull scripts, the embedding
+     * column width and the running process all agree on that one source — so the route refuses a
+     * `models` block rather than storing a row nothing reads. Mirrored here so the mock cannot
+     * model a contract the server does not have.
+     */
+    if (patch.models)
+      return HttpResponse.json(
+        { code: 'MODELS_ENV_ONLY', message: 'משבצות המודלים נקבעות בתצורת השרת' },
+        { status: 400 },
+      );
     const merged = deepMerge(
       aiAdminState.settings as unknown as Record<string, unknown>,
       patch,
@@ -269,14 +283,15 @@ export const aiAdminHandlers: RequestHandler[] = [
   }),
   http.get(`${B}/admin/ai/conversations`, ({ request }) => {
     const u = new URL(request.url);
+    // `ConversationsQuerySchema`'s fields and no others. There is deliberately no `feedback`
+    // here: the real route has no such parameter, and a mock that invents one lets a UI filter
+    // pass its test while doing nothing against the server (X6 fix wave — B-I3).
+    aiAdminState.listCalls += 1;
     const userId = u.searchParams.get('userId');
     const documentId = u.searchParams.get('documentId');
-    const feedback = u.searchParams.get('feedback');
     let items = aiAdminState.conversations.filter((c) => !aiAdminState.deleted.includes(c.id));
     if (userId) items = items.filter((c) => c.userId === userId || c.userName.includes(userId));
     if (documentId) items = items.filter((c) => c.documentId === documentId);
-    if (feedback)
-      items = items.filter((c) => (aiAdminState.messages[c.id] ?? []).some((m) => m.feedback === feedback));
     return HttpResponse.json({ items, total: items.length, page: 1, pageSize: 50 });
   }),
   http.delete(`${B}/admin/ai/conversations/:id`, ({ params }) => {

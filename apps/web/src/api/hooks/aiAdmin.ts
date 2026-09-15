@@ -43,6 +43,14 @@ export const usePutAiSettings = () => {
       // "גרסה N" chip is right on the render that follows the save, not one refetch later.
       qc.setQueryData(keys.ai.settings, s);
       void qc.invalidateQueries({ queryKey: keys.ai.versions });
+      /*
+       * A brief, style or limits change moves what the next suggestion means, and the acceptance
+       * analytics are grouped by model and prompt version — leaving them cached would show
+       * yesterday's rate under today's prompt version. `invalidateAi` is the one place that
+       * knows the pair; the `setQueryData` above survives it because it is re-seeded first and
+       * an invalidated-but-fresh entry refetches in the background.
+       */
+      invalidateAi(qc);
     },
   });
 };
@@ -89,15 +97,14 @@ export interface AdminConversationsQuery {
   documentId?: string;
   from?: string;
   to?: string;
-  /** UI-side filter over the messages' ratings; not part of the server query yet. */
-  feedback?: 'up' | 'down';
   page?: number;
 }
 
 /**
- * `feedback` and `page` are the tab's own state, not `ConversationsQuerySchema` fields — the
- * server query would reject them. The feedback filter stays client-side until the route carries
- * it (noted in `docs/wave6-acceptance.md`).
+ * `page` is the tab's own state and not a `ConversationsQuerySchema` field, so it is dropped here
+ * rather than sent. There is deliberately no `feedback`: the route has no such field, the list row
+ * carries no message-level rating to filter on locally, and a filter that only changes the query
+ * key is worse than no filter (X6 fix wave — the control was removed).
  */
 const serverQuery = (q: AdminConversationsQuery): Record<string, string> => {
   const out: Record<string, string> = {};
@@ -133,9 +140,9 @@ export const useDeleteConversation = () => {
     mutationFn: async (id: string) => {
       unwrap(await api.DELETE('/admin/ai/conversations/{id}', { params: { path: { id } } }));
     },
-    // Every filter combination is its own cache entry, so invalidate the prefix rather than the
-    // one key the screen happens to be holding.
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['ai', 'conversations'] }),
+    // Every filter combination is its own cache entry, so invalidate through the one helper that
+    // owns the `ai` prefix rather than the single key the screen happens to be holding.
+    onSuccess: () => invalidateAi(qc),
   });
 };
 
