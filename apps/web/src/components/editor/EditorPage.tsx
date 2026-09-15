@@ -48,6 +48,7 @@ import { useToast } from '../ui/Toast.js';
 import { BlockLibrary } from './BlockLibrary.js';
 import { StepEditor } from './StepEditor.js';
 import { DropZone } from './DropZone.js';
+import { useEditorPickers } from './Pickers.js';
 import { SidePane } from './SidePane.js';
 import { useRequestReviewDialog } from '../review/RequestReview.js';
 import { HistoryStrip } from './HistoryStrip.js';
@@ -319,6 +320,31 @@ export function EditorPage() {
     [doc, update],
   );
 
+  /** The corpus as `<Fmt>` wants it — names a `[[doc:id]]` target in the step editor (G10). */
+  const docRefs = useMemo(
+    () => (cards.data?.items ?? []).map((c) => ({ id: c.id, title: c.title })),
+    [cards.data],
+  );
+
+  /**
+   * G10 — `+ שדה CRM` and `+ קישור`, from the block library and from the `/` menu. Both end in
+   * the same place: one action appended to the selected step, which is what legacy's
+   * `addBasic('crm' | 'link')` did.
+   */
+  const pickers = useEditorPickers({
+    excludeId: isNew ? undefined : id,
+    onInsert: (text) => {
+      if (!doc) return;
+      const next = addAction(doc, selected, text);
+      // `addAction` is a no-op on a shared block — say so rather than swallowing the click.
+      if (next === doc) {
+        toast('זהו בלוק משותף — נתק העתק כדי לערוך', 'warn');
+        return;
+      }
+      update(next, 'פעולה');
+    },
+  });
+
   const usage = useMemo(() => {
     const map: Record<string, number> = {};
     for (const c of cards.data?.items ?? []) if (c.hasSharedBlocks) map.all = (map.all ?? 0) + 1;
@@ -572,6 +598,7 @@ export function EditorPage() {
         blocks={blocks.data ?? []}
         usage={usage}
         onBasic={applyBasic}
+        onPick={(kind) => (kind === 'crm' ? pickers.pickCrmField() : pickers.pickDocLink())}
         onShared={applyShared}
         onPreset={(t) => update(addAction(doc, selected, t))}
         onNewBlock={() => go('/blocks')}
@@ -803,6 +830,7 @@ export function EditorPage() {
                         selected={selected === s.key || multi.has(s.key)}
                         fields={fields.data ?? []}
                         blocks={blocks.data ?? []}
+                        docs={docRefs}
                         onSelect={(shift) => selectStep(s.key, shift)}
                         onPatch={(m) => patchStep(s.key, m)}
                         onMove={(dir) => update(moveStep(doc, s.key, dir), `הזזת שלב ${s.num}`)}
@@ -828,7 +856,10 @@ export function EditorPage() {
               <DropZone
                 onCommand={(cmd) => {
                   if (cmd.kind === 'basic') applyBasic(cmd.value as BasicType);
-                  else if (cmd.kind === 'shared') {
+                  else if (cmd.kind === 'pick') {
+                    if (cmd.value === 'crm') pickers.pickCrmField();
+                    else pickers.pickDocLink();
+                  } else if (cmd.kind === 'shared') {
                     const b = blocks.data?.find((x) => x.id === cmd.value);
                     if (b) applyShared(b);
                   } else if (cmd.kind === 'phase') {

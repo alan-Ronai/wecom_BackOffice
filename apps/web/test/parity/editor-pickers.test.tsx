@@ -37,7 +37,7 @@ const openEditor = async () => {
 };
 
 describe('parity · editor quick commands (gap)', () => {
-  it.skip('picks a CRM field into an action instead of asking for its exact name', async () => {
+  it('picks a CRM field into an action instead of asking for its exact name', async () => {
     await openEditor();
     await userEvent.click(await screen.findByText('+ שדה CRM'));
 
@@ -49,7 +49,7 @@ describe('parity · editor quick commands (gap)', () => {
     expect(await screen.findByDisplayValue('פתח CRM ↗ שדה sim block lbl')).toBeInTheDocument();
   });
 
-  it.skip('picks the target document of a link instead of asking for its id', async () => {
+  it('picks the target document of a link instead of asking for its id', async () => {
     await openEditor();
     await userEvent.click(await screen.findByText('+ קישור'));
 
@@ -60,7 +60,7 @@ describe('parity · editor quick commands (gap)', () => {
     expect(await screen.findByDisplayValue(/המשך לפי \[\[doc:/)).toBeInTheDocument();
   });
 
-  it.skip('offers both from the drop zone’s / menu, as legacy did', async () => {
+  it('offers both from the drop zone’s / menu, as legacy did', async () => {
     await openEditor();
     await userEvent.type(await screen.findByPlaceholderText(/לפקודה מהירה|\//), '/');
 

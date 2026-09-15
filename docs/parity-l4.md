@@ -28,8 +28,8 @@ both as a component suite (`pnpm --filter @wecom/web test`) and in a browser
 **Counts** — 71 rows across the four matrices below: **34 parity**, **29 improved** (8 of them
 rows where a gap found in this walk was closed), **6 new** (capabilities the port adds that legacy
 never had), **2 dropped**. Section 6 names two further dropped behaviours that have no
-legacy-versus-port row of their own. Ten gaps were found: **9 fixed here**, **1 left open**
-(§5).
+legacy-versus-port row of their own. Ten gaps were found: **9 fixed here**, **1 (G10) left open by
+this lane and closed by the follow-up lane that owned it** (§5).
 
 ---
 
@@ -141,8 +141,8 @@ per-user state to `GET/PUT /me/preferences`, which is why the storage differs on
 
 ## 5. Gaps found
 
-Nine were fixed in this lane; one is left open. Every one is pinned by a test under
-`apps/web/test/parity/`.
+Nine were fixed in this lane; the tenth, G10, was left open here and closed by a follow-up lane.
+Every one is pinned by a test under `apps/web/test/parity/`.
 
 ### Fixed here
 
@@ -158,11 +158,23 @@ Nine were fixed in this lane; one is left open. Every one is pinned by a test un
 | G8 | The CRM note under an action said "שדה CRM · תקין" and dropped legacy's "· ב-N מסמכים"; the hover peek always showed the description and never legacy's "משתף איתך: ⧉ <block> (שלב N)"; and `document.title` never changed, so every browser tab, history entry and bookmark read "wecom · מאגר ידע פנימי". | `StepView` renders `usedIn` (already on `GET /fields`); `Peek` computes the shared blocks from two already-cached documents; `navStore` names the route and the article reports its own title | `test/parity/article.test.tsx`, `test/parity/document-title.test.tsx` |
 | G9 | CSV import read four of the five documented columns and hard-coded `priority: 'm'`, so an import of the shape `legacy/README.md` publishes flattened every card to "בינוני" — and priority is what the library groups and facets by, so the whole import landed in the wrong place with nothing to say so. | `LibraryPage.importFile` reads `pri`, falling back to `'m'` for an empty or unknown value exactly as legacy did (1 line) | `test/parity/csv-import.test.tsx` |
 
-### Left open
+### Left open — none; G10 closed by a follow-up lane
 
-| # | Gap | Why it is not fixed here | Estimate |
+| # | Gap | Fix | Test |
+|---|---|---|---|
+| G10 | The editor's two picker quick-commands. Legacy offered `+ שדה CRM` and `+ קישור` and `CRM שדה` / `↗ קישור למסמך` in the `/` menu; each opened a `<select>` and appended `פתח CRM ↗ שדה <name>` or `המשך לפי [[doc:<id>]]`. The port had neither, so an editor had to type a field name character-exact from memory or paste a raw uuid. | `editor/Pickers.tsx` — a search box over a native `<select size>` (the listbox that already does arrows, type-ahead and RTL), one over `GET /fields` with `usedIn` and status, one over `GET /documents` with the target's type and worlds as chips. Reached from the block library and from a new `pick` arm on `SlashCommand`; both append one action to the selected step, as `addBasic('crm' \| 'link')` did. An action's `[[doc:id]]` now names its target beside the field. No API, schema or fixture change. | `test/parity/editor-pickers.test.tsx` (the three criteria below, un-skipped) |
+
+The estimate this lane wrote for it — ~90 lines across 3 files, half a day with tests — was low on
+lines and right on shape: +378/−8 across six files, of which 273 are the new picker module (about a
+third of it comment) and 5 are CSS. The three files it named are three of the five touched.
+
+<details><summary>The gap as this lane recorded it</summary>
+
+| # | Gap | Why it was not fixed here | Estimate |
 |---|---|---|---|
 | G10 | The editor's two picker quick-commands. Legacy offered `+ שדה CRM` and `+ קישור` on each step's adder row and `CRM שדה` / `↗ קישור למסמך` in the `/` menu; each opened a `<select>` (over `crm-fields.json`, or over every other document) and appended `פתח CRM ↗ שדה <name>` or `המשך לפי [[doc:<id>]]`. The port has neither. The **capability** is intact — `<Fmt>` still detects a field in free text and resolves `[[doc:id]]`, and the action placeholder says so — but an editor now has to type the exact field name, or a raw uuid, from memory. That is worse than legacy, where document ids were slugs. | Two new dialogs plus wiring in three files (`DropZone`'s `SlashCommand` union and command list, `EditorPage`'s `onCommand` switch and `applyBasic`, `StepEditor`'s adder row), past the ≤ 30-line in-place budget this lane works to. | ~90 lines across 3 files, half a day with tests. The existing `useModal` + `useFields` + `useDocuments` hooks cover everything it needs; no API or schema change. |
+
+</details>
 
 ---
 

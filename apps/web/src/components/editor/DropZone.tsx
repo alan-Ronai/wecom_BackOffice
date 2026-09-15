@@ -4,6 +4,8 @@ import type { Block } from '@wecom/shared';
 export type SlashCommand =
   | { kind: 'basic'; value: string }
   | { kind: 'shared'; value: string }
+  /** G10 — opens a picker dialog rather than inserting something on its own (legacy `addBasic`). */
+  | { kind: 'pick'; value: 'crm' | 'link' }
   | { kind: 'phase'; value: '' }
   | { kind: 'title'; value: string };
 
@@ -27,6 +29,8 @@ export function DropZone({
       ['? הסתעפות אם/אז', { kind: 'basic', value: 'branch' }],
       ['✓ תוצאות', { kind: 'basic', value: 'outcomes' }],
       ['“ תסריט שיחה', { kind: 'basic', value: 'script' }],
+      ['CRM שדה', { kind: 'pick', value: 'crm' }],
+      ['↗ קישור למסמך', { kind: 'pick', value: 'link' }],
       ...blocks.map<[string, SlashCommand]>((b) => [
         `⧉ ${b.title} (בלוק משותף)`,
         { kind: 'shared', value: b.id },
@@ -66,6 +70,9 @@ export function DropZone({
         <input
           type="text"
           aria-label="פקודה מהירה"
+          // The field is transparent until it has focus, so the hint behind it is what a reader
+          // sees; the placeholder is the same words, for the moment the field covers them.
+          placeholder="/ לפקודה מהירה"
           value={value}
           onChange={(e) => {
             setValue(e.target.value);
