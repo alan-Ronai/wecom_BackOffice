@@ -203,9 +203,14 @@ export function Palette() {
     const out: Row[] = [];
     const groups = search.data?.groups ?? [];
     for (const g of groups) {
-      if (!g.hits.length) continue;
+      // Legacy narrowed the pool to documents whenever the palette was asked *which document*
+      // ("איזה מסמך לפתוח בלשונית חדשה?" / "…להציג לצד הנוכחי?"). A CRM field or a block is not an
+      // answer to that question, and picking one navigated to `/doc/<field name>`. A step hit
+      // still qualifies — it carries the document it belongs to.
+      const hits = mode === 'search' ? g.hits : g.hits.filter((h) => h.documentId ?? h.type === 'document');
+      if (!hits.length) continue;
       out.push({ kind: 'group', label: GROUP_LABEL[g.type] ?? g.type });
-      for (const hit of g.hits) out.push({ kind: 'hit', hit });
+      for (const hit of hits) out.push({ kind: 'hit', hit });
     }
     if (mode === 'search' && (type === 'all' || type === 'actions')) {
       const needle = debounced.trim().toLowerCase();
@@ -222,6 +227,14 @@ export function Palette() {
 
   const selectable = rows.filter((r) => r.kind !== 'group');
   const current = selectable[Math.min(sel, Math.max(0, selectable.length - 1))];
+
+  // Legacy's `draw()` ended by scrolling the selected row into view. The result box shows about
+  // six rows and holds up to forty, so without this, arrowing down moves a selection nobody can
+  // see and ↵ opens something the operator never read.
+  useEffect(() => {
+    if (!open) return;
+    document.querySelector('.palette .ri.on')?.scrollIntoView({ block: 'nearest' });
+  }, [open, sel, rows]);
 
   if (!open) return null;
 
@@ -247,7 +260,10 @@ export function Palette() {
     }
     const h = row.hit;
     if (mode === 'split') {
-      if (h.documentId) nav.toggleSplit(h.documentId);
+      // Same resolution as `newtab`: a document hit names itself in `id`, a step hit names its
+      // document in `documentId`. The rows list is already narrowed to those two.
+      const id = h.documentId ?? h.id;
+      if (id) nav.toggleSplit(id);
       return;
     }
     if (mode === 'newtab') {

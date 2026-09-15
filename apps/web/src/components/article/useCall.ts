@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Document } from '@wecom/shared';
 import { callState, type CallResult, type CallState } from '../../lib/callState.js';
+import { useToast } from '../ui/Toast.js';
 import type { ResolvedStep } from '../../lib/steps.js';
 
 export interface Call {
@@ -36,6 +37,7 @@ export function useCall(
   syncUrl = true,
 ): Call {
   const go = useNavigate();
+  const toast = useToast();
   const docId = doc?.id ?? '';
   const [state, setState] = useState<CallState>(() =>
     docId ? callState.get(docId) : { started: null, active: null, results: {} },
@@ -94,8 +96,12 @@ export function useCall(
       const i = steps.findIndex((s) => s.key === key);
       const next = res.goto && steps.some((s) => s.key === res.goto) ? res.goto : steps[i + 1]?.key;
       if (next) setActive(next);
+      // Legacy `pickOutcome`: an outcome with nowhere to go *is* the end of the call. Without
+      // this the agent is left on the last step with no signal that the document is finished and
+      // the CRM summary is complete — and `C` (copy the summary) is the next thing they need.
+      else toast('✓ סיום המסמך · הסיכום מוכן להעתקה', 'ok');
     },
-    [setActive, steps],
+    [setActive, steps, toast],
   );
 
   const skipped = useMemo(() => {

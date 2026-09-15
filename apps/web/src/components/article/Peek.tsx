@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useDocument } from '../../api/hooks/documents.js';
+import { useBlocks } from '../../api/hooks/content.js';
 import { useNav } from '../shell/navStore.js';
 import { useEntityDialogs } from '../library/dialogs.js';
 import { cat, PRI } from '../../lib/constants.js';
@@ -32,6 +33,25 @@ export function Peek() {
   const docQ = useDocument(peek?.docId);
   const doc = docQ.data;
   const stepCount = doc ? doc.phases.reduce((n, p) => n + p.steps.length, 0) : 0;
+
+  /**
+   * Legacy's `KB.sharedWith(current, hovered)` line. The description says what the other document
+   * is about; this says what it has in common with the one on screen — which is the reason to
+   * open it *beside* the current one rather than instead of it, and the whole point of the peek
+   * during a call. Both documents are already cached under `keys.doc(id)`, so this costs nothing
+   * on the article page.
+   */
+  const currentId = /^\/doc\/([^/]+)/.exec(loc.pathname)?.[1];
+  const currentQ = useDocument(peek && currentId !== peek.docId ? currentId : undefined);
+  const blocks = useBlocks();
+  const shared = useMemo(() => {
+    if (!doc || !currentQ.data) return [];
+    const mine = new Set(currentQ.data.phases.flatMap((p) => p.steps.map((s) => s.blockId)).filter(Boolean));
+    return doc.phases
+      .flatMap((p) => p.steps)
+      .filter((s) => s.blockId && mine.has(s.blockId))
+      .map((s) => `⧉ ${blocks.data?.find((b) => b.id === s.blockId)?.title ?? ''} (שלב ${s.num})`);
+  }, [doc, currentQ.data, blocks.data]);
 
   const hide = useCallback((now = false) => {
     if (showTimer.current) clearTimeout(showTimer.current);
@@ -108,7 +128,7 @@ export function Peek() {
       <div className="m">
         {cat(doc.category).label} · {stepCount} שלבים · {PRI[doc.priority].label} · v{doc.currentVersion}
       </div>
-      <div className="s">{doc.description}</div>
+      <div className="s">{shared.length ? `משתף איתך: ${shared.join(', ')}` : doc.description}</div>
       <div className="b">
         <span
           className="p"

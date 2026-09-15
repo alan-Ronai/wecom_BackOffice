@@ -15,7 +15,12 @@ export interface StepCtx {
   expandAll?: boolean;
   connections?: boolean;
   prefix?: string;
-  fields: FieldInfo[];
+  /**
+   * `GET /fields` returns a `usedIn` count alongside each field, and the CRM note under an action
+   * renders it. The property is optional because the editor preview and the split panes hand
+   * down whatever list they already hold; a missing count just drops that clause.
+   */
+  fields: (FieldInfo & { usedIn?: number })[];
   docs: DocRef[];
   crmFields?: CrmField[];
   onSelect?: (key: string) => void;
@@ -77,7 +82,15 @@ export function StepView({ step, ctx, hint }: { step: ResolvedStep; ctx: StepCtx
     if (!name) return null;
     const f = ctx.fields.find((x) => x.name === name);
     const label = f?.status === 'renamed' ? 'שונה שם' : f?.status === 'new' ? 'חדש' : f ? 'תקין' : 'לא מוכר';
-    return <span className="fnote">שדה CRM · {label}</span>;
+    // The count is the half an editor acts on: "תקין" says the field exists, "ב-9 מסמכים" says
+    // whether renaming it is a one-line edit or a morning's work.
+    const used = f?.usedIn == null ? '' : ` · ב-${f.usedIn} מסמכים`;
+    return (
+      <span className="fnote">
+        שדה CRM · {label}
+        {used}
+      </span>
+    );
   };
 
   return (
