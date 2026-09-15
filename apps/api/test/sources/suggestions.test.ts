@@ -275,6 +275,232 @@ run('SuggestionService', () => {
     240000,
   );
 
+  /**
+   * X3 §1.8. Note what the second edit asserts: a structured edit is always applied to the
+   * ORIGINAL payload, never to the previous edit, so `add-0` means the same proposed line on
+   * every pass and `edit_diff` always reads "as proposed → as it stands".
+   */
+  it(
+    'edits a suggestion field by field and records the diff',
+    async () =>
+      withDb(async (pool) => {
+        const uid = await seedUser(pool, { displayName: 'ענבר ל.' });
+        const src = (await pool.query(`insert into sources(kind, title) values ('docx','נהלים') returning id`))
+          .rows[0].id as string;
+        const rev = (
+          await pool.query(
+            `insert into source_revisions(source_id, hash, paragraphs) values ($1,'h1','[]') returning id`,
+            [src],
+          )
+        ).rows[0].id as string;
+        const svc = new SuggestionService(pool, contentStub, { publish: async () => undefined });
+        const [s] = await svc.createFromProposals(rev, [
+          {
+            anchor: '§4.8',
+            type: 'update-step',
+            title: 'סף',
+            targetDocumentId: null,
+            targetStepKey: 's8',
+            targetBlockId: null,
+            payload: { type: 'update-step', addActions: ['א', 'ב'], patch: { hint: 'טיפ' } },
+            confidence: 0.9,
+            rationale: 'r',
+          },
+        ]);
+
+        const e = await svc.editStructured(
+          s.id,
+          {
+            type: 'update-step',
+            rows: [
+              { rowId: 'add-1', op: 'remove' },
+              { rowId: 'patch-hint', op: 'edit', value: 'טיפ מעודכן' },
+            ],
+          },
+          uid,
+        );
+        expect(e.editedPayload).toEqual({
+          type: 'update-step',
+          addActions: ['א'],
+          patch: { hint: 'טיפ מעודכן' },
+        });
+        expect(e.editDiff?.rows.map((r) => [r.rowId, r.op])).toEqual([
+          ['add-1', 'remove'],
+          ['patch-hint', 'edit'],
+        ]);
+
+        const e2 = await svc.editStructured(
+          s.id,
+          { type: 'update-step', rows: [{ rowId: 'add-0', op: 'edit', value: 'א!' }] },
+          uid,
+        );
+        expect(e2.editedPayload).toEqual({
+          type: 'update-step',
+          addActions: ['א!', 'ב'],
+          patch: { hint: 'טיפ' },
+        });
+
+        await expect(
+          svc.editStructured(s.id, { type: 'update-step', rows: [{ rowId: 'nope', op: 'remove' }] }, uid),
+        ).rejects.toMatchObject({ code: 'UNKNOWN_ROW' });
+        await expect(
+          svc.editStructured(s.id, { type: 'new-step', rows: [] } as never, uid),
+        ).rejects.toMatchObject({ code: 'TYPE_MISMATCH' });
+
+        // the legacy full-payload edit still works and now derives a diff too
+        const e3 = await svc.edit(s.id, { type: 'update-step', addActions: ['א', 'ג'], patch: {} }, uid);
+        expect(e3.editDiff?.rows.map((r) => r.rowId).sort()).toEqual(['add-1', 'patch-hint']);
+      }),
+    180000,
+  );
+
+  it(
+    'accepts part of a suggestion and re-queues the rest as a remainder',
+    async () =>
+      withDb(async (pool) => {
+        const uid = await seedUser(pool, { displayName: 'ענבר ל.' });
+        const src = (await pool.query(`insert into sources(kind, title) values ('docx','נהלים') returning id`))
+          .rows[0].id as string;
+        const rev = (
+          await pool.query(
+            `insert into source_revisions(source_id, hash, paragraphs) values ($1,'h2','[]') returning id`,
+            [src],
+          )
+        ).rows[0].id as string;
+        const block: Block = {
+          id: B,
+          slug: 'sim-refresh',
+          title: 'ריענון SIM',
+          kind: 'step',
+          actions: [
+            { id: 'b1', text: 'x' },
+            { id: 'b2', text: 'y' },
+          ],
+          outcomes: [],
+          currentVersion: 1,
+          updatedAt: '2025-06-12T00:00:00.000Z',
+        };
+        await seedBlock(pool, block);
+        const doc: Document = {
+          id: D,
+          slug: 'browsing',
+          title: 'איטיות גלישה',
+          description: '',
+          category: 'tech',
+          wave: 1,
+          priority: 'hh',
+          kind: 'steps',
+          status: 'published',
+          currentVersion: 1,
+          sourceId: src,
+          related: [],
+          createdAt: '2025-06-12T00:00:00.000Z',
+          updatedAt: '2025-06-12T00:00:00.000Z',
+          phases: [
+            {
+              id: 'p1',
+              label: '',
+              steps: [
+                {
+                  key: 's8',
+                  num: '8',
+                  title: 'בדיקת מהירות גלישה',
+                  actions: [{ id: 'a1', text: 'הרץ Speedtest' }],
+                  outcomes: [],
+                  blockRefs: [],
+                  deps: [],
+                },
+              ],
+            },
+          ],
+        };
+        await seedDocument(pool, doc, uid);
+
+        const events: Event[] = [];
+        const svc = new SuggestionService(pool, contentStub, { publish: (_tx, e) => void events.push(e) });
+        const [s] = await svc.createFromProposals(rev, [
+          {
+            anchor: '§4.8',
+            type: 'update-step',
+            title: 'סף',
+            targetDocumentId: D,
+            targetStepKey: 's8',
+            targetBlockId: null,
+            payload: {
+              type: 'update-step',
+              addActions: ['א', 'ב'],
+              outcomes: [{ kind: 'ok', text: 'נפתר' }],
+              patch: { hint: 'טיפ' },
+            },
+            confidence: 0.9,
+            rationale: 'r',
+          },
+        ]);
+
+        // the whole `outcomes` group plus one `add` row — a legal selection
+        await expect(svc.acceptParts(s.id, ['out-0', 'add-0'], uid)).resolves.toBeTruthy();
+        const again = await svc.get(s.id);
+        expect(again.status).toBe('accepted');
+        expect(again.appliedParts).toEqual(['add-0', 'out-0']);
+        expect(again.editedPayload).toEqual({
+          type: 'update-step',
+          addActions: ['א'],
+          outcomes: [{ kind: 'ok', text: 'נפתר' }],
+          patch: {},
+        });
+        const list = await svc.list({ sourceId: src, page: 1, pageSize: 50 });
+        const rem = list.items.find((x) => x.parentId === s.id)!;
+        expect(rem).toMatchObject({
+          status: 'pending',
+          type: 'update-step',
+          anchor: '§4.8',
+          targetDocumentId: D,
+          targetStepKey: 's8',
+          title: 'סף (המשך)',
+        });
+        expect(rem.payload).toEqual({ type: 'update-step', addActions: ['ב'], patch: { hint: 'טיפ' } });
+        expect(events.filter((e) => e.name === 'suggestion.created')).toHaveLength(2); // original + remainder
+
+        const [s2] = await svc.createFromProposals(rev, [
+          {
+            anchor: '§5',
+            type: 'update-block',
+            title: 'בלוק',
+            targetDocumentId: null,
+            targetStepKey: null,
+            targetBlockId: B,
+            payload: {
+              type: 'update-block',
+              actions: [
+                { id: 'b1', text: 'x' },
+                { id: 'b2', text: 'y!' },
+              ],
+            },
+            confidence: 0.8,
+            rationale: 'r',
+          },
+        ]);
+        // a partial atomic group is not splittable, and the row stays untouched
+        await expect(svc.acceptParts(s2.id, ['act-b1'], uid)).rejects.toMatchObject({
+          code: 'NOT_SPLITTABLE',
+        });
+        expect((await svc.get(s2.id)).status).toBe('pending');
+        // selecting everything is a normal accept: no remainder and no applied_parts
+        const r3 = await svc.acceptParts(s2.id, ['act-b1', 'act-b2'], uid);
+        expect(r3.remainder).toBeNull();
+        expect((await svc.get(s2.id)).appliedParts).toBeNull();
+
+        // publishAccepted applies the narrowed payload only — the remainder is still pending
+        await svc.publishAccepted(src, uid);
+        const after = (await readDocument(pool, D))!;
+        const st = after.phases.flatMap((p) => p.steps).find((x) => x.key === 's8')!;
+        expect(st.actions.map((a) => a.text)).toContain('א');
+        expect(st.actions.map((a) => a.text)).not.toContain('ב');
+        expect((await svc.get(rem.id)).status).toBe('pending');
+      }),
+    240000,
+  );
+
   it(
     'filters and paginates the review queue',
     async () =>
