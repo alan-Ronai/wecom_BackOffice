@@ -73,6 +73,39 @@ const hi = (text: string, q: string): string => {
   );
 };
 
+/**
+ * L8 — the documents already in the query cache, *and* a re-render when that changes.
+ *
+ * The local sections below the search threshold are read straight out of TanStack's cache rather
+ * than fetched, which is the point: two letters cost no request. But reading a cache inside a
+ * `useMemo` keyed on `qc` — an object that never changes — meant the palette took one snapshot when
+ * it opened and kept it. Open `/doc/:id` cold, hit `Ctrl K` before the sidebar's document list has
+ * answered, type two letters: the sections stayed empty until another keystroke moved a dep.
+ *
+ * Subscribing to the cache is what makes the read live. Only while the palette is open, so the
+ * subscription costs nothing the rest of the time.
+ */
+function useCachedDocumentCards(enabled: boolean): DocumentCard[] {
+  const qc = useQueryClient();
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    if (!enabled) return;
+    return qc.getQueryCache().subscribe((event) => {
+      const key = event.query.queryKey;
+      if (Array.isArray(key) && key[0] === 'documents') setVersion((n) => n + 1);
+    });
+  }, [qc, enabled]);
+  return useMemo(() => {
+    const byId = new Map<string, DocumentCard>();
+    for (const [, page] of qc.getQueriesData<ListDocumentsResponse>({ queryKey: ['documents'] }))
+      for (const c of page?.items ?? []) if (!byId.has(c.id)) byId.set(c.id, c);
+    return [...byId.values()];
+    // `version` is the subscription's signal that the cache moved; `enabled` re-reads on the open,
+    // since the snapshot taken while the palette was closed is exactly the stale one. `qc` never
+    // changes, which is the whole reason this needed the other two.
+  }, [qc, version, enabled]);
+}
+
 /** Port of legacy KB.palette — server search merged with local actions. */
 export function Palette() {
   const palette = usePalette();
@@ -86,7 +119,6 @@ export function Palette() {
   const prefs = usePreferences();
   const savePrefs = useSavePreferences();
   const ui = useUiPrefs();
-  const qc = useQueryClient();
   const can = useCan();
   const track = useTelemetry();
 
@@ -97,6 +129,7 @@ export function Palette() {
   const trap = useFocusTrap<HTMLDivElement>(true);
   const debounced = useDebounced(q, 120);
   const search = useSearch(debounced, type);
+  const cachedCards = useCachedDocumentCards(open);
 
   /**
    * Below `MIN_SEARCH_CHARS` no request was made for what is typed now — but `keepPreviousData`
@@ -242,11 +275,8 @@ export function Palette() {
      * `fields`/`blocks`/`scripts` tab that the local cache cannot speak for.
      */
     if (!isSearchable(debounced) && (type === 'all' || type === 'documents')) {
-      const byId = new Map<string, DocumentCard>();
-      for (const [, page] of qc.getQueriesData<ListDocumentsResponse>({ queryKey: ['documents'] }))
-        for (const c of page?.items ?? []) if (!byId.has(c.id)) byId.set(c.id, c);
       for (const g of localGroups({
-        cards: [...byId.values()],
+        cards: cachedCards,
         lastSeen: ui.prefs.lastSeen,
         needle: debounced,
       })) {
@@ -265,7 +295,7 @@ export function Palette() {
       }
     }
     return out;
-  }, [data, actions, debounced, mode, type, qc, ui.prefs.lastSeen]);
+  }, [data, actions, cachedCards, debounced, mode, type, ui.prefs.lastSeen]);
 
   const selectable = rows.filter((r) => r.kind !== 'group');
   const current = selectable[Math.min(sel, Math.max(0, selectable.length - 1))];
