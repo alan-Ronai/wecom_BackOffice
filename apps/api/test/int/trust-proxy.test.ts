@@ -84,6 +84,70 @@ describe('trustProxySetting', () => {
       expect(cfg({ TRUST_PROXY_HOPS: '' }).TRUST_PROXY_HOPS).toBeUndefined();
       expect(trustProxySetting(cfg({ TRUST_PROXY: '172.16.0.0/12' }))).toEqual(['172.16.0.0/12']);
     });
+
+    /**
+     * M5. The exact-address arm compared the raw string, *before* the `::ffff:` unwrap the CIDR
+     * arm does — so `TRUST_PROXY=172.20.0.3` on a dual-stack listener silently stopped trusting
+     * nginx. Silently: `req.ip` becomes the proxy's address, so every per-IP rate-limit bucket
+     * collapses into one and every audit row records the proxy instead of the caller.
+     */
+    it('matches an exact address however the peer is spelled', () => {
+      const trust = hopFn({ TRUST_PROXY: '172.20.0.3', TRUST_PROXY_HOPS: '1' });
+      expect(trust('172.20.0.3', 0)).toBe(true);
+      // The same host, as a dual-stack listener hands it over.
+      expect(trust('::ffff:172.20.0.3', 0)).toBe(true);
+      // …and the other direction: a mapped address written in the config still matches the
+      // plain v4 peer, because both sides are normalised rather than only one.
+      const mapped = hopFn({ TRUST_PROXY: '::ffff:172.20.0.3', TRUST_PROXY_HOPS: '1' });
+      expect(mapped('172.20.0.3', 0)).toBe(true);
+      expect(mapped('::ffff:172.20.0.3', 0)).toBe(true);
+      // Still nobody else.
+      expect(trust('172.20.0.4', 0)).toBe(false);
+    });
+
+    /**
+     * Deploy review L14. `loopback`/`linklocal`/`uniquelocal` are proxy-addr's own spellings and
+     * work with `TRUST_PROXY` alone; the hop-bounded arm is our trust function rather than
+     * proxy-addr's list handling, so without the table they became exact addresses matching
+     * nothing — a working config that started trusting nobody the moment `TRUST_PROXY_HOPS` was
+     * set beside it.
+     */
+    it('keeps proxy-addr keywords working once TRUST_PROXY_HOPS is set', () => {
+      const loopback = hopFn({ TRUST_PROXY: 'loopback', TRUST_PROXY_HOPS: '1' });
+      expect(loopback('127.0.0.1', 0)).toBe(true);
+      expect(loopback('127.9.9.9', 0)).toBe(true);
+      expect(loopback('::1', 0)).toBe(true);
+      expect(loopback('10.0.0.1', 0)).toBe(false);
+
+      const unique = hopFn({ TRUST_PROXY: 'uniquelocal', TRUST_PROXY_HOPS: '1' });
+      for (const a of ['10.1.2.3', '172.18.0.5', '192.168.1.1', 'fd00::1'])
+        expect(unique(a, 0), a).toBe(true);
+      expect(unique('203.0.113.1', 0)).toBe(false);
+
+      // Mixed with addresses and CIDRs, which is what a real `.env` line looks like.
+      const mixed = hopFn({ TRUST_PROXY: 'loopback,172.16.0.0/12,10.0.0.1', TRUST_PROXY_HOPS: '1' });
+      for (const a of ['127.0.0.1', '172.18.0.5', '10.0.0.1']) expect(mixed(a, 0), a).toBe(true);
+      expect(mixed('192.168.1.1', 0)).toBe(false);
+
+      const linklocal = hopFn({ TRUST_PROXY: 'linklocal', TRUST_PROXY_HOPS: '1' });
+      expect(linklocal('169.254.1.1', 0)).toBe(true);
+      expect(linklocal('fe80::1', 0)).toBe(true);
+    });
+
+    /**
+     * Deploy review L14, the other half: `ipaddr.parseCIDR` threw a bare `invalid CIDR subnet`
+     * out of `buildApp`, a stack trace naming ipaddr.js for what is a typo in one line of
+     * `deploy/.env`.
+     */
+    it('turns a malformed TRUST_PROXY into a boot-time config error naming the variable', () => {
+      for (const bad of ['172.16.0.0/64', '172.16.0.0/', 'not-an-ip', '10.0.0.0/8,wat'])
+        expect(() => cfg({ TRUST_PROXY: bad }), bad).toThrow(/TRUST_PROXY/);
+      // The message says what to write instead.
+      expect(() => cfg({ TRUST_PROXY: '172.16.0.0/64' })).toThrow(/uniquelocal/);
+      // A well-formed value of every accepted shape still parses.
+      for (const ok of ['true', 'false', 'loopback', '172.16.0.0/12', '10.0.0.1, uniquelocal'])
+        expect(() => cfg({ TRUST_PROXY: ok }), ok).not.toThrow();
+    });
   });
 });
 

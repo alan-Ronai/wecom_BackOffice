@@ -111,11 +111,35 @@ export function groupSections(paragraphs: Paragraph[], sourceTitle: string): Sec
   return out;
 }
 
+/** How many items these sections carry, i.e. how many steps they would become uncapped. */
+export const countItems = (sections: Section[]): number => sections.reduce((n, s) => n + s.items.length, 0);
+
+/**
+ * The paragraphs `MAX_STEPS` left out of a suggestion, as a sentence for its rationale — or
+ * `''` when nothing was dropped (M4).
+ *
+ * The cap itself is right: a 400-paragraph source has to stay reviewable. Applying it in silence
+ * was not. On the `singleDocument` path the loss is permanent, not merely invisible: applying the
+ * card anchors the source's steps, so `isNewSourcePath` (which needs `linkedSteps.length === 0`)
+ * never fires for that source again and the paragraphs past the cap are never proposed by
+ * anything. The reviewer is the only one who can act on it, so the reviewer is told, in the one
+ * field they read before pressing apply.
+ */
+export const truncationNote = (sections: Section[], phases: Phase[]): string => {
+  const dropped = countItems(sections) - phases.reduce((n, p) => n + p.steps.length, 0);
+  return dropped > 0
+    ? ` שים לב: ${dropped} פסקאות מעבר ל-${MAX_STEPS} השלבים הראשונים לא נכללו בכרטיס ויש להוסיף אותן ידנית.`
+    : '';
+};
+
 /**
  * One phase per section, steps numbered continuously across the whole suggestion so a
  * multi-phase card still has unique `step_key`s (`suggestions.applyOne` → `nextKey`).
  * Each step keeps its own paragraph ref in `sourceRef`, which is what makes the next
  * import map paragraph → step instead of proposing the card again.
+ *
+ * Stops at `MAX_STEPS` steps in total. What was left out is reported by `truncationNote`, which
+ * every caller here puts in the card's rationale.
  */
 export function buildPhases(sections: Section[], phaseLabel?: string): Phase[] {
   const phases: Phase[] = [];
@@ -201,25 +225,31 @@ export function sectionCards(ctx: ProposalContext): ProposedSuggestion[] {
   if (!sections.length) return [];
   if (ctx.source.singleDocument) {
     const text = sections.flatMap((s) => s.items.map((i) => i.text)).join(' ');
+    const phases = buildPhases(sections);
     return [
       card({
         anchor: anchorOf(sections[0].ref),
         title: ctx.source.title,
         text,
-        phases: buildPhases(sections),
-        rationale: 'פריט מרוחק חדש ללא מסמך מתאים: ' + sections.length + ' סעיפים אוחדו לכרטיס אחד.',
+        phases,
+        rationale:
+          'פריט מרוחק חדש ללא מסמך מתאים: ' +
+          sections.length +
+          ' סעיפים אוחדו לכרטיס אחד.' +
+          truncationNote(sections, phases),
       }),
     ];
   }
-  return sections.map((s) =>
-    card({
+  return sections.map((s) => {
+    const phases = buildPhases([s], 'שלבי הטיפול');
+    return card({
       anchor: anchorOf(s.ref),
       title: s.title,
       text: s.items.map((i) => i.text).join(' '),
-      phases: buildPhases([s], 'שלבי הטיפול'),
-      rationale: 'סעיף חדש ' + s.ref + ' ללא שלב מקושר.',
-    }),
-  );
+      phases,
+      rationale: 'סעיף חדש ' + s.ref + ' ללא שלב מקושר.' + truncationNote([s], phases),
+    });
+  });
 }
 
 /**

@@ -20,6 +20,28 @@ export const syncFlagReason = (overall: DocumentSyncState['overall']): string | 
  * `GET /documents/:id/sync-state` and the wave-5 source-review flag both read this. It does not
  * check visibility — callers that answer to a user must `assertVisibleDocument` first.
  */
+/**
+ * Strips the connector-operations fields from a state, for a caller who may read the document
+ * but does not hold `sources.manage` (post-pilot L4).
+ *
+ * `GET /documents/:id/sync-state` answers to `docs.read` — every agent in the building — because
+ * the article header needs its badge. The badge needs the *state*; it does not need the
+ * connector's name and type, the remote URL, or how the connector's last run went. Those
+ * describe the integration rather than the article, and they are the things an agent has no
+ * business knowing and `sources.manage` exists to gate.
+ */
+export const redactSyncState = (state: DocumentSyncState): DocumentSyncState => ({
+  ...state,
+  links: state.links.map((l) => ({
+    ...l,
+    connectorName: null,
+    connectorType: null,
+    remoteUrl: null,
+    connectorLastStatus: null,
+    connectorLastRunAt: null,
+  })),
+});
+
 export async function getDocumentSyncState(
   db: Pool | PoolClient,
   documentId: string,

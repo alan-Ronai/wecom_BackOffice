@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { signBody, verifySignature, WordPressConnector, WpConfigSchema } from '../src/index.js';
+import { WebhookBodySchema } from '../src/wordpress/webhook.js';
 
 const cfg = WpConfigSchema.parse({
   baseUrl: 'http://wp',
@@ -51,6 +52,41 @@ describe('webhook', () => {
       ),
     ).rejects.toThrow(/stale webhook/);
   });
+  /**
+   * Post-pilot L1. The API's replay key hashes the exact signed bytes and `sent_at` has second
+   * resolution, so the per-delivery `nonce` inside the body is the only thing that keeps two
+   * genuine saves of the same post in the same second from being byte-identical requests — the
+   * second of which is refused `409 REPLAY`, dropping an editor's correction. `docs/connectors.md`
+   * has always asked plugins for it; the schema is what puts it in the contract.
+   */
+  it('carries the per-delivery nonce through the body schema', () => {
+    const b = { event: 'save_post', post_type: 'posts', post_id: 7, modified_gmt: 'x', sent_at: 'y' };
+    expect(WebhookBodySchema.parse({ ...b, nonce: 'b3f1c2a0e9d84f17' }).nonce).toBe('b3f1c2a0e9d84f17');
+    // Optional, because WEBHOOK_REQUIRE_NONCE=false has to buy a real release of grace for
+    // plugins that predate it.
+    expect(WebhookBodySchema.parse(b).nonce).toBeUndefined();
+    // But a plugin that sends the wrong *type* fails loudly rather than having it dropped.
+    expect(WebhookBodySchema.safeParse({ ...b, nonce: 17 }).success).toBe(false);
+    expect(WebhookBodySchema.safeParse({ ...b, nonce: '' }).success).toBe(false);
+  });
+
+  it('two saves in the same second are distinct deliveries when each carries a nonce', () => {
+    const at = '2026-09-15T08:30:01+00:00';
+    const save = (nonce: string) =>
+      JSON.stringify({
+        event: 'save_post',
+        post_type: 'posts',
+        post_id: 7,
+        modified_gmt: '2026-09-15T08:30:00',
+        sent_at: at,
+        nonce,
+      });
+    // The replay key is a hash of these bytes; without the nonce the two are the same request.
+    expect(save('a')).not.toBe(save('b'));
+    expect(signBody('topsecret1', save('a'))).not.toBe(signBody('topsecret1', save('b')));
+    expect(WebhookBodySchema.parse(JSON.parse(save('a'))).nonce).toBe('a');
+  });
+
   it('rejects an unparseable sent_at', async () => {
     const bad = rawWith('not-a-date');
     await expect(

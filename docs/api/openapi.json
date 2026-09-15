@@ -31401,10 +31401,12 @@
                             "format": "uuid"
                           },
                           "connectorName": {
-                            "type": "string"
+                            "type": "string",
+                            "nullable": true
                           },
                           "connectorType": {
-                            "type": "string"
+                            "type": "string",
+                            "nullable": true
                           },
                           "externalId": {
                             "type": "string"

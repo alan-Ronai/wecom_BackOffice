@@ -22,7 +22,7 @@ import {
   type SyncLinkRow,
 } from './repo.js';
 import type { SyncService } from './sync.js';
-import { claimWebhookNonce, replayKey, NONCE_HEADER } from './nonces.js';
+import { claimWebhookNonce, releaseWebhookNonce, replayKey, NONCE_HEADER } from './nonces.js';
 import { auditOf, userOf, type Enqueue } from './context.js';
 
 /**
@@ -416,9 +416,24 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
           'deprecated: webhook without a nonce header; set WEBHOOK_REQUIRE_NONCE once the plugin is updated',
         );
       }
-      if (!(await claimWebhookNonce(app.db, row.id, replayKey(raw))))
+      const nonce = replayKey(raw);
+      if (!(await claimWebhookNonce(app.db, row.id, nonce)))
         return reply.status(409).send({ code: 'REPLAY', message: 'בקשה זו כבר התקבלה', requestId: req.id });
-      const jobId = await opts.enqueue('connector.webhook', { connectorId: row.id, changes });
+      // The claim has to come first — claiming *after* the enqueue would let two copies of one
+      // delivery both queue a sync run, which is the thing the claim exists to stop. That leaves
+      // exactly one hole, and this closes it: an enqueue that fails answers 500, and WordPress
+      // retries the same signed bytes. Without the release the retry is a 409 REPLAY for a sync
+      // that never ran, so the author's edit is lost until the next full run — a failure mode
+      // strictly worse than the one the nonce was added for.
+      let jobId: string;
+      try {
+        jobId = await opts.enqueue('connector.webhook', { connectorId: row.id, changes });
+      } catch (err) {
+        await releaseWebhookNonce(app.db, row.id, nonce).catch((e) =>
+          req.log.error({ err: e, connectorId: row.id }, 'could not release an unused webhook nonce'),
+        );
+        throw err;
+      }
       return reply.status(202).send({ jobId, changes: changes.length });
     },
   );

@@ -733,8 +733,15 @@ export type ParityUnlinkedRemote = z.infer<typeof ParityUnlinkedRemoteSchema>;
 export const DocumentSyncLinkStateSchema = z.object({
   linkId: IdSchema,
   connectorId: IdSchema,
-  connectorName: z.string(),
-  connectorType: z.string(),
+  /**
+   * The connector-operations half. `GET /documents/:id/sync-state` answers to `docs.read` —
+   * every agent in the building — because the article header needs a badge; it does not follow
+   * that every agent needs the connector's name, its type, the remote URL and how its last run
+   * went. Those are `sources.manage`'s business, and they are `null` for a caller without it
+   * (post-pilot L4). The badge itself — `state`, `overall`, the version numbers — is unchanged.
+   */
+  connectorName: z.string().nullable(),
+  connectorType: z.string().nullable(),
   externalId: z.string(),
   remoteUrl: z.string().nullable(),
   state: SyncLinkStateSchema,

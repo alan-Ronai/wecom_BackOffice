@@ -260,6 +260,31 @@ run('migrations', () => {
     // only users; deliberately no FK to topics (W1's table)
     expect(fk.rows[0].n).toBe(1);
   });
+  /**
+   * Post-pilot M6. Every trigram index 0044 adds has to be one the planner can actually choose,
+   * because a GIN index that is never read is pure write amplification on the ingest path. The
+   * `blocks` predicate ORs title, description, script and the `block_actions` aggregate, and a
+   * bitmap OR needs *every* arm indexable — so `blocks_title_trgm` could never be used for it.
+   */
+  it('0044 indexes only the columns a search predicate can be driven by, and not blocks.title', async () => {
+    const idx = await pool.query(
+      "select indexname from pg_indexes where indexname like '%\\_trgm' and schemaname='public' order by 1",
+    );
+    const names = idx.rows.map((r) => r.indexname);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'documents_body_html_trgm',
+        'documents_code_trgm',
+        'documents_description_trgm',
+        'step_actions_text_trgm',
+        'steps_description_trgm',
+        'steps_script_trgm',
+        'steps_title_trgm',
+      ]),
+    );
+    expect(names).not.toContain('blocks_title_trgm');
+  });
+
   it('0035 keeps both the tags term and the Hebrew stopword filter in the search vector', async () => {
     // 0030 added tags but dropped 0027's stopword filter; 0035 is the one definition with both.
     await pool.query(
