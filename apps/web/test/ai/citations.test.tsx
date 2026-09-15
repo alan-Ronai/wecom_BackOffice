@@ -27,4 +27,27 @@ describe('step citations', () => {
     expect(screen.queryByRole('link')).toBeNull();
     expect(screen.getByText('אין כאן ציטוט')).toBeInTheDocument();
   });
+
+  /**
+   * The prose between citations keeps the pane's bidi treatment — `<Fmt>` isolates a Latin run in
+   * a `<bdi dir="ltr">` so an RTL sentence does not scramble it — and it is escaped, so a model
+   * cannot put markup on the screen by typing it.
+   */
+  it('renders the prose around a citation through the bidi-safe Fmt treatment', () => {
+    const { container } = render(
+      <MemoryRouter>{renderWithStepLinks('הרץ Speedtest ואז שלב 2', 'doc-1')}</MemoryRouter>,
+    );
+    expect(container.querySelector('bdi.lat')).toHaveTextContent('Speedtest');
+    expect(screen.getByRole('link', { name: 'שלב 2' })).toBeInTheDocument();
+  });
+
+  it('escapes markup a model typed rather than rendering it', () => {
+    const { container } = render(
+      <MemoryRouter>{renderWithStepLinks('<img src=x onerror=alert(1)> שלב 3', 'doc-1')}</MemoryRouter>,
+    );
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.innerHTML).toContain('&lt;');
+    expect(container.textContent).toContain('<img src=x onerror=alert(1)>');
+    expect(screen.getByRole('link', { name: 'שלב 3' })).toBeInTheDocument();
+  });
 });

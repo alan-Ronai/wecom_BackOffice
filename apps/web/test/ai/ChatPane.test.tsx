@@ -126,6 +126,36 @@ describe('<ChatPane>', () => {
     await waitFor(() => expect(got).toEqual([['draft_step', { title: 'שלב חדש' }, MSG_3]]));
   });
 
+  /**
+   * B-C1. The citation feature is only real if it survives the pane's bidi rendering: the answer
+   * goes through `renderWithStepLinks`, so "שלב 1" is a `<a>` to the step key and the prose around
+   * it is still `<Fmt>`-rendered.
+   */
+  it('renders a step citation in an answer as a link to that step', async () => {
+    scriptStream([
+      { type: 'token', text: 'ראה שלב 1 ואז שלב 12.' },
+      { type: 'done', messageId: MSG_3, tokensIn: 1, tokensOut: 1, latencyMs: 1 },
+    ]);
+    const user = userEvent.setup();
+    renderWithProviders(<ChatPane kind="workspace" documentId={DOC_1} stepIndex={{ '1': 'check-link' }} />);
+    await user.type(await box(), 'מה השלב הראשון');
+    await user.keyboard('{Enter}');
+    const link = await screen.findByRole('link', { name: 'שלב 1' });
+    expect(link).toHaveAttribute('href', `/doc/${DOC_1}/check-link`);
+    // A number the index does not carry still links — to the number itself, not to nothing.
+    expect(screen.getByRole('link', { name: 'שלב 12' })).toHaveAttribute('href', `/doc/${DOC_1}/12`);
+  });
+
+  it('never offers hunk decisions on the article page', async () => {
+    server.use(withMe({ permissions: ['docs.read', 'docs.edit', 'ai.ask', 'ai.chat'] }));
+    const user = userEvent.setup();
+    renderWithProviders(<ChatPane kind="article" documentId={DOC_1} />);
+    await user.type(await box(), 'קצר');
+    await user.keyboard('{Enter}');
+    const card = await screen.findByRole('region', { name: 'עריכות מוצעות' });
+    for (const b of within(card).getAllByRole('button')) expect(b).toBeDisabled();
+  });
+
   it('posts feedback from the thumbs', async () => {
     const user = userEvent.setup();
     renderWithProviders(<ChatPane kind="workspace" documentId={DOC_1} />);

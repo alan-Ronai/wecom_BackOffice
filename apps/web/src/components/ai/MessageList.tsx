@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import type { AiMessage, SuggestionPayload } from '@wecom/shared';
-import { Fmt } from '../Fmt.js';
 import type { ChatViewState, SealedReply, ToolChip } from '../../lib/chatReducer.js';
+import { renderWithStepLinks } from './citations.js';
 import { ToolChips } from './ToolCallChip.js';
 import { ProposedEditsCard } from './ProposedEditsCard.js';
 import { useProposedEdits } from '../../api/hooks/ai.js';
@@ -11,14 +11,14 @@ import { FeedbackButtons } from './FeedbackButtons.js';
 /**
  * How an assistant reply's text is rendered.
  *
- * Today: bidi-safe Hebrew with no CRM chip substitution — a model's prose is not a step body, so
- * a stray field name in it should not become a chip. X6 points this at `renderWithStepLinks` from
- * `components/ai/citations.tsx` (**X4b owns that file**), which turns "שלב 3א" into a link to
- * `/doc/:id/:stepKey` when `stepIndex` has the number. `documentId` and `stepIndex` are threaded
- * through for exactly that swap and are otherwise unused.
+ * `renderWithStepLinks` (`components/ai/citations.tsx`) splits the reply on step citations: the
+ * prose between them is rendered by `<Fmt>` — bidi-safe Hebrew, escaped, with CRM chip
+ * substitution off, because a model's prose is not a step body — and "שלב 3א" becomes a link to
+ * `/doc/:id/:stepKey` when `stepIndex` carries the number. All three panes pass `stepIndex`; a
+ * number the map does not know still links, to the number itself.
  */
-function renderAnswer(content: string, _documentId: string, _stepIndex?: Record<string, string>): ReactNode {
-  return <Fmt text={content} fields={[]} docs={[]} noCrm />;
+function renderAnswer(content: string, documentId: string, stepIndex?: Record<string, string>): ReactNode {
+  return renderWithStepLinks(content, documentId, stepIndex);
 }
 
 const toolChipsOf = (m: AiMessage): ToolChip[] => {

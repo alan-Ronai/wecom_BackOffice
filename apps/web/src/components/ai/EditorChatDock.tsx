@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { useCan } from '../../api/hooks/me.js';
 import { ChatPane } from './ChatPane.js';
 
@@ -53,6 +53,13 @@ export function EditorChatDock({
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
+  /*
+   * Stable identity: `ChatPane` copies `context` into state on every identity change, so a fresh
+   * `{ stepKey }` per editor render would keep re-pinning the selected step and undo the editor's
+   * "הסר הקשר" — and the editor re-renders on every keystroke in the step form.
+   */
+  const context = useMemo(() => (stepKey ? { stepKey } : undefined), [stepKey]);
+
   const onToolResult = useCallback(
     (name: string, payload: unknown) => {
       if (name !== 'draft_step' || !onInsertStep || !payload || typeof payload !== 'object') return;
@@ -80,7 +87,7 @@ export function EditorChatDock({
           <ChatPane
             kind="editor"
             documentId={documentId}
-            context={stepKey ? { stepKey } : undefined}
+            context={context}
             stepIndex={stepIndex}
             onToolResult={onToolResult}
             onProposedEdits={onProposedEdits}
