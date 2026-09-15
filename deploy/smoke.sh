@@ -103,9 +103,9 @@ tier_slot() { # <tier> <suggest|chat|embed>
   case "$1:$2" in
     0:suggest|0:chat) echo 'qwen2.5:3b-instruct-q4_K_M' ;;
     0:embed) echo 'nomic-embed-text' ;;
-    1:suggest|1:chat) echo 'dictalm2.0-instruct:7b-q4_K_M' ;;
+    1:suggest|1:chat) echo 'aya-expanse:8b-q4_K_M' ;;
     2:suggest) echo 'gemma3:12b-it-q4_K_M' ;;
-    2:chat) echo 'dictalm2.0-instruct:7b-q4_K_M' ;;
+    2:chat) echo 'aya-expanse:8b-q4_K_M' ;;
     3:suggest) echo 'gemma3:27b-it-q4_K_M' ;;
     3:chat) echo 'gemma3:12b-it-q4_K_M' ;;
     4:suggest|4:chat) echo 'gemma3:27b-it-q4_K_M' ;;

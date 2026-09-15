@@ -59,18 +59,21 @@ export const MODEL_TIER_PRESETS: Record<ModelTier, ModelTierPreset> = {
   1: {
     tier: 1,
     vm: '4 vCPU / 16 GB',
-    suggestModel: 'dictalm2.0-instruct:7b-q4_K_M',
-    chatModel: 'dictalm2.0-instruct:7b-q4_K_M',
+    // X6: DictaLM 2.0 has no Ollama-library tag (`pull` answers "file does not exist"), so spec
+    // §6's first fallback — Aya Expanse 8B, multilingual with real Hebrew — is the tag. See
+    // `docs/wave6-acceptance.md` § "Model evaluation". The second fallback is Qwen2.5 7B.
+    suggestModel: 'aya-expanse:8b-q4_K_M',
+    chatModel: 'aya-expanse:8b-q4_K_M',
     embedModel: 'bge-m3',
     embedDimension: 1024,
-    suggestFallback: 'aya-expanse:8b-q4_K_M',
-    notes: 'ברירת המחדל אחרי גל 6 — עברית מתמחה, ~6 GB זיכרון',
+    suggestFallback: 'qwen2.5:7b-instruct-q4_K_M',
+    notes: 'ברירת המחדל אחרי גל 6 — רב-לשוני עם עברית, ~6 GB זיכרון',
   },
   2: {
     tier: 2,
     vm: '8 vCPU / 32 GB',
     suggestModel: 'gemma3:12b-it-q4_K_M',
-    chatModel: 'dictalm2.0-instruct:7b-q4_K_M',
+    chatModel: 'aya-expanse:8b-q4_K_M',
     embedModel: 'bge-m3',
     embedDimension: 1024,
     suggestFallback: 'qwen2.5:14b-instruct-q4_K_M',

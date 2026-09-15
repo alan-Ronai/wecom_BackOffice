@@ -20,7 +20,7 @@ set -euo pipefail
 # `MODEL_TIER=n` selects a whole row of the tier table and the API resolves it at boot
 # (`apps/api/src/lib/modelSlots.ts`). This script has to resolve the *same* row or a clean install
 # at a tier finishes with the wrong tags in `ollama list`: the API would ask Ollama for
-# `dictalm2.0-instruct:7b-q4_K_M` and find `qwen2.5:3b-instruct-q4_K_M`, with nothing but a
+# `aya-expanse:8b-q4_K_M` and find `qwen2.5:3b-instruct-q4_K_M`, with nothing but a
 # per-request 404 to say so. The table below therefore mirrors `MODEL_TIER_PRESETS`
 # (`packages/shared/src/schemas/wave6.ts`) — change them together.
 : "${MODEL_TIER:=}"
@@ -30,9 +30,9 @@ tier_slot() { # <tier> <suggest|chat|embed>
   case "$1:$2" in
     0:suggest|0:chat) echo 'qwen2.5:3b-instruct-q4_K_M' ;;
     0:embed) echo 'nomic-embed-text' ;;
-    1:suggest|1:chat) echo 'dictalm2.0-instruct:7b-q4_K_M' ;;
+    1:suggest|1:chat) echo 'aya-expanse:8b-q4_K_M' ;;
     2:suggest) echo 'gemma3:12b-it-q4_K_M' ;;
-    2:chat) echo 'dictalm2.0-instruct:7b-q4_K_M' ;;
+    2:chat) echo 'aya-expanse:8b-q4_K_M' ;;
     3:suggest) echo 'gemma3:27b-it-q4_K_M' ;;
     3:chat) echo 'gemma3:12b-it-q4_K_M' ;;
     4:suggest|4:chat) echo 'gemma3:27b-it-q4_K_M' ;;

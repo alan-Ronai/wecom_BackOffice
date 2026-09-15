@@ -56,8 +56,8 @@ Two peer constraints are binding for every lane:
 | Tier | VM | suggest | chat | embed |
 |---|---|---|---|---|
 | 0 | 4 vCPU / 16 GB | `qwen2.5:3b-instruct-q4_K_M` | same | `nomic-embed-text` (768) |
-| 1 | 4 vCPU / 16 GB | `dictalm2.0-instruct:7b-q4_K_M` (fallback `aya-expanse:8b-q4_K_M`) | same | `bge-m3` (1024) |
-| 2 | 8 vCPU / 32 GB | `gemma3:12b-it-q4_K_M` | `dictalm2.0-instruct:7b-q4_K_M` | `bge-m3` |
+| 1 | 4 vCPU / 16 GB | `aya-expanse:8b-q4_K_M` (fallback `qwen2.5:7b-instruct-q4_K_M`) | same | `bge-m3` (1024) |
+| 2 | 8 vCPU / 32 GB | `gemma3:12b-it-q4_K_M` | `aya-expanse:8b-q4_K_M` | `bge-m3` |
 | 3 | 16 vCPU / 64 GB | `gemma3:27b-it-q4_K_M` | `gemma3:12b-it-q4_K_M` | `bge-m3` |
 | 4 | + GPU 24 GB | `gemma3:27b-it-q4_K_M` | same | `bge-m3` |
 

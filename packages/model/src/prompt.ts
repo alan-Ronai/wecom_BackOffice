@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import { SuggestionPayloadSchema, SuggestionSchema, SuggestionTypeSchema } from '@wecom/shared';
+import { IdSchema, SuggestionPayloadSchema, SuggestionSchema, SuggestionTypeSchema } from '@wecom/shared';
 import type { ProposalContext, ProposedSuggestion } from './contract.js';
 import { groupSections, isNewSourcePath } from './sections.js';
 
@@ -179,6 +179,19 @@ export function buildMessages(ctx: ProposalContext): { role: 'system' | 'user'; 
   ];
 }
 
+/**
+ * X6: the three target fields are **absent-means-null**.
+ *
+ * `RESPONSE_FORMAT` above deliberately leaves them out of `required` — a suggestion that targets
+ * a document has no step key, one that targets a block has no document — but `SuggestionSchema`
+ * spells them `.nullable()`, which in zod still demands the key be present. So the model was told
+ * the field was optional and then rejected for omitting it. Every case of the tier-0 evaluation
+ * run failed on exactly that (`suggestions.0.targetBlockId: Required`) and scored 0, from a model
+ * whose answers were otherwise the right shape: a 3B does not emit `"targetBlockId": null`.
+ *
+ * Only the *model-facing* parse is relaxed. `SuggestionSchema` — the API contract, where a stored
+ * row really does carry all three columns — is untouched.
+ */
 const ProposedSchema = SuggestionSchema.innerType()
   .omit({
     id: true,
@@ -189,6 +202,14 @@ const ProposedSchema = SuggestionSchema.innerType()
     decidedAt: true,
     appliedVersionId: true,
     editedPayload: true,
+  })
+  .extend({
+    targetDocumentId: IdSchema.nullish().transform((v) => v ?? null),
+    targetStepKey: z
+      .string()
+      .nullish()
+      .transform((v) => v ?? null),
+    targetBlockId: IdSchema.nullish().transform((v) => v ?? null),
   })
   .refine((s) => s.payload.type === s.type, { message: 'payload.type must equal type' });
 const EnvelopeSchema = z.object({ suggestions: z.array(ProposedSchema) });

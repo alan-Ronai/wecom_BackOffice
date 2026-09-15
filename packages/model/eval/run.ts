@@ -2,7 +2,7 @@
  * Wave 6 (X1), spec §1.9 — the offline evaluation CLI.
  *
  *   pnpm --filter @wecom/model eval --rules
- *   pnpm --filter @wecom/model eval --model dictalm2.0-instruct:7b-q4_K_M --embed bge-m3 --out run.json
+ *   pnpm --filter @wecom/model eval --model aya-expanse:8b-q4_K_M --embed bge-m3 --out run.json
  *
  * Without `--rules` it talks to a real Ollama **without a fallback**: a model that cannot answer
  * has to show up as a failure, not as the rule engine quietly scoring in its place. `--embed` is
