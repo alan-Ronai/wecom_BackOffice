@@ -145,6 +145,29 @@ run('0045 — user_role_worlds (A-M14)', () => {
     expect((await resolvePermissions(pool, U)).worldScopes).toEqual(['later', 'tech']);
     await pool.query(`delete from worlds where slug='later'`);
   });
+
+  const scopeOf = async () =>
+    (await pool.query(`select world_scope from user_roles where user_id=$1`, [U])).rows[0].world_scope;
+
+  /**
+   * Post-pilot M7. The FK cascades the join rows when a world goes, but the array they were
+   * mirrored from stayed — and a slug re-created under the same name then silently restored every
+   * scope that had ever named it, including one an admin had revoked by deleting the world.
+   */
+  it('prunes the array when a world is deleted, so re-creating the slug resurrects nothing', async () => {
+    await pool.query(`insert into worlds(slug, name, position) values ('doomed','נמחק',97)`);
+    await pool.query(`update user_roles set world_scope=$1 where user_id=$2`, [['tech', 'doomed'], U]);
+    expect(await slugs()).toEqual(['doomed', 'tech']);
+
+    await pool.query(`delete from worlds where slug='doomed'`);
+    expect(await slugs()).toEqual(['tech']);
+    // The column agrees with the join table rather than keeping a slug that scopes nothing.
+    expect(await scopeOf()).toEqual(['tech']);
+
+    await pool.query(`insert into worlds(slug, name, position) values ('doomed','נמחק',97)`);
+    expect(await slugs()).toEqual(['tech']);
+    await pool.query(`delete from worlds where slug='doomed'`);
+  });
 });
 
 const asset = (n: number) => `a${n}aaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`;

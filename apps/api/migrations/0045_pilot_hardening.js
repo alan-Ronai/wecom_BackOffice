@@ -189,6 +189,25 @@ exports.up = (pgm) => {
              after insert on worlds
              for each row execute function worlds_created()`);
 
+  /*
+   * The delete half (post-pilot M7). `user_role_worlds.world_slug` cascades, so the join rows go
+   * with the world; the array they were mirrored from did not, and the two then disagreed. Worse,
+   * the stale entry is live ammunition: re-creating a slug with the same name silently restored
+   * every scope that had ever named it — including one an admin had already removed by deleting
+   * the world. Mirror the delete into the column, exactly as `worlds_slug_renamed()` mirrors a
+   * rename. `{}` (scoped to nothing) rather than `null` (every world) is the conservative end.
+   */
+  pgm.sql(`create function worlds_slug_deleted() returns trigger as $$
+             begin
+               update user_roles
+                  set world_scope = array_remove(world_scope, old.slug)
+                where world_scope @> array[old.slug];
+               return old;
+             end $$ language plpgsql`);
+  pgm.sql(`create trigger worlds_slug_deleted_trg
+             after delete on worlds
+             for each row execute function worlds_slug_deleted()`);
+
   // ── 3. asset_refs (B-M15) ──────────────────────────────────────────────
   pgm.createTable(
     'asset_refs',
@@ -269,6 +288,8 @@ exports.down = (pgm) => {
   pgm.sql('drop function if exists asset_refs_sync()');
   pgm.dropTable('asset_refs');
   pgm.sql('drop function if exists asset_refs_ids(text)');
+  pgm.sql('drop trigger if exists worlds_slug_deleted_trg on worlds');
+  pgm.sql('drop function if exists worlds_slug_deleted()');
   pgm.sql('drop trigger if exists worlds_created_trg on worlds');
   pgm.sql('drop function if exists worlds_created()');
   pgm.sql('drop trigger if exists worlds_slug_renamed_trg on worlds');
