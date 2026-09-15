@@ -15,18 +15,30 @@ import { contentHash, htmlToParagraphs, normalizeText } from './html.js';
 import { renderWpHtml } from '../render/wpHtml.js';
 import { assertFresh, verifySignature, WebhookBodySchema } from './webhook.js';
 import { assertAllowedHost, type ConnectorGuards } from '../guards.js';
+import { guardedFetch } from '../fetch.js';
 
 export class WordPressConnector implements Connector<WpConfig> {
   configSchema = WpConfigSchema;
+
+  /**
+   * Every outbound call this connector makes — the REST client's, the media HEAD, the media
+   * GET — goes through this one wrapper, so each *hop* of a redirect is re-checked against the
+   * allowlist rather than only the URL we first asked for (M3). There is deliberately no second
+   * outbound path: the raw `fetch` the caller passed is not kept.
+   */
+  private readonly fetchImpl: typeof fetch;
+
   /**
    * `guards.hostAllowlist` limits where `cfg.baseUrl` may point. Without it every
    * authenticated call is an SSRF primitive against anything the API container
    * can reach; link-local metadata is refused either way.
    */
   constructor(
-    private fetchImpl: typeof fetch = fetch,
+    fetchImpl: typeof fetch = fetch,
     private guards: ConnectorGuards = {},
-  ) {}
+  ) {
+    this.fetchImpl = guardedFetch(fetchImpl, guards.hostAllowlist);
+  }
 
   protected client(cfg: WpConfig): WpClient {
     assertAllowedHost(cfg.baseUrl, this.guards.hostAllowlist);
