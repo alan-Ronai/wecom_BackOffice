@@ -12,6 +12,31 @@ set -euo pipefail
 base=${1:-https://localhost}
 : "${SMOKE_REQUIRE_MODEL:=true}"
 
+# ── never certify the end-to-end stack as a deployment ────────────────────────────────────────
+# `pnpm e2e:compose` copies deploy/e2e.env over deploy/.env for the length of a run and moves the
+# operator's own aside. A hard kill leaves it there: the next `docker compose up -d` on the VM
+# brings the pilot stack up on a SESSION_SECRET that is committed to git, POSTGRES_PASSWORD=e2e,
+# and AUTH_FALLBACK=paloalto pointed at whatever answers as `paloalto`. Every check below would
+# pass on that stack — it is healthy, the model is pulled, the headers are right — and "smoke
+# passed" is precisely the sentence that would send it into use.
+#
+# deploy/e2e.env marks itself with WECOM_E2E_STACK=1 for this. scripts/e2e-compose.mjs is the only
+# thing that sets WECOM_E2E_RUNNER=1, so the gate's own runs are unaffected.
+env_file="$(dirname "$0")/.env"
+if [ "${WECOM_E2E_RUNNER:-}" != "1" ] && [ -f "$env_file" ] &&
+   grep -qE '^[[:space:]]*WECOM_E2E_STACK[[:space:]]*=[[:space:]]*1[[:space:]]*$' "$env_file"; then
+  echo "smoke FAILED: $env_file is the end-to-end test configuration (WECOM_E2E_STACK=1), not a" >&2
+  echo "  deployment's. A killed 'pnpm e2e:compose' run leaves it there. Refusing to certify a" >&2
+  echo "  stack built from it: its SESSION_SECRET is in git, its database password is 'e2e', and" >&2
+  echo "  AUTH_FALLBACK=paloalto will sign in whoever the configured firewall names." >&2
+  echo >&2
+  echo "  Recover, from the repo root:" >&2
+  echo "    mv deploy/.env.before-e2e deploy/.env    # your real config, saved by the runner" >&2
+  echo "    docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d" >&2
+  echo "  then re-run this smoke test." >&2
+  exit 1
+fi
+
 # Reads one scalar out of the health body without needing jq on the host. Each key appears once,
 # and the value may itself contain a colon (`qwen2.5:3b-instruct-q4_K_M`), so this stops at the
 # next quote, comma or brace rather than splitting on ':'.

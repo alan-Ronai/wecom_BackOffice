@@ -51,7 +51,7 @@ import { spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { runPlaywright } from './lib/playwright-run.mjs';
 
@@ -196,17 +196,57 @@ function assertNoLeftoverEnvBackup() {
 }
 
 /**
+ * The key `deploy/e2e.env` uses to name itself as the end-to-end configuration, and the escape
+ * hatch that lets this runner past the refusal it triggers.
+ *
+ * The configuration this gate installs is not a deployment: its SESSION_SECRET is committed to
+ * git, its Postgres password is `e2e`, and it runs `AUTH_FALLBACK=paloalto` pointed at a stub. If
+ * a run is hard-killed that file stays at `deploy/.env`, and nothing about the resulting stack
+ * looks wrong from the outside — so the file says what it is, and `deploy/smoke.sh` refuses to
+ * certify a stack configured from it unless `WECOM_E2E_RUNNER=1` is set, which only this script
+ * sets. (Follow-up for the backend lane: the API's own production config check should refuse to
+ * boot on `NODE_ENV=production` together with this key, which is never a real deployment.)
+ */
+const E2E_SENTINEL = 'WECOM_E2E_STACK';
+const SENTINEL_RE = /^[ \t]*WECOM_E2E_STACK[ \t]*=[ \t]*1[ \t]*$/m;
+
+/**
+ * If the sentinel is ever dropped from `deploy/e2e.env`, the refusal in `deploy/smoke.sh` silently
+ * stops protecting anything — and a check that has quietly stopped working is worse than none.
+ * Fail here, where it is one line to fix, rather than on the VM months later.
+ */
+function assertEnvSourceIsMarked() {
+  if (SENTINEL_RE.test(readFileSync(ENV_SOURCE, 'utf8'))) return;
+  throw new Error(
+    `${ENV_SOURCE} no longer sets ${E2E_SENTINEL}=1.\n` +
+      '  That line is how a deploy/.env left behind by a killed run is recognised as the e2e\n' +
+      "  configuration rather than a deployment's — deploy/smoke.sh refuses to certify a stack\n" +
+      '  built from it. Put it back, or this gate is installing an unmarked config over\n' +
+      "  an operator's deploy/.env.",
+  );
+}
+
+/**
  * `deploy/.env` is what `env_file:` reads, and an operator's own may be sitting there. Move it
  * aside rather than overwrite it, and put it back on the way out.
  */
 function swapEnv() {
   assertNoLeftoverEnvBackup();
+  assertEnvSourceIsMarked();
   if (existsSync(ENV_TARGET)) {
     renameSync(ENV_TARGET, ENV_BACKUP);
+    // Immediately, and not after the copy below. `envSwapped` is what teardown consults to decide
+    // whether there is anything to put back; between this rename and that assignment the
+    // operator's deploy/.env existed *only* as the backup, so a copyFileSync that threw (a full
+    // disk, a read-only mount, a missing e2e.env) left them with no deploy/.env at all and a
+    // restoreEnv() that returned immediately.
+    envSwapped = true;
     console.log(`  deploy/.env moved aside to ${ENV_BACKUP}`);
   }
-  copyFileSync(ENV_SOURCE, ENV_TARGET);
+  // True before the copy for the same reason from the other side: a copy that throws part-written
+  // leaves a truncated deploy/.env that teardown still has to remove.
   envSwapped = true;
+  copyFileSync(ENV_SOURCE, ENV_TARGET);
 }
 function restoreEnv() {
   if (!envSwapped) return;
@@ -278,7 +318,9 @@ function teardown() {
         `  wordpress  http://127.0.0.1:${WP_PORT}/wp-json/wp/v2/posts/101\n` +
         `  logs       docker compose -p ${PROJECT} logs\n` +
         `  down       docker compose -p ${PROJECT} -f ${COMPOSE_FILES.join(' -f ')} down -v\n` +
-        `  (deploy/.env is still the e2e one; ${ENV_BACKUP} holds what was there)\n`,
+        `  (deploy/.env is still the e2e one — it sets ${E2E_SENTINEL}=1, so deploy/smoke.sh will\n` +
+        `   refuse to certify anything brought up from it; ${ENV_BACKUP} holds what was there,\n` +
+        '   and `mv` it back when you are done here)\n',
     );
     return;
   }
@@ -305,6 +347,9 @@ async function main() {
   // Before anything is built, minted or started: a leftover backup means an operator's real
   // deploy/.env is sitting unrestored, and nothing here should run until they have it back.
   assertNoLeftoverEnvBackup();
+  // This process, and everything it spawns, is the one context in which a deploy/.env marked
+  // `WECOM_E2E_STACK=1` is expected — see the comment on E2E_SENTINEL.
+  process.env.WECOM_E2E_RUNNER = '1';
   ensureCerts();
   swapEnv();
   // `./backups` is bind-mounted read-only into the api container; compose would create it as
