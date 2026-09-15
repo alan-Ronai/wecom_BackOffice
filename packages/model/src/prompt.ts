@@ -211,7 +211,27 @@ const ProposedSchema = SuggestionSchema.innerType()
       .transform((v) => v ?? null),
     targetBlockId: IdSchema.nullish().transform((v) => v ?? null),
   })
-  .refine((s) => s.payload.type === s.type, { message: 'payload.type must equal type' });
+  .refine((s) => s.payload.type === s.type, { message: 'payload.type must equal type' })
+  /**
+   * Absent-means-null is only safe if a type that *needs* a target is still refused without one.
+   * The apply path resolves the target and 404s when it cannot (`needDoc` / `needStep`), so a
+   * suggestion with no step key is not a worse suggestion — it is one that cannot be accepted at
+   * all, and it used to be caught here only by accident, because the parse demanded all three
+   * keys on every type. `RESPONSE_FORMAT` cannot express a per-type requirement; this can.
+   */
+  .superRefine((s, ctx) => {
+    const need = (field: 'targetDocumentId' | 'targetStepKey' | 'targetBlockId') => {
+      if (!s[field])
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: `${s.type} requires ${field}` });
+    };
+    if (s.type === 'update-step' || s.type === 'deprecate-step') {
+      need('targetDocumentId');
+      need('targetStepKey');
+    }
+    if (s.type === 'update-block') need('targetBlockId');
+    if (s.type === 'new-step') need('targetDocumentId');
+    // `new-card` creates the document and `field-alert` touches a field, so neither has a target.
+  });
 const EnvelopeSchema = z.object({ suggestions: z.array(ProposedSchema) });
 
 export function parseProposals(
