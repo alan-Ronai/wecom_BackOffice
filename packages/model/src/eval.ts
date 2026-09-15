@@ -76,12 +76,21 @@ export const LATIN_ALLOW_LIST = ['speedtest', 'wi-fi', 'wifi', 'sim', 'esim', 'c
 const CJK_OR_CYRILLIC = /[Ѐ-ӿ぀-ヿ一-鿿가-힯]/;
 const LATIN_WORD = /[A-Za-z][A-Za-z0-9'-]*/g;
 
+/**
+ * The apostrophe and hyphen are inside a word (`Wi-Fi`, `don't`) and around one (`"hold"` closed
+ * with a geresh, `ה-APN`). Trimming the ends is what stops `hold'` being reported as a word the
+ * allow-list does not contain — a false positive that cost tier 1 both of its "failures" in the
+ * first measured run.
+ */
+const trimEdges = (w: string) => w.replace(/^[-'’]+|[-'’]+$/g, '');
+
 /** The offending fragments in one string, or `[]` when it is clean. */
 export function languageOffences(text: string, allow: ReadonlySet<string>): string[] {
   const out: string[] = [];
   const script = text.match(new RegExp(CJK_OR_CYRILLIC, 'g'));
   if (script) out.push(...new Set(script));
-  for (const w of text.match(LATIN_WORD) ?? []) {
+  for (const raw of text.match(LATIN_WORD) ?? []) {
+    const w = trimEdges(raw);
     // A single letter or anything carrying a digit is an identifier (`s8`, `4G`), not a word.
     if (w.length < 2 || /\d/.test(w)) continue;
     if (!allow.has(w.toLowerCase())) out.push(w);
@@ -95,7 +104,7 @@ export function languageOffences(text: string, allow: ReadonlySet<string>): stri
  * allow-list is the global one, plus this case's own vocabulary, plus whatever it declares.
  * What is left over is the thing the check is for: `champs`, `ubah`, `блок`, 鉴于.
  */
-const allowFor = (c: EvalCase): Set<string> => {
+export const latinAllowFor = (c: EvalCase): Set<string> => {
   const corpus = [
     c.source.title,
     ...c.diffs.flatMap((d) => [d.before ?? '', d.after ?? '']),
@@ -107,7 +116,7 @@ const allowFor = (c: EvalCase): Set<string> => {
   return new Set([
     ...LATIN_ALLOW_LIST,
     ...c.allowLatin.map((w) => w.toLowerCase()),
-    ...(corpus.match(LATIN_WORD) ?? []).map((w) => w.toLowerCase()),
+    ...(corpus.match(LATIN_WORD) ?? []).map((w) => trimEdges(w).toLowerCase()),
   ]);
 };
 
@@ -136,7 +145,7 @@ const isWanted = (s: ProposedSuggestion, c: EvalCase): boolean =>
   c.expected.some((e) => targets(s, e) && s.type === e.type && share(s, e) > 0);
 
 export function scoreCase(c: EvalCase, items: ProposedSuggestion[]): CaseScore {
-  const allow = allowFor(c);
+  const allow = latinAllowFor(c);
   const languageFailures = items.filter(
     (s) => languageOffences(s.title, allow).length || languageOffences(s.rationale, allow).length,
   ).length;

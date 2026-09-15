@@ -15,7 +15,15 @@ import type { EvalCase } from '@wecom/shared';
 import { RuleBasedModel } from '../src/rules.js';
 import { OllamaModel } from '../src/ollama.js';
 import { PROMPT_VERSION } from '../src/prompt.js';
-import { aggregate, contextForCase, EVAL_CASES_DIR, loadCases, scoreCase } from '../src/eval.js';
+import {
+  aggregate,
+  contextForCase,
+  EVAL_CASES_DIR,
+  languageOffences,
+  latinAllowFor,
+  loadCases,
+  scoreCase,
+} from '../src/eval.js';
 import type { ModelClient } from '../src/contract.js';
 
 const EVAL_TIMEOUT_MS = 180_000;
@@ -59,6 +67,7 @@ async function main(): Promise<void> {
   const rows: Record<string, string | number>[] = [];
   const scores = [];
   const latencies: number[] = [];
+  const langWords: string[] = [];
   for (const c of cases) {
     const started = Date.now();
     let items: Awaited<ReturnType<ModelClient['proposeChanges']>> = [];
@@ -72,6 +81,20 @@ async function main(): Promise<void> {
     scores.push(s);
     const ms = Date.now() - started;
     latencies.push(ms);
+    /**
+     * C-I8: the *count* goes in the table and the offending words go in the `--out` file. A
+     * language failure is only actionable if you can see what the model said — "8 failures" is a
+     * number, `champs`, `ubah`, `блок` is a reason to move a tier.
+     */
+    const offences = [
+      ...new Set(
+        items.flatMap((x) => [
+          ...languageOffences(x.title, latinAllowFor(c)),
+          ...languageOffences(x.rationale, latinAllowFor(c)),
+        ]),
+      ),
+    ];
+    if (offences.length) langWords.push(`${c.id}: ${offences.join(', ')}`);
     rows.push({
       case: c.id,
       hitTarget: Number(s.hitTarget.toFixed(2)),
@@ -107,7 +130,7 @@ async function main(): Promise<void> {
   };
   console.log(summary);
   if (out) {
-    writeFileSync(out, JSON.stringify({ ...summary, rows }, null, 2));
+    writeFileSync(out, JSON.stringify({ ...summary, rows, languageOffences: langWords }, null, 2));
     console.log('wrote ' + out);
   }
 }
