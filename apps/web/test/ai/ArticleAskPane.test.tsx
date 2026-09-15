@@ -15,13 +15,14 @@ vi.mock('../../src/components/ai/ChatPane.js', () => ({
 }));
 
 describe('ArticleAskPane', () => {
-  it('starts collapsed, opens on click, and mounts the read-only chat for the document', async () => {
+  it('starts collapsed, opens on click, and mounts an askable chat for the document', async () => {
     renderWithProviders(<ArticleAskPane documentId="doc-1" stepKey="s3" />, { route: '/doc/doc-1' });
     const toggle = await screen.findByRole('button', { name: 'שאל את המערכת' });
     expect(screen.queryByTestId('chat-pane')).toBeNull();
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(toggle);
-    expect(screen.getByTestId('chat-pane')).toHaveTextContent('article:doc-1:ro:s3');
+    // X6: the pane is *not* `readOnly` — "read-only Q&A" is the tool set, not the composer.
+    expect(screen.getByTestId('chat-pane')).toHaveTextContent('article:doc-1:rw:s3');
     expect(screen.getByRole('region', { name: 'שאל את המערכת' })).toBeInTheDocument();
     expect(screen.getByText(/מבוססות על התוכן שפורסם בלבד/)).toBeInTheDocument();
   });

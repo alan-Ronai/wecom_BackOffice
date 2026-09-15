@@ -65,6 +65,7 @@ import { ImportExportButtons } from '../source/ImportExportButtons.js';
 import { PublishFeedbackPicker } from '../feedback/PublishFeedbackPicker.js';
 import { useChangePreview } from '../../api/hooks/learning.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
+import { EditorChatDock, type DraftStep } from '../ai/EditorChatDock.js';
 
 /**
  * Lazy because `RichText` is the tiptap/ProseMirror stack — ~1.1 MB of source, the single largest
@@ -448,6 +449,12 @@ export function EditorPage() {
     [doc, fields.data, blocks.data],
   );
 
+  /** wave 6: step number → step key, so a chat answer's "שלב 2" can link to that step. */
+  const stepIndex = useMemo(
+    () => Object.fromEntries(allSteps(doc ?? undefined).map((s) => [s.num, s.key])),
+    [doc],
+  );
+
   /**
    * `MetadataPanel` is controlled on exactly the five fields `PATCH /documents/:id` accepts, so
    * the mapping to and from the working document is the whole mount.
@@ -482,6 +489,30 @@ export function EditorPage() {
   );
 
   const leave = useCallback(() => go(isNew ? '/library' : `/doc/${id}`), [go, id, isNew]);
+  /**
+   * wave 6 (X6 mount): the chat's `draft_step` tool result, accepted in the dock, lands as a real
+   * step at the end of the document — through the same `addBasic` + `renumber` + `update` path the
+   * "+ שלב" button uses, so it is undoable, autosaved and marks the draft dirty like any other
+   * edit. The AI never writes: this runs only because the editor pressed "הוסף למסמך".
+   */
+  const insertDraftStep = useCallback(
+    (step: DraftStep) => {
+      if (!doc) return;
+      const withStep = addBasic(doc, 'step', null, null);
+      const inserted = allSteps(withStep).at(-1);
+      if (!inserted) return;
+      const next = structuredClone(withStep);
+      const target = next.phases.flatMap((p) => p.steps).find((s) => s.key === inserted.key);
+      if (!target) return;
+      target.title = step.title;
+      target.actions = step.actions.map((text) => ({ id: uid('a'), text }));
+      target.outcomes = step.outcomes ?? [];
+      update(renumber(next), 'שלב מהעוזר');
+      setSelected(target.key);
+    },
+    [doc, update],
+  );
+
   // `Shell` also binds Escape (palette → drawer → split). Without this guard both handlers fire
   // and closing the palette inside the editor also navigated away, discarding the draft.
   /** Shift-click selects a contiguous run between the anchor and the clicked step. */
@@ -774,6 +805,12 @@ export function EditorPage() {
                 ערוך מקור
               </Link>
             ) : null}
+            {/* wave 6 (X4a): source editor + suggestions + chat in one place. */}
+            {!isNew && can('ai.chat') ? (
+              <Link className="btn sm" to={`/workspace/${id}`}>
+                🧭 סביבת עבודה
+              </Link>
+            ) : null}
             <button
               className="btn sm"
               onClick={() => download(`${doc.title || 'knowledge-item'}.json`, JSON.stringify(doc, null, 2))}
@@ -1013,6 +1050,20 @@ export function EditorPage() {
             </>
           )}
         </div>
+
+        {/* wave 6 (X4b): the step editor's chat dock — refine a step, explain one, draft a new
+            one, review the document. It gates itself on `ai.chat`, stays collapsed until it is
+            opened, and hands a drafted step back for this page to insert: the AI proposes, the
+            editor commits (spec §1.3). It sits at the end of `.ed-main` so it docks below the
+            step list in both the steps view and the source-map view. */}
+        {!isNew && can('docs.edit', doc) ? (
+          <EditorChatDock
+            documentId={id}
+            stepKey={selected ?? undefined}
+            stepIndex={stepIndex}
+            onInsertStep={insertDraftStep}
+          />
+        ) : null}
       </div>
 
       <StepSelectionBar

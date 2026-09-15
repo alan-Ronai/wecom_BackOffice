@@ -56,6 +56,8 @@ export function Sidebar({
     ['זהות וכניסה', '/admin/identity', 'system.admin'],
     ['מחברים', '/admin/connectors', 'connectors.manage'],
     ['מצב מערכת', '/admin/system', 'system.admin'],
+    // wave 6 (X4b): the brief/style editor, the model slots, the eval runs and the transcripts.
+    ['בינה מלאכותית', '/admin/ai', 'ai.manage'],
   ];
   const visibleAdmin = adminLinks.filter(([, , needs]) => can(needs));
   const maySync = can('sources.manage') || can('suggestions.apply');

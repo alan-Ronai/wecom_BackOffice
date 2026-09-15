@@ -48,6 +48,7 @@ import { SourcePane } from '../source/SourcePane.js';
 import { SyncStateBadge } from '../source/SyncStateBadge.js';
 import { RefreshBanner } from '../learning/RefreshBanner.js';
 import { LearningBadge } from '../learning/LearningBadge.js';
+import { ArticleAskPane } from '../ai/ArticleAskPane.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 import type { FieldInfo } from '../../lib/format.js';
 
@@ -95,6 +96,12 @@ export function ArticlePage() {
 
   const doc = docQ.data;
   const steps = useMemo(() => resolvedSteps(doc, blocks.data), [doc, blocks.data]);
+  /**
+   * wave 6: step *number* → step *key*, for the ask pane's citations. An answer says "שלב 3א";
+   * the article's own deep link is `/doc/:id/:stepKey`, so the number has to be translated before
+   * it can become a link.
+   */
+  const stepIndex = useMemo(() => Object.fromEntries(steps.map((s) => [s.num, s.key])), [steps]);
   // Stable identity: a fresh `[]` on every render busts <Fmt>'s useMemo for every step.
   const fields: FieldInfo[] = useMemo(() => fieldsQ.data ?? EMPTY_FIELDS, [fieldsQ.data]);
   // I10: resolved from this document's own links/related, not from page 1 of the library.
@@ -536,6 +543,10 @@ export function ArticlePage() {
       {/* wave 5 (V4a): the reader's own refresh obligation for *this* document. The component
           gates itself on `learning.read` and renders nothing when nothing is owed. */}
       <RefreshBanner documentId={doc.id} />
+      {/* wave 6 (X4b): the agent's read-only Q&A, collapsed until asked for. It gates itself on
+          `ai.ask` and lives inside the work view only, never in the print frame. `stepIndex` maps
+          a cited step *number* to its key, which is what the `/doc/:id/:stepKey` link needs. */}
+      <ArticleAskPane documentId={doc.id} stepKey={call.activeKey ?? undefined} stepIndex={stepIndex} />
       {paneBody}
     </>
   );
@@ -591,6 +602,9 @@ export function ArticlePage() {
       run: () => togglePin.mutate({ id: doc.id, pinned: !pinned }),
     },
     ...(can('docs.edit', doc) ? [{ label: '✏️ ערוך', run: () => go(`/edit/${doc.id}`) }] : []),
+    ...(can('ai.chat') && can('docs.edit', doc)
+      ? [{ label: '🧭 סביבת עבודה', run: () => go(`/workspace/${doc.id}`) }]
+      : []),
     { label: `🕓 v${doc.currentVersion}`, run: () => go(`/history/${doc.id}`) },
     { label: 'קשרים', run: () => setPanelMobile((v) => !v) },
   ];
@@ -694,6 +708,12 @@ export function ArticlePage() {
               {can('docs.edit', doc) ? (
                 <button className="btn sm" title="E" onClick={() => go(`/edit/${doc.id}`)}>
                   ✏️ ערוך
+                </button>
+              ) : null}
+              {/* wave 6 (X4a): the combined source + suggestions + chat workspace. */}
+              {can('ai.chat') && can('docs.edit', doc) ? (
+                <button className="btn sm" onClick={() => go(`/workspace/${doc.id}`)}>
+                  🧭 סביבת עבודה
                 </button>
               ) : null}
               <button className="btn sm" title="H" onClick={() => go(`/history/${doc.id}`)}>

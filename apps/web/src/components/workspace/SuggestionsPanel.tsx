@@ -29,7 +29,12 @@ export function SuggestionsPanel({
   refined,
   onRefinedConsumed,
 }: {
-  documentId: string;
+  /**
+   * The item whose source this is. X6 mounts the panel on `/sources/:id` too, where the page has
+   * a source but no single document, so it is optional: with an explicit `sourceId` the document
+   * is only a fallback for finding one.
+   */
+  documentId?: string;
   sourceId?: string;
   onAskAbout?: (suggestionId: string) => void;
   /** A payload the chat refined, handed over by the workspace for the editor to accept. */

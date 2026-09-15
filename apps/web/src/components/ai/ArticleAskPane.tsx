@@ -14,6 +14,11 @@ export const ASK_TITLE = 'שאל את המערכת';
  *
  * `stepIndex` (step number → step key) is what turns "שלב 3א" in an answer into a link to that
  * step; without it a citation still renders, it just points at the number.
+ *
+ * X6: the pane is **not** `readOnly`. "Read-only Q&A" in the spec is about the tool set — an
+ * `ai.ask` caller gets no write tools — not about the composer; `readOnly` on `ChatPane` disables
+ * sending outright, which would leave an agent a pane with nothing to ask with. `kind="article"`
+ * is what lets an `ai.ask`-only caller send.
  */
 export function ArticleAskPane({
   documentId,
@@ -46,7 +51,6 @@ export function ArticleAskPane({
             documentId={documentId}
             context={stepKey ? { stepKey } : undefined}
             stepIndex={stepIndex}
-            readOnly
             compact
           />
           <p className="muted small">התשובות מבוססות על התוכן שפורסם בלבד ומצטטות מספרי שלבים.</p>

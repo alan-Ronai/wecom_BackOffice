@@ -1,9 +1,7 @@
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { SuggestionPayload } from '@wecom/shared';
 import {
   useDecideSuggestion,
-  useEditSuggestion,
   useProcessSource,
   usePublishSuggestions,
   useRevision,
@@ -19,7 +17,7 @@ import { Hamburger } from '../shell/MobileDrawer.js';
 import { Fmt } from '../Fmt.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
-import { SuggestionCard } from './SuggestionCard.js';
+import { SuggestionsPanel } from '../workspace/SuggestionsPanel.js';
 import { LoadError } from '../ui/index.js';
 import { plural } from '@wecom/shared';
 
@@ -36,7 +34,6 @@ export function SourcesPage() {
   const process = useProcessSource();
   const upload = useUploadSource();
   const decide = useDecideSuggestion();
-  const edit = useEditSuggestion();
   const publish = usePublishSuggestions();
   const [viewChanges, setViewChanges] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -264,7 +261,7 @@ export function SourcesPage() {
         )}
       </div>
 
-      <aside className="src-panel">
+      <aside className="src-panel" aria-label="הצעות לכרטיסים">
         <div className="hd">
           <b>הצעות לכרטיסים</b>
           <span>{pending ? `${pending} ממתינות` : 'אין שינויים ממתינים'}</span>
@@ -289,25 +286,13 @@ export function SourcesPage() {
               כשיסומנו שינויים במעקב (Track Changes) הם יופיעו כאן כהצעות
             </div>
           ) : null}
-          {items.map((s) => (
-            <SuggestionCard
-              key={s.id}
-              suggestion={s}
-              canReview={canReview}
-              canApply={canApply}
-              onDecide={(decision) => decide.mutate({ id: s.id, decision })}
-              onEdit={(text) => {
-                const base = s.editedPayload ?? s.payload;
-                const next: SuggestionPayload =
-                  base.type === 'update-step'
-                    ? { ...base, addActions: [text] }
-                    : base.type === 'new-card'
-                      ? { ...base, title: text }
-                      : base;
-                edit.mutate({ id: s.id, editedPayload: next });
-              }}
-            />
-          ))}
+          {/*
+            wave 6 (X6 mount): the same panel the workspace uses — `affects` chips, the structured
+            row editor and a partial apply — instead of this page's own `SuggestionCard` list and
+            its one-line text-blob edit. The two surfaces must not diverge: an editor who reviews a
+            suggestion here and one who reviews it in the workspace has to see the same thing.
+          */}
+          {current ? <SuggestionsPanel sourceId={current.id} /> : null}
           <div className="sug-info">
             <b>מה המנוע בודק</b> · שינוי סף/ערכים → עדכון שלב · פסקה חדשה → כרטיס חדש או שלב · טקסט זהה ב-2+
             פרקים → בלוק משותף · שדה CRM לא מוכר → התראה · פסקה שנמחקה → הוצאה משימוש
