@@ -103,4 +103,17 @@ export const keys = {
   parity: (connectorId: string = '*') => ['sync', 'parity', connectorId] as const,
   /** Under `sync` too: resolving a conflict has to clear the article header's badge. */
   documentSyncState: (id: string) => ['sync', 'document', id] as const,
+  /**
+   * wave 6 — AI copilot (X4a/X4b). Every key starts with `'ai'`, which is what lets the
+   * `ai.message` SSE event drop the whole surface with one prefix invalidation.
+   */
+  ai: {
+    conversations: (q: unknown = '*') => ['ai', 'conversations', q] as const,
+    conversation: (id: string) => ['ai', 'conversation', id] as const,
+    proposedEdits: (id: string) => ['ai', 'proposedEdits', id] as const,
+  },
+  /* wave 6 — structured suggestion editing (X3). Under `suggestions`, so a decision on the list
+     also drops the single-suggestion row the drawer is editing. */
+  suggestion: (id: string) => ['suggestions', 'item', id] as const,
+  suggestionAnalytics: (q: unknown = '*') => ['suggestions', 'analytics', q] as const,
 };
