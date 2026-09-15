@@ -21,6 +21,7 @@ import { initialTaxonomy, taxonomyHandlers, type TaxonomyState } from './taxonom
 import { feedbackHandlers, resetFeedbackState } from './feedback-handlers.js';
 import { learningHandlers, resetLearningState } from './learning-handlers.js';
 import { learningManageHandlers, resetLearningState as resetLearningManageState } from './learning-manage.js';
+import { aiHandlers, resetAiState } from './ai-handlers.js';
 import type { TrashItem } from '../../src/api/types.js';
 
 const B = '/api/v1';
@@ -92,6 +93,7 @@ export function resetState(): void {
   resetFeedbackState();
   resetLearningState();
   resetLearningManageState();
+  resetAiState();
 }
 
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
@@ -127,6 +129,11 @@ export const handlers: RequestHandler[] = [
   // two lanes stub the same path, the agent's view is the one `CONTRACTS-wave5.md` describes.
   ...learningHandlers,
   ...learningManageHandlers,
+  // wave 6 (X4a) — before the stage-1 suggestion routes, so `GET /suggestions/:id`,
+  // `PATCH /suggestions/:id/edit` and the wave 6 `POST /suggestions/:id/accept` win for the ids
+  // this group owns. Its accept resolver returns `undefined` for any other id, which msw treats
+  // as "try the next handler", so the stage-1 fixtures keep their behaviour.
+  ...aiHandlers,
   http.get(`${B}/auth/me`, () => HttpResponse.json({ ...fx.me, preferences: { ...state.preferences } })),
   // Bare provider ids plus a fallback — not `{ id, label }` objects.
   http.get(`${B}/auth/providers`, () =>

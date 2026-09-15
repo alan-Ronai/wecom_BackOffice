@@ -89,6 +89,18 @@ import {
   roleMatrix,
 } from './stage5.js';
 import { state } from './handlers.js';
+/* wave 6 (X4a) */
+import {
+  AiMessageSchema,
+  ChatEventSchema,
+  ConversationDetailSchema,
+  ConversationSchema,
+  ConversationsResponseSchema,
+  DecideProposedEditsResultSchema,
+  ProposedEditsSchema,
+  SuggestionAnalyticsSchema,
+} from '@wecom/shared';
+import { CONV_1, DEFAULT_SCRIPT, PE_1, SUG_AFFECTS, aiState, resetAiState } from './ai-handlers.js';
 
 const B = 'http://kb.test/api/v1';
 const DOC = D_BROWSING;
@@ -514,5 +526,49 @@ describe('wave 5 (V4b) fixtures match the zod contract', () => {
     const assigned = await (await post(`/learning/items/${LI_BRIEF}/assign`, { userIds: [U2] })).json();
     expect(AssignResultSchema.safeParse(assigned).success).toBe(true);
     expect(GapDetectResultSchema.safeParse(await (await post('/gaps/detect', {})).json()).success).toBe(true);
+  });
+});
+
+/**
+ * wave 6 (X4a) — the chat, proposed-edit and structured-suggestion fixtures, parsed with the same
+ * schemas the X2/X3 routes validate against (`docs/api/CONTRACTS-wave6.md`).
+ */
+describe('wave 6 X4a fixtures match the contract', () => {
+  it('conversation, messages, proposed edits and affects parse', () => {
+    resetAiState();
+    expect(ConversationSchema.parse(aiState.conversations[0])).toBeTruthy();
+    for (const m of aiState.messages) expect(AiMessageSchema.parse(m)).toBeTruthy();
+    expect(ProposedEditsSchema.parse(aiState.proposedEdits[0])).toBeTruthy();
+    const s = SuggestionSchema.parse(aiState.suggestions[0]);
+    expect(s.affects.length).toBeGreaterThan(0);
+  });
+
+  it('the default stream script is a valid ChatEvent sequence ending in done', () => {
+    for (const e of DEFAULT_SCRIPT) expect(ChatEventSchema.parse(e)).toBeTruthy();
+    expect(DEFAULT_SCRIPT.at(-1)?.type).toBe('done');
+  });
+
+  it('the wave 6 msw group answers the contract shapes', async () => {
+    resetAiState();
+    const get = async (p: string): Promise<unknown> => (await fetch(`${B}${p}`)).json();
+    expect(ConversationsResponseSchema.safeParse(await get('/ai/conversations')).success).toBe(true);
+    expect(ConversationDetailSchema.safeParse(await get(`/ai/conversations/${CONV_1}`)).success).toBe(true);
+    expect(SuggestionSchema.safeParse(await get(`/suggestions/${SUG_AFFECTS}`)).success).toBe(true);
+    expect(SuggestionAnalyticsSchema.safeParse(await get('/suggestions/analytics')).success).toBe(true);
+    const decided: unknown = await (
+      await fetch(`${B}/ai/proposed-edits/${PE_1}/decide`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ accept: ['op-1'], reject: ['op-2'] }),
+      })
+    ).json();
+    expect(DecideProposedEditsResultSchema.safeParse(decided).success).toBe(true);
+  });
+
+  it('a suggestion this group does not own still reaches the stage-1 accept handler', async () => {
+    resetAiState();
+    const res = await fetch(`${B}/suggestions/${SUG_1}/accept`, { method: 'POST' });
+    expect(SuggestionSchema.safeParse(await res.json()).success).toBe(true);
+    expect(aiState.accepted).toHaveLength(0);
   });
 });
