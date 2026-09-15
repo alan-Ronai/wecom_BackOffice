@@ -72,6 +72,12 @@ export const refreshes = (n: number): string =>
 /** פער — a knowledge gap. */
 export const gaps = (n: number): string => plural(n, { one: 'פער אחד', two: 'שני פערים', many: '# פערים' });
 
+/* wave 6 — the AI copilot's nouns. */
+
+/** הודעה — one message in a chat transcript (feminine). */
+export const messages = (n: number): string =>
+  plural(n, { one: 'הודעה אחת', two: 'שתי הודעות', many: '# הודעות' });
+
 /** ניסיון — one attempt at a quiz. */
 export const attempts = (n: number): string =>
   plural(n, { one: 'ניסיון אחד', two: 'שני ניסיונות', many: '# ניסיונות' });
