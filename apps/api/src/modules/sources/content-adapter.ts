@@ -1,6 +1,6 @@
 import type { Block, CrmField, Document } from '@wecom/shared';
 import type { Tx } from '../../lib/sql.js';
-import { publishDocument } from '../documents/publish.js';
+import { publishAndFlag, publishFlagDeps } from '../documents/publishWithFlag.js';
 import { getDocument, insertDocument, loadDocRefs, saveStructure, type Q } from '../documents/repo.js';
 import { getBlock, listBlocks, updateBlock } from '../blocks/repo.js';
 import { listFields, upsertField } from '../fields/repo.js';
@@ -33,7 +33,15 @@ export const contentAdapter: ContentApi = {
     // Persist the caller's in-memory edits before the snapshot is frozen.
     if (doc.phases.length)
       await saveStructure(tx(client), doc.id, { phases: doc.phases, related: doc.related }, opts.actorId);
-    const r = await publishDocument(tx(client), doc.id, {
+    /**
+     * A-C2: an accepted suggestion is an editorial publish. A model-applied change that removes
+     * a step is the textbook significant change, so it records §1.5's flag and fans out the
+     * refresh like any other — `override: undefined`, because there is no editor at a checkbox
+     * here either. The notifier and the bus come from the ambient holder: `ContentApi` hands
+     * this method a database client and nothing else.
+     */
+    const r = await publishAndFlag(tx(client), publishFlagDeps(), {
+      doc: doc.id,
       actorId: opts.actorId,
       label: opts.label,
       suggestionId: opts.suggestionId ?? null,

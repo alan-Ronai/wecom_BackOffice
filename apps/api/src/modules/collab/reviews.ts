@@ -15,7 +15,7 @@ import { audit } from '../../lib/audit.js';
 import { badRequest, httpError, notFound } from '../../lib/http.js';
 import { withTransaction, type Queryable, type Tx } from '../../lib/sql.js';
 import { requireUser } from '../../lib/user.js';
-import { publishDocument } from '../documents/publish.js';
+import { publishAndFlag } from '../documents/publishWithFlag.js'; // A-C2: §1.5 also runs on the approve path
 import { assertCanApprove, canApprove } from './approver.js'; // wave 5 V3: approver gate
 import { documentTitle, iso, leadIds, notify, notifyMany } from './repo.js';
 
@@ -156,8 +156,16 @@ export default async function reviewRoutes(instance: FastifyInstance) {
     },
     async (req) => {
       const user = requireUser(req);
-      // Before the transaction: a caller the approver switch refuses must not take the row lock.
-      await assertCanApprove(app.db, user);
+      /**
+       * Before the transaction: a caller the approver switch refuses must not take the row lock.
+       *
+       * A-M5: the gate is on `approve` only. The SELF_APPROVAL comment below already argues that
+       * `changes` is a withdrawal an author must be able to perform alone — sending your own
+       * document back to draft publishes nothing. Gating the whole route meant that with
+       * `requireApprover` on, an editor could no longer pull back their own review request and had
+       * to find an approver to do it for them.
+       */
+      if (req.body.decision === 'approve') await assertCanApprove(app.db, user);
       const documentId = req.params.id;
       return withTransaction(app.db, async (tx) => {
         const open = await tx.query<{
@@ -216,12 +224,25 @@ export default async function reviewRoutes(instance: FastifyInstance) {
               baseVersion,
               currentVersion: cur.current_version,
             });
-          // The approval is what makes the version: the label is the reviewer's, so the
-          // history reads "אושר בבדיקה" rather than an anonymous bump.
-          await publishDocument(tx, documentId, {
-            actorId: user.id,
-            label: req.body.label ?? `אושר בבדיקה על ידי ${user.displayName}`,
-          });
+          /**
+           * The approval is what makes the version: the label is the reviewer's, so the
+           * history reads "אושר בבדיקה" rather than an anonymous bump.
+           *
+           * A-C2: and it goes through `publishAndFlag`, not the bare publish. With
+           * `workflow.requireApprover` on, *this* is the editorial publish path — §1.5's
+           * detection ran nowhere at all in the one configuration §1.6 exists to enable. No
+           * `significantChange`: the approver's dialog has no checkbox, so the detector's own
+           * verdict stands.
+           */
+          await publishAndFlag(
+            tx,
+            { notifier: app.notifier, events: app.events },
+            {
+              doc: documentId,
+              actorId: user.id,
+              label: req.body.label ?? `אושר בבדיקה על ידי ${user.displayName}`,
+            },
+          );
         } else {
           await tx.query(
             "update documents set status='draft', updated_by=$2, updated_at=now(), etag=gen_random_uuid()::text where id=$1",
