@@ -144,34 +144,49 @@ CI (`ci.yml`'s `perf` job) on every push.
 
 ## Trusting X-Forwarded-For
 
-`nginx` sets `X-Forwarded-For $proxy_add_x_forwarded_for`, which **appends** the connecting
-address to whatever the client sent rather than replacing it, and `TRUST_PROXY` then tells the API
-how far out to unwind that list. With the prescribed `TRUST_PROXY=172.16.0.0/12` (the docker
-bridge range) the API resolves `req.ip` to the left-most address the bridge did not add — which is
-right when there is a second proxy in front, and means that a client able to reach nginx directly
-can also *choose* the address the API sees, by sending an `X-Forwarded-For` of its own.
+`req.ip` is the address the API believes a request came from, and it decides:
 
-What that address decides:
-
-- the Palo Alto subnet allowlist (`PALOALTO_SUBNETS`) — so a client on the LAN can ask the
-  firewall about an address other than its own, and be signed in as whoever holds it;
+- the Palo Alto subnet allowlist (`PALOALTO_SUBNETS`) — whether the firewall is asked who the
+  caller is, and **which address it is asked about**;
 - the per-IP auth rate-limit buckets;
 - the `audit_log.ip` and `sessions.ip` columns.
 
-For the pilot — one VM on a closed LAN, behind the same firewall that answers the User-ID
-lookups — this is an accepted risk rather than a hole: the attacker must already be inside, and
-can only become a user the firewall maps to an address in `PALOALTO_SUBNETS`. It stops being
-acceptable the moment the VM is reachable from a wider network. Two things to do then, in order:
+Two settings produce it, and both are load-bearing:
 
-1. keep `TRUST_PROXY` naming the bridge (never `true`, which trusts an `X-Forwarded-For` from any
-   peer, including a client that bypasses nginx entirely);
-2. make nginx **replace** rather than append, by changing `deploy/nginx.conf`'s two
-   `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for` lines to `$remote_addr`. Do this
-   only when nothing legitimate sits in front of nginx, since it discards a real upstream proxy's
-   client address too.
+1. **nginx replaces the header.** `deploy/nginx.conf` sets `X-Forwarded-For $remote_addr` (and
+   `X-Real-IP $remote_addr`) on every proxying location — the address the TCP connection actually
+   came from, discarding anything the client sent under that name. It used to set
+   `$proxy_add_x_forwarded_for`, which *appends*; with `TRUST_PROXY` naming the bridge, the API
+   then unwound the list to the left-most address the bridge had not added — an address the
+   **client** had chosen. Any client that could reach nginx could therefore pick the address the
+   firewall was asked about, and be signed in as whoever the User-ID table maps to it. That was
+   real, and it is fixed.
+2. **The API bounds how far it unwinds.** `TRUST_PROXY=172.16.0.0/12` says which peers may be
+   believed at all — it is what refuses a forged header from a client that reaches the API
+   *directly*, bypassing nginx, so never set it to `true`. `TRUST_PROXY_HOPS=1` says how far:
+   "believe exactly the address the immediate proxy wrote, and unwind no further". Together they
+   hold even if (1) were ever reverted. Raise the hop count only if you deliberately put another
+   proxy in front of nginx, and by the number of proxies you added.
 
-`pnpm e2e:compose` relies on the current behaviour to play a LAN client from a laptop (see below),
-so `apps/web/e2e/compose/lan-identity.spec.ts` is the thing that goes red when this changes.
+The cost of (1) is that a legitimate proxy in front of nginx loses its client's address. There is
+none in this deployment. If one is ever added, put the append back in `deploy/nginx.conf`'s
+`/api/` location *only* and keep `TRUST_PROXY_HOPS` at the number of hops that proxy adds; the
+hop cap is then what still stops the client's own header at the outermost trusted proxy.
+
+What holds this in place:
+
+- `deploy/nginx-check.sh` fails if the production config mentions `$proxy_add_x_forwarded_for`
+  outside a comment, or if any `location` with a `proxy_pass` is missing
+  `proxy_set_header X-Forwarded-For $remote_addr;`.
+- `deploy/smoke.sh` sends seven `POST /auth/local` attempts from the VM, each with a different
+  forged `X-Forwarded-For`, and insists on a 429. The route is rate-limited to five a minute per
+  `req.ip`, so seven 401s would mean each forged address got its own bucket — i.e. the API was
+  taking `req.ip` from the caller. (Invalid credentials by construction; the cost is that the
+  host running the smoke cannot attempt a local login for the following minute.
+  `SMOKE_CHECK_XFF=false` skips it.)
+- `apps/api/test/int/trust-proxy.test.ts` covers `TRUST_PROXY_HOPS` against a live Fastify.
+- `apps/web/e2e/compose/lan-identity.spec.ts` is the end-to-end half — see the next section for
+  how it plays a LAN client now that a header no longer can.
 
 ## The Compose end-to-end gate
 
@@ -191,21 +206,44 @@ library, creates a break-glass admin and a LAN user, and runs `apps/web/e2e/comp
   plus the HTTP→HTTPS redirect;
 - the **Palo Alto User-ID fallback** end to end — a browser with no session lands in the library
   as the firewall's user with the role the deployment granted, an address the firewall cannot name
-  stays signed out, and an address outside `PALOALTO_SUBNETS` never reaches the firewall at all;
+  stays signed out, an address outside `PALOALTO_SUBNETS` never reaches the firewall at all, and a
+  browser that forges `X-Forwarded-For` is still seen as the address it connected from;
 - an editorial round trip (create → publish → search → article) through the proxy;
 - the two-way WordPress loop, with the connector's outbound call leaving the api *container* and
   being checked against `CONNECTOR_HOST_ALLOWLIST`.
 
 Requirements: Docker with compose v2, `openssl`, `curl`, `lsof`, a Chromium for Playwright
-(`pnpm --filter @wecom/web exec playwright install chromium`), and free TCP ports 8443, 8080, 8186
-and 8085 — the first two are hard-coded in `docker-compose.ci.yml`, because compose concatenates
-`ports` across overlay files instead of replacing them. Roughly 6 GB of disk for the images, the
-Ollama layer and the small model.
+(`pnpm --filter @wecom/web exec playwright install chromium`), and free TCP ports 8443, 8080, 8186,
+8085, 8444, 8445 and 8446 — the first two are hard-coded in `docker-compose.ci.yml`, because
+compose concatenates `ports` across overlay files instead of replacing them. Roughly 6 GB of disk
+for the images, the Ollama layer and the small model.
 
-Two stubs stand in for systems a test machine does not have: `scripts/paloalto-stub.mjs` (the
-PAN-OS XML API, with a `/_control/*` plane the specs use to see which addresses were looked up)
-and `scripts/wp-stub.mjs` (the same WordPress fake the connector unit tests use). Everything else
-is the product. `deploy/e2e.env` holds the configuration and is copied over `deploy/.env` for the
+### How the gate plays a LAN client
+
+Since nginx replaces `X-Forwarded-For` (above), no header a browser sends can change `req.ip`, and
+the identity specs cannot pretend to be on the LAN — which is the point. They are given real
+addresses instead. `deploy/docker-compose.e2e.yml` declares two extra networks, `lan`
+(`10.44.0.0/24`, inside the `/16` that `PALOALTO_SUBNETS` names in `deploy/e2e.env`) and `offsite`
+(`198.51.100.0/24`), attaches nginx to both, and runs three containers of
+`scripts/lan-forwarder.mjs` — a dependency-free TCP forwarder, pinned to a fixed `ipv4_address` and
+publishing nginx's 443 to a port on the host:
+
+| open this                | and nginx sees you as | which is                              |
+| ------------------------ | --------------------- | ------------------------------------- |
+| `https://localhost:8444` | `10.44.0.7`           | on the LAN, mapped by the firewall    |
+| `https://localhost:8445` | `10.44.0.9`           | on the LAN, unknown to the firewall   |
+| `https://localhost:8446` | `198.51.100.7`        | off the LAN entirely                  |
+| `https://localhost:8443` | the bridge gateway    | this machine, as it really is         |
+
+A Playwright context simply picks a `baseURL`; nothing forges a header anywhere in the gate. One
+spec then sends `X-Forwarded-For: 10.44.0.7` from the 10.44.0.9 client and asserts it stays signed
+out, with no session cookie and no firewall lookup for the address it claimed — the attack the
+gate's old fixture was, turned into a test. `KEEP_STACK=1` prints all four URLs.
+
+Three stubs stand in for what a test machine does not have: `scripts/paloalto-stub.mjs` (the PAN-OS
+XML API, with a `/_control/*` plane the specs use to see which addresses were looked up),
+`scripts/wp-stub.mjs` (the same WordPress fake the connector unit tests use), and the forwarders
+above (a LAN). Everything else is the product. `deploy/e2e.env` holds the configuration and is copied over `deploy/.env` for the
 run; whatever was there is moved to `deploy/.env.before-e2e` and put back on the way out.
 
 In CI it is `.github/workflows/deploy-e2e.yml`: on `main`, nightly, and on demand — not on every
