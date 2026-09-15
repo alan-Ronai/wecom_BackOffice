@@ -32,9 +32,19 @@ const waitForEvent = async (events: Event[], name: string, ms = 10_000): Promise
 };
 
 const WP_TITLE = 'נוהל WordPress לבדיקה';
-const WP_BODY = '<h2>מבוא</h2><p>סף מהירות: 5 מגה.</p><ul><li>בדיקת APN</li><li>ניתוק מ-Wi-Fi</li></ul>';
+/**
+ * L3: **two** `<h2>`s, deliberately. With one section the `singleDocument` merge is a no-op —
+ * one section is one card either way — so every assertion below held identically whether the
+ * merge worked or not, and the suite's own subject was untested. Two sections have to come back
+ * as one card with two phases; one card per section would now be two suggestions and two
+ * documents, which is the fan-out this file exists to pin.
+ */
+const WP_BODY =
+  '<h2>מבוא</h2><p>סף מהירות: 5 מגה.</p><ul><li>בדיקת APN</li><li>ניתוק מ-Wi-Fi</li></ul>' +
+  '<h2>המשך טיפול</h2><p>העבר את הפנייה לטכנאי שטח.</p>';
 const WP_BODY_EDITED =
-  '<h2>מבוא</h2><p>סף מהירות: 6 מגה.</p><ul><li>בדיקת APN</li><li>ניתוק מ-Wi-Fi</li></ul>';
+  '<h2>מבוא</h2><p>סף מהירות: 6 מגה.</p><ul><li>בדיקת APN</li><li>ניתוק מ-Wi-Fi</li></ul>' +
+  '<h2>המשך טיפול</h2><p>העבר את הפנייה לטכנאי שטח.</p>';
 
 run('pipeline fan-out: one remote item is one document', () => {
   let db: Awaited<ReturnType<typeof startTestDb>>;
@@ -116,8 +126,9 @@ run('pipeline fan-out: one remote item is one document', () => {
 
     expect((await inject('POST', `/api/v1/sources/${sourceId}/process`)).statusCode).toBe(200);
     const pending = (await inject('GET', `/api/v1/suggestions?status=pending&sourceId=${sourceId}`)).json();
-    // The defect: four paragraphs (h2, p, and a card per li) produced four suggestions here.
-    expect(pending.total, 'one section of one post = one suggestion').toBe(1);
+    // The defect: every paragraph (h2, p, a card per li) produced its own suggestion here. Two
+    // sections make this load-bearing — without the `singleDocument` merge it would be two.
+    expect(pending.total, 'two sections of one post = one suggestion').toBe(1);
     const card = pending.items[0];
     expect(card.type).toBe('new-card');
     // The card is named after the POST, not after the first sentence of a paragraph.
@@ -144,15 +155,20 @@ run('pipeline fan-out: one remote item is one document', () => {
 
     const doc = (await inject('GET', `/api/v1/documents/${documentId}`)).json();
     expect(doc.title).toBe(WP_TITLE);
-    expect(doc.phases).toHaveLength(1);
-    expect(doc.phases[0].label).toBe('מבוא');
-    expect(
-      doc.phases[0].steps.map((s: { title: string; sourceRef?: string }) => [s.title, s.sourceRef]),
-    ).toEqual([
+    // One document, and the two sections are its two phases rather than two documents.
+    expect(doc.phases).toHaveLength(2);
+    expect(doc.phases.map((p: { label: string }) => p.label)).toEqual(['מבוא', 'המשך טיפול']);
+    const steps = (i: number) =>
+      doc.phases[i].steps.map((s: { title: string; sourceRef?: string }) => [s.title, s.sourceRef]);
+    expect(steps(0)).toEqual([
       ['סף מהירות: 5 מגה', '§h2-1.p-1'],
       ['בדיקת APN', '§h2-1.ul-2'],
       ['ניתוק מ-Wi-Fi', '§h2-1.ul-2'],
     ]);
+    expect(steps(1)).toEqual([['העבר את הפנייה לטכנאי שטח', '§h2-2.p-1']]);
+    // Step keys stay unique across the phases, which is what `nextKey` needs on apply.
+    const keys = doc.phases.flatMap((p: { steps: { key: string }[] }) => p.steps.map((s) => s.key));
+    expect(new Set(keys).size).toBe(keys.length);
   }, 240000);
 
   it('a remote edit lands as the source HTML of that same document', async () => {
