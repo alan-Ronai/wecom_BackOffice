@@ -1,30 +1,177 @@
-/**
- * PLACEHOLDER — X4a ships the real `ChatPane` at this path and X6 deletes this file at merge.
- *
- * It exists so the two X4b mounts (`EditorChatDock`, `ArticleAskPane`) can be written, typed and
- * tested against the agreed props while the lanes run in parallel. The props are X4a's, verbatim:
- * changing them here would mean changing them twice.
- */
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { AiToolName, ProposedEdits, SuggestionPayload } from '@wecom/shared';
+import { useCan } from '../../api/hooks/me.js';
+import {
+  useConversation,
+  useConversationFor,
+  useDecideProposedEdits,
+  useMessageFeedback,
+  useSendMessage,
+} from '../../api/hooks/ai.js';
+import { useToast } from '../ui/Toast.js';
+import { Composer } from './Composer.js';
+import { MessageList } from './MessageList.js';
+import { parseRefinedPayload } from './RefinedSuggestionCard.js';
+
+export interface ChatContext {
+  stepKey?: string;
+  suggestionId?: string;
+  selection?: string;
+}
+export type ChatKind = 'workspace' | 'editor' | 'article';
+
+const KIND_LABEL: Record<ChatKind, string> = {
+  workspace: 'סביבת העבודה',
+  editor: 'עורך השלבים',
+  article: 'שאל את המערכת',
+};
 
 export interface ChatPaneProps {
-  kind: 'workspace' | 'editor' | 'article';
+  kind: ChatKind;
   documentId: string;
   sourceRevisionId?: string;
-  context?: { stepKey?: string; suggestionId?: string; selection?: string };
-  /** No write tools, no composer affordances beyond asking (the article pane). */
+  context?: ChatContext;
   readOnly?: boolean;
-  /** The dock and the ask pane are narrow; the workspace page is not. */
   compact?: boolean;
-  onProposedEdits?: (proposedEditsId: string) => void;
-  onRefinedSuggestion?: (suggestionId: string) => void;
-  /** Every `tool_result` frame, so a host can consume the one it cares about (`draft_step`). */
-  onToolResult?: (name: string, payload: unknown, messageId: string) => void;
-  /** Step number → step key, so a citation can link to `/doc/:id/:stepKey`. */
+  onProposedEdits?: (pe: ProposedEdits) => void;
+  onRefinedSuggestion?: (suggestionId: string, payload: SuggestionPayload) => void;
+  /** Generic hand-off for tool results that carry a payload (`draft_step` → the editor dock). */
+  onToolResult?: (name: AiToolName, payload: unknown, messageId: string) => void;
+  /** step num → step key, so citations like "שלב 3א" become links to `/doc/:id/:stepKey`. */
   stepIndex?: Record<string, string>;
   className?: string;
 }
 
-export function ChatPane({ className }: ChatPaneProps): ReactNode {
-  return <div className={['chat-pane', 'muted', className].filter(Boolean).join(' ')}>הצ&apos;אט נטען…</div>;
+/**
+ * The shared chat pane — one component for all three kinds (`/workspace/:id`, the step editor,
+ * the article page); X4b mounts the other two.
+ *
+ * Which tools the model may call is decided server-side from the caller's permissions. Here the
+ * pane only decides whether to render at all (`ai.ask`) and whether the composer writes
+ * (`ai.chat`, or `ai.ask` on the article page, where the server restricts the tool set instead).
+ * Nothing the model returns is applied without a click.
+ */
+export function ChatPane({
+  kind,
+  documentId,
+  sourceRevisionId,
+  context,
+  readOnly,
+  compact,
+  onProposedEdits,
+  onRefinedSuggestion,
+  onToolResult,
+  stepIndex,
+  className,
+}: ChatPaneProps) {
+  const can = useCan();
+  const mayAsk = can('ai.ask');
+  const mayChat = can('ai.chat');
+  const conv = useConversationFor(kind, documentId, { enabled: mayAsk, sourceRevisionId });
+  const [convId, setConvId] = useState<string | null>(null);
+  useEffect(() => {
+    if (conv.conversation) setConvId(conv.conversation.id);
+  }, [conv.conversation]);
+
+  const detail = useConversation(convId);
+  const chat = useSendMessage(convId);
+  const decide = useDecideProposedEdits(documentId);
+  const feedback = useMessageFeedback();
+  const toast = useToast();
+  const [ctx, setCtx] = useState<ChatContext | undefined>(context);
+  useEffect(() => setCtx(context), [context]);
+
+  // Hand proposed edits / refinements / tool payloads to the host as soon as the reply seals.
+  const last = chat.view.sealed.at(-1);
+  const handled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!last || handled.current === last.messageId) return;
+    handled.current = last.messageId;
+    if (last.proposed && onProposedEdits)
+      onProposedEdits({
+        id: last.proposed.proposedEditsId,
+        messageId: last.messageId,
+        documentId: last.proposed.documentId,
+        // From the event. Never fabricated: the apply path sends it as `If-Match`.
+        baseSourceVersion: last.proposed.baseSourceVersion,
+        ops: last.proposed.ops,
+        status: 'proposed',
+        decidedBy: null,
+        decidedAt: null,
+        resultingSourceVersion: null,
+      });
+    if (last.refined && onRefinedSuggestion) {
+      // The stream types `editedPayload` as unknown; a payload that is not one is not handed on.
+      const payload = parseRefinedPayload(last.refined.editedPayload);
+      if (payload) onRefinedSuggestion(last.refined.suggestionId, payload);
+    }
+    if (onToolResult)
+      for (const t of last.tools)
+        if (t.ok && t.payload !== undefined) onToolResult(t.name as AiToolName, t.payload, last.messageId);
+  }, [last, onProposedEdits, onRefinedSuggestion, onToolResult]);
+
+  if (!mayAsk) return null;
+
+  const canSend = !readOnly && (mayChat || kind === 'article');
+  const sel = ctx?.selection;
+  const contextLabel = ctx?.suggestionId
+    ? 'הקשר: הצעה'
+    : ctx?.stepKey
+      ? `הקשר: שלב ${ctx.stepKey}`
+      : sel
+        ? `הקשר: "${sel.slice(0, 40)}${sel.length > 40 ? '…' : ''}"`
+        : undefined;
+
+  const send = async (content: string): Promise<void> => {
+    let id = convId;
+    if (!id) {
+      try {
+        id = (await conv.create()).id;
+        setConvId(id);
+      } catch {
+        toast('לא ניתן לפתוח שיחה', 'warn');
+        return;
+      }
+    }
+    chat.send({ content, ...(contextLabel ? { context: ctx } : {}) }, id);
+  };
+
+  return (
+    <div
+      className={'chat-pane' + (compact ? ' compact' : '') + (className ? ' ' + className : '')}
+      dir="rtl"
+      aria-label={KIND_LABEL[kind]}
+    >
+      <div className="chat-head">
+        <b>{KIND_LABEL[kind]}</b>
+        <span className="small muted">{detail.data?.conversation.model ?? ''}</span>
+      </div>
+      <MessageList
+        history={detail.data?.messages ?? []}
+        view={chat.view}
+        streaming={chat.isStreaming}
+        documentId={documentId}
+        stepIndex={stepIndex}
+        canDecide={canSend && mayChat && can('docs.edit')}
+        onAcceptOps={(peId, ids) => decide.mutate({ id: peId, accept: ids, reject: [] })}
+        onRejectOps={(peId, ids) => decide.mutate({ id: peId, accept: [], reject: ids })}
+        onAcceptAll={(peId) => decide.mutate({ id: peId, accept: 'all', reject: [] })}
+        onApplyRefined={onRefinedSuggestion}
+        onFeedback={(messageId, rating, note) => feedback.mutate({ messageId, rating, note })}
+      />
+      {chat.error ? (
+        <div role="alert" className="chat-error">
+          {chat.error}
+        </div>
+      ) : null}
+      <Composer
+        disabled={!canSend}
+        streaming={chat.isStreaming}
+        contextLabel={contextLabel}
+        onClearContext={() => setCtx(undefined)}
+        onSend={(t) => void send(t)}
+        onStop={chat.stop}
+      />
+    </div>
+  );
 }
