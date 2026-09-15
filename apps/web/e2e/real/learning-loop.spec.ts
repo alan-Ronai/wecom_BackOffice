@@ -79,12 +79,15 @@ test('W5-E2E-1 a quiz is built, assigned, passed, refreshed after a significant 
   // trip over a document of real size.
   await expect(l.getByTestId('questions-list').locator('li').first()).toBeVisible({ timeout: 60_000 });
   await l.getByRole('button', { name: 'שמור שאלות' }).click();
+  // Publishing a quiz whose questions are still unsaved is a 400, so the save is waited for.
+  await expect(l.getByText('השאלות נשמרו')).toBeVisible();
 
   await l.getByRole('button', { name: 'פרסם' }).click();
   const pubDialog = l.getByRole('dialog', { name: 'פרסום פריט למידה' });
   await pubDialog.getByLabel('תיאור הגרסה').fill('גרסה ראשונה');
   await pubDialog.getByRole('button', { name: 'אישור' }).click();
-  await expect(l.getByText('פריט הלמידה פורסם')).toBeVisible();
+  // The durable post-condition, not the toast: "הקצה" is disabled until the item is published.
+  await expect(l.getByRole('button', { name: 'הקצה' })).toBeEnabled({ timeout: 20_000 });
 
   /* 2. assign to the agents of the document's world ------------------------- */
   await l.getByRole('button', { name: 'הקצה' }).click();
