@@ -64,13 +64,20 @@ interface Props {
   where: string;
   /** Changing this clears a caught error — the route path, so navigating away recovers. */
   resetKey?: string;
+  /**
+   * What to render instead of the panel (review M1). The panel is right for a *page*: it is the
+   * whole screen and it owns the recovery. It is wrong for an overlay — a palette that throws
+   * should close, not paint a crash report over a working app — so `Shell` passes `null` for the
+   * three it wraps, and the throw is still logged and still reported.
+   */
+  fallback?: ReactNode;
 }
 
 interface State {
   error: Error | null;
 }
 
-export class ErrorBoundary extends Component<Props, State> {
+class ErrorBoundaryBase extends Component<Props, State> {
   override state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
@@ -96,6 +103,7 @@ export class ErrorBoundary extends Component<Props, State> {
   override render(): ReactNode {
     const { error } = this.state;
     if (!error) return this.props.children;
+    if (this.props.fallback !== undefined) return this.props.fallback;
     /**
      * A chunk that 404s after a deploy is the one error `reset()` cannot fix: React caches the
      * rejected `import()` inside the `lazy()` wrapper, so re-rendering the same subtree replays
@@ -137,9 +145,26 @@ export class ErrorBoundary extends Component<Props, State> {
 }
 
 /**
- * The per-route boundary. A function component only so it can read the path and hand it down as
- * the reset key — everything else is the class above.
+ * The boundary everything uses. A function component only so it can read the path and default the
+ * reset key to it — everything else is the class above.
+ *
+ * The default is the fix for M1. The shell boundary was mounted with no `resetKey` at all, and
+ * `Palette`, `Peek`, `Tour`, `Sidebar`, `TabStrip` and the notification bell all render under it:
+ * one throw from any overlay replaced the entire application with the panel, and nothing short of
+ * the user thinking to reload ever brought it back — `נסה שוב` re-rendered the same overlay in the
+ * same state that had just thrown. Keying on the path means navigating anywhere is a recovery,
+ * which is what the route boundary has always done and what nobody wired to the outer one.
  */
+export function ErrorBoundary({ children, where, resetKey, fallback }: Props) {
+  const loc = useLocation();
+  return (
+    <ErrorBoundaryBase where={where} resetKey={resetKey ?? loc.pathname} fallback={fallback}>
+      {children}
+    </ErrorBoundaryBase>
+  );
+}
+
+/** The per-route boundary: the same thing, named by the route it guards. */
 export function RouteBoundary({ children }: { children: ReactNode }) {
   const loc = useLocation();
   return (

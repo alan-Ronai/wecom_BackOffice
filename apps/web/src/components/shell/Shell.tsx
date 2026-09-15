@@ -6,6 +6,7 @@ import { KEYMAP, useHotkeys } from '../../lib/keys.js';
 import { Palette } from '../palette/Palette.js';
 import { usePalette } from '../palette/paletteStore.js';
 import { Peek } from '../article/Peek.js';
+import { ErrorBoundary } from '../ui/ErrorBoundary.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { NavProvider, useNav } from './navStore.js';
@@ -136,9 +137,24 @@ function ShellInner() {
           <Outlet />
         </div>
       </main>
-      <Palette />
-      <Peek />
-      <Tour />
+      {/**
+       * M1 — one boundary each, and no panel.
+       *
+       * These three render *beside* the outlet, under the shell boundary, so before this a throw
+       * inside the palette's hit list or the peek drawer's fetch took the sidebar, the topbar and
+       * every route with it. An overlay is ephemeral by nature: the honest recovery is for it to
+       * close (the throw is still logged and still reported from `componentDidCatch`), leaving an
+       * app the agent can keep working in — and `Ctrl K` opens a fresh one.
+       */}
+      <ErrorBoundary where="palette" fallback={null}>
+        <Palette />
+      </ErrorBoundary>
+      <ErrorBoundary where="peek" fallback={null}>
+        <Peek />
+      </ErrorBoundary>
+      <ErrorBoundary where="tour" fallback={null}>
+        <Tour />
+      </ErrorBoundary>
     </div>
   );
 }
