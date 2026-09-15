@@ -26,6 +26,19 @@ export interface NextHint {
   choices: number;
 }
 
+/**
+ * How many outcomes get a digit (L1).
+ *
+ * `ArticlePage`'s key handler binds `1`–`3` and the keymap card advertises `1-3`, so a fourth
+ * outcome has no key — which is why `choices` is capped here and why `StepView` stops drawing a
+ * `<kbd>` past the third. Exported so the two cannot drift: a keycap the keyboard does not honour
+ * is the same defect in the other direction.
+ *
+ * The *hint* below still names every destination, because every outcome is clickable — the cap is
+ * on keys, not on where the call can go.
+ */
+export const MAX_OUTCOME_KEYS = 3;
+
 const label = (s: ResolvedStep | undefined): string => (s ? `שלב ${s.num}: ${stripFmt(s.title)}` : 'סיום');
 
 /**
@@ -46,7 +59,7 @@ export function nextHint(step: ResolvedStep, steps: ResolvedStep[]): NextHint {
   // branch options when there is a branch, and to the outcomes otherwise.
   const gotos = step.branch ? step.branch.options.map((o) => o.goto) : step.outcomes.map((o) => o.goto);
   // Only the first three are reachable from the keyboard, which is what the aside advertises.
-  const choices = Math.min(gotos.length, 3);
+  const choices = Math.min(gotos.length, MAX_OUTCOME_KEYS);
 
   if (!choices) {
     return {
@@ -69,7 +82,9 @@ export function nextHint(step: ResolvedStep, steps: ResolvedStep[]): NextHint {
   }
 
   // A branching step: naming every destination is the whole value of the hint, because this is
-  // exactly where an agent cannot predict what pressing `2` will do.
+  // exactly where an agent cannot predict what pressing `2` will do. Every outcome is listed,
+  // including a fourth that has no digit — it is one click away, and a hint that hid it would
+  // describe a call the agent cannot make sense of when they take that branch.
   return {
     text: `מה הלאה · לפי התוצאה: ${unique.map((d) => label(d)).join(' · ')}`,
     terminal: unique.every((d) => !d),
