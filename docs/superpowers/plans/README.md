@@ -71,3 +71,17 @@ Run order: V0 alone on `main`; V1–V4b in parallel worktrees branched after V0 
 
 Wave 5 landed on `wave5/integration`: the merge record is `docs/wave5-merge-log.md` and the
 PRD-bullet-to-test matrix is `docs/wave5-acceptance.md`.
+
+## Wave 6 — AI copilot (spec `../specs/2026-09-15-kb-wave6-ai-copilot-design.md`, contract `docs/api/CONTRACTS-wave6.md` written by X0 Task 6)
+
+| Lane | Plan | Start after | Produces for |
+|---|---|---|---|
+| X0 Contracts | `2026-09-15-X0-wave6-contracts.md` | — | everyone (wave6 schemas + aliases, the three `ai.*` permissions and 0050, `ai.message`, the two queues, model-contract `chat`/`embedBatch`/`ImpactSet`, `resolveModelSlots`, `getAiSettings`) |
+| X1 Generation quality (api + model) | `2026-09-15-X1-generation-quality.md` | X0 on main | system prompt v3, impact-aware `ProposalContext`, `affects`, few-shot bank, embedding-based mapping, the embedder swap + reindex, eval harness, confidence calibration |
+| X2 Chat backend (api) | `2026-09-15-X2-chat-backend.md` | X0 on main | conversations/messages, the SSE chat route, the tool runtime and per-role tool sets, rate limits, feedback, transcript export |
+| X3 Suggestion editing & analytics (api + shared) | `2026-09-15-X3-suggestion-editing.md` | X0 on main | structured edit per type, partial apply, stored edit diff, `GET /suggestions/analytics` |
+| X4a Workspace web | `2026-09-15-X4a-workspace-web.md` | X0 on main | `/workspace/:id` — source editor, suggestions panel with `affects` + partial apply, chat pane with diff hunks |
+| X4b Chat elsewhere + admin web | `2026-09-15-X4b-chat-admin-web.md` | X0 on main | chat in the step editor, read-only Q&A on the article page, `/admin/ai` (brief, style, slots, evals, analytics, transcripts) |
+| X6 Integration | `2026-09-15-X6-integration.md` | X1–X4b merged | mounts, seams (0054), real e2e flows, the tier-1 evaluation run on the VM, acceptance matrix |
+
+Run order: X0 alone on `main`; X1–X4b in parallel worktrees branched after X0 lands; X6 last. Shared-file rules, the migration numbers, the SSE contract and the deploy checklist are in X0's contract document.
