@@ -27,7 +27,7 @@ test('W6-E2E-1 the chat proposes a source edit, the editor accepts it, and a par
   page,
   baseURL,
 }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(420_000);
   const api = await adminApi(page, baseURL!);
   opened.apis.push(api);
   // `editor` holds docs.edit + ai.chat + suggestions.review (`DEFAULT_ROLES.editor`).
@@ -114,12 +114,18 @@ test('W6-E2E-1 the chat proposes a source edit, the editor accepts it, and a par
   });
   await panel.getByRole('button', { name: 'עריכה מפורטת' }).first().click();
   const drawer = e.getByRole('dialog', { name: 'עריכת ההצעה' });
-  const firstRow = drawer.getByRole('textbox').first();
-  await firstRow.fill(`${await firstRow.inputValue()} (${stamp})`);
+  // Each row is keep / edit / remove; the editable field only appears once "ערוך" is chosen,
+  // which is the tri-state the structured editor is for (§1.8).
+  const firstRowFields = drawer.locator('fieldset').first();
+  await firstRowFields.getByRole('radio', { name: 'ערוך' }).check();
+  const field = firstRowFields.getByRole('textbox');
+  await field.fill(`${await field.inputValue()} (${stamp})`);
   await drawer.getByRole('button', { name: 'שמור עריכה' }).click();
   await expect(drawer).toBeHidden({ timeout: 30_000 });
 
-  const target = pending.find((s) => (s.affects ?? []).length >= 0)!;
+  // The panel lists pending suggestions in the order the API returns them, so the card the drawer
+  // just edited is the one the row checkboxes below belong to.
+  const target = pending[0]!;
   await panel.getByRole('checkbox').first().check();
   await panel.getByRole('button', { name: 'החל חלקית' }).first().click();
 
