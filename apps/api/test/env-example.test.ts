@@ -84,7 +84,7 @@ describe('deploy/.env.example', () => {
     const r = ConfigSchema.safeParse({
       ...shipped(),
       SESSION_SECRET: secret,
-      CONNECTOR_KEY: 'ab'.repeat(32),
+      CONNECTOR_KEY: '0123456789abcdef'.repeat(4),
     });
     expect(r.success).toBe(false);
     const issue = r.success ? undefined : r.error.issues.find((i) => String(i.path[0]) === 'SESSION_SECRET');

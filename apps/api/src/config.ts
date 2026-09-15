@@ -62,7 +62,10 @@ export function weakSessionSecret(value: string): string | null {
 export function weakConnectorKey(value: string): string | null {
   const key = value.toLowerCase();
   if (key === DEV_CONNECTOR_KEY) return 'is still the all-zero default';
-  if (distinct(key) < 2) return 'is a single hex digit repeated';
+  // 64 random hex digits use all 16 values with overwhelming probability; a hand-typed pattern
+  // (`a1a1a1…`, `abab…`) uses two or three. Eight is a generous floor that no generated key fails.
+  if (distinct(key) < 8)
+    return `uses only ${distinct(key)} distinct hex digits, so it is a typed pattern rather than a generated key`;
   return null;
 }
 
