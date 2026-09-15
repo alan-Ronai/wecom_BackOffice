@@ -157,4 +157,88 @@ export class OllamaModel implements ModelClient {
     if (!r.ok) throw new Error('embeddings http ' + r.status);
     return ((await r.json()) as { embedding: number[] }).embedding;
   }
+
+  /**
+   * Wave 6 (X1). `/api/embed` accepts an array and returns one vector per input, so a reindex
+   * of 5,000 documents is 5,000/`batch` round trips instead of 5,000. Empty input → [] without a
+   * call. A model that ignores the batch form (older Ollama) answers with one vector for the
+   * first input only; we detect the short answer and fall back to one `embed` per text.
+   */
+  async embedBatch(texts: string[]): Promise<number[][]> {
+    if (!texts.length) return [];
+    const r = await this.req('/api/embed', {
+      model: this.o.embedModel ?? 'nomic-embed-text',
+      input: texts,
+    });
+    if (!r.ok) throw new Error('embed http ' + r.status);
+    const data = (await r.json()) as { embeddings?: number[][] };
+    if (Array.isArray(data.embeddings) && data.embeddings.length === texts.length) return data.embeddings;
+    const out: number[][] = [];
+    for (const t of texts) out.push(await this.embed(t));
+    return out;
+  }
+
+  /** `/api/show` for one tag: family, parameter size, quantization and (for embedders) the vector width. */
+  async showModel(
+    tag: string,
+  ): Promise<{
+    family?: string;
+    parameterSize?: string;
+    quantization?: string;
+    embeddingLength?: number;
+  } | null> {
+    try {
+      const r = await this.req('/api/show', { model: tag });
+      if (!r.ok) return null;
+      const d = (await r.json()) as {
+        details?: { family?: string; parameter_size?: string; quantization_level?: string };
+        model_info?: Record<string, unknown>;
+      };
+      const info = d.model_info ?? {};
+      const lenKey = Object.keys(info).find((k) => k.endsWith('.embedding_length'));
+      return {
+        family: d.details?.family,
+        parameterSize: d.details?.parameter_size,
+        quantization: d.details?.quantization_level,
+        embeddingLength: lenKey ? Number(info[lenKey]) : undefined,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The tags Ollama has locally, for `POST /admin/ai/models/test`'s presence check.
+   * Never throws: an unreachable daemon is an empty listing, which the route reports as
+   * `reachable: false` rather than a 500.
+   */
+  async listTags(): Promise<{ name: string; size: number }[]> {
+    try {
+      const r = await this.req('/api/tags');
+      if (!r.ok) return [];
+      const d = (await r.json()) as { models?: { name?: string; size?: number }[] };
+      return (d.models ?? [])
+        .filter((m) => !!m.name)
+        .map((m) => ({ name: m.name as string, size: Number(m.size ?? 0) }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * One short generation on an arbitrary tag, for the admin slot test: the point is the
+   * measured throughput, not the text. Throws so the caller can report the error verbatim.
+   */
+  async generateProbe(tag: string, prompt: string, numPredict = 20): Promise<{ tokens: number; ms: number }> {
+    const started = Date.now();
+    const r = await this.req('/api/chat', {
+      model: tag,
+      stream: false,
+      options: { temperature: 0, num_predict: numPredict },
+      messages: [{ role: 'user', content: prompt }],
+    });
+    if (!r.ok) throw new Error('chat http ' + r.status);
+    const d = (await r.json()) as { eval_count?: number };
+    return { tokens: Number(d.eval_count ?? 0), ms: Date.now() - started };
+  }
 }
