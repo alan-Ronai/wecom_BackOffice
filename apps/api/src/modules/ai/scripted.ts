@@ -13,7 +13,13 @@
  * path the permission gate has to be seen refusing, with the reply "אין לי הרשאה לשנות תוכן".
  */
 import type { ChatMessage, ChatResult, ModelClient, ToolCall } from '@wecom/model';
-import { DOCUMENT_ID_LABEL, SECOND_CALL, SUGGESTION_ID_LABEL } from './prompt.js';
+import {
+  DOCUMENT_ID_LABEL,
+  parseRefBlocks,
+  renderRefBlocks,
+  SECOND_CALL,
+  SUGGESTION_ID_LABEL,
+} from './prompt.js';
 
 const UUID = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
 
@@ -39,20 +45,6 @@ const result = (content: string, toolCalls: ToolCall[] = []): ChatResult => ({
 
 let counter = 0;
 const callId = () => `script_${++counter}`;
-
-/**
- * `§ref` + text pairs, the shape `propose_source_edit` asks a model for and `diffToOps` reads
- * back. The second call's prompt contains the current paragraphs in exactly this form, so the
- * script can echo them with one substitution applied.
- */
-const parseParagraphBlocks = (text: string): { ref: string; text: string }[] => {
-  const out: { ref: string; text: string }[] = [];
-  for (const block of text.split(/\n\s*\n/)) {
-    const m = /^\s*§([^\s\n]+)\n([\s\S]*)$/.exec(block);
-    if (m) out.push({ ref: m[1], text: m[2].trim() });
-  }
-  return out;
-};
 
 export class ScriptedChatModel implements ModelClient {
   name = 'scripted-chat';
@@ -126,7 +118,7 @@ export class ScriptedChatModel implements ModelClient {
 
   /** Echo the paragraphs back with the instruction's quoted substitution applied to one of them. */
   private rewriteParagraphs(prompt: string): ChatResult {
-    const blocks = parseParagraphBlocks(prompt);
+    const blocks = parseRefBlocks(prompt);
     const q = quoted(prompt);
     if (blocks.length && q.length) {
       const [from, to] = q.length >= 2 ? [q[0], q[1]] : [null, q[0]];
@@ -137,7 +129,7 @@ export class ScriptedChatModel implements ModelClient {
           text: from ? blocks[target].text.replace(from, to) : to,
         };
     }
-    return result(blocks.map((b) => `§${b.ref}\n${b.text}`).join('\n\n'));
+    return result(renderRefBlocks(blocks));
   }
 
   /** The refine prompt carries the current payload; echoing it back is always the same type. */

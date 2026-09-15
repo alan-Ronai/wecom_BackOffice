@@ -23,7 +23,7 @@ import {
 import type { ChatMessage } from '@wecom/model';
 import { getSourceDocument } from '../../sourcedocs/repo.js';
 import { diffToOps } from '../proposedEdits.js';
-import { SECOND_CALL } from '../prompt.js';
+import { parseRefBlocks, renderRefBlocks, SECOND_CALL, type RefBlock } from '../prompt.js';
 import { defineTool, NOT_FOUND, type ToolCtx, type ToolOutcome } from './registry.js';
 import { visibleDocument } from './read.js';
 
@@ -63,16 +63,6 @@ function extractJson(text: string): unknown {
   }
 }
 
-/** `§ref` + text blocks, the form `propose_source_edit` asks for and `diffToOps` reads back. */
-export function parseParagraphBlocks(text: string): { ref: string; text: string }[] {
-  const out: { ref: string; text: string }[] = [];
-  for (const block of text.split(/\n\s*\n/)) {
-    const m = /^\s*§([^\s\n]+)[ \t]*\n([\s\S]*)$/.exec(block);
-    if (m) out.push({ ref: m[1], text: m[2].trim() });
-  }
-  return out;
-}
-
 /** Paragraphs as `§ref\ntext`, addressed ones kept whole and the rest dropped once over budget. */
 function renderParagraphs(
   paragraphs: readonly Paragraph[],
@@ -80,15 +70,16 @@ function renderParagraphs(
   addressed?: readonly string[],
 ): string {
   const wanted = addressed?.length ? paragraphs.filter((p) => addressed.includes(p.ref)) : paragraphs;
-  const out: string[] = [];
+  const kept: RefBlock[] = [];
   let used = 0;
   for (const p of wanted) {
-    const block = `§${p.ref}\n${paragraphText(p)}`;
-    if (used + block.length > budget) break;
-    out.push(block);
-    used += block.length + 2;
+    const text = paragraphText(p);
+    const size = p.ref.length + text.length + 4;
+    if (used + size > budget) break;
+    kept.push({ ref: p.ref, text });
+    used += size;
   }
-  return out.join('\n\n');
+  return renderRefBlocks(kept);
 }
 
 export const proposeSourceEdit = defineTool({
@@ -120,7 +111,7 @@ export const proposeSourceEdit = defineTool({
       `הנחיה: ${args.instruction}\n\nהפסקאות:\n${renderParagraphs(current, ctx.settings.limits.maxContextChars, refs)}`,
     );
     if (!reply) return NO_MODEL;
-    const proposed = parseParagraphBlocks(reply);
+    const proposed = parseRefBlocks(reply);
     if (!proposed.length) return { ok: false, summary: 'המודל לא החזיר פסקאות בפורמט הנדרש' };
 
     const ops = diffToOps(current, proposed, refs);

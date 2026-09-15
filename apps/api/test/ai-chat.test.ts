@@ -11,6 +11,7 @@ import * as repo from '../src/modules/ai/repo.js';
 import { MAX_TOOL_ROUNDS } from '../src/modules/ai/chat.js';
 import { aiChatHolder, unavailableChatModel } from '../src/modules/ai/chatModel.js';
 import { resetRateLimit } from '../src/modules/ai/rateLimit.js';
+import { ScriptedChatModel } from '../src/modules/ai/scripted.js';
 import { parseSseFrames } from '../src/modules/ai/sse.js';
 import { runTool, specsFor, type ToolCtx } from '../src/modules/ai/tools/index.js';
 
@@ -481,6 +482,42 @@ function runRouteTests() {
     expect(ev.find((e) => e.type === 'tool_result')).toMatchObject({ ok: false });
     const after = await fx.db.pool.query('select count(*)::int n from ai_proposed_edits');
     expect(after.rows[0].n).toBe(before.rows[0].n);
+  });
+
+  /**
+   * The e2e stack's model, driven through the real route. The refusal is the orchestrator's
+   * permission gate, not the script's: the script asks for `propose_source_edit` on behalf of an
+   * `ai.ask` caller precisely so the gate can be seen turning it down.
+   */
+  it('the scripted model answers, cites a step and is refused the write tool', async () => {
+    aiChatHolder.swap(new ScriptedChatModel());
+
+    const ask = await newConversation('article', fx.agent);
+    const answered = parseSseFrames((await send(ask.json().id, 'מה עושים כשאין גלישה?', fx.agent)).body);
+    expect(answered.find((e) => e.type === 'tool_call')).toMatchObject({ name: 'read_document' });
+    expect(
+      answered
+        .filter((e) => e.type === 'token')
+        .map((e) => (e as Extract<ChatEvent, { type: 'token' }>).text)
+        .join(''),
+    ).toContain('שלב 1');
+
+    const edit = await newConversation('article', fx.agent);
+    const refused = parseSseFrames((await send(edit.json().id, 'שנה את "הישן" ל"החדש"', fx.agent)).body);
+    expect(refused.find((e) => e.type === 'tool_result')).toMatchObject({
+      name: 'propose_source_edit',
+      ok: false,
+    });
+    expect(
+      refused
+        .filter((e) => e.type === 'token')
+        .map((e) => (e as Extract<ChatEvent, { type: 'token' }>).text)
+        .join(''),
+    ).toBe('אין לי הרשאה לשנות תוכן');
+
+    const small = await newConversation('editor', fx.editor);
+    const chat = parseSseFrames((await send(small.json().id, 'תודה רבה', fx.editor)).body);
+    expect(chat.map((e) => e.type)).toEqual(['token', 'done']);
   });
 
   it('caps an article conversation at the ask tools even for an editor', async () => {

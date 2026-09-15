@@ -38,6 +38,37 @@ export const DOCUMENT_ID_LABEL = 'מזהה מסמך';
 /** The label `withContext` prints in front of an open suggestion card's id. */
 export const SUGGESTION_ID_LABEL = 'מזהה הצעה';
 
+/** A `§ref`-headed block: how paragraphs travel to the model and back. */
+export interface RefBlock {
+  ref: string;
+  text: string;
+}
+
+const REF_HEADER = /(^|\n)§([^\s\n]+)[ \t]*\n/g;
+
+/**
+ * Read `§ref`-headed blocks out of text — the prompt the rewrite tool sends *and* the reply it
+ * gets back, which is why it lives here rather than in either.
+ *
+ * Deliberately scanning rather than splitting on blank lines: the prompt has a preamble and an
+ * "הפסקאות:" header before the first block, a model reply may have prose around it, and a
+ * paragraph may itself contain a blank line. Anything not under a `§` header is ignored.
+ */
+export function parseRefBlocks(text: string): RefBlock[] {
+  const marks: { ref: string; markStart: number; bodyStart: number }[] = [];
+  REF_HEADER.lastIndex = 0;
+  for (let m = REF_HEADER.exec(text); m; m = REF_HEADER.exec(text))
+    marks.push({ ref: m[2], markStart: m.index, bodyStart: m.index + m[0].length });
+  return marks.map((mark, i) => ({
+    ref: mark.ref,
+    text: text.slice(mark.bodyStart, i + 1 < marks.length ? marks[i + 1].markStart : undefined).trim(),
+  }));
+}
+
+/** The inverse of `parseRefBlocks`. */
+export const renderRefBlocks = (blocks: readonly RefBlock[]): string =>
+  blocks.map((b) => `§${b.ref}\n${b.text}`).join('\n\n');
+
 const KIND_ROLE: Record<ConversationKind, string> = {
   article: 'אתה עונה לנציג שירות על מסמך אחד. אתה קורא בלבד — אינך מציע עריכות.',
   editor: 'אתה עוזר לעורך בתוך עורך המסמך: קריאה, בדיקת השפעה, והצעות עריכה לאישור.',
