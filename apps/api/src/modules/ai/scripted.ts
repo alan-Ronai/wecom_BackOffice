@@ -36,6 +36,18 @@ const quoted = (text: string): string[] =>
 const lastOfRole = (messages: ChatMessage[], role: ChatMessage['role']): ChatMessage | undefined =>
   [...messages].reverse().find((m) => m.role === role);
 
+/**
+ * What the person actually typed, without the context block `withContext` appends.
+ *
+ * The rules below read the end of the message — "ends with `?`" is the question rule — and the
+ * panes always send a context (the open step, the open suggestion, the selection), which arrives
+ * as `…\n\n---\nהקשר:\n…` glued onto the end. Matching against the whole string meant the
+ * question rule never fired from a pane, which is every pane: an agent's "מה השלב הראשון?" read
+ * as no intent at all and answered "הבנתי.". The ids are still taken from the full text — that is
+ * where `withContext` puts them.
+ */
+const asked = (content: string): string => content.split('\n\n---\n')[0]!.trimEnd();
+
 const result = (content: string, toolCalls: ToolCall[] = []): ChatResult => ({
   content,
   toolCalls,
@@ -101,17 +113,19 @@ export class ScriptedChatModel implements ModelClient {
     }
 
     const documentId = labelled(system, DOCUMENT_ID_LABEL);
+    // The ids live in the context block; the *intent* is what the person typed above it.
     const suggestionId = labelled(user, SUGGESTION_ID_LABEL);
+    const typed = asked(user);
 
-    if (REFINE_INTENT.test(user) && suggestionId)
+    if (REFINE_INTENT.test(typed) && suggestionId)
       return result('', [
-        { id: callId(), name: 'refine_suggestion', args: { suggestionId, instruction: user } },
+        { id: callId(), name: 'refine_suggestion', args: { suggestionId, instruction: typed } },
       ]);
-    if (EDIT_INTENT.test(user) && documentId)
+    if (EDIT_INTENT.test(typed) && documentId)
       return result('', [
-        { id: callId(), name: 'propose_source_edit', args: { documentId, instruction: user } },
+        { id: callId(), name: 'propose_source_edit', args: { documentId, instruction: typed } },
       ]);
-    if (user.trimEnd().endsWith('?') && documentId)
+    if (typed.endsWith('?') && documentId)
       return result('', [{ id: callId(), name: 'read_document', args: { documentId } }]);
     return result('הבנתי.');
   }

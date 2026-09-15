@@ -76,6 +76,22 @@ describe('ScriptedChatModel', () => {
     expect(second.toolCalls).toEqual([]);
   });
 
+  /**
+   * X6: every pane sends a context, which `withContext` glues onto the end of the message as
+   * `…\n\n---\nהקשר:\n…`. The rules read the *end* of the text, so matching the whole string
+   * meant an agent's "מה השלב הראשון?" from the ask pane never looked like a question.
+   */
+  it('reads the intent from the typed line, not from the context block after it', async () => {
+    const withStep = 'מה השלב הראשון?\n\n---\nהקשר:\nהשלב הפתוח: s1';
+    const r = await m.chat({ messages: turn(withStep) });
+    expect(r.toolCalls[0]).toMatchObject({ name: 'read_document', args: { documentId: DOC } });
+    // The ids still come from the whole message — that is where `withContext` puts them.
+    const refine = await m.chat({
+      messages: turn(`שפר את הניסוח\n\n---\nהקשר:\n${SUGGESTION_ID_LABEL}: ${SUG}`),
+    });
+    expect(refine.toolCalls[0]).toMatchObject({ name: 'refine_suggestion', args: { suggestionId: SUG } });
+  });
+
   it('says הבנתי. to anything else, and streams it', async () => {
     const tokens: string[] = [];
     const r = await m.chat({ messages: turn('שלום'), onToken: (t) => tokens.push(t) });

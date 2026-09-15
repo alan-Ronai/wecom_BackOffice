@@ -24,7 +24,7 @@ describe('resolveModelSlots', () => {
       embedDimension: 768,
     });
   });
-  it('tier 1 selects the Hebrew model and the multilingual embedder', () => {
+  it('tier 1 selects the larger generation model and the multilingual embedder', () => {
     const s = resolveModelSlots({ ...today, MODEL_TIER: 1 });
     expect(s).toEqual({
       tier: 1,
@@ -33,7 +33,9 @@ describe('resolveModelSlots', () => {
       embedModel: 'bge-m3',
       embedDimension: 1024,
     });
-    expect(s.suggestModel).toMatch(/dictalm/i);
+    // X6: DictaLM 2.0 has no Ollama-library tag; tier 1 names spec §6's fallback instead. The
+    // assertion is that tier 1 is *not* tier 0's small model, which is what the tier is for.
+    expect(s.suggestModel).not.toBe(MODEL_TIER_PRESETS[0].suggestModel);
   });
   it('an explicit slot beats the preset', () => {
     const s = resolveModelSlots({ ...today, MODEL_TIER: 1, CHAT_MODEL: 'x' });
