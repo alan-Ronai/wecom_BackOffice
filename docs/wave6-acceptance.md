@@ -87,9 +87,9 @@ explicitly, which `resolveModelSlots`' explicit-env precedence supports) and re-
 | `@wecom/shared` | 123 passed / 17 files |
 | `@wecom/connectors` | 49 passed / 8 files |
 | `@wecom/model` | 61 passed / 11 files |
-| `apps/api` unit | 224 passed (426 integration-only skipped) |
-| `RUN_INTEGRATION=1 apps/api` | 739 passed / 117 files |
-| `apps/web` (`--minWorkers=1 --maxWorkers=4`) | 883 passed / 134 files; one known load flake (`article/ArticleQol.test.tsx`), green in isolation |
+| `apps/api` unit | 138 passed / 23 files (`test/unit`); 234 passed in the default run |
+| `RUN_INTEGRATION=1 apps/api` | 741 passed / 117 files |
+| `apps/web` (`--minWorkers=1 --maxWorkers=4`) | 884 passed / 134 files |
 | OpenAPI regen + contract + route coverage | clean; 174 paths, allowlist free of dead entries |
 | `pnpm e2e:real` | see the report |
 | `E2E_OIDC=1 pnpm e2e:real` | see the report |
