@@ -55,6 +55,25 @@ export const BaseConfigSchema = z.object({
   MODEL_NAME: z.string().default('qwen2.5:3b-instruct-q4_K_M'),
   // L5: pipeline
   EMBED_MODEL: z.string().default('nomic-embed-text'),
+  /**
+   * How many dimensions `EMBED_MODEL` returns, which must equal the width of
+   * `documents.embedding`. It was hard-coded in a migration — `vector(768)`, from
+   * `0003_content.js` — and nothing compared the two, so configuring a 384-dimensional model
+   * (`all-minilm`) produced a stack where every embedding write failed into
+   * `updateEmbedding`'s deliberate swallow: no vector, no log line, search silently lexical.
+   *
+   * `plugins/model.ts` reads the column's own `atttypmod` at boot and refuses to start on a
+   * disagreement, naming both numbers — so an install that changes the embedding model either
+   * changes this and the column together, or does not come up. 768 is `nomic-embed-text`,
+   * what `deploy/.env.example` ships and what the migration created.
+   *
+   * `z.preprocess` for the same reason as TRUST_PROXY_HOPS: a key with nothing after the `=`
+   * is "unset", not 0.
+   */
+  EMBED_DIMENSION: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.coerce.number().int().min(1).default(768),
+  ),
   MODEL_DISABLED: boolEnv(false),
   WATCH_DIR: z.string().optional(),
   /** Base directory a `json` connector's `path` must stay inside (path-traversal guard). */

@@ -42,6 +42,20 @@ export default async function routes(app: FastifyInstance) {
       ]);
       // Kept for clients that read the old boolean — it now means "reachable *and* pulled".
       const model = modelStatus.reachable && modelStatus.tagPresent;
+      /**
+       * `plugins/model.ts` decorates the /api/v1 scope this route's own scope descends from, so
+       * `app.embedStatus` resolves through the prototype chain — but it is registered *after*
+       * this route, and a caller that builds the app without it (a bare `buildApp` in a unit
+       * test) must still get a health body rather than a 500 out of the serializer. Hence the
+       * fallback, which says "nothing has been asked of the embedding path" in the same shape.
+       */
+      const embedStatus = app.embedStatus?.snapshot() ?? {
+        model: app.config.EMBED_MODEL,
+        dimension: null,
+        expected: app.config.EMBED_DIMENSION,
+        lastOk: null,
+        lastError: null,
+      };
       return {
         ok: db && model,
         db,
@@ -52,6 +66,13 @@ export default async function routes(app: FastifyInstance) {
         uptimeSec: Math.round((Date.now() - started) / 1000),
         lastBackupAt: backup?.latestAt ?? null,
         lastBackupOk: backup?.ok ?? null,
+        /**
+         * Deliberately **not** folded into `ok`. `ok` is the liveness probe nginx and
+         * `deploy/smoke.sh` read; a stack whose embeddings are the wrong width still serves
+         * every page and still searches, lexically. Failing liveness on it would take a
+         * working pilot down over a ranking regression.
+         */
+        embedStatus,
       };
     },
   );

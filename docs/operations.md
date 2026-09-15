@@ -168,6 +168,19 @@ Categories are a closed enum, not a database table, so adding one touches code, 
 To upgrade:
 
 1. Set the new tag in `deploy/.env`.
+
+   **If it is `EMBED_MODEL`, set `EMBED_DIMENSION` in the same edit.** The two are one setting:
+   `documents.embedding` is a `vector(768)` column (migration `0003_content.js`), and a vector of
+   any other width simply cannot be stored in it. `nomic-embed-text` is 768, `all-minilm` is 384,
+   `mxbai-embed-large` is 1024. A width other than the column's also needs the column migrated and
+   every document re-embedded (step 5) — existing vectors are not convertible.
+
+   The API reads the column's own declared width at start-up and **refuses to boot** when
+   `EMBED_DIMENSION` disagrees with it, naming both numbers and the migration. That is deliberate:
+   before this check the disagreement was invisible. `updateEmbedding` is best-effort and swallows
+   its errors so a model outage can never fail a publish, so a wrong-width model stored no vector
+   on any publish, logged nothing, and left search ranking lexically with `GET /system/health`
+   green throughout — the state `deploy/ci.env` and `deploy/e2e.env` were themselves in.
 2. `docker compose -f deploy/docker-compose.yml up -d ollama-pull` — pulls the new model into the
    `ollama` volume (progress: `docker compose logs -f ollama-pull`). The old model stays
    available until you prune it.
@@ -187,7 +200,25 @@ To upgrade:
    `MODEL_NAME`/`EMBED_MODEL` on restart (`app.model`, `plugins/model.ts`).
 4. Confirm: `GET /api/v1/admin/system` → `modelName` reflects the new tag, `model: true`; and
    `deploy/smoke.sh https://<host>` → `model ok` for `MODEL_NAME` and `embed ok` for `EMBED_MODEL`.
-   Health reports only the first of the two, which is why the embedding tag is checked there.
+   `modelStatus` describes `MODEL_NAME` only, which is why the embedding tag is checked there.
+
+   For the embedding model, `GET /api/v1/system/health` → `embedStatus` answers the question the
+   tag listing cannot — whether the vectors it returns are storable:
+
+   ```json
+   "embedStatus": { "model": "nomic-embed-text", "dimension": 768, "expected": 768,
+                    "lastOk": true, "lastError": null }
+   ```
+
+   `dimension` is the width of the last vector the model actually returned and `expected` is
+   `EMBED_DIMENSION`; `lastOk: null` means nothing has asked for an embedding yet (a fresh
+   install, or `MODEL_DISABLED=true`), and `lastError` says what went wrong when it is `false`. It
+   is deliberately **not** folded into `ok`: a stack whose embeddings fail still serves every page
+   and still searches, lexically, and failing the liveness probe over a ranking regression would
+   take a working pilot down. Publish a document and check
+   `GET /api/v1/documents/<id>/embedding-status` → `hasEmbedding: true` for the other half —
+   whether the vector reached the row. `apps/web/e2e/compose/embedding.spec.ts` asserts both on
+   every run of the Compose gate.
 5. **If `EMBED_MODEL` changed**, every stored `documents.embedding` was computed with the old
    model and is no longer comparable to new query embeddings. Rebuild them: trigger the
    `search.reindex` job (its schedule, or `POST` the job manually if your ops tooling exposes
@@ -286,6 +317,12 @@ library, creates a break-glass admin and a LAN user, and runs `apps/web/e2e/comp
   stays signed out, an address outside `PALOALTO_SUBNETS` never reaches the firewall at all, and a
   browser that forges `X-Forwarded-For` is still seen as the address it connected from;
 - an editorial round trip (create → publish → search → article) through the proxy;
+- the **embedding path**, end to end and for the first time: a published document ends up with a
+  real 768-dimension vector in `documents.embedding`, computed by a real Ollama running
+  `nomic-embed-text` on CPU, and `/system/health`'s `embedStatus.lastOk` agrees. Until this the
+  gate configured `all-minilm` — 384 dimensions against a `vector(768)` column — so every
+  embedding write it ever made failed into `updateEmbedding`'s deliberate swallow and nothing
+  said so;
 - the two-way WordPress loop, with the connector's outbound call leaving the api *container* and
   being checked against `CONNECTOR_HOST_ALLOWLIST`.
 
@@ -293,7 +330,10 @@ Requirements: Docker with compose v2, `openssl`, `curl`, `lsof`, a Chromium for 
 (`pnpm --filter @wecom/web exec playwright install chromium`), and free TCP ports 8443, 8080, 8186,
 8085, 8444, 8445 and 8446 — the first two are hard-coded in `docker-compose.ci.yml`, because
 compose concatenates `ports` across overlay files instead of replacing them. Roughly 6 GB of disk
-for the images, the Ollama layer and the small model.
+for the images, the Ollama layer and the two models — `qwen2.5:0.5b` (~400 MB) and, since the
+embedding spec needs a model whose vectors the column accepts, `nomic-embed-text` (~274 MB rather
+than `all-minilm`'s ~46 MB). Both are cached in the gate's `ollama` volume between runs, so the
+extra pull is paid once per `down -v`.
 
 ### How the gate plays a LAN client
 

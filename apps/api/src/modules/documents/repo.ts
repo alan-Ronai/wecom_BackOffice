@@ -1042,3 +1042,27 @@ export async function restoreVersion(tx: Tx, id: string, v: number, userId: stri
   });
   return r;
 }
+
+/**
+ * Whether this document actually carries a vector, and how wide it is.
+ *
+ * `vector_dims` rather than a bare `is not null`, because the two failures this answers are
+ * different: nothing was ever stored, versus something was stored by a model of a different
+ * width (an `EMBED_MODEL` changed under an existing corpus, which `docs/operations.md` tells
+ * operators to follow with a reindex). Returns null for a document that does not exist or is
+ * in the trash, which the route turns into a 404.
+ */
+export async function embeddingStatus(
+  q: Q,
+  id: string,
+): Promise<{ hasEmbedding: boolean; dimension: number | null } | null> {
+  const r = await q.query(
+    `select embedding is not null has_embedding,
+            case when embedding is null then null else vector_dims(embedding) end dim
+       from documents where id=$1 and deleted_at is null`,
+    [id],
+  );
+  if (!r.rowCount) return null;
+  const row = r.rows[0] as { has_embedding: boolean; dim: number | null };
+  return { hasEmbedding: row.has_embedding, dimension: row.dim === null ? null : Number(row.dim) };
+}

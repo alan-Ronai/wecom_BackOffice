@@ -6,6 +6,7 @@ import {
   DeleteResponseSchema,
   DiffQuerySchema,
   DiffResponseSchema,
+  DocumentEmbeddingStatusSchema,
   DocumentSchema,
   LinksResponseSchema,
   RelatedResponseSchema,
@@ -35,6 +36,42 @@ import { updateEmbedding } from '../search/repo.js';
 import { resolveFeedback } from '../feedback/repo.js'; // W3: close reports with the published version
 
 const Params = z.object({ id: IdSchema });
+
+/**
+ * The fire-and-forget embedding after a publish or a restore, made observable.
+ *
+ * `updateEmbedding` is best-effort by design — it catches everything so a model outage can
+ * never fail a publish — which is why nothing here awaits it or lets it reject. The cost was
+ * that it was *silent*: it resolved `false` and the `.catch()` that used to sit here could
+ * never fire, because it never rejects. Three years of publishes against a model whose vectors
+ * are the wrong width for `documents.embedding` would have produced no log line at all.
+ *
+ * Model-side failures (unreachable, wrong dimension) are logged and recorded by the wrapper in
+ * `lib/embedStatus.ts`, at the call itself, where the model name and the returned width are
+ * known. What is left for here is the one case that wrapper cannot see: the model answered
+ * correctly and the row still was not updated. `recordWriteFailure` says whether that is what
+ * happened, so the warning fires exactly once and only when it is news.
+ *
+ * `app.embedStatus` is decorated by `plugins/model.ts`, which registers *after* this module in
+ * the same /api/v1 scope; it is reached through the prototype chain, exactly as `app.model`
+ * above is, and is guarded the same way for an app built without it.
+ */
+function noteEmbedResult(
+  app: FastifyInstance,
+  req: FastifyRequest,
+  id: string,
+  stored: Promise<boolean>,
+  what: 'publish' | 'restore',
+): void {
+  void stored.then(
+    (ok) => {
+      if (ok) return;
+      const msg = `embed on ${what} produced no stored embedding`;
+      if (app.embedStatus?.recordWriteFailure(`${msg} (document ${id})`)) req.log.warn({ id }, msg);
+    },
+    (err) => req.log.warn({ err, id }, `embed on ${what} failed`),
+  );
+}
 
 /**
  * `body.worlds` and `body.topics` are full replacements, not additions: `syncMemberships`
@@ -384,10 +421,7 @@ export default async function routes(app: FastifyInstance) {
       await pushOnPublish(app, req, id, user.id);
       // Best-effort, outside the transaction: a model outage must never fail a publish.
       const model = (app as unknown as { model?: ModelClient | null }).model;
-      if (model?.embed)
-        updateEmbedding(app.db, id, model).catch((err) =>
-          req.log.warn({ err, id }, 'embed on publish failed'),
-        );
+      if (model?.embed) noteEmbedResult(app, req, id, updateEmbedding(app.db, id, model), 'publish');
       return result;
     },
   );
@@ -573,10 +607,7 @@ export default async function routes(app: FastifyInstance) {
       });
       await pushOnPublish(app, req, id, user.id);
       const model = (app as unknown as { model?: ModelClient | null }).model;
-      if (model?.embed)
-        updateEmbedding(app.db, id, model).catch((err) =>
-          req.log.warn({ err, id }, 'embed on restore failed'),
-        );
+      if (model?.embed) noteEmbedResult(app, req, id, updateEmbedding(app.db, id, model), 'restore');
       return result;
     },
   );
@@ -697,6 +728,44 @@ export default async function routes(app: FastifyInstance) {
       const doc = await repo.getVisibleDocument(app.db, (req.params as { id: string }).id, user);
       if (!doc) throw notFound('המסמך');
       return { items: await repo.relatedFor(app.db, doc, canReadUnpublished(user)) };
+    },
+  );
+
+  /**
+   * Whether the embedding the publish path fires off actually landed on this row.
+   *
+   * `GET /system/health`'s `embedStatus` answers the same question about the *model* — did it
+   * hand back a vector the column accepts — and the two fail independently, so proving the
+   * embedding path end to end needs both. This is the per-document half, and it is the only
+   * admin-visible signal there is: `documents.embedding` is not in `DocumentSchema` (a 768-float
+   * array on every read of every document is not a payload anyone wants), so before this route
+   * the sole way to see whether a document was embedded was `psql`.
+   *
+   * Additive and read-only: no existing response shape changes.
+   */
+  app.get(
+    '/documents/:id/embedding-status',
+    {
+      config: { requires: ['docs.read'], scope: 'document' },
+      schema: {
+        tags: ['documents'],
+        params: Params,
+        response: { 200: DocumentEmbeddingStatusSchema },
+      },
+    },
+    async (req) => {
+      const user = requireUser(req);
+      const { id } = req.params as { id: string };
+      if (!(await repo.getVisibleDocument(app.db, id, user))) throw notFound('המסמך');
+      const status = await repo.embeddingStatus(app.db, id);
+      if (!status) throw notFound('המסמך');
+      return {
+        id,
+        hasEmbedding: status.hasEmbedding,
+        dimension: status.dimension,
+        expected: app.config.EMBED_DIMENSION,
+        model: app.config.EMBED_MODEL,
+      };
     },
   );
 
