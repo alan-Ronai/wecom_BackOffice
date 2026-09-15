@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { htmlToParagraphs, type Paragraph } from '@wecom/shared';
-import { RuleBasedModel, groupSections, type ProposalContext } from '../src/index.js';
+import {
+  MAX_STEPS,
+  RuleBasedModel,
+  buildPhases,
+  countItems,
+  groupSections,
+  sectionCards,
+  truncationNote,
+  type ProposalContext,
+} from '../src/index.js';
 
 /**
  * The fan-out defect: a first import of a source with no matching document produced one
@@ -191,5 +200,50 @@ describe('RuleBasedModel on a source with no matching document', () => {
     ];
     const out = await new RuleBasedModel().proposeChanges(ctx);
     expect(out.map((s) => s.type)).toEqual(['update-step']);
+  });
+});
+
+/**
+ * M4. `buildPhases` caps a suggestion at `MAX_STEPS` steps — rightly: a 400-paragraph source has
+ * to stay reviewable. It did so in silence, and on the `singleDocument` path that silence is
+ * permanent data loss: applying the card anchors the source's steps, so `isNewSourcePath` (which
+ * needs `linkedSteps.length === 0`) never fires for that source again and the paragraphs past the
+ * cap are never proposed by anything. The reviewer is the only one who can act on it.
+ */
+describe('MAX_STEPS truncation', () => {
+  const big = (n: number): Paragraph[] => [
+    { ref: 'h2-1', heading: 'נוהל ארוך', level: 2, runs: [{ t: 'נוהל ארוך' }] },
+    ...Array.from({ length: n }, (_, i) => ({
+      ref: `h2-1.p-${i + 1}`,
+      runs: [{ t: `שלב מספר ${i + 1} בתהליך הטיפול בפנייה.` }],
+    })),
+  ];
+
+  it('caps the steps and says so in the rationale the reviewer reads', () => {
+    const sections = groupSections(big(MAX_STEPS + 7), 'נוהל ארוך');
+    expect(countItems(sections)).toBe(MAX_STEPS + 7);
+    const phases = buildPhases(sections);
+    expect(phases.reduce((n, p) => n + p.steps.length, 0)).toBe(MAX_STEPS);
+
+    const note = truncationNote(sections, phases);
+    expect(note).toContain('7');
+    expect(note).toContain(String(MAX_STEPS));
+
+    const [cardOut] = sectionCards(ctxFor(big(MAX_STEPS + 7), { title: 'נוהל ארוך', singleDocument: true }));
+    expect(cardOut.rationale).toContain(note.trim());
+    if (cardOut.payload.type !== 'new-card') throw new Error('expected a new-card payload');
+    expect(cardOut.payload.phases.reduce((n, p) => n + p.steps.length, 0)).toBe(MAX_STEPS);
+  });
+
+  it('says nothing when nothing was dropped', () => {
+    const sections = groupSections(big(3), 'נוהל קצר');
+    expect(truncationNote(sections, buildPhases(sections))).toBe('');
+    const [only] = sectionCards(ctxFor(big(3), { title: 'נוהל קצר', singleDocument: true }));
+    expect(only.rationale).not.toMatch(/לא נכללו/);
+  });
+
+  it('reports it on the per-section path too, not only for a single remote item', () => {
+    const [first] = sectionCards(ctxFor(big(MAX_STEPS + 2), { title: 'נוהל ארוך' }));
+    expect(first.rationale).toMatch(/2 פסקאות/);
   });
 });
