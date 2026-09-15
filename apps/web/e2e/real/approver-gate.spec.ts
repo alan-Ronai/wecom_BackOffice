@@ -24,15 +24,14 @@ test('W5-E2E-2 requireApprover blocks a lead and admits an approver', async ({ b
   test.setTimeout(180_000);
   const api = await adminApi(page, baseURL!);
   opened.apis.push(api);
-  const editor = await createUser(api, 'editor');
   const lead = await createUser(api, 'lead');
   const approver = await createUser(api, 'approver');
 
-  /* the editor writes a draft and sends it to review -------------------------- */
-  const e = await signInAs(browser, editor, baseURL!);
-  opened.pages.push(e);
-  const eApi = await adminApi(e, baseURL!);
-  opened.apis.push(eApi);
+  /* somebody other than the approver writes a draft and sends it to review ---- */
+  // The signed-in admin plays the requester: what matters is only that they are not the person
+  // who approves (main's E-2 refuses a self-approval with 403 SELF_APPROVAL), and every UI
+  // sign-in this gate performs comes out of one shared five-a-minute budget.
+  const eApi = api;
   const created = await eApi.post('/api/v1/documents', {
     data: { title: TITLE, description: '', category: 'tech', wave: 1, priority: 'm', kind: 'steps' },
   });

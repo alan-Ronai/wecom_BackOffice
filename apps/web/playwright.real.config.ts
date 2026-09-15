@@ -16,7 +16,14 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   retries: 0,
-  timeout: 60_000,
+  /**
+   * 150 s, not 60 s. `POST /auth/local` allows five attempts a minute per IP — a real defence —
+   * and this gate signs in as several fresh people per spec from one address, so a spec can
+   * legitimately spend a minute waiting the window out before its first click lands
+   * (`helpers/users.ts` does that waiting). At 60 s the budget ran out inside the wait and the
+   * failure read as "the queue never rendered", nowhere near the cause.
+   */
+  timeout: 150_000,
   expect: { timeout: 15_000 },
   use: {
     baseURL,

@@ -78,9 +78,36 @@ export async function signInAs(browser: Browser, creds: Creds, baseURL: string):
     await page.getByRole('button', { name: 'כניסה מקומית (מנהל מערכת בלבד)' }).click();
   await page.getByLabel('דוא״ל').fill(creds.email);
   await page.getByLabel('סיסמה').fill(creds.password);
-  // Exact: the disclosure button also starts with "כניסה".
-  await page.getByRole('button', { name: 'כניסה', exact: true }).click();
-  await expect(page).toHaveURL(/\/library/);
+  /**
+   * `POST /auth/local` is rate-limited to five attempts a minute per IP — a real defence that the
+   * gate itself runs into, because every spec here signs in as two or three fresh people from the
+   * same address and wave 5 added two more specs. A refusal is not a failed login: the form stays
+   * put and says "יותר מדי ניסיונות". So the click is retried across the window rather than
+   * asserted once, and only a genuine rejection (wrong credentials, no session) runs out the
+   * budget and fails.
+   *
+   * Exact: the disclosure button also starts with "כניסה".
+   */
+  const submit = page.getByRole('button', { name: 'כניסה', exact: true });
+  const LIMITED = 'יותר מדי ניסיונות';
+  for (let attempt = 0; ; attempt++) {
+    await submit.click();
+    // One of three things happens: the session lands, the limiter refuses, or the credentials are
+    // wrong. Only the middle one is worth waiting for, and a retry inside the window would just
+    // spend another attempt, so the wait is the window itself.
+    const landed = await page
+      .waitForURL(/\/library/, { timeout: 10_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (landed) break;
+    const limited = await page
+      .getByText(LIMITED)
+      .isVisible()
+      .catch(() => false);
+    if (!limited || attempt >= 2) break;
+    await page.waitForTimeout(61_000);
+  }
+  await expect(page, `signed in as ${creds.email}`).toHaveURL(/\/library/);
   // A new account usually meets the first-login tour, and it covers the library while it is
   // open. Best-effort rather than asserted: whether it shows depends on the preferences row,
   // and this helper is about signing in, not about the tour (`auth.setup.ts` asserts that).

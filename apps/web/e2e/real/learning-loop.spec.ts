@@ -38,27 +38,36 @@ test('W5-E2E-1 a quiz is built, assigned, passed, refreshed after a significant 
   test.setTimeout(240_000);
   const api = await adminApi(page, baseURL!);
   opened.apis.push(api);
-  const lead = await createUser(api, 'lead');
   const agent = await createUser(api, 'agent');
 
-  const found = await api.get(`/api/v1/documents?q=${encodeURIComponent(DOC_TITLE)}&pageSize=20`);
+  // Listed and filtered here rather than searched: the title carries a `/`, which the full-text
+  // query treats as punctuation, and this lookup is setup rather than the thing under test.
+  const found = await api.get('/api/v1/documents?pageSize=200');
   expect(found.ok(), await found.text()).toBeTruthy();
-  const doc = (
-    (await found.json()) as { items: { id: string; title: string; category: string }[] }
-  ).items.find((d) => d.title === DOC_TITLE);
-  expect(doc, `the seeded document "${DOC_TITLE}" is in the corpus`).toBeTruthy();
+  const listed = (await found.json()) as {
+    items: { id: string; title: string; category: string }[];
+    total: number;
+  };
+  const doc = listed.items.find((d) => d.title.includes(DOC_TITLE));
+  expect(
+    doc,
+    `the seeded document "${DOC_TITLE}" is in the corpus (got ${listed.items.length}/${listed.total}: ${listed.items
+      .map((d) => d.title)
+      .join(' | ')})`,
+  ).toBeTruthy();
 
-  /* 1. the lead builds a quiz from the document ----------------------------- */
-  const l = await signInAs(browser, lead, baseURL!);
-  opened.pages.push(l);
+  /* 1. the manager builds a quiz from the document -------------------------- */
+  // The manager is the signed-in admin of the shared storage state: this stage is about
+  // `learning.manage` + `docs.publish`, which the admin holds, and `POST /auth/local` allows only
+  // five sign-ins a minute per IP — a budget the whole gate shares.
+  const l = page;
   await l.goto('/learning/manage');
   await l.getByRole('button', { name: '✚ שאלון' }).click();
+  const newQuiz = l.getByRole('dialog', { name: 'שאלון חדש' });
+  await newQuiz.getByLabel('כותרת', { exact: true }).fill(QUIZ);
+  await newQuiz.getByRole('button', { name: 'אישור' }).click();
   await expect(l).toHaveURL(/\/learning\/manage\/[0-9a-f-]{36}/);
   const itemId = new URL(l.url()).pathname.split('/').pop()!;
-
-  const title = l.getByLabel('כותרת', { exact: true });
-  await title.fill(QUIZ);
-  await title.blur();
   await expect(l.getByRole('heading', { level: 1 })).toContainText(QUIZ);
 
   await l.getByLabel('הוסף פריט ידע').fill(DOC_TITLE);
