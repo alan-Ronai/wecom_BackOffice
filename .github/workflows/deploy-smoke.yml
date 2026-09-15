@@ -74,6 +74,8 @@ jobs:
           set -euo pipefail
           compose() { docker compose --env-file deploy/ci.env -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml "$@"; }
           id=$(compose ps -aq ollama-pull)
+          test -n "$id" || { echo "the ollama-pull service did not start"; exit 1; }
+          state=""
           for i in $(seq 1 120); do
             state=$(docker inspect -f '{{.State.Status}}' "$id")
             [ "$state" = "exited" ] && break
@@ -82,6 +84,14 @@ jobs:
           # --tail: `ollama pull` redraws a progress bar thousands of times even without a TTY,
           # and the last lines are the ones that say whether it finished.
           compose logs --tail 20 ollama-pull
+          # The loop can fall out without the container ever exiting, and a *running* container
+          # reports ExitCode 0 — so checking only the exit code turned a ten-minute hang into a
+          # green step and pushed the failure into the smoke test, where it read as an unexplained
+          # timeout. Insist on the state first, exactly as scripts/e2e-compose.mjs does.
+          test "$state" = "exited" || {
+            echo "ollama-pull is still '$state' after 10 minutes — the model pull did not finish"
+            exit 1
+          }
           code=$(docker inspect -f '{{.State.ExitCode}}' "$id")
           test "$code" = "0" || { echo "ollama-pull exited $code"; exit 1; }
 
