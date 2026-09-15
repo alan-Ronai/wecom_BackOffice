@@ -29,8 +29,12 @@ before the pilot. Harness: `packages/model/eval`, the eight committed Hebrew cas
 | Run | suggest model | embedder | cases | hit-target | hit-type | content overlap | median s/case | schema failures |
 |---|---|---|---|---|---|---|---|---|
 | rules floor | `RuleBasedModel` (deterministic) | — | 8 | **0.875** | **0.750** | **0.438** | <0.01 | 0 |
-| tier 0 | `qwen2.5:3b-instruct-q4_K_M` | `nomic-embed-text` (768) | 8 | 0.125 | 0.125 | 0.125 | 4.3 | 1 |
-| tier 1 | `aya-expanse:8b-q4_K_M` | `bge-m3` (1024) | 8 | 0.000 | 0.000 | 0.000 | 12.6 | 2 |
+| tier 0 | `qwen2.5:3b-instruct-q4_K_M` | `nomic-embed-text` (768) | 8 | 0.000 | 0.000 | 0.000 | 4.3 | 8 |
+| tier 1 | `aya-expanse:8b-q4_K_M` | `bge-m3` (1024) | 8 | 0.000 | 0.000 | 0.000 | 12.6 | 8 |
+
+Tier 1's run predates the per-type target rule described below; the rule can only make the parse
+stricter, so its 0.000 stands. Tier 0 was re-run after it — its earlier 0.125 came from the one
+case that had been scored on a suggestion no editor could ever have applied.
 
 RAM was not isolated per run (a shared laptop with the browser and three Postgres containers up);
 Ollama's resident set was ~2 GB for tier 0 and ~6 GB for tier 1, consistent with spec §6.
@@ -44,28 +48,42 @@ tier 1 (and tier 2's chat slot) now name `aya-expanse:8b-q4_K_M` and tier 1's ow
 `deploy/smoke.sh`, `deploy/.env.example`, `docs/operations.md` and `CONTRACTS-wave6.md`; the new
 `apps/api/test/unit/tier-table-drift.test.ts` fails if those copies ever disagree again.
 
-### The harness bug this run found
+### What the run found in the harness, and what the harness was hiding
 
-The first tier-0 run scored a flat **0.000 on every case**. The cause was not the model:
 `RESPONSE_FORMAT`, the JSON schema Ollama is handed, deliberately leaves
 `targetDocumentId`/`targetStepKey`/`targetBlockId` out of `required` — a suggestion that targets a
-document has no step key — while the zod parse spelled them `.nullable()`, which in zod still
-demands the key be present. The model was told the field was optional and then rejected for
-omitting it (`suggestions.0.targetBlockId: Required`), and a 3B does not emit
-`"targetBlockId": null`. The model-facing parse now reads absent as null; the API contract is
-unchanged. Every number in the table above is from after that fix.
+document has no step key, one that targets a block has no document — while the zod parse spelled
+all three `.nullable()`, which in zod still demands the key be present. The model was told the
+field was optional and then rejected for omitting it, and a 3B does not emit
+`"targetBlockId": null`. The parse now reads absent as null.
+
+That first relaxation went one step too far and `pnpm e2e:compose` caught it: the apply path
+resolves the targets and 404s when it cannot, so an `update-step` with no step key is not a worse
+suggestion but one that can never be accepted — and the WordPress spec's publish answered 404. The
+requirement is **per type** (`update-step` and `deprecate-step` need a document and a step,
+`update-block` a block, `new-step` a document, `new-card` and `field-alert` none), which
+`RESPONSE_FORMAT` cannot express and a `superRefine` can.
+
+With that in place the honest reading of tier 0 is **0.000, with all eight cases failing the
+parse**, and the failures say why: the model answers `update-step` and never names the step. The
+0.125 in the first corrected run was one case scored on a suggestion the apply path would have
+refused. The relaxation is still right — it is what stops a `new-card` being rejected for lacking
+a `targetBlockId` — it is simply much smaller than it first looked.
 
 ### Ruling
 
-The plan's condition — *tier 1 becomes the default only if its hit-target ≥ tier 0's* — **is not
-met on this machine**: 0.000 against 0.125. More to the point, **both local generation models are
-far below the deterministic rule engine** (0.875), which is the floor a tier is supposed to beat.
+The plan's condition — *tier 1 becomes the default only if its hit-target ≥ tier 0's* — is met
+only trivially: **both score 0.000**. Both local generation models are far below the deterministic
+rule engine (0.875), which is the floor a tier is supposed to beat, and neither produced a single
+applicable suggestion on this machine.
 
 `MODEL_TIER=1` is nevertheless left as `deploy/.env.example`'s default, for three reasons, and
 parked for the VM to settle:
 
 1. The numbers are from a loaded dev laptop, not the 4 vCPU VM the tiers are specified against,
-   and the plan itself says a non-VM run is directional only.
+   and the plan itself says a non-VM run is directional only. Two of the eight cases fail on the
+   payload discriminator rather than the target, which reads more like a prompt problem than a
+   model-size one.
 2. Half of what tier 1 buys is the **embedder** — `bge-m3`, multilingual, 1024 dims — which this
    harness does not score at all, and which migration 0051, the reindex job and the compose gate
    are all built around. Reverting the tier to 0 to chase a generation number would unwind the
@@ -106,7 +124,7 @@ message they did not send).
 | Item | Ruling | Cost if wrong |
 |---|---|---|
 | Tier 1 is the default on a dev-machine evaluation that does not support it | Keep `MODEL_TIER=1` (the embedder half is what 0051 and the compose gate are built on) and run both tiers on the VM before the pilot | A pilot runs generation on a model that is worse than the rule engine it falls back to — costly in review time, not in correctness, because the fallback catches a schema failure |
-| Both local models score far below `RuleBasedModel` on the eight cases | Recorded, not fixed: prompt v3 and the case set are X1's, and one 8-case run on a loaded laptop is not enough to re-open either | Prompt v3 may be over-long for a 3–8B model; the next eval run on the VM is what settles it |
+| Both local models score **0.000** against `RuleBasedModel`'s 0.875, every case failing the schema | Recorded, not fixed: prompt v3 and the case set are X1's, and one 8-case run on a loaded laptop is not enough to re-open either. Production is not affected in the same way — `OllamaModel` falls back to the rule engine on a parse failure, which is what the compose gate exercises | Prompt v3 may be over-long, or under-specific about naming the target step, for a 3–8B model; the next eval run on the VM is what settles it |
 | Chat quality is proven by the scripted client in e2e, by the eval harness otherwise | Real inference in the gate would be slow and non-deterministic; the orchestrator, the tools, the persistence and the apply path are the same code either way | A prompt regression is caught by an eval run, not by CI |
 | `ScriptedChatModel` is reachable under `NODE_ENV=production` when `WECOM_E2E_RUNNER=1` | Accepted: `e2e:real` runs the API as production on purpose, and `WECOM_E2E_RUNNER` is the marker `config.ts` already treats as "this is the e2e stack". A deployment sets neither it nor `AI_TEST_SCRIPT` | An install that sets both gets a fake chat that answers plausibly; the boot log warns |
 | `streamChat` cancels by closing the response reader rather than passing the `AbortSignal` to `fetch` | Accepted (X4a): under jsdom the app's signal is jsdom's and `fetch` is undici's, which rejects a foreign signal outright | A request cannot be aborted before headers arrive; after that the reader close ends it |
