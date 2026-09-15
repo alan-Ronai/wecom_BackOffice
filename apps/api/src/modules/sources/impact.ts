@@ -11,6 +11,14 @@ export interface StepRef {
 export interface ImpactOptions {
   relatedK?: number;
   scopes?: string[] | null;
+  /**
+   * Whether the inbound-link walk may report drafts (A-I1). It was hardcoded `true`, which is
+   * right for the queued proposal job — it has no user and its whole job is to see the graph —
+   * but wrong for `read_impact`, whose caller is a person who may hold `ai.chat` without holding
+   * `docs.read_unpublished`. The tool passes `canReadUnpublished(user)`; the job keeps the
+   * default, so the server-side pipeline's reach is unchanged.
+   */
+  readUnpublished?: boolean;
 }
 
 /**
@@ -70,9 +78,15 @@ export class ImpactService {
     }));
 
     // Documents pointing at the changed documents (links, goto, related, shares_block…), via the graph.
+    const readUnpublished = opts.readUnpublished ?? true;
     const seen = new Map<string, { id: string; title: string; why: string }>();
     for (const id of docIds) {
-      const rows = await inboundFor(this.pool, { kind: 'document', key: id }, opts.scopes ?? null, true);
+      const rows = await inboundFor(
+        this.pool,
+        { kind: 'document', key: id },
+        opts.scopes ?? null,
+        readUnpublished,
+      );
       for (const r of rows)
         if (!docIds.includes(r.documentId) && !seen.has(r.documentId))
           seen.set(r.documentId, { id: r.documentId, title: r.title, why: WHY[r.type] ?? r.type });
@@ -89,14 +103,23 @@ export class ImpactService {
 
     // Related by embedding (cosine), excluding the changed documents themselves. A document
     // with no vector yet (a fresh 0051 column before `ai.reindex` ran) simply contributes none.
+    //
+    // A-I1: the neighbour search runs over every document with a vector, so it needs the caller's
+    // world scope like any other reader — otherwise a `tech`-scoped editor calling `read_impact`
+    // reads `billing` ids and titles out of the vector index. `$4` null means "no scope" (the
+    // queued job), matching the convention in `graph/repo.ts` and `search/repo.ts`.
     const k = opts.relatedK ?? 5;
     const related = await this.pool.query(
       `select d.id, d.title, 1 - (d.embedding <=> src.embedding) as sim
          from documents src, documents d
         where src.id = $1 and src.embedding is not null and d.embedding is not null
-          and d.deleted_at is null and d.status in ('published','partial') and d.id <> all($2::uuid[])
+          and d.deleted_at is null and d.status in ('published','partial')
+          and d.id <> all($2::uuid[])
+          and ($4::text[] is null or exists (
+                select 1 from document_worlds dw
+                 where dw.document_id = d.id and dw.world_slug = any($4::text[])))
         order by d.embedding <=> src.embedding limit $3`,
-      [docIds[0], docIds, k],
+      [docIds[0], docIds, k, opts.scopes ?? null],
     );
     impact.related = related.rows.map((r) => ({
       id: r.id as string,

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { ModelClient } from '@wecom/model';
+import { EmbedDimensionMismatchError, type WarnLogger } from '../../lib/embedStatus.js';
 import type { Queryable } from '../../lib/sql.js';
 
 /**
@@ -38,6 +39,7 @@ export async function refreshStepEmbeddings(
   q: Queryable,
   documentId: string,
   model: ModelClient | null | undefined,
+  log?: WarnLogger,
 ): Promise<number> {
   if (!model?.embed) return 0;
   const r = await q.query(
@@ -68,7 +70,30 @@ export async function refreshStepEmbeddings(
         [todo[i].id, documentId, JSON.stringify(vecs[i]), todo[i].hash],
       );
     return todo.length;
-  } catch {
+  } catch (e) {
+    /**
+     * A-M6: still best-effort — a model outage must not fail a publish — but no longer silent.
+     * The bare `catch { return 0 }` swallowed `EmbedDimensionMismatchError` along with
+     * everything else, which is exactly the class of failure `lib/embedStatus.ts` exists to
+     * stop being invisible for `documents.embedding`. Step embeddings get the same treatment:
+     * a width mismatch is its own warning, because it never recovers on its own.
+     */
+    const mismatch = e instanceof EmbedDimensionMismatchError;
+    log?.warn(
+      {
+        documentId,
+        steps: todo.length,
+        err: (e as Error).message,
+        ...(mismatch
+          ? {
+              embedModel: (e as EmbedDimensionMismatchError).embedModel,
+              dimension: (e as EmbedDimensionMismatchError).dimension,
+              expected: (e as EmbedDimensionMismatchError).expected,
+            }
+          : {}),
+      },
+      mismatch ? 'step embeddings skipped: the embedder returned the wrong width' : 'step embeddings skipped',
+    );
     return 0;
   }
 }

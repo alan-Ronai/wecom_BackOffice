@@ -15,10 +15,13 @@
 import {
   AI_SETTINGS_KEYS,
   AiSettingsSchema,
+  type AiModelsSettings,
   type AiSettings,
   type AiSettingsKey,
   type AiSettingsPut,
 } from '@wecom/shared';
+import { httpError } from './http.js';
+import type { ModelSlots } from './modelSlots.js';
 import type { Queryable, Tx } from './sql.js';
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
@@ -56,9 +59,41 @@ const readRows = async (
   return out;
 };
 
-/** Effective AI settings: the four stored patches with schema defaults filling every gap. */
-export async function getAiSettings(q: Queryable): Promise<AiSettings> {
-  return effective(await readRows(q));
+/**
+ * A-I5 — the `models` block is **derived, not stored**.
+ *
+ * Everything that actually runs resolves its model from the environment: `makeChatModel`,
+ * `app.model`, the boot dimension check and `reindexEmbeddings`' expected width all call
+ * `resolveModelSlots(config)`. The stored `ai.models` row was read by nothing but the slot probe
+ * and the eval job, so an admin could move the tier on `/admin/ai`, see it saved, see
+ * `/models/test` confirm the new tag — and change nothing about the running system.
+ *
+ * Rather than teach four readers to consult settings-then-env (and then decide what a change
+ * means to a process that has already sized `documents.embedding`), the block is now a
+ * projection of `resolveModelSlots`. `PUT /admin/ai/settings` refuses a `models` patch with
+ * 400 `MODELS_ENV_ONLY`; the tier moves by `MODEL_TIER` plus a restart and a reindex, which is
+ * what spec §6 always said it was.
+ */
+export const modelsFromSlots = (slots: ModelSlots): AiModelsSettings => ({
+  // `tier: null` is "no MODEL_TIER configured" — the slots then come from `MODEL_NAME` and
+  // `EMBED_MODEL` directly. The wire type is a tier number, so it reports 0 and the three tags
+  // below say what is actually loaded.
+  tier: slots.tier ?? 0,
+  suggestModel: slots.suggestModel,
+  chatModel: slots.chatModel,
+  embedModel: slots.embedModel,
+  embedDimension: slots.embedDimension,
+});
+
+/**
+ * Effective AI settings: the four stored patches with schema defaults filling every gap.
+ *
+ * Pass `slots` (`resolveModelSlots(app.config)`) wherever the caller has a config — the `models`
+ * block then reports what the process is really running rather than what a row remembers.
+ */
+export async function getAiSettings(q: Queryable, slots?: ModelSlots): Promise<AiSettings> {
+  const settings = effective(await readRows(q));
+  return slots ? { ...settings, models: modelsFromSlots(slots) } : settings;
 }
 
 /**
@@ -83,6 +118,14 @@ export async function putAiSettings(
   patch: AiSettingsPut,
   actorId: string | null,
 ): Promise<AiSettings> {
+  // A-I5: the models block is environment-derived; a PUT that names it is refused rather than
+  // quietly accepted into a row nothing reads.
+  if (patch.models && Object.keys(patch.models).length)
+    throw httpError(
+      400,
+      'MODELS_ENV_ONLY',
+      'הגדרות המודל נקבעות בסביבת ההרצה (MODEL_TIER ו-*_MODEL) ואינן ניתנות לעריכה מכאן',
+    );
   const stored = await readRows(tx, true);
   const merged = {} as Record<keyof AiSettings, Record<string, unknown>>;
   const changed: AiSettingsKey[] = [];

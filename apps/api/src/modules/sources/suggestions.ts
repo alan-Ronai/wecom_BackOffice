@@ -20,6 +20,7 @@ import type { ProposedSuggestion } from '@wecom/model';
 import { audit } from '../../lib/audit.js';
 import type { ContentApi, ContentClient } from './content-api.js';
 import { documentsForSource } from '../documents/sourceReview.js';
+import { suggestionVisibleSql, type SuggestionViewer } from './suggestionScope.js';
 
 type Status = Suggestion['status'];
 
@@ -185,18 +186,32 @@ export class SuggestionService {
     return out;
   }
 
-  async get(id: string): Promise<Suggestion> {
-    const r = await this.pool.query(`select * from suggestions where id=$1`, [id]);
+  /**
+   * A-I6: the review queue is world-scoped like every other reader. `viewer` is the caller's
+   * reach (`suggestionViewer(req.user)`); a suggestion outside it answers **404**, not 403, for
+   * the same reason `getVisibleDocument` does — the id must not tell you the row exists. Callers
+   * with no viewer (the apply pipeline, the service's own internal reads) see everything, which
+   * is what a server-side job needs.
+   */
+  async get(id: string, viewer?: SuggestionViewer): Promise<Suggestion> {
+    const scoped = viewer ? ` and ${suggestionVisibleSql('g', '$2', viewer.readUnpublished)}` : '';
+    const r = await this.pool.query(
+      `select g.* from suggestions g where g.id=$1${scoped}`,
+      viewer ? [id, viewer.worldScopes ? [...viewer.worldScopes] : null] : [id],
+    );
     if (!r.rowCount) throw httpErr(404, 'NOT_FOUND', 'ההצעה לא נמצאה');
     return row(r.rows[0]);
   }
 
-  async list(q: {
-    status?: Status;
-    sourceId?: string;
-    page: number;
-    pageSize: number;
-  }): Promise<{ items: Suggestion[]; total: number }> {
+  async list(
+    q: {
+      status?: Status;
+      sourceId?: string;
+      page: number;
+      pageSize: number;
+    },
+    viewer?: SuggestionViewer,
+  ): Promise<{ items: Suggestion[]; total: number }> {
     const where: string[] = [];
     const params: unknown[] = [];
     if (q.status) {
@@ -206,6 +221,10 @@ export class SuggestionService {
     if (q.sourceId) {
       params.push(q.sourceId);
       where.push(`sr.source_id=$${params.length}`);
+    }
+    if (viewer) {
+      params.push(viewer.worldScopes ? [...viewer.worldScopes] : null);
+      where.push(suggestionVisibleSql('g', `$${params.length}`, viewer.readUnpublished));
     }
     const w = where.length ? 'where ' + where.join(' and ') : '';
     const total = await this.pool.query(
@@ -340,6 +359,16 @@ export class SuggestionService {
   ): Promise<{ accepted: Suggestion; remainder: Suggestion | null }> {
     const cur = await this.get(id);
     if (cur.status === 'applied') throw httpErr(409, 'ALREADY_APPLIED', 'ההצעה כבר יושמה');
+    /**
+     * A-I4. A partial accept is only meaningful on a *pending* suggestion. On a repeat call
+     * (double-click, a retry after a timeout) `base` would be the already-narrowed
+     * `edited_payload`, so `whole` came out true, `applied_parts` was erased — taking the row out
+     * of the analytics' `EDITED` count — and the first remainder stayed in the queue with nothing
+     * explaining it. The claim below (`where id=$1 and status='pending'`) is the real guard, the
+     * same claim-by-predicate `decideProposedEdits` uses; this is the cheap early answer.
+     */
+    if (cur.status !== 'pending')
+      throw httpErr(409, 'NOT_PENDING', 'ההצעה כבר הוכרעה — אי אפשר לאשר חלקים ממנה שוב');
     const base = cur.editedPayload ?? cur.payload;
     let split: { applied: SuggestionPayload; remainder: SuggestionPayload | null };
     try {
@@ -360,9 +389,12 @@ export class SuggestionService {
     try {
       await client.query('begin');
       const whole = split.remainder === null && rowsOf(base).every((r) => parts.includes(r.rowId));
+      // A-I4: claim the row by predicate, so two concurrent partial accepts cannot both write a
+      // remainder. The loser sees zero rows and gets a 409 rather than duplicating the queue.
       const upd = await client.query(
         `update suggestions set status='accepted', decided_by=$2, decided_at=now(),
-                edited_payload=$3, edit_diff=$4, applied_parts=$5 where id=$1 returning *`,
+                edited_payload=$3, edit_diff=$4, applied_parts=$5
+          where id=$1 and status='pending' returning *`,
         [
           id,
           actorId,
@@ -371,6 +403,7 @@ export class SuggestionService {
           whole ? null : JSON.stringify([...new Set(parts)].sort()),
         ],
       );
+      if (!upd.rowCount) throw httpErr(409, 'NOT_PENDING', 'ההצעה כבר הוכרעה — אי אפשר לאשר חלקים ממנה שוב');
       const accepted = row(upd.rows[0]);
       let remainder: Suggestion | null = null;
       if (split.remainder) {

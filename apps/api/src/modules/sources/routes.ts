@@ -14,6 +14,8 @@ import {
 } from '@wecom/shared';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { suggestionAnalytics } from './analytics.js';
+import { suggestionViewer, type SuggestionViewer } from './suggestionScope.js';
+import type { ReqUser } from '../../lib/user.js';
 import { parseUpload } from './parsers.js';
 import { processRevision, type PipelineDeps } from '../../jobs/pipeline.js';
 
@@ -23,6 +25,16 @@ const err = (statusCode: number, code: string, message: string) =>
 const actorId = (req: { user?: { id: string } | null }): string => {
   if (!req.user) throw err(401, 'UNAUTHENTICATED', 'נדרשת התחברות');
   return req.user.id;
+};
+
+/**
+ * A-I6. The review queue is world-scoped like every other reader, so every suggestion route that
+ * addresses a row by id — the two reads and the `before` snapshot the decision routes audit
+ * against — resolves it through the caller's reach. A row outside it answers 404.
+ */
+const viewer = (req: { user?: ReqUser | null }): SuggestionViewer => {
+  if (!req.user) throw err(401, 'UNAUTHENTICATED', 'נדרשת התחברות');
+  return suggestionViewer(req.user);
 };
 
 /**
@@ -152,7 +164,8 @@ export default function sourcesRoutes(deps: PipelineDeps) {
         config: { requires: ['suggestions.review'] },
       },
       async (req) => {
-        const { items, total } = await deps.suggestions.list(req.query);
+        // A-I6: the queue is world-scoped like every other reader.
+        const { items, total } = await deps.suggestions.list(req.query, viewer(req));
         return { items, total, page: req.query.page, pageSize: req.query.pageSize };
       },
     );
@@ -174,7 +187,7 @@ export default function sourcesRoutes(deps: PipelineDeps) {
         },
         config: { requires: ['suggestions.review'] },
       },
-      async (req) => deps.suggestions.get(req.params.id),
+      async (req) => deps.suggestions.get(req.params.id, viewer(req)),
     );
 
     /**
@@ -196,7 +209,7 @@ export default function sourcesRoutes(deps: PipelineDeps) {
         config: { requires: ['suggestions.review'] },
       },
       async (req) => {
-        const before = await deps.suggestions.get(req.params.id);
+        const before = await deps.suggestions.get(req.params.id, viewer(req));
         const parts = req.body?.parts;
         const s = parts?.length
           ? (await deps.suggestions.acceptParts(req.params.id, parts, actorId(req))).accepted
@@ -250,7 +263,7 @@ export default function sourcesRoutes(deps: PipelineDeps) {
           config: { requires: ['suggestions.review'] },
         },
         async (req) => {
-          const before = await deps.suggestions.get(req.params.id);
+          const before = await deps.suggestions.get(req.params.id, viewer(req));
           const s = await deps.suggestions.decide(req.params.id, status, actorId(req));
           await app.audit(
             req,
@@ -276,7 +289,7 @@ export default function sourcesRoutes(deps: PipelineDeps) {
         config: { requires: ['suggestions.review'] },
       },
       async (req) => {
-        const before = await deps.suggestions.get(req.params.id);
+        const before = await deps.suggestions.get(req.params.id, viewer(req));
         // The body schema's refine guarantees exactly one of the two is present.
         const s = req.body.structuredEdit
           ? await deps.suggestions.editStructured(req.params.id, req.body.structuredEdit, actorId(req))

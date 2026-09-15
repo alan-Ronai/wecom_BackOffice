@@ -26,6 +26,8 @@ import { diffToOps } from '../proposedEdits.js';
 import { parseRefBlocks, renderRefBlocks, SECOND_CALL, type RefBlock } from '../prompt.js';
 import { defineTool, NOT_FOUND, type ToolCtx, type ToolOutcome } from './registry.js';
 import { visibleDocument } from './read.js';
+import { suggestionVisibleSql } from '../../sources/suggestionScope.js';
+import { canReadUnpublished } from '../../../lib/visibility.js';
 
 const Uuid = z.string().uuid();
 const Instruction = z.string().min(1).max(2000);
@@ -92,6 +94,21 @@ export const proposeSourceEdit = defineTool({
     scope: z.object({ paragraphRefs: z.array(z.string().min(1)).max(50).optional() }).optional(),
   }),
   async run(ctx, args): Promise<ToolOutcome> {
+    /**
+     * A-I3. The orchestrator persists the hunks as `{ documentId: conversation.documentId,
+     * baseSourceVersion: conversationSource.version }`, so a call naming any other document
+     * produced a row that claimed A at A's version while carrying B's ops — an unappliable
+     * proposal that fails at decide time with "the source moved" when it did not — and a call in
+     * a conversation with no document at all was dropped on the floor after the pane had already
+     * drawn the tool chip. Reconcile here, where there is still something to say about it.
+     */
+    if (!ctx.conversation.documentId)
+      return { ok: false, summary: 'אפשר להציע עריכת מקור רק בשיחה שפתוחה על מסמך' };
+    if (args.documentId !== ctx.conversation.documentId)
+      return {
+        ok: false,
+        summary: 'אפשר להציע עריכה רק למסמך שהשיחה פתוחה עליו',
+      };
     const doc = await visibleDocument(ctx, args.documentId);
     if (!doc) return NOT_FOUND;
     const source = await getSourceDocument(ctx.db, doc.id);
@@ -131,9 +148,17 @@ export const refineSuggestion = defineTool({
   description: 'משכתב הצעת פייפליין קיימת לפי הנחיה, ומחזיר תוכן מוצע מאותו סוג. המשתמש עדיין מאשר.',
   args: z.object({ suggestionId: Uuid, instruction: Instruction }),
   async run(ctx, args): Promise<ToolOutcome> {
+    /**
+     * A-I2: the visibility term is in the `where`, not applied afterwards on the target document
+     * alone. A null-target suggestion — `new-card` carries an entire proposed document in the
+     * payload that this tool both feeds to the model and returns — used to skip the check, so a
+     * world-scoped caller could refine (and read) a row from a world they cannot see.
+     */
     const r = await ctx.db.query(
-      'select id, type, title, target_document_id, coalesce(edited_payload, payload) payload from suggestions where id=$1',
-      [args.suggestionId],
+      `select g.id, g.type, g.title, g.target_document_id, coalesce(g.edited_payload, g.payload) payload
+         from suggestions g
+        where g.id=$1 and ${suggestionVisibleSql('g', '$2', canReadUnpublished(ctx.user))}`,
+      [args.suggestionId, ctx.user.worldScopes ? [...ctx.user.worldScopes] : null],
     );
     if (!r.rowCount) return NOT_FOUND;
     const row = r.rows[0] as {
@@ -142,6 +167,7 @@ export const refineSuggestion = defineTool({
       target_document_id: string | null;
       payload: SuggestionPayload;
     };
+    // The target document also has to be readable as a document (status, scope, soft delete).
     if (row.target_document_id && !(await visibleDocument(ctx, row.target_document_id))) return NOT_FOUND;
     if (!ctx.model?.chat) return NO_MODEL;
 

@@ -18,6 +18,13 @@
  *
  * Rebuilding drops every stored vector: `ai.reindex` recomputes them, and search falls back to
  * lexical ranking until it has run — the same degradation an empty EMBED_MODEL gives.
+ *
+ * A-M5 — **`down` restores the width the column actually had**, not a hardcoded 768. `up` reads
+ * the live `vector(n)` out of the catalogue before dropping the column and records it in
+ * `schema_migration_notes`; `down` reads it back. Without that, rolling back on a tier-1 install
+ * narrowed a 1024 column to 768, and re-running `up` widened it again — two full losses of every
+ * vector where the operator asked for one round trip. The notes table is this migration's own and
+ * is dropped by `down`, so a full rollback still leaves an empty schema.
  */
 
 /** `MODEL_TIER_PRESETS[n].embedDimension` from `packages/shared/src/schemas/wave6.ts`. */
@@ -42,7 +49,25 @@ const dim = resolveEmbedDimension(process.env);
 
 exports.resolveEmbedDimension = resolveEmbedDimension;
 
+/** Where `up` writes down what it is about to destroy, so `down` can put it back. */
+const NOTES = 'schema_migration_notes';
+exports.NOTES_TABLE = NOTES;
+const WIDTH_KEY = '0051.documents.embedding.previous_width';
+exports.EMBEDDING_WIDTH_KEY = WIDTH_KEY;
+
+/** `vector(768)` → `768`, straight out of the catalogue. Null when the column is not a vector. */
+const CURRENT_WIDTH_SQL = `(select substring(format_type(a.atttypid, a.atttypmod) from '[(]([0-9]+)[)]')
+     from pg_attribute a
+    where a.attrelid = 'documents'::regclass and a.attname = 'embedding' and not a.attisdropped)`;
+
 exports.up = (pgm) => {
+  pgm.sql(`create table if not exists ${NOTES} (
+             key text primary key,
+             value text not null,
+             noted_at timestamptz not null default now())`);
+  pgm.sql(`insert into ${NOTES}(key, value)
+           values ('${WIDTH_KEY}', coalesce(${CURRENT_WIDTH_SQL}, '${LEGACY_EMBED_DIMENSION}'))
+           on conflict (key) do update set value = excluded.value, noted_at = now()`);
   pgm.sql(`alter table documents drop column embedding`);
   pgm.sql(`alter table documents add column embedding vector(${dim})`);
   pgm.createTable('step_embeddings', {
@@ -80,5 +105,14 @@ exports.down = (pgm) => {
   pgm.dropColumns('suggestions', ['affects', 'prompt_version', 'model']);
   pgm.dropTable('step_embeddings');
   pgm.sql(`alter table documents drop column embedding`);
-  pgm.sql(`alter table documents add column embedding vector(768)`);
+  // The width `up` recorded, falling back to 0003's 768 only when there is no note to read.
+  pgm.sql(`do $$
+             declare w integer;
+             begin
+               select nullif(value, '')::integer into w
+                 from ${NOTES} where key = '${WIDTH_KEY}';
+               if w is null or w < 1 then w := ${LEGACY_EMBED_DIMENSION}; end if;
+               execute format('alter table documents add column embedding vector(%s)', w);
+             end $$;`);
+  pgm.dropTable(NOTES, { ifExists: true });
 };

@@ -15,6 +15,7 @@ import { search } from '../../search/repo.js';
 import { canReadUnpublished } from '../../../lib/visibility.js';
 import { hasScope } from '../../../lib/user.js';
 import { impactPort } from '../impactPort.js';
+import { suggestionVisibleSql } from '../../sources/suggestionScope.js';
 import { defineTool, NOT_FOUND, type ToolCtx, type ToolOutcome } from './registry.js';
 
 const Uuid = z.string().uuid();
@@ -199,11 +200,20 @@ export const listSuggestions = defineTool({
     status: z.enum(['pending', 'accepted', 'rejected']).optional(),
   }),
   async run(ctx, args): Promise<ToolOutcome> {
+    /**
+     * A-I2: with neither argument this was "the 30 most recent suggestions on the instance".
+     * The tool addresses one document or one revision; asking it to browse the whole queue is
+     * what `GET /suggestions` is for, and that route has its own permission.
+     */
+    if (!args.documentId && !args.sourceRevisionId)
+      return { ok: false, summary: 'צריך לציין מסמך או גרסת מקור כדי לרשום הצעות' };
     if (args.documentId && !(await visibleDocument(ctx, args.documentId))) return NOT_FOUND;
     /**
-     * The `exists` term is the visibility rule for a suggestion nobody can see the target of: a
-     * suggestion whose `target_document_id` is unpublished or out of scope is not listed, even
-     * when the caller named the revision rather than the document.
+     * `suggestionVisibleSql` is the visibility rule for a suggestion nobody can see the target of:
+     * a suggestion whose `target_document_id` is unpublished or out of scope is not listed, even
+     * when the caller named the revision rather than the document — and a **null-target** row
+     * (`new-card`, which carries a whole proposed document, and `field-alert`) is scoped through
+     * its source's documents instead of skipping the check entirely (A-I2).
      */
     const r = await ctx.db.query(
       `select g.id, g.type, g.title, g.target_document_id, g.target_step_key, g.confidence, g.status,
@@ -212,11 +222,7 @@ export const listSuggestions = defineTool({
         where ($1::uuid is null or g.target_document_id = $1)
           and ($2::uuid is null or g.source_revision_id = $2)
           and ($3::text is null or g.status = $3)
-          and (g.target_document_id is null or exists (
-                select 1 from documents d where d.id = g.target_document_id and d.deleted_at is null
-                  ${canReadUnpublished(ctx.user) ? '' : "and d.status in ('published','partial')"}
-                  and ($4::text[] is null or exists (
-                        select 1 from document_worlds dw where dw.document_id = d.id and dw.world_slug = any($4)))))
+          and ${suggestionVisibleSql('g', '$4', canReadUnpublished(ctx.user))}
         order by g.created_at desc limit 30`,
       [
         args.documentId ?? null,

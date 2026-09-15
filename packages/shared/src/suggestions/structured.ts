@@ -320,7 +320,9 @@ function rebuild(p: SuggestionPayload, decide: (row: SuggestionRow) => Decision)
             .map(([id, s]) => val(id, s)),
         }))
         .filter((ph) => ph.steps.length > 0);
-      out = { type: 'new-card', ...meta, phases } as SuggestionPayload;
+      // A-M2: `type` re-asserted *after* the spread. `meta` is client-controlled, so spreading
+      // it over the discriminant would let an edit rename the payload's type.
+      out = { ...meta, phases, type: 'new-card' } as SuggestionPayload;
       break;
     }
     case 'new-step': {
@@ -331,8 +333,8 @@ function rebuild(p: SuggestionPayload, decide: (row: SuggestionRow) => Decision)
         .map(([id, t]) => val(id, t));
       if (actions.length === 0) throw new Error('new-step must keep at least one action');
       out = {
-        type: 'new-step',
         ...meta,
+        type: 'new-step', // A-M2: after the spread, never before it.
         actions,
         outcomes: p.outcomes
           .map((o, i) => [`out-${i}`, o] as const)
@@ -353,8 +355,8 @@ function rebuild(p: SuggestionPayload, decide: (row: SuggestionRow) => Decision)
       break;
     case 'field-alert':
       out = {
-        type: 'field-alert',
         ...(val('alert', { fieldName: p.fieldName, issue: p.issue }) as Record<string, unknown>),
+        type: 'field-alert', // A-M2: after the spread, never before it.
       } as SuggestionPayload;
       break;
   }

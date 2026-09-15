@@ -439,7 +439,7 @@ export default async function routes(app: FastifyInstance) {
          * today mapped on trigram until the next full pass. Same contract as the line above:
          * outside the transaction, never awaited, never able to fail a publish.
          */
-        void refreshStepEmbeddings(app.db, id, model).catch(() => undefined);
+        void refreshStepEmbeddings(app.db, id, model, app.log).catch(() => undefined);
       }
       return result;
     },
@@ -628,7 +628,7 @@ export default async function routes(app: FastifyInstance) {
       const model = (app as unknown as { model?: ModelClient | null }).model;
       if (model?.embed) {
         noteEmbedResult(app, req, id, updateEmbedding(app.db, id, model), 'restore');
-        void refreshStepEmbeddings(app.db, id, model).catch(() => undefined);
+        void refreshStepEmbeddings(app.db, id, model, app.log).catch(() => undefined);
       }
       return result;
     },

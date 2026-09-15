@@ -4,6 +4,7 @@ import { MappingService } from './mapping.js';
 import { ProposalService } from './proposal.js';
 import { ImpactService } from './impact.js';
 import { getAiSettings } from '../../lib/aiSettings.js';
+import { resolveModelSlots } from '../../lib/modelSlots.js';
 import { SuggestionService, type EventSink } from './suggestions.js';
 import { resolveContentApi } from './content-api.js';
 import { registerPipelineJobs, type PipelineDeps } from '../../jobs/pipeline.js';
@@ -54,7 +55,9 @@ export async function registerSourcesModule(app: FastifyInstance): Promise<Pipel
   const deps: PipelineDeps = {
     revisions,
     mapping,
-    proposal: new ProposalService(app.db, mapping, content, impact, () => getAiSettings(app.db)),
+    proposal: new ProposalService(app.db, mapping, content, impact, () =>
+      getAiSettings(app.db, resolveModelSlots(app.config)),
+    ),
     suggestions: new SuggestionService(app.db, content, eventSink(app)),
     impact,
   };

@@ -31,10 +31,12 @@ import {
   type Conversation,
 } from '@wecom/shared';
 import { getAiSettings, currentPromptVersion } from '../../lib/aiSettings.js';
+import { resolveModelSlots } from '../../lib/modelSlots.js';
 import { audit } from '../../lib/audit.js';
 import { httpError, notFound } from '../../lib/http.js';
 import { withTransaction } from '../../lib/sql.js';
 import { hasPerm, hasScope, requireUser, type ReqUser } from '../../lib/user.js';
+import { canReadUnpublished } from '../../lib/visibility.js';
 import { getVisibleDocument } from '../documents/repo.js';
 import { getSourceDocument, saveSourceDocument } from '../sourcedocs/repo.js';
 import { queueIngestRetry, runIngest } from '../sourcedocs/ingestRetry.js';
@@ -60,11 +62,20 @@ export default function aiRoutes(deps: AiRouteDeps) {
   return async function routes(instance: FastifyInstance) {
     const app = instance.withTypeProvider<ZodTypeProvider>();
 
-    const settings = () => getAiSettings(app.db);
+    const settings = () => getAiSettings(app.db, resolveModelSlots(app.config));
+
+    /**
+     * A-M9: the joined document title is narrowed to what this caller may still see. An
+     * `ai.manage` admin reading the transcript browser is deliberately unscoped.
+     */
+    const titleViewer = (user: ReqUser): repo.ConversationViewer | undefined =>
+      hasPerm(user, 'ai.manage')
+        ? undefined
+        : { worldScopes: user.worldScopes, readUnpublished: canReadUnpublished(user) };
 
     /** The conversation, or a 404 — never a 403, and never a row the caller may not read. */
     const ownConversation = async (id: string, user: ReqUser, mustOwn = true) => {
-      const c = await repo.getConversation(app.db, id);
+      const c = await repo.getConversation(app.db, id, titleViewer(user));
       if (!c) throw notFound('השיחה');
       if (mustOwn ? c.userId !== user.id && !hasPerm(user, 'ai.manage') : !readable(c, user))
         throw notFound('השיחה');
@@ -125,10 +136,11 @@ export default function aiRoutes(deps: AiRouteDeps) {
         const query = req.query;
         // Own conversations unless an `ai.manage` admin explicitly asked to see everyone's.
         const all = hasPerm(user, 'ai.manage') && query.mine === false;
-        const { items, total } = await repo.listConversations(app.db, {
-          ...query,
-          userId: all ? (query.userId ?? null) : user.id,
-        });
+        const { items, total } = await repo.listConversations(
+          app.db,
+          { ...query, userId: all ? (query.userId ?? null) : user.id },
+          titleViewer(user),
+        );
         return { items, total, page: query.page, pageSize: query.pageSize };
       },
     );
@@ -169,6 +181,13 @@ export default function aiRoutes(deps: AiRouteDeps) {
           throw httpError(403, 'FORBIDDEN', 'אין לך הרשאה לשיחה מסוג זה', { permission: 'ai.chat' });
 
         const s = await settings();
+        /**
+         * A-M1: availability first. `checkRate` *consumes* a slot in the user's hourly window, so
+         * asking it before the 503 check meant a model outage burned the quota of everyone who
+         * kept retrying — the one hour in which the budget matters least.
+         */
+        if (!(await aiChatHolder.available()))
+          throw httpError(503, 'AI_UNAVAILABLE', 'מודל הצ׳אט אינו זמין כרגע');
         const rate = checkRate(user.id, s.limits.chatPerUserPerHour);
         if (!rate.ok) {
           reply.header('retry-after', String(rate.retryAfterSec));
@@ -176,8 +195,6 @@ export default function aiRoutes(deps: AiRouteDeps) {
             retryAfterSec: rate.retryAfterSec,
           });
         }
-        if (!(await aiChatHolder.available()))
-          throw httpError(503, 'AI_UNAVAILABLE', 'מודל הצ׳אט אינו זמין כרגע');
 
         const sse = openSse(reply);
         try {
@@ -303,16 +320,23 @@ export default function aiRoutes(deps: AiRouteDeps) {
       },
       async (req, reply) => {
         const query = req.query;
-        await streamTranscripts(
-          app.db,
-          {
-            userId: query.userId,
-            documentId: query.documentId,
-            from: query.from,
-            to: query.to,
-          },
-          reply,
-        );
+        const filter = {
+          userId: query.userId,
+          documentId: query.documentId,
+          from: query.from,
+          to: query.to,
+        };
+        /**
+         * A-I7. This streams every user's conversations, messages and feedback notes off the box
+         * as a file. The delete next door is audited; the bulk read was not, and for a surface
+         * whose justification is "we keep a year of what people asked the assistant", who took a
+         * copy and with what filter is the one thing that has to be on the record.
+         *
+         * Before the hijack, deliberately: `streamTranscripts` takes the socket over, and an
+         * audit written after that has no reply left to fail into.
+         */
+        await app.audit(req, 'admin.ai.conversations.export', 'ai_conversation', null, null, filter);
+        await streamTranscripts(app.db, filter, reply);
       },
     );
 

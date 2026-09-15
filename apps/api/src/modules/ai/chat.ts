@@ -38,9 +38,9 @@ import { withTransaction } from '../../lib/sql.js';
 import type { ReqUser } from '../../lib/user.js';
 import { getSourceDocument } from '../sourcedocs/repo.js';
 import type { ChatModelHolder } from './chatModel.js';
-import { buildSystemPrompt, titleFrom, withContext } from './prompt.js';
+import { buildSystemPrompt, renderToolResult, titleFrom, withContext } from './prompt.js';
 import * as repo from './repo.js';
-import { runTool, specsFor, type ToolCtx } from './tools/index.js';
+import { runTool, specsFor, type ToolCtx, type ToolOutcome } from './tools/index.js';
 import { visibleDocument } from './tools/read.js';
 
 /** Six rounds is a CPU-only budget, not a capability claim: past it, the turn answers anyway. */
@@ -81,7 +81,8 @@ const toChatMessages = (messages: readonly AiMessage[]): ChatMessage[] =>
       return m.toolResults.map((r) => ({
         role: 'tool' as const,
         toolCallId: r.id,
-        content: JSON.stringify({ ok: r.ok, summary: r.summary, data: r.payload }).slice(0, 12_000),
+        // A-I8/A-M8: fenced as untrusted, and cut inside `data` so the envelope stays valid JSON.
+        content: renderToolResult({ ok: r.ok, summary: r.summary, data: r.payload }),
       }));
     return [];
   });
@@ -128,8 +129,16 @@ export class ChatOrchestrator {
     const document = input.conversation.documentId
       ? await this.documentFor(input.conversation.documentId, input.user, settings)
       : null;
+    /**
+     * A-I3: `propose_source_edit` needs the conversation's source version to anchor its row, so
+     * the source is loaded for a caller who may propose as well as for one who may read it.
+     * Without this an editor tier without `read_source` produced hunks the orchestrator then
+     * silently discarded.
+     */
     const source =
-      document && allowed.includes('read_source') ? await getSourceDocument(this.deps.db, document.id) : null;
+      document && (allowed.includes('read_source') || allowed.includes('propose_source_edit'))
+        ? await getSourceDocument(this.deps.db, document.id)
+        : null;
 
     const history = await repo.listMessages(this.deps.db, input.conversation.id);
     const system = buildSystemPrompt({
@@ -243,7 +252,17 @@ export class ChatOrchestrator {
         const rows: ToolOutcomeRow[] = [];
         for (const call of r.toolCalls) {
           input.emit({ type: 'tool_call', id: call.id, name: call.name, args: call.args });
-          const res = await runTool(toolCtx, allowedSet, call);
+          const ran = await runTool(toolCtx, allowedSet, call);
+          /**
+           * A-I3: a proposal the orchestrator cannot persist is not a proposal. The tool already
+           * refuses a `documentId` that is not the conversation's, so this is the belt to that
+           * braces — a conversation whose source vanished between the turn starting and the tool
+           * running answers `ok:false` rather than drawing a chip for a row that was never written.
+           */
+          const res: ToolOutcome =
+            ran.ok && ran.proposedEdits?.length && !(document && source)
+              ? { ok: false, summary: 'לא ניתן לשמור את ההצעה — לשיחה הזו אין מסמך מקור' }
+              : ran;
           const payload = res.ok ? res.data : undefined;
           input.emit({
             type: 'tool_result',
@@ -289,9 +308,9 @@ export class ChatOrchestrator {
           messages.push({
             role: 'tool',
             toolCallId: call.id,
-            content: JSON.stringify(
-              res.ok ? { ok: true, data: res.data } : { ok: false, error: res.summary },
-            ).slice(0, 12_000),
+            content: renderToolResult(
+              res.ok ? { ok: true, data: res.data } : { ok: false, summary: res.summary },
+            ),
           });
         }
 
