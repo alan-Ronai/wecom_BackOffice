@@ -1,8 +1,15 @@
+# Every job below sets `timeout-minutes`. The GitHub default is 360 — six hours of a runner, and
+# six hours before anyone learns a job is wedged rather than slow. The caps here are roughly triple
+# the expected runtime: they should fire only when something is genuinely stuck (a hung
+# testcontainer, a Playwright run waiting on a server that never came up), never on a slow runner.
 name: ci
 on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+    # ~8–12 min: install, lint, typecheck, the workspace build, unit tests, then `test:int` against
+    # a testcontainers Postgres, which is the long pole and the one that can hang.
+    timeout-minutes: 30
     # No `services:` block on purpose. `test:int` brings up its own Postgres through
     # testcontainers (`apps/api/test/helpers/db.ts` -> `startTestDb`), so a service container
     # here was started and health-checked on every run without a single test connecting to it.
@@ -28,6 +35,9 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     needs: build
+    # ~6–9 min: install, build, a chromium download, then the msw-backed specs. A browser waiting
+    # on a page that never loads is exactly the shape of hang this cap is for.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -51,6 +61,8 @@ jobs:
     # documents. See apps/api/scripts/{load-fixture,perf-check}.ts.
     runs-on: ubuntu-latest
     needs: build
+    # ~2–4 min of measurement on top of install and build, against a testcontainers Postgres.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -89,6 +101,10 @@ jobs:
     # real backend that a mocked API cannot.
     runs-on: ubuntu-latest
     needs: build
+    # ~10–14 min: install, build, chromium, then a Postgres container, migrate/seed/create-admin,
+    # the API and `vite preview` and the specs against all of it. The most moving parts of the
+    # five, and the one most likely to sit waiting on a server that never becomes healthy.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
