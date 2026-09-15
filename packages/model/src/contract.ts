@@ -27,6 +27,12 @@ export interface ProposalContext {
   fields: { name: string; status: string }[];
   blocks: { id: string; title: string; actions: string[] }[];
 }
+/**
+ * What a model returns. Everything the *server* owns is omitted, including wave 6's
+ * `affects`: the impact set is computed by the api from the graph and the embeddings
+ * (spec §1.6) and stamped onto the row — a model must not be able to claim a change
+ * touches a document it never saw.
+ */
 export type ProposedSuggestion = Omit<
   Suggestion,
   | 'id'
@@ -37,6 +43,9 @@ export type ProposedSuggestion = Omit<
   | 'decidedAt'
   | 'appliedVersionId'
   | 'editedPayload'
+  | 'affects'
+  | 'editDiff'
+  | 'appliedParts'
 >;
 /* ── wave 5 (V1): quiz question generation (additive, optional) ─────────── */
 export interface QuestionContextStep {

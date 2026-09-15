@@ -54,6 +54,12 @@ const row = (r: Record<string, unknown>): Suggestion => ({
   decidedBy: (r.decided_by as string) ?? null,
   decidedAt: r.decided_at ? (r.decided_at as Date).toISOString() : null,
   appliedVersionId: (r.applied_version_id as string) ?? null,
+  /**
+   * Wave 6 (X0), additive: the column arrives with X1's 0051, so this reads defensively and
+   * every row selected before it — and every row a rollback leaves behind — is `[]` rather
+   * than a parse failure. X1 computes it; X3's structured editor and analytics read it.
+   */
+  affects: (r.affects as Suggestion['affects']) ?? [],
   createdAt: (r.created_at as Date).toISOString(),
 });
 
