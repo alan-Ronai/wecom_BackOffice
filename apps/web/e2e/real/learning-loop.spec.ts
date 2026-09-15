@@ -24,9 +24,11 @@ const QUIZ = `שאלון גלישה ${stamp}`;
 /** A term the corpus cannot possibly answer, so the zero-result heuristic has something to find. */
 const ZERO_TERM = `zzzqq${stamp}`;
 
-interface PreviewQuestion {
+/** `GET /learning/items/:id` — the manager's view, the only one that says which option is correct. */
+interface ItemQuestion {
   id: string;
   stem: string;
+  kind: 'single' | 'multi' | 'order' | 'free';
   options: { id: string; text: string; correct: boolean }[];
 }
 
@@ -98,46 +100,44 @@ test('W5-E2E-1 a quiz is built, assigned, passed, refreshed after a significant 
   await expect(l.getByText(/הוקצה ל-[1-9]\d* משתמשים/)).toBeVisible();
 
   /* 3. the agent passes it in the player ------------------------------------ */
-  // The correct options are the manager's to know, not the player's: the player payload strips
-  // `correct`, which is the point. The lead reads them from the preview and the agent answers.
-  const preview = await api.get(`/api/v1/learning/items/${itemId}/preview`);
-  expect(preview.ok(), await preview.text()).toBeTruthy();
-  const questions = ((await preview.json()) as { questions: PreviewQuestion[] }).questions;
+  /*
+   * Which option is correct is the manager's to know: `GET /learning/my/:id` and the manager's own
+   * *preview* both answer `PlayerQuestionSchema`, which omits `correct` — that omission is the
+   * feature. So the answers come from the full item (`GET /learning/items/:id`), which only
+   * `learning.manage` can read, and the agent then picks them in the player like a person.
+   */
+  const full = await api.get(`/api/v1/learning/items/${itemId}`);
+  expect(full.ok(), await full.text()).toBeTruthy();
+  const questions = ((await full.json()) as { questions: ItemQuestion[] }).questions;
   expect(questions.length).toBeGreaterThan(0);
+  expect(
+    questions.every((q) => q.options.some((o) => o.correct)),
+    'every generated question has a correct option',
+  ).toBe(true);
 
   const a = await signInAs(browser, agent, baseURL!);
   opened.pages.push(a);
+  const agentApi = await adminApi(a, baseURL!);
+  opened.apis.push(agentApi);
+
   await a.goto('/learning');
   await a.getByRole('link', { name: QUIZ }).click();
   await a.getByRole('button', { name: 'התחל שאלון' }).click();
   for (let i = 0; i < questions.length; i++) {
+    await expect(a.locator('.quiz-progress')).toHaveText(`שאלה ${i + 1} מתוך ${questions.length}`);
     const asked = await a.locator('.quiz-q legend').innerText();
     const q = questions.find((x) => x.stem.trim() === asked.trim());
-    expect(q, `the player asked a question the preview did not list: ${asked}`).toBeTruthy();
+    expect(q, `the player asked a question the item did not list: ${asked}`).toBeTruthy();
     const advance = a.getByRole('button', { name: i + 1 < questions.length ? 'הבא' : 'שלח תשובות' });
-    /*
-     * Tick every correct option, then wait for the button the selection enables — re-ticking if
-     * it is still disabled. A background refetch of the player payload (the assignment's own
-     * notification arrives over SSE while the quiz is open) can re-render the question with the
-     * selection cleared, and a single click would then be silently lost.
-     */
-    const pick = async () => {
-      for (const o of q!.options.filter((x) => x.correct))
-        await a
-          .locator('.quiz-q label')
-          .filter({ hasText: o.text })
-          .first()
-          .locator('input')
-          .check()
-          .catch(() => undefined);
-      return advance.isEnabled();
-    };
-    await expect
-      .poll(pick, { message: `answer question ${i + 1}`, timeout: 30_000, intervals: [200, 500, 1_000] })
-      .toBe(true);
+    const inputs = a.locator('.quiz-q input');
+    for (const [n, o] of q!.options.entries()) if (o.correct) await inputs.nth(n).check();
+    await expect(advance).toBeEnabled();
     await advance.click();
   }
   await expect(a.getByRole('heading', { name: /^עברת! ציון/ })).toBeVisible({ timeout: 30_000 });
+
+  await a.goto('/learning');
+  await expect(a.getByRole('region', { name: 'הושלמו' })).toContainText(QUIZ);
 
   /* 4. the dashboard shows the completion ----------------------------------- */
   await l.goto(`/learning/manage/${itemId}`);
@@ -160,8 +160,6 @@ test('W5-E2E-1 a quiz is built, assigned, passed, refreshed after a significant 
   await expect(a.getByRole('region', { name: 'בוטלו' })).toBeVisible();
 
   /* 6. a search nobody can answer becomes a gap with a shortcut ------------- */
-  const agentApi = await adminApi(a, baseURL!);
-  opened.apis.push(agentApi);
   for (let i = 0; i < 4; i++) {
     const s = await agentApi.get(`/api/v1/search?q=${encodeURIComponent(ZERO_TERM)}`);
     expect(s.ok(), await s.text()).toBeTruthy();
