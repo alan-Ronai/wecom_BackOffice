@@ -48,15 +48,55 @@ const CLIENT_ERROR = 'client_error';
  * would itself fail. `/edit/:id` is included for the same reason `/doc/:id` is: a malformed step
  * breaks both screens, and the editor is where it gets fixed.
  *
- * The *path* and the *message* are still missing, and deliberately so: `telemetry_events` has no
- * column for either (`0010_telemetry.js` — id, user_id, kind, document_id, step_key, at; no jsonb),
- * so appending `path` to `TelemetryEventSchema` without a migration would only add a field the API
- * silently drops. Deferred: needs migration.
+ * The *path* and the *message* now travel with it too: `0043_telemetry_client_error.js` adds the
+ * nullable `path` and `message` columns the table never had, and `TelemetryEventSchema` appends the
+ * two optional fields. "Something crashed on a document this week" became "this route threw this
+ * message", which is the difference between a number on a dashboard and a bug somebody can fix.
  */
 const DOC_ROUTE = /^\/(?:doc|edit)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/i;
 
 export function documentIdFromPath(path: string): string | undefined {
   return DOC_ROUTE.exec(path)?.[1];
+}
+
+/** `TelemetryEventSchema` caps both; over the cap the API answers 400 and the report is lost. */
+const MAX_PATH = 512;
+const MAX_MESSAGE = 1000;
+
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+/** Deliberately loose on the local part: the job is to catch an address, not to validate one. */
+const EMAIL = /[^\s@<>()[\],;:"']+@[^\s@<>()[\],;:"']+\.[a-z]{2,}/gi;
+
+/**
+ * What a crash report is allowed to say.
+ *
+ * `error.message` only. Not `error.stack` — it names minified bundle frames, it is long enough to
+ * blow the column on its own, and nobody reading `telemetry_events` can act on it; the developer
+ * who can already has it in `console.error` one line above. Not the URL either: `location.search`
+ * and `location.hash` are exactly where a search term, a filter or a scroll anchor live, so the
+ * row gets `useLocation().pathname` and stops there.
+ *
+ * Then the redaction, which exists because a *message* is not a field anyone designed. It is
+ * whatever string the throwing code happened to interpolate, and the two things that turn up in
+ * one by accident are an address (`no mailbox for dana@ronai.example`) and an id (`no such step
+ * for 9f3…`). `telemetry_events` is readable by anyone with `analytics.read`, so both are replaced
+ * with a marker that keeps the sentence legible.
+ *
+ * The one uuid that stays is the `documentId` already going out on the same row: redacting it
+ * would hide nothing that is not in the next column over, and the message usually reads as
+ * nonsense without it.
+ *
+ * Truncation is last, so a redaction can never be cut in half into something that still looks like
+ * half an address.
+ */
+export function safeErrorMessage(message: string, documentId?: string): string {
+  const keep = documentId?.toLowerCase();
+  const clean = message
+    .replace(EMAIL, '[email]')
+    .replace(UUID, (m) => (m.toLowerCase() === keep ? m : '[id]'))
+    .replace(/\s+/g, ' ')
+    .trim();
+  return clean.length > MAX_MESSAGE ? clean.slice(0, MAX_MESSAGE - 1) + '…' : clean;
 }
 
 /**
@@ -66,7 +106,9 @@ export function documentIdFromPath(path: string): string | undefined {
  * or throws synchronously (jsdom without a network stub), `.catch` for the rejection — because the
  * one thing this reporter must never do is throw from inside a component that is already broken.
  */
-export function reportClientError(documentId?: string): void {
+export function reportClientError(path: string, error?: Error): void {
+  const documentId = documentIdFromPath(path);
+  const message = error?.message ? safeErrorMessage(error.message, documentId) : '';
   try {
     void fetch(`${API_BASE}/telemetry`, {
       method: 'POST',
@@ -74,7 +116,15 @@ export function reportClientError(documentId?: string): void {
       headers: { 'content-type': 'application/json' },
       keepalive: true,
       body: JSON.stringify({
-        events: [{ kind: CLIENT_ERROR, at: new Date().toISOString(), ...(documentId ? { documentId } : {}) }],
+        events: [
+          {
+            kind: CLIENT_ERROR,
+            at: new Date().toISOString(),
+            ...(documentId ? { documentId } : {}),
+            ...(path ? { path: path.slice(0, MAX_PATH) } : {}),
+            ...(message ? { message } : {}),
+          },
+        ],
       }),
     }).catch(() => undefined);
   } catch {
@@ -86,6 +136,13 @@ interface Props {
   children: ReactNode;
   /** Where the throw happened, for the console line: `shell`, or the route path. */
   where: string;
+  /**
+   * The route pathname, which is *not* `where`: the shell's boundary and the three overlay ones
+   * are named for the thing they guard, not for a route, and a crash under any of them still
+   * happened on a screen worth naming. Defaulted from `useLocation()` by the wrapper below, so a
+   * boundary rendered outside a router (a unit test) still has a string to report.
+   */
+  path?: string;
   /** Changing this clears a caught error — the route path, so navigating away recovers. */
   resetKey?: string;
   /**
@@ -112,9 +169,8 @@ class ErrorBoundaryBase extends Component<Props, State> {
     // The console line is what a developer with the tab open sees; the telemetry row is what
     // anybody looking at the deployed VM a day later sees. Both, not one.
     console.error(`[ErrorBoundary:${this.props.where}]`, error, info.componentStack);
-    // `where` is the route path for every boundary but the shell's, which is why it can name the
-    // document (M2).
-    reportClientError(documentIdFromPath(this.props.where));
+    // The route, and the message with the stack and anything personal stripped out of it (M2).
+    reportClientError(this.props.path ?? '', error);
   }
 
   override componentDidUpdate(prev: Props): void {
@@ -181,10 +237,16 @@ class ErrorBoundaryBase extends Component<Props, State> {
  * same state that had just thrown. Keying on the path means navigating anywhere is a recovery,
  * which is what the route boundary has always done and what nobody wired to the outer one.
  */
-export function ErrorBoundary({ children, where, resetKey, fallback }: Props) {
+export function ErrorBoundary({ children, where, path, resetKey, fallback }: Props) {
   const loc = useLocation();
   return (
-    <ErrorBoundaryBase where={where} resetKey={resetKey ?? loc.pathname} fallback={fallback}>
+    <ErrorBoundaryBase
+      where={where}
+      // `pathname` only — never `loc.search` or `loc.hash`, which is where a query would be.
+      path={path ?? loc.pathname}
+      resetKey={resetKey ?? loc.pathname}
+      fallback={fallback}
+    >
       {children}
     </ErrorBoundaryBase>
   );
