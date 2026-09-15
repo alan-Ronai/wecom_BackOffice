@@ -1,20 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { escapeHtml, type Permission } from '@wecom/shared';
-import { useSearch } from '../../api/hooks/search.js';
+import { escapeHtml, type DocumentCard, type Permission } from '@wecom/shared';
+import { isSearchable, MIN_SEARCH_CHARS, useSearch } from '../../api/hooks/search.js';
 import { useDebounced } from '../../lib/useDebounced.js';
 import { useNav } from '../shell/navStore.js';
 import { usePalette } from './paletteStore.js';
 import { useEntityDialogs } from '../library/dialogs.js';
 import { useSettings } from '../settings/SettingsDialog.js';
 import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.js';
+import { useUiPrefs } from '../../api/hooks/uiPrefs.js';
 import { useCan } from '../../api/hooks/me.js';
 import { useTelemetry } from '../../api/hooks/collab.js';
 import { Html } from '../Fmt.js';
 import { TypeBadge, worldShort } from '../taxonomy/TypeBadge.js';
 import { hitLabel } from './hitLabel.js';
+import { localGroups } from './localHits.js';
 import { useFocusTrap } from '../ui/useFocusTrap.js';
-import type { SearchHit } from '../../api/types.js';
+import type { ListDocumentsResponse, SearchHit } from '../../api/types.js';
 import { results as nResults } from '../../lib/count.js';
 
 /**
@@ -35,6 +38,12 @@ const TYPES: [string, string][] = [
 const GROUP_LABEL: Record<string, string> = Object.fromEntries(
   TYPES.filter(([k]) => k !== 'all').map(([k, l]) => [k, l]),
 );
+
+/**
+ * Said once, quietly, only while the query is too short to send. An agent who types two letters
+ * and sees a shorter list than usual is owed the reason, and the reason is not "no results".
+ */
+const SHORT_QUERY_HINT = `הקלידו לפחות ${MIN_SEARCH_CHARS} תווים לחיפוש בכל המקורות`;
 
 interface LocalAction {
   id: string;
@@ -73,6 +82,8 @@ export function Palette() {
   const settings = useSettings();
   const prefs = usePreferences();
   const savePrefs = useSavePreferences();
+  const ui = useUiPrefs();
+  const qc = useQueryClient();
   const can = useCan();
   const track = useTelemetry();
 
@@ -83,6 +94,15 @@ export function Palette() {
   const trap = useFocusTrap<HTMLDivElement>(true);
   const debounced = useDebounced(q, 120);
   const search = useSearch(debounced, type);
+
+  /**
+   * Below `MIN_SEARCH_CHARS` no request was made for what is typed now — but `keepPreviousData`
+   * outlives the query key, so the *previous*, longer query's hits and its footer count would stay
+   * on screen and read as an answer to the current two letters. They are not one, so they go.
+   */
+  const data = isSearchable(debounced) ? search.data : undefined;
+  /** What the operator has typed, not what the debounce has caught up to — the hint must not lag. */
+  const short = q.trim().length > 0 && !isSearchable(q);
 
   useEffect(() => {
     if (!open) return;
@@ -201,11 +221,35 @@ export function Palette() {
 
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
-    const groups = search.data?.groups ?? [];
+    const groups = data?.groups ?? [];
     for (const g of groups) {
-      if (!g.hits.length) continue;
+      // Legacy narrowed the pool to documents whenever the palette was asked *which document*
+      // ("איזה מסמך לפתוח בלשונית חדשה?" / "…להציג לצד הנוכחי?"). A CRM field or a block is not an
+      // answer to that question, and picking one navigated to `/doc/<field name>`. A step hit
+      // still qualifies — it carries the document it belongs to.
+      const hits = mode === 'search' ? g.hits : g.hits.filter((h) => h.documentId ?? h.type === 'document');
+      if (!hits.length) continue;
       out.push({ kind: 'group', label: GROUP_LABEL[g.type] ?? g.type });
-      for (const hit of g.hits) out.push({ kind: 'hit', hit });
+      for (const hit of hits) out.push({ kind: 'hit', hit });
+    }
+    /*
+     * Too short to send: answer out of the cache instead of going blank. Every row here is a
+     * document — the one thing `newtab`/`split` mode asks for — so the mode filter above has
+     * nothing left to do, and the type filter is honoured by not offering documents under a
+     * `fields`/`blocks`/`scripts` tab that the local cache cannot speak for.
+     */
+    if (!isSearchable(debounced) && (type === 'all' || type === 'documents')) {
+      const byId = new Map<string, DocumentCard>();
+      for (const [, page] of qc.getQueriesData<ListDocumentsResponse>({ queryKey: ['documents'] }))
+        for (const c of page?.items ?? []) if (!byId.has(c.id)) byId.set(c.id, c);
+      for (const g of localGroups({
+        cards: [...byId.values()],
+        lastSeen: ui.prefs.lastSeen,
+        needle: debounced,
+      })) {
+        out.push({ kind: 'group', label: g.label });
+        for (const hit of g.hits) out.push({ kind: 'hit', hit });
+      }
     }
     if (mode === 'search' && (type === 'all' || type === 'actions')) {
       const needle = debounced.trim().toLowerCase();
@@ -218,10 +262,18 @@ export function Palette() {
       }
     }
     return out;
-  }, [search.data, actions, debounced, mode, type]);
+  }, [data, actions, debounced, mode, type, qc, ui.prefs.lastSeen]);
 
   const selectable = rows.filter((r) => r.kind !== 'group');
   const current = selectable[Math.min(sel, Math.max(0, selectable.length - 1))];
+
+  // Legacy's `draw()` ended by scrolling the selected row into view. The result box shows about
+  // six rows and holds up to forty, so without this, arrowing down moves a selection nobody can
+  // see and ↵ opens something the operator never read.
+  useEffect(() => {
+    if (!open) return;
+    document.querySelector('.palette .ri.on')?.scrollIntoView({ block: 'nearest' });
+  }, [open, sel, rows]);
 
   if (!open) return null;
 
@@ -247,7 +299,10 @@ export function Palette() {
     }
     const h = row.hit;
     if (mode === 'split') {
-      if (h.documentId) nav.toggleSplit(h.documentId);
+      // Same resolution as `newtab`: a document hit names itself in `id`, a step hit names its
+      // document in `documentId`. The rows list is already narrowed to those two.
+      const id = h.documentId ?? h.id;
+      if (id) nav.toggleSplit(id);
       return;
     }
     if (mode === 'newtab') {
@@ -270,7 +325,7 @@ export function Palette() {
   };
 
   let selIdx = -1;
-  const stat = `${nResults(search.data?.total ?? selectable.length)} ב-${search.data?.files ?? 0} קבצים · ${Math.max(1, Math.round(search.data?.tookMs ?? 1))}ms`;
+  const stat = `${nResults(data?.total ?? selectable.length)} ב-${data?.files ?? 0} קבצים · ${Math.max(1, Math.round(data?.tookMs ?? 1))}ms`;
 
   return (
     <div
@@ -336,6 +391,11 @@ export function Palette() {
             Esc
           </kbd>
         </div>
+        {short ? (
+          <div className="hint" role="status">
+            {SHORT_QUERY_HINT}
+          </div>
+        ) : null}
         <div className="res">
           {!rows.length ? (
             <div className="empty">אין תוצאות</div>

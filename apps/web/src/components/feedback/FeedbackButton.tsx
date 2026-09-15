@@ -1,9 +1,18 @@
 import { Fragment, useState } from 'react';
-import { FEEDBACK_KINDS, FEEDBACK_KIND_LABELS, type FeedbackKind } from '@wecom/shared';
+import {
+  DOC_TYPES,
+  FEEDBACK_KINDS,
+  FEEDBACK_KIND_LABELS,
+  type DocType,
+  type FeedbackKind,
+} from '@wecom/shared';
 import { useCreateFeedback } from '../../api/hooks/feedback.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
-import { docTypeLabel, worldLabel } from '../taxonomy/TypeBadge.js';
+import { TypeBadge, docTypeLabel, worldLabel } from '../taxonomy/TypeBadge.js';
+
+const isDocType = (v: string | undefined): v is DocType =>
+  !!v && (DOC_TYPES as readonly string[]).includes(v);
 
 export interface FeedbackButtonProps {
   documentId: string;
@@ -24,8 +33,6 @@ function FeedbackForm({
   documentId,
   documentVersion,
   stepKey,
-  documentTitle,
-  docType,
   worldSlug,
   onDone,
 }: FeedbackButtonProps & { onDone: () => void }) {
@@ -66,15 +73,22 @@ function FeedbackForm({
           onChange={(e) => setText(e.target.value)}
         />
       </label>
-      {/* PRD §12: the agent never retypes what the system already knows. */}
+      {/*
+        PRD §12: the agent never retypes what the system already knows.
+
+        §5.4's five auto-context fields are all still on screen, but the item and its type are now
+        the dialog's header (see `subtitle` below) rather than two more entries in this line —
+        naming the thing you are reporting on is a heading's job, and printing the title twice in a
+        520 px dialog read as a bug. What is left here is the context you cannot see by looking at
+        the header: which world, which version, which step, and that the user and date go too.
+
+        A-4 (review §3): `docTypeLabel` is still used for the fallback in the header — the modal
+        used to read `סוג T` where every other surface in the app reads `T · תסריט`, and the bare
+        letter is a storage code, not a label anyone outside the team can read.
+      */}
       <div className="small muted feedback-context">
         נשמר אוטומטית:{' '}
         {[
-          documentTitle,
-          // A-4 (review §3): the modal used to read `סוג T` where every other surface in the app
-          // reads `T · תסריט`. Same component family, two spellings — and the bare letter is a
-          // storage code, not a label anyone outside the team can read.
-          docType ? `סוג ${docTypeLabel(docType)}` : null,
           worldSlug ? `עולם ${worldLabel(worldSlug)}` : null,
           `גרסה v${documentVersion}`,
           stepKey ? `שלב ${stepKey}` : null,
@@ -106,16 +120,46 @@ function FeedbackForm({
   );
 }
 
-/** Fixed entry point on every knowledge item (article header) and on every step (PRD §12). */
-export function FeedbackButton(props: FeedbackButtonProps) {
+/**
+ * Opening the dialog, without the button that usually opens it.
+ *
+ * A-6 folds the article topbar into an overflow menu on a phone, and a menu item cannot render a
+ * `FeedbackButton` — it needs to *call* it. Extracted rather than duplicated so the two entry
+ * points cannot drift in what context they attach.
+ */
+export function useFeedbackDialog(props: FeedbackButtonProps) {
   const modal = useModal();
-  const open = () => {
+  return () => {
     const dispose = modal.open({
       title: FEEDBACK_TITLE,
+      /**
+       * A-4, second half. The dialog is reachable from the article header *and* from every step
+       * row, and until now it named neither — an agent who opened it from a step, on a screen
+       * where the modal covers the article, had nothing on it identifying what they were about to
+       * report on. The chip is the same `TypeBadge` the library, the topic page and the article
+       * header use, so the letter is never on its own here either.
+       */
+      subtitle: props.documentTitle ? (
+        <>
+          {isDocType(props.docType) ? (
+            <TypeBadge docType={props.docType} compact />
+          ) : props.docType ? (
+            // Same degradation as `docTypeLabel`: an unrecognised code shows as itself rather
+            // than as a badge claiming a label it does not have.
+            <span className="small muted">{docTypeLabel(props.docType)}</span>
+          ) : null}
+          <span className="modal-subtitle-text">{props.documentTitle}</span>
+        </>
+      ) : null,
       body: <FeedbackForm {...props} onDone={() => dispose()} />,
       sticky: true,
     });
   };
+}
+
+/** Fixed entry point on every knowledge item (article header) and on every step (PRD §12). */
+export function FeedbackButton(props: FeedbackButtonProps) {
+  const open = useFeedbackDialog(props);
   return (
     <button
       type="button"

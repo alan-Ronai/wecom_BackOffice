@@ -1,0 +1,67 @@
+name: deploy-e2e
+
+# The Compose end-to-end gate (`pnpm e2e:compose`): Playwright against the stack deploy/ describes
+# — nginx terminating TLS in front of the API, Postgres, a real Ollama with a small model pulled,
+# a Palo Alto User-ID stub and a WordPress stub.
+#
+# Not on pull_request, and deliberately so. `deploy-smoke` already builds the same images and
+# proves the stack comes up on every PR in ~12–16 min; this job adds a browser, a model pull that
+# is actually used for inference, and five spec files on top of that, and asking for it on every
+# push would double the queue for a gate whose failures are almost always deployment-shaped rather
+# than diff-shaped. It runs on `main`, nightly, and on demand — and a lane touching deploy/, the
+# identity path or the e2e harness should trigger it by hand before merging.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/**'
+      - 'scripts/**'
+      - 'apps/web/e2e/compose/**'
+      - 'apps/web/playwright.compose.config.ts'
+      - 'apps/api/src/modules/auth/**'
+      - 'apps/api/src/plugins/auth.ts'
+      - '.github/workflows/deploy-e2e.yml'
+  schedule:
+    # 02:20 UTC, after the nightly backup drill and well clear of working hours in Asia/Jerusalem.
+    - cron: '20 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  deploy-e2e:
+    runs-on: ubuntu-latest
+    # Expected runtime ~25–35 min on a standard runner: ~7–10 min to build the api and web images,
+    # ~1 min to pull the small CI model, ~1 min for the stack and the seed, and ~10–15 min of
+    # specs (the WordPress round trip runs the source pipeline through a real CPU-only model call,
+    # which is the slowest single step in the suite). The cap is generous on purpose — it should
+    # fire only when something is genuinely stuck.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+
+      # The specs and the config are all that run on the host — the API and the SPA are built into
+      # images by compose — so this installs the workspace but never builds it.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @wecom/web exec playwright install --with-deps chromium
+
+      # Everything else (the self-signed certificate, deploy/.env, `docker compose build`, the
+      # model pull, the seed, the break-glass admin and the LAN user) is scripts/e2e-compose.mjs's
+      # job, so that a run on a maintainer's laptop and a run here are the same run.
+      - run: pnpm e2e:compose
+
+      - name: compose logs on failure
+        if: failure()
+        run: |
+          docker compose -p wecom-kb-e2e \
+            -f deploy/docker-compose.yml \
+            -f deploy/docker-compose.ci.yml \
+            -f deploy/docker-compose.e2e.yml logs --tail 200 || true
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-compose-results
+          path: apps/web/test-results
+          retention-days: 7

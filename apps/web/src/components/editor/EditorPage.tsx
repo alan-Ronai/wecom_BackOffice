@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Block, Category, Document, Step } from '@wecom/shared';
 import {
@@ -48,6 +48,7 @@ import { useToast } from '../ui/Toast.js';
 import { BlockLibrary } from './BlockLibrary.js';
 import { StepEditor } from './StepEditor.js';
 import { DropZone } from './DropZone.js';
+import { useEditorPickers } from './Pickers.js';
 import { SidePane } from './SidePane.js';
 import { useRequestReviewDialog } from '../review/RequestReview.js';
 import { HistoryStrip } from './HistoryStrip.js';
@@ -59,10 +60,21 @@ import { ApiError as ApiErrorClass } from '../../api/unwrap.js';
 import { MetadataPanel, type MetadataValue } from './MetadataPanel.js';
 import { OwnerFields } from '../governance/OwnerFields.js';
 import { ImportExportButtons } from '../source/ImportExportButtons.js';
-import { RichText } from '../source/RichText.js';
 import { PublishFeedbackPicker } from '../feedback/PublishFeedbackPicker.js';
 import { useChangePreview } from '../../api/hooks/learning.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
+
+/**
+ * Lazy because `RichText` is the tiptap/ProseMirror stack — ~1.1 MB of source, the single largest
+ * thing the app can import. `/edit/:id` stays an eager route (an agent who spots a wrong step mid
+ * call should not wait on a chunk to reach the editor shell), but the rich-text *widget* inside it
+ * is one round trip, taken while the metadata panel and step list are already on screen.
+ *
+ * It also keeps tiptap out of the entry chunk entirely: the only other importer is `SourceEditor`,
+ * itself behind the lazy `/edit/:id/source` route, so Rollup emits tiptap as a chunk shared by the
+ * two editing surfaces instead of hoisting it into the first paint of `/library`.
+ */
+const RichText = lazy(() => import('../source/RichText.js').then((m) => ({ default: m.RichText })));
 
 const emptyDoc = (cat: Category): Document => ({
   id: 'new',
@@ -130,7 +142,9 @@ function BodyEditor({
           onChange={(e) => onChange(e.target.value)}
         />
       ) : (
-        <RichText value={value} onChange={onChange} compact />
+        <Suspense fallback={<div className="route-loading">טוען עורך…</div>}>
+          <RichText value={value} onChange={onChange} compact />
+        </Suspense>
       )}
       {sourceLink}
     </div>
@@ -345,6 +359,31 @@ export function EditorPage() {
     },
     [doc, update],
   );
+
+  /** The corpus as `<Fmt>` wants it — names a `[[doc:id]]` target in the step editor (G10). */
+  const docRefs = useMemo(
+    () => (cards.data?.items ?? []).map((c) => ({ id: c.id, title: c.title })),
+    [cards.data],
+  );
+
+  /**
+   * G10 — `+ שדה CRM` and `+ קישור`, from the block library and from the `/` menu. Both end in
+   * the same place: one action appended to the selected step, which is what legacy's
+   * `addBasic('crm' | 'link')` did.
+   */
+  const pickers = useEditorPickers({
+    excludeId: isNew ? undefined : id,
+    onInsert: (text) => {
+      if (!doc) return;
+      const next = addAction(doc, selected, text);
+      // `addAction` is a no-op on a shared block — say so rather than swallowing the click.
+      if (next === doc) {
+        toast('זהו בלוק משותף — נתק העתק כדי לערוך', 'warn');
+        return;
+      }
+      update(next, 'פעולה');
+    },
+  });
 
   const usage = useMemo(() => {
     const map: Record<string, number> = {};
@@ -610,6 +649,7 @@ export function EditorPage() {
         blocks={blocks.data ?? []}
         usage={usage}
         onBasic={applyBasic}
+        onPick={(kind) => (kind === 'crm' ? pickers.pickCrmField() : pickers.pickDocLink())}
         onShared={applyShared}
         onPreset={(t) => update(addAction(doc, selected, t))}
         onNewBlock={() => go('/blocks')}
@@ -841,6 +881,7 @@ export function EditorPage() {
                         selected={selected === s.key || multi.has(s.key)}
                         fields={fields.data ?? []}
                         blocks={blocks.data ?? []}
+                        docs={docRefs}
                         onSelect={(shift) => selectStep(s.key, shift)}
                         onPatch={(m) => patchStep(s.key, m)}
                         onMove={(dir) => update(moveStep(doc, s.key, dir), `הזזת שלב ${s.num}`)}
@@ -866,7 +907,10 @@ export function EditorPage() {
               <DropZone
                 onCommand={(cmd) => {
                   if (cmd.kind === 'basic') applyBasic(cmd.value as BasicType);
-                  else if (cmd.kind === 'shared') {
+                  else if (cmd.kind === 'pick') {
+                    if (cmd.value === 'crm') pickers.pickCrmField();
+                    else pickers.pickDocLink();
+                  } else if (cmd.kind === 'shared') {
                     const b = blocks.data?.find((x) => x.id === cmd.value);
                     if (b) applyShared(b);
                   } else if (cmd.kind === 'phase') {

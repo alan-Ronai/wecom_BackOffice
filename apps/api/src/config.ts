@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import ipaddr from 'ipaddr.js';
+
+/** A parsed CIDR, as `ipaddr.parseCIDR` returns it. */
+type Subnet = [ipaddr.IPv4 | ipaddr.IPv6, number];
 
 /** Dev-only defaults that must never reach production (see `productionGuard`). */
 export const DEV_SESSION_SECRET = 'dev-secret-change-me-please';
@@ -73,6 +77,23 @@ export const BaseConfigSchema = z.object({
    * limits and the audit/session IP columns.
    */
   TRUST_PROXY: z.string().optional(),
+  /**
+   * How many proxy hops to unwind, at most. `TRUST_PROXY` alone answers "may this peer be
+   * believed?"; it does not answer "how far out?" — with a list of CIDRs the API walks
+   * `X-Forwarded-For` right-to-left past every trusted address and takes the left-most one that
+   * is left, which is the address the *client* chose if the proxy appended rather than replaced.
+   * `TRUST_PROXY_HOPS=1` says "believe exactly the address the immediate proxy wrote", so a
+   * client's own `X-Forwarded-For` cannot reach `req.ip` even if nginx is misconfigured to append
+   * it. Set it to the number of proxies actually in front of the API (1 for the shipped nginx);
+   * leave it unset to unwind the whole trusted chain, as before.
+   */
+  // `z.preprocess` because an env file that carries the key with nothing after the `=` hands
+  // zod an empty string, which `z.coerce.number()` would turn into 0 — i.e. "trust nothing" —
+  // rather than "unset".
+  TRUST_PROXY_HOPS: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.coerce.number().int().min(1).optional(),
+  ),
   TRASH_DAYS: z.coerce.number().int().min(1).default(30), // L2: soft-delete retention window
   // L6: AES-256-GCM key for connector configs at rest. Production must set a real
   // key (`openssl rand -hex 32`); dev/test fall back to an all-zero key.
@@ -134,8 +155,11 @@ export const ConfigSchema = BaseConfigSchema.superRefine((c, ctx) => {
 
 export type Config = z.infer<typeof ConfigSchema>;
 
-/** Resolves `TRUST_PROXY` into the value Fastify's `trustProxy` option accepts. */
-export const trustProxySetting = (config: Config): boolean | string[] => {
+/** What Fastify's `trustProxy` option accepts, of the forms this config produces. */
+export type TrustProxySetting = boolean | string[] | ((address: string, hop: number) => boolean);
+
+/** `TRUST_PROXY` on its own: who may be believed, with no bound on how far out. */
+const trustedPeers = (config: Config): boolean | string[] => {
   const raw = config.TRUST_PROXY?.trim();
   if (!raw) return config.NODE_ENV === 'production';
   if (raw === 'true') return true;
@@ -144,6 +168,41 @@ export const trustProxySetting = (config: Config): boolean | string[] => {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean); // trusted proxy addresses / CIDRs
+};
+
+/**
+ * Resolves `TRUST_PROXY` (+ `TRUST_PROXY_HOPS`) into the value Fastify's `trustProxy` option
+ * accepts.
+ *
+ * Fastify hands this to `@fastify/proxy-addr`, which builds `[socket address, …X-Forwarded-For
+ * reversed]` and walks it outward while the trust function says yes; `req.ip` is where it stops.
+ * A CIDR list alone therefore answers only "is this peer a proxy?", and keeps walking — so a
+ * proxy that *appends* (`$proxy_add_x_forwarded_for`) lets the client pick `req.ip` by sending a
+ * header of its own. `TRUST_PROXY_HOPS` bounds the walk: with `hop` counted from 0 at the socket
+ * peer, `hops=1` stops at the address the immediate proxy wrote, whatever else is in the header.
+ *
+ * Both halves matter and neither replaces the other: the CIDR list is what stops a client that
+ * reaches the API *directly*, bypassing nginx, from being believed at all; the hop cap is what
+ * stops a misconfigured nginx from passing the client's own header through.
+ */
+export const trustProxySetting = (config: Config): TrustProxySetting => {
+  const peers = trustedPeers(config);
+  const hops = config.TRUST_PROXY_HOPS;
+  if (hops === undefined || peers === false) return peers;
+  // "trust exactly N hops, whoever they are" — what Fastify's own numeric form compiles to, spelt
+  // as a function because `trustProxy`'s TypeScript signature does not admit a number.
+  if (peers === true) return (_address, hop) => hop < hops;
+  const subnets = peers.map((s) => (s.includes('/') ? ipaddr.parseCIDR(s) : null) as Subnet | null);
+  const exact = peers.filter((s) => !s.includes('/'));
+  return (address, hop) => {
+    if (hop >= hops) return false;
+    if (exact.includes(address)) return true;
+    if (!ipaddr.isValid(address)) return false;
+    let addr = ipaddr.parse(address);
+    if (addr.kind() === 'ipv6' && (addr as ipaddr.IPv6).isIPv4MappedAddress())
+      addr = (addr as ipaddr.IPv6).toIPv4Address();
+    return subnets.some((net) => net !== null && net[0].kind() === addr.kind() && addr.match(net as never));
+  };
 };
 
 export const loadConfig = (over: Partial<Config> = {}): Config =>

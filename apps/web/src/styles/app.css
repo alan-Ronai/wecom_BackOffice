@@ -448,6 +448,7 @@ html[data-theme="dark"] .peek { background: var(--surface-3); border: 1px solid 
 .palette .types span { font-size: 11px; padding: 3px 9px; border-radius: 20px; background: var(--surface-2); color: var(--muted); cursor: pointer; white-space: nowrap; }
 .palette .types span.on { background: var(--navy); color: #fff; }
 html[data-theme="dark"] .palette .types span.on { background: var(--red); }
+.palette .hint { padding: 7px 20px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: 11.5px; color: var(--muted); }
 .palette .res { padding: 8px; max-height: 60vh; overflow-y: auto; scrollbar-width: thin; }
 .palette .gh { padding: 8px 12px 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
 .palette .ri { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r); cursor: pointer; }
@@ -474,6 +475,34 @@ html[data-theme="dark"] .palette .ri .ic.round { background: var(--surface-3); c
 .modal.wide { width: min(860px, 100%); }
 .modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
 .modal h2 .x { margin-inline-start: auto; font-size: 16px; color: var(--muted); cursor: pointer; padding: 2px 8px; }
+/* Names the item a dialog acts on, under the title. The border is what keeps it from reading as
+   the first line of the body. */
+/* A-6. The `⋯` overflow the article topbar collapses into at ≤480px.
+   Anchored with `inset-inline-end`, so the browser resolves the side from `dir` and the menu hangs
+   from the correct edge in RTL and LTR alike — no JS arithmetic to get backwards. */
+.overflow-menu { position: relative; display: inline-flex; }
+.overflow-menu-trigger { line-height: 1; padding-inline: 10px; }
+.overflow-menu-list { position: absolute; top: calc(100% + 4px); inset-inline-end: 0; z-index: 60; min-width: 200px; max-height: min(70vh, 420px); overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow-lg); padding: 4px; }
+.overflow-menu-item { padding: 9px 12px; border-radius: 6px; font-size: 13px; color: var(--text); cursor: pointer; white-space: nowrap; }
+.overflow-menu-item:hover, .overflow-menu-item:focus-visible { background: var(--surface-3); outline: none; }
+/* The focus ring is what the keyboard user navigates by, so it is not only a hover echo. */
+.overflow-menu-item:focus-visible { box-shadow: inset 0 0 0 2px var(--red); }
+.overflow-menu-item.on { font-weight: 600; }
+.overflow-menu-item.on::before { content: '✓ '; color: var(--red); }
+.overflow-menu-item[aria-disabled='true'] { opacity: .45; cursor: default; }
+.overflow-menu-item[aria-disabled='true']:hover { background: transparent; }
+
+/* The crumb is the other half of A-6: at this width the trail is one line of a wrapped topbar, so
+   it truncates instead of pushing the actions onto a second row. */
+@media (max-width: 480px) {
+  .topbar.h56 { padding: 0 14px; gap: 8px; flex-wrap: nowrap; }
+  .topbar.h56 .crumb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar.h56 .crumb a, .topbar.h56 .crumb .sep { display: none; }
+  .topbar.h56 .actions { gap: 6px; flex-wrap: nowrap; }
+}
+
+.modal-subtitle { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -2px 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border-soft); }
+.modal-subtitle-text { font-size: 13px; font-weight: 600; color: var(--text-2); min-width: 0; overflow-wrap: anywhere; }
 .modal p { font-size: 13.5px; color: var(--text-2); line-height: 1.6; }
 .modal .foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 .modal pre { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r); padding: 12px; font-family: var(--mono); font-size: 12px; direction: ltr; text-align: left; overflow: auto; max-height: 55vh; margin: 12px 0 0; }
@@ -926,6 +955,11 @@ button.bar-row:focus-visible { outline: 2px solid var(--red); outline-offset: 2p
 .form { display: flex; flex-direction: column; gap: 10px; }
 .form label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--muted); }
 .form label input, .form label select, .form label textarea { font-size: 13px; color: var(--text); }
+/* ── editor quick-command pickers (G10) ────────────────────────────────── */
+.picker { min-width: 340px; }
+.picker select { padding: 4px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); }
+.picker select option { padding: 4px 6px; border-radius: 4px; }
+.picker-detail { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 22px; font-size: 11.5px; }
 .auto-id { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); }
 .auto-id .who b { font-size: 13.5px; }
 .auto-id .avatar { width: 34px; height: 34px; font-size: 14px; }

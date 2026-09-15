@@ -12,6 +12,8 @@
     "migrate:down": "node-pg-migrate -m migrations -j js --ignore-pattern package.json down",
     "openapi": "tsx src/openapi.ts",
     "perf:check": "tsx scripts/perf-check.ts",
+    "perf:load": "tsx scripts/perf-load.ts",
+    "perf:sql": "tsx scripts/perf-sql.ts",
     "seed": "tsx src/seed.ts",
     "start": "node dist/server.js",
     "test": "vitest run",

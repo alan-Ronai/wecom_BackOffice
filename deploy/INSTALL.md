@@ -5,7 +5,7 @@ Target: one VMware VM, Ubuntu 22.04/24.04, 4 vCPU, 16 GB RAM, 80 GB disk, Docker
 ## Clean install
 1. Install Docker: `curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER` (log out and in).
 2. Clone: `git clone <repo-url> /opt/wecom-kb && cd /opt/wecom-kb`.
-3. Configure: `cp deploy/.env.example deploy/.env`, then set `POSTGRES_PASSWORD`, `SESSION_SECRET` (`openssl rand -hex 32`), `CONNECTOR_KEY` (`openssl rand -hex 32` — required even if you add the WordPress connector later; it encrypts connector secrets at rest), `PUBLIC_URL` (the DNS name users will open), and the identity settings below. `SESSION_SECRET` and `CONNECTOR_KEY` have development defaults that the API **refuses to start with** when `NODE_ENV=production`, and `CONNECTOR_HOST_ALLOWLIST` and `TRUST_PROXY` must be set there too (both have permissive fallbacks — "any public host" and "trust any `X-Forwarded-For`" — that a production deployment should not arrive at by omission; see the WordPress connector and reverse-proxy sections). A half-filled `.env` therefore fails loudly at step 5 rather than silently running open.
+3. Configure: `cp deploy/.env.example deploy/.env`, then set `POSTGRES_PASSWORD`, `SESSION_SECRET` (`openssl rand -hex 32`), `CONNECTOR_KEY` (`openssl rand -hex 32` — required even if you add the WordPress connector later; it encrypts connector secrets at rest), `PUBLIC_URL` (the DNS name users will open), and the identity settings below. `SESSION_SECRET` and `CONNECTOR_KEY` have development defaults that the API **refuses to start with** when `NODE_ENV=production`, and `CONNECTOR_HOST_ALLOWLIST` and `TRUST_PROXY` must be set there too (both have permissive fallbacks — "any public host" and "trust any `X-Forwarded-For`" — that a production deployment should not arrive at by omission; see the WordPress connector and reverse-proxy sections, and set `TRUST_PROXY_HOPS=1` with it). A half-filled `.env` therefore fails loudly at step 5 rather than silently running open.
 4. TLS: place `cert.pem` and `key.pem` in `deploy/certs/` (see "TLS certificate").
 5. Start: `docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build`.
    First start pulls the model (~2 GB, 5–20 min on the LAN); progress: `docker compose -f deploy/docker-compose.yml logs -f ollama-pull`.
@@ -66,7 +66,17 @@ now refuses an empty-password URL with that explanation instead of a bare authen
 Restores the newest `kb-*.dump` into a throwaway `kb_restore_drill_*` database on the same server, counts `documents`, then drops the scratch database. This is what actually proves a backup is restorable rather than merely present — run it after every change to the backup/retention config, and periodically (e.g. monthly) as its own check independent of the quarterly full restore above. The `system.backup-check` worker's own result (age of the *latest* dump, not whether it restores) is visible at `GET /api/v1/admin/system` → `backup.lastBackupAt` / `backup.lastBackupOk`, and on `GET /api/v1/system/health`.
 
 ## Reverse proxy and client IPs
-`nginx` terminates TLS and forwards `X-Real-IP` / `X-Forwarded-For`. The API only believes those headers when `TRUST_PROXY` allows the peer. It is **required** when `NODE_ENV=production` — unset, it used to fall back to `true`, i.e. trust an `X-Forwarded-For` from any peer, including a client that reaches the API without going through nginx. `deploy/.env.example` ships `172.16.0.0/12`, the docker bridge range; `true` trusts any peer, `false` trusts none. `req.ip` is what the Palo Alto subnet allowlist, the per-IP auth rate limits and the `audit_log.ip` / `sessions.ip` columns record — with the wrong value the allowlist evaluates nginx's own address and every login shares one rate-limit bucket. Check it after install: `curl -sk https://<host>/api/v1/auth/me` from a workstation and confirm the workstation's address (not `172.x`) appears in `/admin/sessions`.
+`nginx` terminates TLS and **replaces** `X-Real-IP` / `X-Forwarded-For` with `$remote_addr`, the address the connection actually came from — it does not append to whatever the client sent. That matters because `req.ip` is what the Palo Alto subnet allowlist is checked against: while nginx appended, any client that could reach it could send an `X-Forwarded-For` of its own and be signed in as whoever the firewall maps to that address. `deploy/nginx-check.sh` fails if that line is ever reverted; do not edit it without reading "Trusting X-Forwarded-For" in `docs/operations.md`.
+
+Two `.env` settings decide how the API reads the result. Set both:
+
+- `TRUST_PROXY` — which peers may be believed at all. `deploy/.env.example` ships `172.16.0.0/12`, the docker bridge range; this is what refuses a forged header from a client that reaches the API without going through nginx, so never set it to `true` (`false` trusts none). Unset, it used to fall back to `true`, which is why the API now refuses to start without it.
+- `TRUST_PROXY_HOPS` — how far to unwind the header. Optional, and `1` for the shipped stack: "believe exactly the address nginx wrote, and nothing beyond it". Raise it only if you put another proxy in front of nginx, by the number of proxies you added; leaving it unset unwinds the whole trusted chain.
+
+`req.ip` is also what the per-IP auth rate limits and the `audit_log.ip` / `sessions.ip` columns record — with the wrong value the allowlist evaluates nginx's own address and every login shares one rate-limit bucket. Two checks after install:
+
+1. `deploy/smoke.sh https://<host>` — among other things it proves a forged `X-Forwarded-For` does not reach `req.ip` (it sends seven rate-limited login attempts with different forged addresses and insists they share one bucket; the credentials are invalid, and that host cannot attempt a local login for the following minute).
+2. `curl -sk https://<host>/api/v1/auth/me` from a workstation, then confirm the workstation's address (not `172.x`) appears in `/admin/sessions`.
 
 ## TLS certificate
 Request a server certificate for `PUBLIC_URL`'s host from the internal CA (`deploy/certs/README.md`). Users' machines already trust the internal CA through GlobalProtect / domain policy, so no browser warning appears. Renewal: replace the two files and `docker compose -f deploy/docker-compose.yml restart web`.
@@ -75,7 +85,7 @@ Request a server certificate for `PUBLIC_URL`'s host from the internal CA (`depl
 Ask IT for an app registration: Web platform, redirect URI = `OIDC_REDIRECT_URI`, ID tokens enabled, optional claim `groups` (security groups), API permission `GroupMember.Read.All` (application, admin-consented) for the nightly sync. Put `OIDC_ISSUER` (`https://login.microsoftonline.com/<tenant-id>/v2.0`), `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` in `deploy/.env`, restart `api`, and map groups to roles in the admin UI (`/admin/groups-map`).
 
 ## Palo Alto User-ID fallback
-Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST` (firewall management address), `PALOALTO_API_KEY` (from `https://<fw>/api/?type=keygen&user=…&password=…` with a read-only admin), and `PALOALTO_SUBNETS` (comma-separated CIDRs allowed to auto-login). `PALOALTO_SCHEME` (default `https`) selects the scheme used to reach the firewall's API — leave it as `https` in every real deployment; `http` exists only so the test suite can run a local stub firewall. The API asks the firewall which user owns the caller's IP and signs that user in. Roles for such users are assigned in `/admin/users`.
+Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST` (firewall management address), `PALOALTO_API_KEY` (from `https://<fw>/api/?type=keygen&user=…&password=…` with a read-only admin), and `PALOALTO_SUBNETS` (comma-separated CIDRs allowed to auto-login). `PALOALTO_SCHEME` (default `https`) selects the scheme used to reach the firewall's API — leave it as `https` in every real deployment; `http` exists only so the test suite can run a local stub firewall. The API asks the firewall which user owns the caller's IP and signs that user in. Roles for such users are assigned in `/admin/users`. A firewall-identified user arrives with **no roles at all**, so nothing is visible until one is granted — grant it before telling agents the link works, or their first visit is an empty library. The whole path (a browser with no session landing in the library as the firewall's user, an unknown address staying signed out, and an address outside `PALOALTO_SUBNETS` never reaching the firewall) is exercised by `pnpm e2e:compose`; see "Verifying a release on the real stack" below and `docs/operations.md`.
 
 ## WordPress connector
 1. Generate the config-encryption key once and put it in `deploy/.env`: `CONNECTOR_KEY=$(openssl rand -hex 32)`. Connector configs are stored AES-256-GCM encrypted with it — rotating the key makes existing connectors unreadable, so keep it with the database backups.
@@ -89,6 +99,30 @@ Until the app registration exists, set `AUTH_FALLBACK=paloalto`, `PALOALTO_HOST`
 
 ## Performance
 §11 of the design spec requires library reads under 300 ms and search under 500 ms (p95) at 5,000 documents. `apps/api/scripts/load-fixture.ts` (`pnpm --filter @wecom/api load:fixture --docs 5000`) generates a realistic fixture library directly with SQL (varied categories/waves, 5–15 steps, CRM references, shared blocks, cross-document links); `apps/api/scripts/perf-check.ts` (`pnpm --filter @wecom/api perf:check`) loads that fixture into a throwaway Postgres and measures `GET /documents`, `GET /documents/:id` and `GET /search` (Hebrew and Latin terms) against it, failing if any p95 exceeds its threshold. Both run in CI (the `build` job) on every push.
+
+## Verifying a release on the real stack
+`deploy/smoke.sh` answers "is it up?". `pnpm e2e:compose` answers "does it work?" — it builds the
+images, brings this same compose stack up under its own project name (`wecom-kb-e2e`, so it can
+never touch the pilot's volumes), and drives a browser through nginx over TLS: the security
+headers on the document and on a hashed asset, the Palo Alto fallback signing a LAN client in with
+the role it was granted, an editorial round trip (create → publish → search → article), and the
+two-way WordPress loop. Two stubs stand in for the firewall and for WordPress
+(`scripts/paloalto-stub.mjs`, `scripts/wp-stub.mjs`); everything else is the product.
+
+Run it on a build machine, not on the pilot VM — it wants Docker with compose v2, `openssl`,
+`curl`, `lsof`, a Playwright Chromium, TCP ports 8443/8080/8186/8085/8444/8445/8446 free and about
+6 GB of disk,
+and it takes 15–25 minutes from cold (about 8 with `E2E_SKIP_BUILD=1` on unchanged images).
+`KEEP_STACK=1` leaves it running to poke at. It is also `.github/workflows/deploy-e2e.yml`, which
+runs on `main`, nightly, and on demand. Configuration lives in `deploy/e2e.env` and is copied over
+`deploy/.env` for the duration; whatever was there is moved to `deploy/.env.before-e2e` and
+restored afterwards. Full description in `docs/operations.md`.
+
+The gate plays a LAN client honestly: `nginx.conf` replaces `X-Forwarded-For`, so no header a
+browser sends can change `req.ip`, and the stack instead runs small forwarder containers pinned to
+fixed addresses on a simulated LAN (ports 8444/8445/8446 on the host, which must also be free).
+One spec asserts that a browser forging `X-Forwarded-For` stays signed out. See
+`docs/operations.md`, "Trusting X-Forwarded-For" and "How the gate plays a LAN client".
 
 ## Troubleshooting
 - `health` shows `db:false` → `docker compose logs db`; check `POSTGRES_PASSWORD` matches in `.env`.

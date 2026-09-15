@@ -13,6 +13,13 @@ import { useFocusTrap } from './useFocusTrap.js';
 
 export interface ModalOptions {
   title: string;
+  /**
+   * Rendered under the title, for naming *what* the dialog is acting on.
+   *
+   * Separate from `title` because `title` is also the `aria-label`, which has to stay a plain
+   * string — and because what belongs here is usually a chip or a badge rather than text.
+   */
+  subtitle?: ReactNode;
   body: ReactNode;
   buttons?: { label: string; cls?: string; onClick?: () => boolean | void }[];
   wide?: boolean;
@@ -67,6 +74,7 @@ function Dialog({ entry: m, topmost, onDismiss }: { entry: Entry; topmost: boole
             ✕
           </span>
         </h2>
+        {m.subtitle ? <div className="modal-subtitle">{m.subtitle}</div> : null}
         <div>{m.body}</div>
         {m.buttons?.length ? (
           <div className="foot">

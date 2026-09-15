@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import type { Category, DocType, DocumentCard } from '@wecom/shared';
+import type { Category, DocType, DocumentCard, Priority } from '@wecom/shared';
 import {
   useDeleteDocument,
   useDocuments,
@@ -12,7 +12,7 @@ import { useCan } from '../../api/hooks/me.js';
 import { useBulkDocuments, useSaveView, useViews, type SavedView } from '../../api/hooks/collab.js';
 import { useUiPrefs } from '../../api/hooks/uiPrefs.js';
 import { useHotkeys } from '../../lib/keys.js';
-import { CATS, WAVES } from '../../lib/constants.js';
+import { CATS, PRI, WAVES } from '../../lib/constants.js';
 import { download, fmtDate } from '../../lib/format.js';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { useNav } from '../shell/navStore.js';
@@ -314,7 +314,11 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
             description: c[ix('desc')] ?? '',
             category: (c[ix('cat')] in CATS ? c[ix('cat')] : 'tech') as Category,
             wave: (Number(c[ix('wave')]) || 2) as 1 | 2 | 3,
-            priority: 'm',
+            // `legacy/README.md` documents the CSV as `title,desc,cat,wave,pri` and legacy read
+            // all five. Hard-coding 'm' flattened every imported card to "בינוני" — and priority
+            // is what the library groups and facets by, so the import landed in the wrong place
+            // with nothing to say so. Unknown or empty still falls back to 'm', as legacy did.
+            priority: (c[ix('pri')] in PRI ? c[ix('pri')] : 'm') as Priority,
             kind: 'steps',
             phases: [],
           });

@@ -23,6 +23,45 @@ conf_mounts=(
 docker run --rm "${conf_mounts[@]}" nginx:1.27-alpine nginx -t
 grep -q 'proxy_buffering off' nginx.conf && grep -q 'try_files $uri /index.html' nginx.conf && echo "nginx.conf ok"
 
+# ── X-Forwarded-For must replace, never append ────────────────────────────────
+# `$proxy_add_x_forwarded_for` appends the connecting address to whatever the client sent, so with
+# TRUST_PROXY naming this hop the API unwound the list to an address the *client* chose — and
+# req.ip is what the Palo Alto User-ID allowlist is checked against. Any client that could reach
+# nginx could be identified as whoever the firewall maps. Asserted statically, on every location
+# that proxies, because a single reverted line is all it takes and nothing downstream would say so.
+#
+# Comments are stripped first: the file explains the rule in prose, and the prose names the
+# variable it forbids.
+stripped=$(sed 's/#.*//' nginx.conf)
+
+if printf '%s\n' "$stripped" | grep -q 'proxy_add_x_forwarded_for'; then
+  echo "nginx-check FAILED: nginx.conf uses \$proxy_add_x_forwarded_for, which appends the client's own X-Forwarded-For — use \$remote_addr" >&2
+  exit 1
+fi
+
+# Every `location` block containing a proxy_pass must also set X-Forwarded-For to $remote_addr.
+proxy_locations=$(printf '%s\n' "$stripped" | awk '/^[ \t]*location[ \t]/ { inloc=1 } inloc && /proxy_pass/ { n++ } inloc && /^[ \t]*\}/ { inloc=0 } END { print n+0 }')
+bad_locations=$(printf '%s\n' "$stripped" | awk '
+  /^[ \t]*location[ \t]/ {
+    loc = $0; sub(/[ \t]*\{.*/, "", loc); sub(/^[ \t]*/, "", loc)
+    inloc = 1; pass = 0; xff = 0; next
+  }
+  inloc && /proxy_pass/ { pass = 1 }
+  inloc && /proxy_set_header[ \t]+X-Forwarded-For[ \t]+\$remote_addr[ \t]*;/ { xff = 1 }
+  inloc && /^[ \t]*\}/ { if (pass && !xff) print "  " loc; inloc = 0 }
+')
+if [ -n "$bad_locations" ]; then
+  echo "nginx-check FAILED: these locations proxy without \`proxy_set_header X-Forwarded-For \$remote_addr;\`:" >&2
+  echo "$bad_locations" >&2
+  exit 1
+fi
+# A parser that matched nothing would "pass" silently; the config has /api/ and the SSE location.
+if [ "$proxy_locations" -lt 2 ]; then
+  echo "nginx-check FAILED: found $proxy_locations proxying locations, expected at least 2 (/api/ and the SSE stream) — has the config been restructured?" >&2
+  exit 1
+fi
+echo "X-Forwarded-For ok: \$remote_addr on all $proxy_locations proxying locations, no \$proxy_add_x_forwarded_for"
+
 # ── live header assertion ──────────────────────────────────────────────────────
 # A user-defined network gives the container Docker's embedded resolver at 127.0.0.11, which the
 # config needs at request time for the `api` upstream. Nothing answers as `api`, so /api/* is a

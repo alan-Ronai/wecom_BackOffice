@@ -29,9 +29,9 @@ import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { E2E_OIDC_CLIENT, E2E_OIDC_USER } from './e2e-oidc-issuer.mjs';
+import { runPlaywright } from './lib/playwright-run.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -69,57 +69,6 @@ function run(cmd, args, opts = {}) {
   const r = spawnSync(cmd, args, { cwd: ROOT, stdio, ...opts });
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} exited ${r.status ?? r.signal}`);
   return r;
-}
-
-/**
- * Runs Playwright and, when it fails, prints the failing **spec names** in a grep-friendly block.
- *
- * `list`'s output is streamed live but scrolls past hundreds of lines of API and browser log, and
- * the coordinator reading these runs wants one thing: which specs are red. The `json` reporter
- * writes a report beside it; this reads that report rather than the terminal, so a spec whose own
- * output happens to contain the word "failed" cannot confuse the summary.
- */
-function runPlaywright(args, jsonReport, opts) {
-  rmSync(jsonReport, { force: true });
-  const r = spawnSync('pnpm', args, { cwd: ROOT, stdio: 'inherit', ...opts });
-  const failures = readFailingSpecs(jsonReport);
-  rmSync(jsonReport, { force: true });
-  if (failures.length) {
-    console.error(`\n── failing specs (${failures.length}) ──────────────`);
-    for (const f of failures) console.error(`FAILED SPEC: ${f}`);
-    console.error('');
-  }
-  if (r.status !== 0) {
-    throw new Error(
-      failures.length
-        ? `playwright: ${failures.length} spec(s) failed:\n  ${failures.join('\n  ')}`
-        : `playwright exited ${r.status ?? r.signal} with no failing spec in the report (a crash, a timeout before the first test, or a config error — see the output above)`,
-    );
-  }
-  return r;
-}
-
-/** `file:line › [project] title path` for every spec the JSON report marks not-ok. */
-function readFailingSpecs(jsonReport) {
-  let report;
-  try {
-    report = JSON.parse(readFileSync(jsonReport, 'utf8'));
-  } catch {
-    return []; // playwright died before writing one; the thrown error says so
-  }
-  const out = [];
-  const walk = (suite, titles) => {
-    const next = suite.title && suite.title !== suite.file ? [...titles, suite.title] : titles;
-    for (const spec of suite.specs ?? []) {
-      if (spec.ok) continue;
-      const project = spec.tests?.[0]?.projectName;
-      const where = `${spec.file ?? suite.file ?? '?'}:${spec.line ?? '?'}`;
-      out.push(`${where} › ${project ? `[${project}] ` : ''}${[...next, spec.title].join(' › ')}`);
-    }
-    for (const child of suite.suites ?? []) walk(child, next);
-  };
-  for (const suite of report.suites ?? []) walk(suite, []);
-  return out;
 }
 
 /**
@@ -505,6 +454,7 @@ async function main() {
     ],
     jsonReport,
     {
+      cwd: ROOT,
       env: {
         ...process.env,
         PLAYWRIGHT_JSON_OUTPUT_NAME: jsonReport,
