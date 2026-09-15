@@ -61,3 +61,56 @@ services:
       db: { condition: service_healthy }
       ollama: { condition: service_healthy }
       paloalto: { condition: service_started }
+
+  # nginx is additionally on the two simulated client networks below, so the forwarders can reach
+  # it *from* an address on them. `default` has to be named explicitly: declaring `networks` on a
+  # service replaces the implicit default membership, and api/db live there.
+  web:
+    networks: [default, lan, offsite]
+
+  # ── the clients ──────────────────────────────────────────────────────────────────────────────
+  # deploy/nginx.conf replaces X-Forwarded-For with `$remote_addr`, so `req.ip` is the address the
+  # connection to nginx genuinely came from and no header a browser sends can change it. That is
+  # the fix; it also means the LAN identity specs can no longer pretend, which is the point.
+  #
+  # Each of these is `scripts/lan-forwarder.mjs` on a network whose subnet is a simulated LAN,
+  # pinned to a fixed address and publishing 443 to the host. A Playwright context that opens
+  # https://localhost:8444 arrives at nginx as 10.44.0.7 — a real remote address, on the network
+  # PALOALTO_SUBNETS names, with nothing forged anywhere.
+  lan-client:
+    image: node:22-alpine
+    command: ["node", "/lan-forwarder.mjs"]
+    volumes: ["../scripts/lan-forwarder.mjs:/lan-forwarder.mjs:ro"]
+    ports: ["${LAN_CLIENT_HOST_PORT:-8444}:443"]
+    networks: { lan: { ipv4_address: 10.44.0.7 } }
+    depends_on: [web]
+    restart: "no"
+
+  # Inside the trusted subnet, but an address the firewall stub has no mapping for.
+  lan-unknown-client:
+    image: node:22-alpine
+    command: ["node", "/lan-forwarder.mjs"]
+    volumes: ["../scripts/lan-forwarder.mjs:/lan-forwarder.mjs:ro"]
+    ports: ["${LAN_UNKNOWN_CLIENT_HOST_PORT:-8445}:443"]
+    networks: { lan: { ipv4_address: 10.44.0.9 } }
+    depends_on: [web]
+    restart: "no"
+
+  # Off the corporate LAN entirely (TEST-NET-2). The firewall must never be asked about it.
+  offsite-client:
+    image: node:22-alpine
+    command: ["node", "/lan-forwarder.mjs"]
+    volumes: ["../scripts/lan-forwarder.mjs:/lan-forwarder.mjs:ro"]
+    ports: ["${OFFSITE_CLIENT_HOST_PORT:-8446}:443"]
+    networks: { offsite: { ipv4_address: 198.51.100.7 } }
+    depends_on: [web]
+    restart: "no"
+
+networks:
+  # The simulated corporate LAN. A /24 inside the /16 `PALOALTO_SUBNETS` names, which is what
+  # makes 10.44.0.7 an address the API's fallback is willing to ask the firewall about.
+  lan:
+    ipam: { config: [{ subnet: 10.44.0.0/24 }] }
+  # …and a network that is not it.
+  offsite:
+    ipam: { config: [{ subnet: 198.51.100.0/24 }] }
