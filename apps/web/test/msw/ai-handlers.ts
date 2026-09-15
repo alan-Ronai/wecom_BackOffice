@@ -222,6 +222,17 @@ const sse = (events: ChatEvent[]): Response => {
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
 
 /**
+ * `StructuredEditDiff.before/after` are strings on the wire: X3 stores an object row (a branch,
+ * an outcome, a step) as key-sorted JSON text, so a diff is comparable across rows of any shape.
+ */
+const serialize = (v: unknown): string =>
+  v === undefined || v === null
+    ? ''
+    : typeof v === 'string'
+      ? v
+      : JSON.stringify(v, Object.keys(v as object).sort());
+
+/**
  * `GET /suggestions/:id`, `PATCH /suggestions/:id/edit` and `POST /suggestions/:id/accept` are
  * registered before the stage-1 suggestion routes, so these win for the wave 6 ids. A request for
  * a suggestion this group does not own returns `undefined`, which msw treats as "try the next
@@ -301,12 +312,24 @@ export const aiHandlers: RequestHandler[] = [
     const base = (fx.suggestions as Suggestion[]).find((x) => x.id === params.id);
     return base ? HttpResponse.json(base) : notFound();
   }),
-  http.patch(`${B}/suggestions/:id/edit`, async ({ params, request }) => {
-    const body = (await request.json()) as StructuredEdit;
-    aiState.edits.push({ id: String(params.id), body });
+  /**
+   * X3 widened the existing `PUT` rather than adding a `PATCH`: the body is
+   * `{ editedPayload } | { structuredEdit }`. Only the second variant, and only for this group's
+   * ids, is answered here — everything else falls through to the stage-1 handler, and the id is
+   * checked before the body is read so the fall-through hands on an unconsumed request.
+   */
+  http.put(`${B}/suggestions/:id/edit`, async ({ params, request }) => {
     const s = aiState.suggestions.find((x) => x.id === params.id);
-    if (!s) return notFound();
-    s.editDiff = { rows: body.rows.map((r) => ({ rowId: r.rowId, op: r.op, after: String(r.value ?? '') })) };
+    if (!s) return undefined;
+    const body = (await request.json()) as { structuredEdit?: StructuredEdit; editedPayload?: unknown };
+    if (!body.structuredEdit) {
+      s.editedPayload = body.editedPayload as Suggestion['editedPayload'];
+      return HttpResponse.json(s);
+    }
+    aiState.edits.push({ id: String(params.id), body: body.structuredEdit });
+    s.editDiff = {
+      rows: body.structuredEdit.rows.map((r) => ({ rowId: r.rowId, op: r.op, after: serialize(r.value) })),
+    };
     return HttpResponse.json(s);
   }),
   http.post(`${B}/suggestions/:id/accept`, async ({ params, request }) => {

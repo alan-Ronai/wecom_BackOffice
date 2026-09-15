@@ -34,10 +34,16 @@ const useSugMutation = <V, R>(fn: (v: V) => Promise<R>) => {
   });
 };
 
+/**
+ * X3 kept the existing `PUT /suggestions/:id/edit` and widened its body to
+ * `{ editedPayload } | { structuredEdit }` rather than adding a second verb, so the row-level
+ * editor posts the second variant to the same route the whole-payload editor already uses.
+ * (`CONTRACTS-wave6.md` still writes this row as `PATCH`; X3's shipped route is the one here.)
+ */
 export const useStructuredEdit = () =>
   useSugMutation(
     async (v: { id: string; edit: StructuredEdit }): Promise<Suggestion> =>
-      w6(SuggestionSchema, 'PATCH', `/suggestions/${v.id}/edit`, { body: v.edit }), // X6: api.PATCH('/suggestions/{id}/edit')
+      w6(SuggestionSchema, 'PUT', `/suggestions/${v.id}/edit`, { body: { structuredEdit: v.edit } }), // X6: api.PUT('/suggestions/{id}/edit')
   );
 
 /** `parts` omitted (`{}`) is the full accept — the contract's own spelling (§4.2). */
