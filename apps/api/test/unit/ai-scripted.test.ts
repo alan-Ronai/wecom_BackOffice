@@ -22,18 +22,28 @@ const turn = (user: string, extra: ChatMessage[] = []): ChatMessage[] => [
 describe('ScriptedChatModel', () => {
   const m = new ScriptedChatModel();
 
-  it('is selected only by AI_TEST_SCRIPT=1 outside production', () => {
+  it('is selected only by AI_TEST_SCRIPT=1, and in production only inside the e2e stack', () => {
     const before = process.env.AI_TEST_SCRIPT;
+    const beforeRunner = process.env.WECOM_E2E_RUNNER;
     try {
       delete process.env.AI_TEST_SCRIPT;
+      delete process.env.WECOM_E2E_RUNNER;
       expect(scriptedChatRequested('test')).toBe(false);
       process.env.AI_TEST_SCRIPT = '1';
       expect(scriptedChatRequested('test')).toBe(true);
       expect(scriptedChatRequested('development')).toBe(true);
+      // A deployment sets neither `WECOM_E2E_RUNNER` nor `AI_TEST_SCRIPT`, and one of the two is
+      // not enough: production refuses the script without the e2e-stack marker.
+      expect(scriptedChatRequested('production')).toBe(false);
+      process.env.WECOM_E2E_RUNNER = '1';
+      expect(scriptedChatRequested('production')).toBe(true);
+      delete process.env.AI_TEST_SCRIPT;
       expect(scriptedChatRequested('production')).toBe(false);
     } finally {
       if (before === undefined) delete process.env.AI_TEST_SCRIPT;
       else process.env.AI_TEST_SCRIPT = before;
+      if (beforeRunner === undefined) delete process.env.WECOM_E2E_RUNNER;
+      else process.env.WECOM_E2E_RUNNER = beforeRunner;
     }
   });
 

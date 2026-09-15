@@ -85,15 +85,22 @@ export interface ChatModelConfig extends ModelSlotsConfig {
 const CHAT_TIMEOUT_MS = 180_000;
 
 /**
- * `AI_TEST_SCRIPT=1` outside production selects the deterministic `ScriptedChatModel`. The e2e
- * stack runs with `MODEL_DISABLED=true` and no Ollama on the box, so without it every chat
- * assertion there would be a 503 — and pointing e2e at a real 7B on CPU would make the suite
- * both slow and non-deterministic. Read from the environment rather than from `Config` on
- * purpose: it is a test seam, not an operational setting, and it has no place in
- * `deploy/.env.example`.
+ * `AI_TEST_SCRIPT=1` selects the deterministic `ScriptedChatModel`. The e2e stack runs with
+ * `MODEL_DISABLED=true` and no Ollama on the box, so without it every chat assertion there would
+ * be a 503 — and pointing e2e at a real 7B on CPU would make the suite both slow and
+ * non-deterministic. Read from the environment rather than from `Config` on purpose: it is a test
+ * seam, not an operational setting, and it has no place in `deploy/.env.example`.
+ *
+ * X6: `pnpm e2e:real` runs the API at `NODE_ENV=production` on purpose — the gate is meant to be
+ * production-like — so `nodeEnv !== 'production'` alone would have made the wave-6 chat flows
+ * untestable in the one place they are supposed to be proven end to end. The second signal is
+ * `WECOM_E2E_RUNNER=1`, which is what already tells `config.ts` "this process is the e2e stack's
+ * API, not a deployment" (it is set by `docker-compose.e2e.yml` and by `scripts/e2e-real.mjs`,
+ * and by nothing else). A real install sets neither variable, so it still cannot reach the
+ * script; an install that sets both has asked for a fake chat in as many words.
  */
 export const scriptedChatRequested = (nodeEnv: string): boolean =>
-  process.env.AI_TEST_SCRIPT === '1' && nodeEnv !== 'production';
+  process.env.AI_TEST_SCRIPT === '1' && (nodeEnv !== 'production' || process.env.WECOM_E2E_RUNNER === '1');
 
 export async function makeChatModel(config: ChatModelConfig, log: FastifyBaseLogger): Promise<ModelClient> {
   if (scriptedChatRequested(config.NODE_ENV)) {

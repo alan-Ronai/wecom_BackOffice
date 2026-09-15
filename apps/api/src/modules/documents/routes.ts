@@ -33,6 +33,7 @@ import { annotateBlame, diffDocuments, diffStats } from './diff.js';
 import { inboundFor } from '../graph/repo.js';
 import { clearSourceReview } from './sourceReview.js';
 import { updateEmbedding } from '../search/repo.js';
+import { refreshStepEmbeddings } from '../sources/embeddings.js';
 import { resolveFeedback } from '../feedback/repo.js'; // W3: close reports with the published version
 import { publishAndFlag } from './publishWithFlag.js'; // V2: knowledge refresh on publish (A-C2)
 
@@ -430,7 +431,16 @@ export default async function routes(app: FastifyInstance) {
       await pushOnPublish(app, req, id, user.id);
       // Best-effort, outside the transaction: a model outage must never fail a publish.
       const model = (app as unknown as { model?: ModelClient | null }).model;
-      if (model?.embed) noteEmbedResult(app, req, id, updateEmbedding(app.db, id, model), 'publish');
+      if (model?.embed) {
+        noteEmbedResult(app, req, id, updateEmbedding(app.db, id, model), 'publish');
+        /*
+         * Wave 6 (X6 seam). X1's 0051 `step_embeddings` is what paragraph→step mapping scores
+         * against, and until now only the `ai.reindex` job refreshed it — a document published
+         * today mapped on trigram until the next full pass. Same contract as the line above:
+         * outside the transaction, never awaited, never able to fail a publish.
+         */
+        void refreshStepEmbeddings(app.db, id, model).catch(() => undefined);
+      }
       return result;
     },
   );
@@ -616,7 +626,10 @@ export default async function routes(app: FastifyInstance) {
       });
       await pushOnPublish(app, req, id, user.id);
       const model = (app as unknown as { model?: ModelClient | null }).model;
-      if (model?.embed) noteEmbedResult(app, req, id, updateEmbedding(app.db, id, model), 'restore');
+      if (model?.embed) {
+        noteEmbedResult(app, req, id, updateEmbedding(app.db, id, model), 'restore');
+        void refreshStepEmbeddings(app.db, id, model).catch(() => undefined);
+      }
       return result;
     },
   );

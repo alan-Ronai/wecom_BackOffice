@@ -4,6 +4,7 @@ import { Fmt } from '../Fmt.js';
 import type { ChatViewState, SealedReply, ToolChip } from '../../lib/chatReducer.js';
 import { ToolChips } from './ToolCallChip.js';
 import { ProposedEditsCard } from './ProposedEditsCard.js';
+import { useProposedEdits } from '../../api/hooks/ai.js';
 import { RefinedSuggestionCard } from './RefinedSuggestionCard.js';
 import { FeedbackButtons } from './FeedbackButtons.js';
 
@@ -95,7 +96,13 @@ export function MessageList({
               {m.role === 'assistant' ? renderAnswer(m.content, documentId, stepIndex) : m.content}
             </div>
             {m.role === 'assistant' && m.proposedEditsId ? (
-              <span className="chip chip-gray">עריכות מוצעות במסמך המקור</span>
+              <HistoryProposedEdits
+                proposedEditsId={m.proposedEditsId}
+                canDecide={canDecide}
+                onAccept={onAcceptOps}
+                onReject={onRejectOps}
+                onAcceptAll={onAcceptAll}
+              />
             ) : null}
             {m.role === 'assistant' ? (
               <FeedbackButtons messageId={m.id} initial={m.feedback} onRate={onFeedback} />
@@ -136,3 +143,46 @@ export function MessageList({
     </div>
   );
 }
+
+/**
+ * X6 seam: the hunks behind a *history* message.
+ *
+ * A reply streamed in this session carries its ops in the `proposed_edits` frame, so the card
+ * above renders without a fetch. A transcript read back after a reload has only the id, and the
+ * chip that used to stand here was a dead end — `GET /ai/proposed-edits/:id` is what fills it in.
+ * A proposal already decided is shown as a chip again rather than as live accept/reject buttons:
+ * the decision is made, and offering it twice would invite a 409.
+ */
+function HistoryProposedEdits({
+  proposedEditsId,
+  canDecide,
+  onAccept,
+  onReject,
+  onAcceptAll,
+}: {
+  proposedEditsId: string;
+  canDecide: boolean;
+  onAccept: (id: string, ids: string[]) => void;
+  onReject: (id: string, ids: string[]) => void;
+  onAcceptAll: (id: string) => void;
+}) {
+  const pe = useProposedEdits(proposedEditsId);
+  if (!pe.data) return <span className="chip chip-gray">עריכות מוצעות במסמך המקור</span>;
+  if (pe.data.status !== 'proposed')
+    return <span className="chip chip-gray">עריכות מוצעות · {DECIDED[pe.data.status]}</span>;
+  return (
+    <ProposedEditsCard
+      ops={pe.data.ops}
+      disabled={!canDecide}
+      onAccept={(ids) => onAccept(proposedEditsId, ids)}
+      onReject={(ids) => onReject(proposedEditsId, ids)}
+      onAcceptAll={() => onAcceptAll(proposedEditsId)}
+    />
+  );
+}
+
+const DECIDED: Record<string, string> = {
+  accepted: 'אושרו',
+  rejected: 'נדחו',
+  partially_accepted: 'אושרו חלקית',
+};

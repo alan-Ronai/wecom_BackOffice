@@ -25,12 +25,19 @@ import {
  * Headers that name a second model call. They are part of the prompt a real model reads, and
  * they are also how the scripted stand-in (`scripted.ts`) tells the four calls apart without
  * anything having to pass it out-of-band state.
+ *
+ * X6: each is prefixed `משימת משנה — `, because the bare nouns collided with `AI_TOOLS`' own
+ * Hebrew labels. `buildSystemPrompt` lists the available tools by label, so *every* first call
+ * from an `ai.chat` caller carried the string `חידוד הצעה` and the scripted model read it as the
+ * refine second call — answering `{}` instead of proposing an edit. A real model never noticed,
+ * which is exactly why the collision survived: the one caller that parses the header is the one
+ * the e2e gate depends on.
  */
 export const SECOND_CALL = {
-  proposeSourceEdit: 'שכתוב פסקאות מקור',
-  refineSuggestion: 'חידוד הצעה',
-  reviewDocument: 'סקירת מסמך',
-  draftStep: 'טיוטת שלב',
+  proposeSourceEdit: 'משימת משנה — שכתוב פסקאות מקור',
+  refineSuggestion: 'משימת משנה — חידוד הצעה',
+  reviewDocument: 'משימת משנה — סקירת מסמך',
+  draftStep: 'משימת משנה — טיוטת שלב',
 } as const;
 
 /** The label the prompt prints in front of the conversation's document id. */

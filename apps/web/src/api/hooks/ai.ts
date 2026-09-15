@@ -1,8 +1,10 @@
 /**
  * The AI copilot's non-streaming routes (X2), plus the one streaming hook the chat pane drives.
  *
- * Everything but the stream goes through the temporary `wave6.ts` bridge and is parsed against
- * `@wecom/shared`; each call site is marked `// X6: api.*` for the swap to the generated client.
+ * Everything but the stream goes through the generated `openapi-fetch` client and is parsed at
+ * runtime with `checked` against the `@wecom/shared` schema the route is built to — the two
+ * layers catch different things (see `api/stage45.ts`). The stream stays on `aiStream.ts`: the
+ * generated client cannot consume a streaming body.
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -11,12 +13,15 @@ import {
   ConversationSchema,
   ConversationsResponseSchema,
   DecideProposedEditsResultSchema,
+  ProposedEditsSchema,
   type Conversation,
   type ConversationKind,
   type SendMessageBody,
 } from '@wecom/shared';
+import { api } from '../client.js';
 import { keys } from '../keys.js';
-import { w6, w6Void } from '../wave6.js';
+import { checked } from '../stage45.js';
+import { unwrap } from '../unwrap.js';
 import { streamChat } from '../aiStream.js';
 import { chatReducer, initialChatView, type ChatViewState } from '../../lib/chatReducer.js';
 import { ApiError } from '../unwrap.js';
@@ -29,14 +34,21 @@ export const useConversations = (
     queryKey: keys.ai.conversations(q),
     enabled,
     queryFn: async () =>
-      w6(ConversationsResponseSchema, 'GET', '/ai/conversations', { query: { ...q, pageSize: 50 } }), // X6: api.GET('/ai/conversations')
+      checked(
+        ConversationsResponseSchema,
+        await api.GET('/ai/conversations', { params: { query: { ...q, pageSize: 50 } } }),
+      ),
   });
 
 export const useConversation = (id: string | null) =>
   useQuery({
     queryKey: keys.ai.conversation(id ?? ''),
     enabled: !!id,
-    queryFn: async () => w6(ConversationDetailSchema, 'GET', `/ai/conversations/${id!}`), // X6: api.GET('/ai/conversations/{id}')
+    queryFn: async () =>
+      checked(
+        ConversationDetailSchema,
+        await api.GET('/ai/conversations/{id}', { params: { path: { id: id! } } }),
+      ),
   });
 
 export const useCreateConversation = () => {
@@ -47,7 +59,7 @@ export const useCreateConversation = () => {
       documentId?: string;
       sourceRevisionId?: string;
       title?: string;
-    }): Promise<Conversation> => w6(ConversationSchema, 'POST', '/ai/conversations', { body }), // X6: api.POST('/ai/conversations')
+    }): Promise<Conversation> => checked(ConversationSchema, await api.POST('/ai/conversations', { body })),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['ai', 'conversations'] }),
   });
 };
@@ -120,10 +132,32 @@ export function useSendMessage(conversationId: string | null) {
 
 export const useMessageFeedback = () =>
   useMutation({
-    mutationFn: async (v: { messageId: string; rating: 'up' | 'down'; note?: string }): Promise<void> =>
-      w6Void('POST', `/ai/messages/${v.messageId}/feedback`, {
-        body: { rating: v.rating, ...(v.note ? { note: v.note } : {}) },
-      }), // X6: api.POST('/ai/messages/{id}/feedback')
+    mutationFn: async (v: { messageId: string; rating: 'up' | 'down'; note?: string }): Promise<void> => {
+      unwrap(
+        await api.POST('/ai/messages/{id}/feedback', {
+          params: { path: { id: v.messageId } },
+          body: { rating: v.rating, ...(v.note ? { note: v.note } : {}) },
+        }),
+      );
+    },
+  });
+
+/**
+ * The hunks behind a `proposedEditsId`, for a transcript read back after a reload.
+ *
+ * A reply streamed in this session carries its ops in the `proposed_edits` frame, so the pane
+ * renders the diff without asking. A message loaded from history carries only the id — X6 added
+ * `GET /ai/proposed-edits/:id` so the chip can still open into real hunks.
+ */
+export const useProposedEdits = (id: string | null | undefined) =>
+  useQuery({
+    queryKey: keys.ai.proposedEdits(id ?? ''),
+    enabled: !!id,
+    queryFn: async () =>
+      checked(
+        ProposedEditsSchema,
+        await api.GET('/ai/proposed-edits/{id}', { params: { path: { id: id! } } }),
+      ),
   });
 
 /**
@@ -134,9 +168,13 @@ export const useDecideProposedEdits = (documentId: string) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (v: { id: string; accept: string[] | 'all'; reject: string[] | 'all' }) =>
-      w6(DecideProposedEditsResultSchema, 'POST', `/ai/proposed-edits/${v.id}/decide`, {
-        body: { accept: v.accept, reject: v.reject },
-      }), // X6: api.POST('/ai/proposed-edits/{id}/decide')
+      checked(
+        DecideProposedEditsResultSchema,
+        await api.POST('/ai/proposed-edits/{id}/decide', {
+          params: { path: { id: v.id } },
+          body: { accept: v.accept, reject: v.reject },
+        }),
+      ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.source(documentId) });
       void qc.invalidateQueries({ queryKey: keys.sourceVersions(documentId) });

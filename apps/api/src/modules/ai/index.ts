@@ -14,6 +14,7 @@ import { getAiSettings } from '../../lib/aiSettings.js';
 import { ChatOrchestrator } from './chat.js';
 import { aiChatHolder, initChatModel, type ChatModelHolder } from './chatModel.js';
 import { runAdminRegistrar } from './adminHook.js';
+import { useImpactService } from './impactService.js';
 import aiRoutes from './routes.js';
 
 declare module 'fastify' {
@@ -26,6 +27,12 @@ declare module 'fastify' {
 export default async function aiModule(app: FastifyInstance) {
   await initChatModel(app.config, app.log);
   if (!app.hasDecorator('aiChat')) app.decorate('aiChat', aiChatHolder);
+  /*
+   * X6 seam: `read_impact` answers from X1's `ImpactService` — the same impact set the proposal
+   * pipeline sees, embeddings included — instead of X2's graph-only fallback. The port keeps its
+   * own visibility check; the service is also called by the queued job, which has no user.
+   */
+  useImpactService(app.db);
 
   const orchestrator = new ChatOrchestrator({
     db: app.db,

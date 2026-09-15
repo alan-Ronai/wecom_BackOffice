@@ -587,8 +587,11 @@ run('migrations', () => {
     const t = await pool.query(
       "select table_name from information_schema.tables where table_schema='public' and table_name like 'ai\\_%' order by 1",
     );
+    // X6: `ai_eval_runs` is X1's 0051 and `ai_setting_versions` X0's 0050 — both match `ai\_%`
+    // once the whole wave is on one branch, so the list is the wave's tables, not only 0052's.
     expect(t.rows.map((r) => r.table_name)).toEqual([
       'ai_conversations',
+      'ai_eval_runs',
       'ai_message_feedback',
       'ai_messages',
       'ai_proposed_edits',

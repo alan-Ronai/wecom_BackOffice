@@ -1,26 +1,18 @@
-import type { StructuredEdit, SuggestionPayload } from '@wecom/shared';
+import { rowsOf as sharedRowsOf, type StructuredEdit, type SuggestionPayload } from '@wecom/shared';
 
 /**
  * The row scheme the structured editor and X3's server-side apply share.
  *
- * Row ids are **X3's**, pinned by the programme controller, and this module is the local copy
- * X6 swaps for X3's shared `rowsOf` export once it lands. Getting them right matters because a
- * partial accept (`POST /suggestions/:id/accept { parts }`) is a list of these strings and
- * nothing else:
+ * X6: the ids, the Hebrew labels, the atomic groups and the required flags now come from X3's
+ * shared `rowsOf` in `@wecom/shared` — the same function the route applies an edit with — so the
+ * drawer and the server can no longer disagree about what a row is called or whether it may be
+ * removed. Getting that right matters because a partial accept
+ * (`POST /suggestions/:id/accept { parts }`) is a list of these strings and nothing else.
  *
- * | type | rows |
- * |---|---|
- * | `update-step` | `add-<i>` · `rep-<action.id>` (atomic group `replace`) · `branch` · `out-<i>` (atomic group `outcomes`) · `patch-<key>` |
- * | `new-card` | `meta` (required) · `step-<phase>-<step>` |
- * | `new-step` | `meta` (required) · `act-<i>` · `out-<i>` |
- * | `update-block` | `act-<action.id>` (atomic group `actions`) · `script` |
- * | `deprecate-step` | `reason` (required) |
- * | `field-alert` | `alert` (required) |
- *
- * Two rules ride on the table. Rows in an **atomic** group are keep-all or remove-all — a
- * replacement set with half its actions dropped is not a smaller edit, it is a different one.
- * And a **required** row cannot be removed: a `new-card` with no `meta`, or a `deprecate-step`
- * with no reason, is not a suggestion at all.
+ * What stays here is only the *display* projection the drawer needs and the shared row does not
+ * carry: a single-line editable `value` and a read-only `hint` (a branch's options, a step's
+ * phase, a card's description). `applyRows`/`diffRows` stay too — they are the drawer's local
+ * preview of what the server will do, and they are asserted against the shared row ids.
  */
 export interface SuggestionRow {
   rowId: string;
@@ -36,72 +28,82 @@ export interface SuggestionRow {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : JSON.stringify(v));
 
-export function rowsOf(p: SuggestionPayload): SuggestionRow[] {
-  switch (p.type) {
-    case 'update-step':
-      return [
-        ...p.addActions.map((a, i) => ({ rowId: `add-${i}`, label: 'פעולה חדשה', value: a })),
-        ...(p.replaceActions ?? []).map((a) => ({
-          rowId: `rep-${a.id}`,
-          label: 'החלפת פעולה',
-          value: a.text,
-          atomic: 'replace',
-        })),
-        ...(p.branch
-          ? [
-              {
-                rowId: 'branch',
-                label: 'הסתעפות',
-                value: p.branch.q,
-                hint: p.branch.options.map((o) => `${o.label}: ${o.text}`).join(' · '),
-              },
-            ]
-          : []),
-        ...(p.outcomes ?? []).map((o, i) => ({
-          rowId: `out-${i}`,
-          label: 'תוצאה',
-          value: o.text,
-          atomic: 'outcomes',
-        })),
-        ...Object.entries(p.patch).map(([k, v]) => ({
-          rowId: `patch-${k}`,
-          label: `שדה ${k}`,
-          value: str(v),
-        })),
-      ];
-    case 'new-card':
-      return [
-        { rowId: 'meta', label: 'כותרת הכרטיס', value: p.title, hint: p.description, required: true },
-        ...p.phases.flatMap((ph, pi) =>
-          ph.steps.map((s, si) => ({
-            rowId: `step-${pi}-${si}`,
-            label: `שלב ${s.num}`,
-            value: s.title,
-            hint: ph.label,
+/** The per-type display projection: `rowId` → the line the drawer edits and the note beside it. */
+function displayOf(p: SuggestionPayload): Map<string, { value: string; hint?: string }> {
+  const rows = ((): { rowId: string; value: string; hint?: string }[] => {
+    switch (p.type) {
+      case 'update-step':
+        return [
+          ...p.addActions.map((a, i) => ({ rowId: `add-${i}`, value: a })),
+          ...(p.replaceActions ?? []).map((a) => ({
+            rowId: `rep-${a.id}`,
+            value: a.text,
           })),
-        ),
-      ];
-    case 'new-step':
-      return [
-        { rowId: 'meta', label: 'כותרת השלב', value: p.title, required: true },
-        ...p.actions.map((a, i) => ({ rowId: `act-${i}`, label: 'פעולה', value: a })),
-        ...p.outcomes.map((o, i) => ({ rowId: `out-${i}`, label: 'תוצאה', value: o.text })),
-      ];
-    case 'update-block':
-      return [
-        ...p.actions.map((a) => ({
-          rowId: `act-${a.id}`,
-          label: 'פעולה בבלוק',
-          value: a.text,
-          atomic: 'actions',
-        })),
-        ...(p.script === undefined ? [] : [{ rowId: 'script', label: 'תסריט', value: p.script }]),
-      ];
-    case 'deprecate-step':
-      return [{ rowId: 'reason', label: 'סיבה', value: p.reason, required: true }];
-    case 'field-alert':
-      return [{ rowId: 'alert', label: 'התראת שדה', value: `${p.fieldName} · ${p.issue}`, required: true }];
-  }
+          ...(p.branch
+            ? [
+                {
+                  rowId: 'branch',
+                  value: p.branch.q,
+                  hint: p.branch.options.map((o) => `${o.label}: ${o.text}`).join(' · '),
+                },
+              ]
+            : []),
+          ...(p.outcomes ?? []).map((o, i) => ({
+            rowId: `out-${i}`,
+            value: o.text,
+          })),
+          ...Object.entries(p.patch).map(([k, v]) => ({
+            rowId: `patch-${k}`,
+            value: str(v),
+          })),
+        ];
+      case 'new-card':
+        return [
+          { rowId: 'meta', value: p.title, hint: p.description },
+          ...p.phases.flatMap((ph, pi) =>
+            ph.steps.map((s, si) => ({
+              rowId: `step-${pi}-${si}`,
+              value: s.title,
+              hint: ph.label,
+            })),
+          ),
+        ];
+      case 'new-step':
+        return [
+          { rowId: 'meta', value: p.title },
+          ...p.actions.map((a, i) => ({ rowId: `act-${i}`, value: a })),
+          ...p.outcomes.map((o, i) => ({ rowId: `out-${i}`, value: o.text })),
+        ];
+      case 'update-block':
+        return [
+          ...p.actions.map((a) => ({
+            rowId: `act-${a.id}`,
+            value: a.text,
+          })),
+          ...(p.script === undefined ? [] : [{ rowId: 'script', value: p.script }]),
+        ];
+      case 'deprecate-step':
+        return [{ rowId: 'reason', value: p.reason }];
+      case 'field-alert':
+        return [{ rowId: 'alert', value: `${p.fieldName} · ${p.issue}` }];
+    }
+  })();
+  return new Map(rows.map((r) => [r.rowId, { value: r.value, ...(r.hint ? { hint: r.hint } : {}) }]));
+}
+
+export function rowsOf(p: SuggestionPayload): SuggestionRow[] {
+  const display = displayOf(p);
+  return sharedRowsOf(p).map((r) => {
+    const d = display.get(r.rowId);
+    return {
+      rowId: r.rowId,
+      label: r.label,
+      value: d?.value ?? (typeof r.value === 'string' ? r.value : JSON.stringify(r.value)),
+      ...(d?.hint ? { hint: d.hint } : {}),
+      ...(r.atomic ? { atomic: r.group } : {}),
+      ...(r.required ? { required: true } : {}),
+    };
+  });
 }
 
 /**

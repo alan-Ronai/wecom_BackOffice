@@ -158,6 +158,26 @@ export default function sourcesRoutes(deps: PipelineDeps) {
     );
 
     /**
+     * X6 seam. Spec §4.2 and `CONTRACTS-wave6.md` both document `GET /suggestions/:id` as the
+     * read that now carries `affects`, `promptVersion`, `model`, `editDiff` and `appliedParts`,
+     * but no lane shipped it: X4a's structured-edit drawer was reading it through a mock. It is
+     * declared before `/suggestions/:id/*` for clarity only — Fastify routes by path, not by
+     * registration order, so `/suggestions/analytics` is unaffected either way.
+     */
+    app.get(
+      '/suggestions/:id',
+      {
+        schema: {
+          tags: ['suggestions'],
+          params: z.object({ id: IdSchema }),
+          response: { 200: SuggestionSchema },
+        },
+        config: { requires: ['suggestions.review'] },
+      },
+      async (req) => deps.suggestions.get(req.params.id),
+    );
+
+    /**
      * `accept` takes an optional `{ parts }` — the row ids of `rowsOf(payload)` to apply now.
      * An absent body, or one without `parts`, is the whole suggestion, exactly as before; with
      * `parts` the rows left out come back as a pending remainder suggestion (`parentId`).

@@ -25,6 +25,7 @@ import {
   DecideProposedEditsResultSchema,
   IdSchema,
   MessageFeedbackBodySchema,
+  ProposedEditsSchema,
   SendMessageBodySchema,
   makeEvent,
   type Conversation,
@@ -224,6 +225,33 @@ export default function aiRoutes(deps: AiRouteDeps) {
     );
 
     /* ── the one write path into content ───────────────────────────────── */
+
+    /**
+     * X6 seam. A proposal streams to the pane inside the `proposed_edits` frame, so a *live*
+     * reply renders its hunks without a fetch — but a transcript reloaded later has only the
+     * message's `proposedEditsId`, and X4a's pane could show a chip and nothing else. This is
+     * the read that fills it in.
+     *
+     * Visibility is the conversation's, not the document's: the person who asked for the edit,
+     * or an admin browsing transcripts. An editor who can see the document but was not in the
+     * conversation gets a 404, exactly as `GET /ai/conversations/:id` does.
+     */
+    app.get(
+      '/ai/proposed-edits/:id',
+      {
+        config: { requires: ['ai.ask'] },
+        schema: { tags: ['ai'], params: Params, response: { 200: ProposedEditsSchema } },
+      },
+      async (req) => {
+        const user = requireUser(req);
+        const pe = await repo.getProposedEdits(app.db, req.params.id);
+        if (!pe) throw notFound('העריכות המוצעות');
+        const conversation = await repo.conversationOfProposedEdits(app.db, req.params.id);
+        if (!conversation || (conversation.userId !== user.id && !hasPerm(user, 'ai.manage')))
+          throw notFound('העריכות המוצעות');
+        return pe;
+      },
+    );
 
     app.post(
       '/ai/proposed-edits/:id/decide',

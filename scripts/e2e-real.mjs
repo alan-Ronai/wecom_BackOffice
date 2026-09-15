@@ -405,6 +405,12 @@ async function main() {
       // Production refuses the dev defaults for these two, and there is no Ollama in CI.
       CONNECTOR_KEY: randomBytes(32).toString('hex'),
       MODEL_DISABLED: 'true',
+      // wave 6: the deterministic chat stand-in, so the copilot specs exercise the real
+      // orchestrator, tools and persistence without an Ollama on the box. `WECOM_E2E_RUNNER=1`
+      // is the second signal `chatModel.ts` requires under NODE_ENV=production — a deployment
+      // sets neither, and config.ts already treats this variable as "this is the e2e stack".
+      AI_TEST_SCRIPT: '1',
+      WECOM_E2E_RUNNER: '1',
       MIGRATE_ON_START: 'false',
       BACKUP_DIR: '/tmp/wecom-e2e-backups',
       // The stub is on loopback, and an empty allowlist would let a connector reach anything —
