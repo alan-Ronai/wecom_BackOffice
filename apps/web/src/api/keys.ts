@@ -103,4 +103,14 @@ export const keys = {
   parity: (connectorId: string = '*') => ['sync', 'parity', connectorId] as const,
   /** Under `sync` too: resolving a conflict has to clear the article header's badge. */
   documentSyncState: (id: string) => ['sync', 'document', id] as const,
+  /* wave 6 — AI. X4a reads `conversations`/`conversation` for the chat panes; X4b owns the rest. */
+  ai: {
+    settings: ['ai', 'settings'] as const,
+    versions: ['ai', 'settings', 'versions'] as const,
+    evalRuns: ['ai', 'eval', 'runs'] as const,
+    conversations: (q: unknown = '*') => ['ai', 'conversations', q] as const,
+    conversation: (id: string) => ['ai', 'conversation', id] as const,
+  },
+  /** Under `suggestions`, so deciding a suggestion drops the acceptance rates built from it. */
+  suggestionAnalytics: (q: unknown = '*') => ['suggestions', 'analytics', q] as const,
 };
