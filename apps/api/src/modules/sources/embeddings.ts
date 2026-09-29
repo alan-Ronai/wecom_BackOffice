@@ -63,13 +63,35 @@ export async function refreshStepEmbeddings(
       model,
       todo.map((t) => t.text),
     );
-    for (let i = 0; i < todo.length; i++)
-      await q.query(
-        `insert into step_embeddings(step_id, document_id, embedding, text_hash) values ($1,$2,$3::vector,$4)
+    let written = 0;
+    for (let i = 0; i < todo.length; i++) {
+      /**
+       * Lock order. This runs in the background after a publish, so the editor's next
+       * `saveStructure` can overlap it — and that transaction locks the `documents` row
+       * `for update` and *then* deletes the steps. A bare `insert … values` took the locks the
+       * other way round: its FK checks key-share the step first and the document second, so the
+       * writer could hold the step while waiting for the document the save held while waiting to
+       * delete the step (40P01, seen as a 500 on `PUT /documents/:id/structure`).
+       *
+       * So the document is key-shared first — the uncorrelated `exists` is an init-plan and runs
+       * before any step row is touched — and only then the step, in the `LockRows` above it. If
+       * the save got there first, the writer waits on the document, and by the time it reaches
+       * the step the step is deleted: `for key share` skips it and nothing is written, where the
+       * FK check would have thrown.
+       */
+      const r = await q.query(
+        `insert into step_embeddings(step_id, document_id, embedding, text_hash)
+         select s.id, $2, $3::vector, $4
+           from steps s
+          where s.id = $1
+            and exists (select 1 from documents d where d.id = $2 for key share)
+            for key share of s
          on conflict (step_id) do update set embedding=excluded.embedding, text_hash=excluded.text_hash, updated_at=now()`,
         [todo[i].id, documentId, JSON.stringify(vecs[i]), todo[i].hash],
       );
-    return todo.length;
+      written += r.rowCount ?? 0;
+    }
+    return written;
   } catch (e) {
     /**
      * A-M6: still best-effort — a model outage must not fail a publish — but no longer silent.
