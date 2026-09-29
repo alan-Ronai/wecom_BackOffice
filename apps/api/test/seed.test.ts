@@ -180,6 +180,17 @@ run('seed', () => {
         )
       ).rows.map((r) => r.code);
       expect(members).toEqual(['E-10', 'M-10', 'O-10', 'O-12', 'O-13', 'R-11', 'R-12', 'R-13', 'T-10']);
+      // O-13 keeps its own legacy topic too, and that one is not renamed
+      const o13 = (
+        await db.pool.query(
+          `select t.slug, t.name from document_topics x join topics t on t.id=x.topic_id join documents d on d.id=x.document_id
+            where d.code='O-13' order by t.slug`,
+        )
+      ).rows;
+      expect(o13).toEqual([
+        { slug: 'topic-14', name: 'בעיות קליטה בארץ' },
+        { slug: 'topic-20', name: 'איפוס הגדרות רשת' },
+      ]);
     });
 
     it('the knowledge map and the text link the documents, and every link resolves', async () => {

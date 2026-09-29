@@ -993,7 +993,7 @@ for (const o of out) {
   for (const s of doc.phases.flatMap((ph) => ph.steps))
     for (const b of s.blockRefs) if (!blockIds.has(b)) throw new Error(`${p.code}: block ${b} missing`);
   const row = { ...doc, _author: o.author, _topicId: o.topicId };
-  if (p.set === 'domestic') row._topicName = DOMESTIC_TOPIC_NAME;
+  if (o.topicId === domesticTopic) row._topicName = DOMESTIC_TOPIC_NAME;
   if (p.code === 'O-13') row._extraTopicIds = [domesticTopic];
   if (p.legacy) {
     const i = nextDocs.findIndex((d) => d.id === p.legacy.id);
