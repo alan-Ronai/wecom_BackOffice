@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type pg from 'pg';
 import type { Document, Paragraph } from '@wecom/shared';
 import type { ModelClient } from '@wecom/model';
@@ -108,6 +108,37 @@ run('embedding-based paragraph → step mapping', () => {
         para('2.1', 'ריענון SIM בצע ריענון SIM בקונסולה'),
       ]);
       expect(fell.map((t) => t.documentId)).toEqual([B]);
+
+      /**
+       * Wave Y · A-M4: one lateral query for the whole batch instead of one per paragraph, with
+       * the same per-paragraph result — order kept, a paragraph under the threshold dropped (and
+       * no trigram fallback, since the batch as a whole said something), and an already-linked
+       * document never proposed.
+       */
+      const three: ModelClient = {
+        ...model,
+        embed: async (t: string) => unit(dim, /APN/.test(t) ? 0 : /SIM/.test(t) ? 1 : dim - 1),
+      };
+      const svc = new MappingService(pool as pg.Pool, three);
+      const spy = vi.spyOn(pool, 'query');
+      const batch = await svc.proposeInitialMapping(src, [
+        para('3.1', 'ריענון SIM'),
+        para('3.2', 'משהו אחר לגמרי'),
+        para('3.3', 'APN'),
+      ]);
+      expect(spy).toHaveBeenCalledTimes(1);
+      spy.mockRestore();
+      expect(batch.map((m) => [m.ref, m.documentId])).toEqual([
+        ['3.1', B],
+        ['3.3', A],
+      ]);
+      await pool.query(
+        `insert into document_links(from_document_id, from_step_key, to_source_id, type, origin)
+         values ($1,'s1',$2,'derived_from_source','explicit')`,
+        [A, src],
+      );
+      const linked = await svc.proposeInitialMapping(src, [para('4.1', 'APN'), para('4.2', 'SIM')]);
+      expect(linked.map((m) => [m.ref, m.documentId])).toEqual([['4.2', B]]);
     }));
 
   it('refreshStepEmbeddings re-embeds only the steps whose text moved', async () =>

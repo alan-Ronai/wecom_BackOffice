@@ -99,20 +99,32 @@ export class MappingService {
       return [];
     }
     if (vecs.length !== paragraphs.length) return [];
+    /**
+     * Wave Y · A-M4: one round trip for the whole batch. Each paragraph's vector is one row of
+     * `unnest … with ordinality`, and the `lateral` subquery is exactly the per-paragraph
+     * nearest-step query this used to issue N times — same join, same exclusion, same
+     * `order by <=> limit 1` — so each paragraph still gets its own best step, decided alone.
+     * The threshold, and with it the fall-through to trigram, is still applied per paragraph
+     * below, unchanged.
+     */
+    const best = await this.pool.query(
+      `select p.i::int as i, b.document_id, b.step_key, b.score
+         from unnest($1::text[]) with ordinality as p(v, i)
+         cross join lateral (
+           select e.document_id, s.step_key, 1 - (e.embedding <=> p.v::vector) as score
+             from step_embeddings e join steps s on s.id = e.step_id
+             join documents d on d.id = e.document_id and d.deleted_at is null
+            where not exists (select 1 from document_links l where l.from_document_id=d.id and l.to_source_id=$2)
+            order by e.embedding <=> p.v::vector limit 1
+         ) b
+        order by p.i`,
+      [vecs.map((v) => JSON.stringify(v)), sourceId],
+    );
     const out: MappingProposal[] = [];
-    for (let i = 0; i < paragraphs.length; i++) {
-      const best = await this.pool.query(
-        `select e.document_id, s.step_key, 1 - (e.embedding <=> $1::vector) as score
-           from step_embeddings e join steps s on s.id = e.step_id
-           join documents d on d.id = e.document_id and d.deleted_at is null
-          where not exists (select 1 from document_links l where l.from_document_id=d.id and l.to_source_id=$2)
-          order by e.embedding <=> $1::vector limit 1`,
-        [JSON.stringify(vecs[i]), sourceId],
-      );
-      const b = best.rows[0];
-      if (b && Number(b.score) >= EMBED_MAP_THRESHOLD)
+    for (const b of best.rows) {
+      if (Number(b.score) >= EMBED_MAP_THRESHOLD)
         out.push({
-          ref: paragraphs[i].ref,
+          ref: paragraphs[(b.i as number) - 1].ref,
           documentId: b.document_id as string,
           stepKey: b.step_key as string,
           score: Number(b.score),
