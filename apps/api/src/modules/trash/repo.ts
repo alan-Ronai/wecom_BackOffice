@@ -1,7 +1,8 @@
 import type pg from 'pg';
 import type { TrashItem } from '@wecom/shared';
-import { httpError } from '../../lib/http.js';
+import { forbidden, httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
+import { hasAllScopes, hasScope } from '../../lib/user.js';
 import { getDocument, hasPublishedVersion, iso, recomputeDerived, type Q } from '../documents/repo.js';
 import { CATEGORY_LABELS, sourceFile } from '../search/repo.js';
 
@@ -133,13 +134,42 @@ export async function assertTrashScope(
   worldScopes: readonly string[] | null,
 ): Promise<void> {
   if (!worldScopes || (type !== 'document' && type !== 'script')) return;
-  const r = await q.query(
-    `select 1 from documents d
-      where d.id = $1 and d.deleted_at is not null
-        and exists (select 1 from document_worlds dw where dw.document_id = d.id and dw.world_slug = any($2))`,
-    [id, [...worldScopes]],
+  const caller = { worldScopes };
+  const worlds = (await deletedDocumentWorlds(q, [id])).get(id);
+  if (!worlds || !hasScope(caller, worlds)) throw httpError(404, 'NOT_FOUND', 'הפריט לא נמצא בסל המיחזור');
+  // Wave Y (A-M6): restoring or purging changes the document, so it needs every world it spans.
+  if (!hasAllScopes(caller, worlds)) throw forbidden();
+}
+
+/** Worlds of soft-deleted documents, by id. An id that is not a deleted document is absent. */
+async function deletedDocumentWorlds(q: Q, ids: string[]): Promise<Map<string, string[]>> {
+  if (!ids.length) return new Map();
+  const r = await q.query<{ id: string; worlds: string[] }>(
+    `select d.id, coalesce((select array_agg(dw.world_slug) from document_worlds dw where dw.document_id = d.id),
+                           array[d.category]) worlds
+       from documents d where d.id = any($1::uuid[]) and d.deleted_at is not null`,
+    [ids],
   );
-  if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'הפריט לא נמצא בסל המיחזור');
+  return new Map(r.rows.map((x) => [x.id, x.worlds]));
+}
+
+/**
+ * The bulk half of the write rule: `restore-all` and the trash empty act on what `listTrash`
+ * shows (any overlap), minus the documents the caller does not hold every world of. Those stay
+ * in the trash for someone who does, rather than 403ing the whole batch.
+ */
+export async function writableTrash(
+  q: Q,
+  items: TrashItem[],
+  worldScopes: readonly string[] | null,
+): Promise<TrashItem[]> {
+  if (!worldScopes) return items;
+  const docIds = items.filter((i) => i.type === 'document' || i.type === 'script').map((i) => i.id);
+  const worlds = await deletedDocumentWorlds(q, docIds);
+  return items.filter(
+    (i) =>
+      (i.type !== 'document' && i.type !== 'script') || hasAllScopes({ worldScopes }, worlds.get(i.id) ?? []),
+  );
 }
 
 export async function restore(tx: Tx, type: TrashType, id: string, userId: string): Promise<void> {

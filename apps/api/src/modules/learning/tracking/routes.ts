@@ -22,7 +22,7 @@ import {
 import { audit } from '../../../lib/audit.js';
 import { forbidden, httpError, notFound } from '../../../lib/http.js';
 import { withTransaction, type Queryable } from '../../../lib/sql.js';
-import { hasScope, requireUser } from '../../../lib/user.js';
+import { hasAllScopes, hasScope, requireUser } from '../../../lib/user.js';
 import { getWorkflowSettings } from '../../../lib/workflowSettings.js';
 import { assertVisibleDocument } from '../../../lib/visibility.js';
 import * as repo from './repo.js';
@@ -47,9 +47,17 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
      * documents' worlds, which is exactly what V1's `assertScope` compares. An item with no
      * world at all stays visible to everyone, as it is in V1.
      */
-    const assertItemScope = async (q: Queryable, id: string, user: ReturnType<typeof requireUser>) => {
+    const assertItemScope = async (
+      q: Queryable,
+      id: string,
+      user: ReturnType<typeof requireUser>,
+      mode: 'read' | 'write',
+    ) => {
       const worlds = await worldsOfItem(q, id);
-      if (worlds.length && !hasScope(user, worlds)) throw forbidden();
+      // Wave Y (A-M6): changing who owes an item is a write, so it needs every world the item
+      // spans; reading its completion stays "any overlap", like every other read.
+      const allowed = mode === 'write' ? hasAllScopes : hasScope;
+      if (worlds.length && !allowed(user, worlds)) throw forbidden();
     };
     /**
      * A-I4: spec §1.8 — an item whose referenced document is invalid or archived is "hidden from
@@ -78,7 +86,7 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
         const { id } = req.params as { id: string };
         const body = req.body as z.infer<typeof AudienceCreateSchema>;
         return withTransaction(app.db, async (tx) => {
-          await assertItemScope(tx, id, user);
+          await assertItemScope(tx, id, user, 'write');
           await assertAssignable(tx, id);
           const a = await repo.createAudience(tx, deps(), id, body, user.id);
           await audit(tx, {
@@ -107,7 +115,7 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
           // the delete to know whose it is.
           const itemId = await repo.audienceItemId(tx, id);
           if (!itemId) throw notFound('קהל היעד');
-          await assertItemScope(tx, itemId, user);
+          await assertItemScope(tx, itemId, user, 'write');
           if (!(await repo.deleteAudience(tx, id))) throw notFound('קהל היעד');
           await audit(tx, {
             actorId: user.id,
@@ -141,7 +149,7 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
         const { id } = req.params as { id: string };
         const body = req.body as z.infer<typeof AssignBodySchema>;
         return withTransaction(app.db, async (tx) => {
-          await assertItemScope(tx, id, user);
+          await assertItemScope(tx, id, user, 'write');
           await assertAssignable(tx, id);
           const pub = await getPublishedItem(tx, id);
           if (!pub) throw notFound('פריט הלמידה');
@@ -276,7 +284,7 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
         // A-I1: `completionFor` filters the *rows* to users in the caller's worlds, but the item
         // itself was never checked — so its card (title, description, counts, completion rate)
         // came back for a quiz in a world the caller cannot see.
-        await assertItemScope(app.db, id, user);
+        await assertItemScope(app.db, id, user, 'read');
         return repo.completionFor(app.db, id, user.worldScopes);
       },
     );

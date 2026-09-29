@@ -33,9 +33,9 @@ import {
 import { getAiSettings, currentPromptVersion } from '../../lib/aiSettings.js';
 import { resolveModelSlots } from '../../lib/modelSlots.js';
 import { audit } from '../../lib/audit.js';
-import { httpError, notFound } from '../../lib/http.js';
+import { forbidden, httpError, notFound } from '../../lib/http.js';
 import { withTransaction } from '../../lib/sql.js';
-import { hasPerm, hasScope, requireUser, type ReqUser } from '../../lib/user.js';
+import { hasAllScopes, hasPerm, hasScope, requireUser, type ReqUser } from '../../lib/user.js';
 import { canReadUnpublished } from '../../lib/visibility.js';
 import { getVisibleDocument } from '../documents/repo.js';
 import { getSourceDocument, saveSourceDocument } from '../sourcedocs/repo.js';
@@ -397,6 +397,9 @@ async function decide(
 
   const applied = acceptedOps(pe.ops, body);
   const status = decisionStatus(pe.ops, applied);
+  // Wave Y (A-M6): applying edits is a document write, which needs every world it spans;
+  // rejecting them all changes nothing but the proposal and stays a reader's decision.
+  if (applied.length && !hasAllScopes(user, doc.worlds)) throw forbidden();
 
   if (!applied.length) {
     const row = await withTransaction(app.db, (tx) =>

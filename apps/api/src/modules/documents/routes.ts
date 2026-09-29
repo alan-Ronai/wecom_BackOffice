@@ -26,7 +26,7 @@ import {
 import { withTransaction } from '../../lib/sql.js';
 import { audit } from '../../lib/audit.js';
 import { forbidden, httpError, notFound } from '../../lib/http.js';
-import { hasScope, requireUser } from '../../lib/user.js';
+import { hasAllScopes, requireUser } from '../../lib/user.js';
 import { canReadUnpublished } from '../../lib/visibility.js';
 import * as repo from './repo.js';
 import { annotateBlame, diffDocuments, diffStats } from './diff.js';
@@ -82,12 +82,11 @@ function noteEmbedResult(
  * therefore let an editor scoped to one world send `worlds: []` and strip a document out of a
  * world they cannot see — that team loses it from their list, topic view, search and graph.
  *
- * The check is on the **difference**, in both directions, and never on a membership the write
- * leaves alone. Requiring scope on every world in the resulting set instead would be
- * over-restriction, and a worse bug than the one it fixes: a `sim`-scoped editor patching only
- * `topics` on a `{billing(primary), sim}` document would be refused for a world they are not
- * touching, even though `config.scope: 'document'` and the caller's `hasScope(user,
- * before.worlds)` intersection have already established that they may edit this document.
+ * The check is on the **difference**, in both directions. Since wave Y (A-M6) a write already
+ * needs every world the document spans *before* the write (`config.scope: 'document:write'` and
+ * the handler's `hasAllScopes(user, before.worlds)`), so a removal is covered twice; what this
+ * adds is the other half — a world (or topic) the write brings *in* must be one the caller holds
+ * too, or they could move a document into a world whose team they cannot answer to.
  *
  * `body.topics` was not checked at all before. Beyond the add/remove scope rule, every topic
  * the caller *names* must live in the document's resulting world set — a topic in a third
@@ -107,7 +106,7 @@ async function assertTaxonomyScope(
   const changed = <T>(a: Iterable<T>, b: ReadonlySet<T>) => [...a].filter((x) => !b.has(x));
   const beforeWorlds = new Set(before.worlds);
   for (const w of [...changed(resulting, beforeWorlds), ...changed(before.worlds, resulting)])
-    if (!hasScope(user, w)) throw forbidden();
+    if (!hasAllScopes(user, w)) throw forbidden();
 
   if (body.topics === undefined) return;
   const named = body.topics;
@@ -136,7 +135,7 @@ async function assertTaxonomyScope(
   // world; a topic the write keeps is left alone, for the same reason a retained world is.
   for (const t of touched) {
     const world = worldOf.get(t);
-    if (world && !hasScope(user, world)) throw forbidden();
+    if (world && !hasAllScopes(user, world)) throw forbidden();
   }
 }
 
@@ -260,7 +259,7 @@ export default async function routes(app: FastifyInstance) {
   app.patch(
     '/documents/:id',
     {
-      config: { requires: ['docs.edit'], scope: 'document' },
+      config: { requires: ['docs.edit'], scope: 'document:write' },
       schema: {
         tags: ['documents'],
         params: Params,
@@ -275,7 +274,7 @@ export default async function routes(app: FastifyInstance) {
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.worlds)) throw forbidden();
+        if (!hasAllScopes(user, before.worlds)) throw forbidden();
         await assertTaxonomyScope(tx, user, before, body);
         const after = await repo.patchDocument(
           tx,
@@ -320,7 +319,7 @@ export default async function routes(app: FastifyInstance) {
   app.put(
     '/documents/:id/structure',
     {
-      config: { requires: ['docs.edit'], scope: 'document' },
+      config: { requires: ['docs.edit'], scope: 'document:write' },
       schema: {
         tags: ['documents'],
         params: Params,
@@ -343,7 +342,7 @@ export default async function routes(app: FastifyInstance) {
       const doc = await withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.worlds)) throw forbidden();
+        if (!hasAllScopes(user, before.worlds)) throw forbidden();
         const after = await repo.saveStructure(
           tx,
           id,
@@ -375,7 +374,7 @@ export default async function routes(app: FastifyInstance) {
   app.post(
     '/documents/:id/publish',
     {
-      config: { requires: ['docs.publish'], scope: 'document' },
+      config: { requires: ['docs.publish'], scope: 'document:write' },
       schema: {
         tags: ['documents'],
         params: Params,
@@ -390,7 +389,7 @@ export default async function routes(app: FastifyInstance) {
       const result = await withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.worlds)) throw forbidden();
+        if (!hasAllScopes(user, before.worlds)) throw forbidden();
         // V2: knowledge refresh — `publishAndFlag` pairs the publish with §1.5's change flag, so a
         // significant change fans out refresh assignments from every editorial path, not just this one.
         const { doc, version, changeFlag } = await publishAndFlag(
@@ -448,7 +447,7 @@ export default async function routes(app: FastifyInstance) {
   app.post(
     '/documents/:id/status',
     {
-      config: { requires: ['docs.publish'], scope: 'document' },
+      config: { requires: ['docs.publish'], scope: 'document:write' },
       schema: {
         tags: ['documents'],
         params: Params,
@@ -463,7 +462,7 @@ export default async function routes(app: FastifyInstance) {
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.worlds)) throw forbidden();
+        if (!hasAllScopes(user, before.worlds)) throw forbidden();
         const after = await repo.setStatus(tx, id, body.status, user.id);
         await audit(tx, {
           actorId: user.id,
@@ -487,7 +486,7 @@ export default async function routes(app: FastifyInstance) {
   app.post(
     '/documents/:id/source-review/clear',
     {
-      config: { requires: ['docs.edit'], scope: 'document' },
+      config: { requires: ['docs.edit'], scope: 'document:write' },
       schema: {
         tags: ['documents'],
         params: Params,
@@ -502,7 +501,7 @@ export default async function routes(app: FastifyInstance) {
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.worlds)) throw forbidden();
+        if (!hasAllScopes(user, before.worlds)) throw forbidden();
         await clearSourceReview(tx, id);
         await audit(tx, {
           actorId: user.id,
@@ -597,7 +596,7 @@ export default async function routes(app: FastifyInstance) {
   app.post(
     '/documents/:id/restore/:v',
     {
-      config: { requires: ['docs.restore'], scope: 'document' },
+      config: { requires: ['docs.restore'], scope: 'document:write' },
       schema: { tags: ['documents'], params: VersionParams, response: { 200: PublishResponseSchema } },
     },
     async (req) => {
@@ -606,7 +605,7 @@ export default async function routes(app: FastifyInstance) {
       const result = await withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.worlds)) throw forbidden();
+        if (!hasAllScopes(user, before.worlds)) throw forbidden();
         const { doc, version } = await repo.restoreVersion(tx, id, v, user.id);
         const auditId = await audit(tx, {
           actorId: user.id,
@@ -637,7 +636,7 @@ export default async function routes(app: FastifyInstance) {
   app.delete(
     '/documents/:id',
     {
-      config: { requires: ['docs.delete'], scope: 'document' },
+      config: { requires: ['docs.delete'], scope: 'document:write' },
       schema: { tags: ['documents'], params: Params, response: { 200: DeleteResponseSchema } },
     },
     async (req) => {
@@ -646,7 +645,7 @@ export default async function routes(app: FastifyInstance) {
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getDocument(tx, id);
         if (!before) throw notFound('המסמך');
-        if (!hasScope(user, before.worlds)) throw forbidden();
+        if (!hasAllScopes(user, before.worlds)) throw forbidden();
         if (await repo.hasPublishedVersion(tx, id))
           throw httpError(
             409,

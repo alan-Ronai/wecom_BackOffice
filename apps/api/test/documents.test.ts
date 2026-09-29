@@ -515,18 +515,20 @@ run('documents', () => {
     expect(found.statusCode).toBe(200);
   });
   /**
-   * A-I3's rule, and the over-restriction the first attempt at it introduced.
+   * A-I3's rule, under wave Y's write scope (A-M6).
    *
-   * `body.worlds` and `body.topics` are full replacements, so the check has to be on the
-   * *difference* in both directions. Checking every world in the resulting set instead refuses
-   * a scoped editor for memberships they are not touching — which `config.scope: 'document'`
-   * and the route's own `hasScope(user, before.worlds)` intersection have already allowed.
+   * `body.worlds` and `body.topics` are full replacements, so the membership check is on the
+   * *difference* in both directions. Since wave Y a write also needs every world the document
+   * spans before the write, so an editor holding only one of a shared document's worlds may read
+   * it but not patch it at all — not even the memberships they are not touching.
    */
   describe('assertTaxonomyScope', () => {
     let scoped: Awaited<ReturnType<typeof makeUser>>;
+    /** Holds both of the shared document's worlds, so may edit it; `tech` stays out of reach. */
+    let both: Awaited<ReturnType<typeof makeUser>>;
     let simTopic: string;
     let billingTopic: string;
-    /** Primary world `billing`, also shared into `sim`: the caller can edit it but owns one world. */
+    /** Primary world `billing`, also shared into `sim`. */
     let shared: string;
 
     const topicIn = async (world: string, slug: string) =>
@@ -542,6 +544,7 @@ run('documents', () => {
 
     beforeAll(async () => {
       scoped = await makeUser(db.pool, { name: 'עורך SIM', scopes: ['sim'] });
+      both = await makeUser(db.pool, { name: 'עורך SIM+גבייה', scopes: ['sim', 'billing'] });
       simTopic = await topicIn('sim', 'ai3-sim');
       billingTopic = await topicIn('billing', 'ai3-billing');
       shared = (
@@ -562,21 +565,33 @@ run('documents', () => {
       ).json().id as string;
     });
 
-    it('lets a scoped editor patch topics on a shared document without touching its other worlds', async () => {
-      // The regression: `resulting` is {billing, sim} and `billing` is out of scope, but the
-      // write changes no world at all, so there is nothing for the caller to justify.
-      const r = await patch(shared, { topics: [billingTopic, simTopic] });
+    it('A-M6: an editor holding one of two worlds reads the document but may not patch it', async () => {
+      const read = await app.inject({
+        method: 'GET',
+        url: `/api/v1/documents/${shared}`,
+        headers: auth(scoped),
+      });
+      expect(read.statusCode).toBe(200);
+      for (const payload of [{ title: 'לא' }, { topics: [billingTopic, simTopic] }, { worlds: ['sim'] }]) {
+        const r = await patch(shared, payload);
+        expect(r.statusCode, JSON.stringify(payload)).toBe(403);
+        expect(r.json().code).toBe('SCOPE_DENIED');
+      }
+    });
+
+    it('lets an editor holding every world patch topics without touching its worlds', async () => {
+      const r = await patch(shared, { topics: [billingTopic, simTopic] }, both);
       expect(r.statusCode, r.body).toBe(200);
       expect(new Set(r.json().topics)).toEqual(new Set([billingTopic, simTopic]));
       // Same for a no-op re-send of the world set, and for naming the primary explicitly.
-      expect((await patch(shared, { worlds: ['sim'] })).statusCode).toBe(200);
-      expect((await patch(shared, { category: 'billing' })).statusCode).toBe(200);
+      expect((await patch(shared, { worlds: ['sim'] }, both)).statusCode).toBe(200);
+      expect((await patch(shared, { category: 'billing' }, both)).statusCode).toBe(200);
       // …and an ordinary field patch is untouched by any of this.
-      expect((await patch(shared, { title: 'משותף — עודכן' })).statusCode).toBe(200);
+      expect((await patch(shared, { title: 'משותף — עודכן' }, both)).statusCode).toBe(200);
     });
 
-    it('refuses adding a world the caller cannot see', async () => {
-      const r = await patch(shared, { worlds: ['sim', 'tech'] });
+    it('refuses adding a world the caller does not hold', async () => {
+      const r = await patch(shared, { worlds: ['sim', 'tech'] }, both);
       expect(r.statusCode).toBe(403);
       // The membership did not change.
       const after = (
@@ -585,7 +600,7 @@ run('documents', () => {
       expect(after.worlds).not.toContain('tech');
     });
 
-    it('refuses removing a world the caller cannot see', async () => {
+    it('refuses removing a world the caller does not hold', async () => {
       // `worlds: []` with the primary still `billing` keeps billing; dropping it needs the
       // primary to move, which is the shape that actually strips the other team's access.
       const r = await patch(shared, { category: 'sim', worlds: [] });
@@ -596,7 +611,7 @@ run('documents', () => {
       expect(after.worlds).toContain('billing');
     });
 
-    it('refuses removing a topic whose world the caller cannot see', async () => {
+    it('refuses removing a topic whose world the caller does not hold', async () => {
       const r = await patch(shared, { topics: [simTopic] });
       expect(r.statusCode).toBe(403);
       expect(
@@ -607,16 +622,14 @@ run('documents', () => {
 
     it('400s a topic that belongs to a world the document is not in', async () => {
       const techTopic = await topicIn('tech', 'ai3-tech');
-      const r = await patch(shared, { topics: [billingTopic, simTopic, techTopic] });
+      const r = await patch(shared, { topics: [billingTopic, simTopic, techTopic] }, both);
       expect(r.statusCode).toBe(400);
       expect(r.json().code).toBe('TOPIC_OUT_OF_WORLD');
       // An application 400's `details` survives the error handler now, so the client can say
       // *which* topic and *which* world rather than just "something was wrong".
       expect(r.json().details).toMatchObject({ worldSlug: 'tech' });
       // An id that names no topic at all is the other 400.
-      const unknown = await patch(shared, {
-        topics: ['00000000-0000-4000-8000-000000000000'],
-      });
+      const unknown = await patch(shared, { topics: ['00000000-0000-4000-8000-000000000000'] }, both);
       expect(unknown.statusCode).toBe(400);
       expect(unknown.json().code).toBe('UNKNOWN_TOPIC');
     });

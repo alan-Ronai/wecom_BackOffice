@@ -22,7 +22,7 @@ import type { Tx } from '../../lib/sql.js';
 import { httpError } from '../../lib/http.js';
 import { getDocument, iso } from '../documents/repo.js';
 import { getWorkflowSettings } from '../../lib/workflowSettings.js';
-import type { ReqUser } from '../../lib/user.js';
+import { hasScope, type ReqUser } from '../../lib/user.js';
 
 export type Q = pg.Pool | Tx;
 type Row = Record<string, unknown>;
@@ -157,11 +157,70 @@ export async function worldsOfItem(q: Q, id: string): Promise<string[]> {
   );
   return [...new Set(r.rows.map((x) => x.w as string).filter(Boolean))];
 }
-export async function canSee(q: Q, item: LearningItem, v: Viewer): Promise<boolean> {
-  if (!v.manage && item.status !== 'published') return false;
+
+/**
+ * The one visibility rule (spec §1.8 + world scope), shared by `canSee` and `canSeeById` so the
+ * two can never drift: a non-manager sees published items only, and a scoped caller sees an item
+ * when it spans no world at all or at least one of theirs (the read rule, `hasScope`).
+ * `worlds` is only consulted for a scoped caller, and is loaded lazily for the same reason.
+ */
+async function seesItem(status: string, worlds: () => Promise<string[]>, v: Viewer): Promise<boolean> {
+  if (!v.manage && status !== 'published') return false;
   if (v.user.worldScopes === null) return true;
-  const worlds = await worldsOfItem(q, item.id);
-  return worlds.length === 0 || worlds.some((w) => v.user.worldScopes!.includes(w));
+  const w = await worlds();
+  return w.length === 0 || hasScope(v.user, w);
+}
+
+export async function canSee(q: Q, item: LearningItem, v: Viewer): Promise<boolean> {
+  return seesItem(item.status, () => worldsOfItem(q, item.id), v);
+}
+
+/** What the authoring routes need to decide and audit a write, without assembling the item. */
+export interface ItemHead {
+  id: string;
+  kind: LearningItem['kind'];
+  status: LearningItem['status'];
+  title: string;
+  worldSlug: string | null;
+  passMark: number | null;
+  maxAttempts: number | null;
+  entryCount: number;
+  questionCount: number;
+  /** `worldsOfItem`; loaded only for a scoped caller (an unscoped one passes every scope check). */
+  worlds: string[];
+}
+
+/**
+ * A-M8: the lean loader. `getItem` assembles entries, questions and source versions with three
+ * extra queries; the routes only need the row and its worlds to answer "may this caller see (and
+ * write) it". Same visibility rule as `canSee` — `seesItem` — so there is one spelling of it.
+ * `null` when the item does not exist or the caller may not see it.
+ */
+export async function canSeeById(q: Q, id: string, v: Viewer): Promise<ItemHead | null> {
+  const r = await q.query(
+    `select li.id, li.kind, li.status, li.title, li.world_slug, li.pass_mark, li.max_attempts,
+            (select count(*)::int from briefing_entries e where e.item_id = li.id) entry_count,
+            (select count(*)::int from quiz_questions x where x.item_id = li.id) question_count
+       from learning_items li where li.id = $1 and li.deleted_at is null`,
+    [id],
+  );
+  if (!r.rowCount) return null;
+  const row = r.rows[0];
+  let worlds: string[] = [];
+  const load = async () => (worlds = await worldsOfItem(q, id));
+  if (!(await seesItem(row.status as string, load, v))) return null;
+  return {
+    id,
+    kind: row.kind as ItemHead['kind'],
+    status: row.status as ItemHead['status'],
+    title: row.title as string,
+    worldSlug: (row.world_slug as string | null) ?? null,
+    passMark: (row.pass_mark as number | null) ?? null,
+    maxAttempts: (row.max_attempts as number | null) ?? null,
+    entryCount: row.entry_count as number,
+    questionCount: row.question_count as number,
+    worlds,
+  };
 }
 
 /**

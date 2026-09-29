@@ -49,6 +49,19 @@ describe('hooks', () => {
     expect(can(undefined, 'docs.read')).toBe(false);
   });
 
+  it('A-M6: reads need any world of the document, writes need every one', async () => {
+    const { result } = renderHook(() => useMe(), { wrapper: wrap() });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    const me = { ...result.current.data!, worldScopes: ['tech'], categoryScopes: ['tech'] };
+    const shared = { category: 'tech' as const, worlds: ['tech' as const, 'intl' as const] };
+    expect(can(me, 'docs.read', shared)).toBe(true);
+    for (const p of ['docs.edit', 'docs.publish', 'docs.delete', 'docs.restore'] as const)
+      expect(can(me, p, shared), p).toBe(false);
+    expect(can(me, 'docs.edit', { category: 'tech', worlds: ['tech'] })).toBe(true);
+    expect(can({ ...me, worldScopes: ['tech', 'intl'] }, 'docs.publish', shared)).toBe(true);
+    expect(can({ ...me, worldScopes: null, categoryScopes: null }, 'docs.publish', shared)).toBe(true);
+  });
+
   it('loads blocks and fields', async () => {
     const w = wrap();
     const b = renderHook(() => useBlocks(), { wrapper: w });

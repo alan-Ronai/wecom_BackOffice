@@ -248,6 +248,22 @@ export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Doc
 export const getDocument = async (q: Q, id: string): Promise<Document | null> =>
   (await assembleMany(q, [id])).get(id) ?? null;
 
+/**
+ * The union of the worlds the given live documents belong to. This is the world set of a
+ * catalogue entry that has none of its own — a block or a CRM field spans the worlds of the
+ * documents that use it — and so what the write rule (`hasAllScopes`, wave Y A-M6) checks.
+ */
+export async function worldsOfDocuments(q: Q, ids: readonly string[]): Promise<string[]> {
+  if (!ids.length) return [];
+  const r = await q.query<{ w: string }>(
+    `select distinct dw.world_slug w from document_worlds dw
+       join documents d on d.id = dw.document_id and d.deleted_at is null
+      where dw.document_id = any($1::uuid[]) order by 1`,
+    [[...ids]],
+  );
+  return r.rows.map((x) => x.w);
+}
+
 /** `getDocument` plus the reader rule: an unpublished document is a 404 for users without `docs.read_unpublished`. */
 export async function getVisibleDocument(
   q: Q,
