@@ -791,8 +791,13 @@ export async function publishDocument(
    * remote. While a sync link is `conflict` or `pending_push` the flag is not stale editorial
    * state — it is a live "the source and the item disagree" that publishing does not settle — so
    * the flag is kept and its reason restated from the current link state rather than cleared.
+   *
+   * Wave Y (owner decision on A-M11): *kept*, never *raised*. `pending_push` is durable on a
+   * read-only link, so raising a clear flag here put every publish of such a document into the
+   * source-review queue although nothing about the source had moved. A flag that was clear stays
+   * clear; one that was set stays set, with the reason restated.
    */
-  const sync = humanPublish ? await getDocumentSyncState(tx, id) : null;
+  const sync = humanPublish && before.sourceReviewNeeded ? await getDocumentSyncState(tx, id) : null;
   const keepFlag = sync !== null && sync.flagReason !== null;
   await tx.query(
     `update documents set current_version=$2, status=$3, updated_by=$4, updated_at=now(), etag=gen_random_uuid()::text,
