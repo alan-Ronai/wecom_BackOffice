@@ -1,6 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
-import { ESLint } from 'eslint';
+import { createRequire } from 'node:module';
+
+/** The slice of ESLint 8's API this uses. `eslint` lives at the root and ships no types here. */
+interface LintResult {
+  filePath: string;
+  messages: { ruleId: string | null; message: string; line: number }[];
+}
+interface ESLintApi {
+  lintText(code: string, opts: { filePath: string }): Promise<LintResult[]>;
+  lintFiles(patterns: string[]): Promise<LintResult[]>;
+}
+const { ESLint } = createRequire(__filename)('eslint') as {
+  ESLint: new (opts: { cwd: string }) => ESLintApi;
+};
 
 /**
  * B-M6 (wave 5) — the guard that keeps keyboard-dead controls from landing again: the
