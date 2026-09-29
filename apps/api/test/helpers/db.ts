@@ -37,11 +37,19 @@ const withDb = (external: string, name: string) => {
   return url.toString();
 };
 
-/** Migrations change → new template; the name is a hash of every migration file. */
+/**
+ * Anything that changes what the migrations build → a different template: every migration file, the
+ * code they require (`common/`, e.g. the embed-dimension resolver 0051 sizes `vector(N)` with) and
+ * the env that code reads. Old templates are left in place — another worktree may still be cloning
+ * one on the same server; drop `kbtpl_%` databases by hand when the server gets crowded.
+ */
 const templateName = () => {
   const hash = createHash('sha1');
-  for (const f of readdirSync('migrations').sort())
-    if (f !== 'package.json') hash.update(f).update(readFileSync(join('migrations', f)));
+  for (const dir of ['migrations', 'common'])
+    for (const f of readdirSync(dir).sort())
+      if (f !== 'package.json') hash.update(f).update(readFileSync(join(dir, f)));
+  for (const k of ['EMBED_DIMENSION', 'MODEL_TIER', 'EMBED_MODEL'])
+    hash.update(`${k}=${process.env[k] ?? ''};`);
   return 'kbtpl_' + hash.digest('hex').slice(0, 12);
 };
 
@@ -56,6 +64,8 @@ const ensureTemplate = async (admin: pg.Client, external: string) => {
   try {
     const { rowCount } = await admin.query('select 1 from pg_database where datname = $1', [tpl]);
     if (!rowCount) {
+      // A build that failed or was killed leaves `_build` behind; start it over.
+      await admin.query(`drop database if exists ${tpl}_build with (force)`);
       await admin.query(`create database ${tpl}_build`);
       await migrate(withDb(external, `${tpl}_build`));
       await admin.query(`alter database ${tpl}_build rename to ${tpl}`);
