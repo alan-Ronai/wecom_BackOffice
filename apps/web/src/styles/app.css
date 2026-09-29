@@ -1707,6 +1707,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .sp-head { display: flex; align-items: baseline; gap: 8px; padding-bottom: 6px; }
 .sp-refined { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: var(--r-sm); padding: 6px 8px; margin-bottom: 8px; }
 .sp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.sp-group + .sp-group { margin-top: 16px; }
+.sp-group-head { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
 .sp-actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
 .affects { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0; }
 .affects-group { display: inline-block; }

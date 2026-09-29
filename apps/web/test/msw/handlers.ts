@@ -31,6 +31,8 @@ interface State extends TaxonomyState {
   pins: Set<string>;
   notes: Note[];
   suggestions: Suggestion[];
+  /** The query string `GET /suggestions` was last asked with (wave Y: `documentId`). */
+  lastSuggestionsQuery: Record<string, string> | null;
   drafts: Map<string, unknown>;
   published: { id: string; label: string }[];
   trash: TrashItem[];
@@ -64,6 +66,7 @@ const initial = (): State => ({
   pins: new Set([fx.docBrowsing.id]),
   notes: fx.notes.map((n) => ({ ...n })),
   suggestions: fx.suggestions.map((s) => ({ ...s })),
+  lastSuggestionsQuery: null,
   drafts: new Map(),
   published: [],
   trash: fx.trash.map((t) => ({ ...t })),
@@ -538,14 +541,23 @@ export const handlers: RequestHandler[] = [
   }),
   http.get(`${B}/sources/:id/revisions/:rev`, () => HttpResponse.json(fx.revision)),
 
-  http.get(`${B}/suggestions`, () =>
-    HttpResponse.json({
-      items: state.suggestions,
-      total: state.suggestions.length,
-      page: 1,
-      pageSize: 50,
-    }),
-  ),
+  http.get(`${B}/suggestions`, ({ request }) => {
+    const q = Object.fromEntries(new URL(request.url).searchParams);
+    state.lastSuggestionsQuery = q;
+    /*
+     * `sourceId` narrows to rows that name their source; rows that do not (older fixtures) are the
+     * primary source's. `documentId` (wave Y) is the document's primary source plus its linked
+     * ones — the mock has no link table, so a row naming a source counts as linked, and a row
+     * naming none counts only when the document has a primary source at all.
+     */
+    const doc = q.documentId ? state.documents.get(q.documentId) : undefined;
+    const items = state.suggestions.filter(
+      (s) =>
+        (!q.sourceId || !s.sourceId || s.sourceId === q.sourceId) &&
+        (!q.documentId || !!s.sourceId || !!doc?.sourceId),
+    );
+    return HttpResponse.json({ items, total: items.length, page: 1, pageSize: 50 });
+  }),
   // Three concrete routes, not one templated `:decision` segment.
   ...(['accept', 'reject', 'reset'] as const).map((decision) =>
     http.post(`${B}/suggestions/:id/${decision}`, ({ params }) => {
