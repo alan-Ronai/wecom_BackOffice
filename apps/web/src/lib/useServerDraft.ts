@@ -21,18 +21,43 @@ export function useServerDraft<T>(server: T) {
   const base = useRef<T>(server);
   /** Edits since then. Non-zero with a draft equal to `base` still counts as clean. */
   const edits = useRef(0);
+  /**
+   * A server copy arrived while the draft was dirty and was deferred. Once the draft is edited
+   * back to its (now stale) base, that copy is adopted rather than left behind: otherwise the
+   * draft reads as "dirty" against the newer copy and a save would silently overwrite it.
+   */
+  const pending = useRef(false);
   const current = useRef<T>(draft);
   current.current = draft;
 
   const adopt = useCallback((copy: T) => {
     edits.current = 0;
     base.current = copy;
+    pending.current = false;
     setDraftState(copy);
   }, []);
 
   useEffect(() => {
-    if (edits.current === 0 || same(current.current, base.current)) adopt(server);
+    const d = current.current;
+    if (edits.current === 0 || same(d, base.current) || same(d, server)) adopt(server);
+    else pending.current = true;
   }, [server, adopt]);
+
+  /*
+   * Wave Y review: the base must not go stale. A draft that equals the server copy *is* the server
+   * copy — whichever way it got there (edited to match a newer copy, or reverted to what a save
+   * just wrote) — so it becomes the clean base and the next server copy is adopted. A draft edited
+   * back to a stale base while a newer copy is waiting takes that newer copy.
+   */
+  useEffect(() => {
+    if (same(draft, server)) {
+      base.current = server;
+      edits.current = 0;
+      pending.current = false;
+    } else if (pending.current && same(draft, base.current)) {
+      adopt(server);
+    }
+  }, [draft, server, adopt]);
 
   const setDraft = useCallback((next: SetStateAction<T>) => {
     edits.current += 1;

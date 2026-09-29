@@ -50,6 +50,18 @@ describe('<SuggestionsPanel> — a multi-source document (wave Y)', () => {
     expect(state.lastSuggestionsQuery).not.toHaveProperty('sourceId');
   });
 
+  it('tags every card with its suggestion id, grouped or not, so it is addressable by id', async () => {
+    withSources();
+    const { container } = renderWithProviders(<SuggestionsPanel documentId={fx.docBrowsing.id} />);
+    await screen.findAllByRole('region', { name: /^הצעות מהמקור / });
+    const ids = [...container.querySelectorAll('li[data-suggestion-id]')].map((li) =>
+      li.getAttribute('data-suggestion-id'),
+    );
+    expect(ids.sort()).toEqual(state.suggestions.map((s) => s.id).sort());
+    const other = container.querySelector('li[data-suggestion-id="e0000000-0000-4000-8000-0000000000a1"]')!;
+    expect(within(other as HTMLElement).getByText('מהמחירון')).toBeInTheDocument();
+  });
+
   it('draws no source headings when everything comes from one source', async () => {
     state.suggestions = [
       { ...suggestionWithAffects(), sourceId: fx.docBrowsing.sourceId!, sourceTitle: 'נהלי תמיכה טכנית' },

@@ -105,6 +105,33 @@ trust-proxy 19/19; `pnpm e2e:real` 16/17 in 1.4 min — W5-E2E-1 (picker + build
 precondition (the seeded source's first paragraph, `<p>מגה.</p>`, is shorter than the spec's
 6-character quote regex) before any Y4-touched UI; it belongs to the wave 6 gate.
 
+**Y4 review fixes** (on `waveY/integration`, web only):
+
+- *World gate on writes* — `SourceReviewBadge` takes `worlds` and gates `docs.edit` on the full
+  set; `ReviewsPage` gates `docs.publish` on the fetched document (`doc.data ?? { category }`);
+  `ProposedEditsOverlay` takes the workspace's document; `TrashPage` gates per-row restore (and
+  the bulk "restore selected") on a document row's `category`/`worlds` **when the row carries
+  them** — `TrashItemSchema` has neither today, so until the API/shared row adds them the web
+  falls back to the bare permission and the server rule is what bites. Tests: `Governance`,
+  `Review` (2), `ProposedEditsOverlay` (2), `Trash` (2).
+- *Draft follows its item* — `BriefingBuilder`/`QuizBuilder` keyed by `it.id`
+  (`BuilderDraft.test.tsx`: A→B, edit B, back to A — fails without the key).
+- *`useServerDraft` stale base* — a draft equal to the server copy becomes the clean base; a
+  copy deferred mid-edit is adopted once the draft is edited back to the old base
+  (`test/lib/useServerDraft.test.tsx`, 3 of 4 fail on the old hook).
+- *`DocCard`* opens on Enter only from the card itself, not an Enter bubbling from the star/kebab
+  or one already handled (`test/library/DocCard.test.tsx`).
+- *Conversations* — `keepPreviousData`; page clamped to the last real page; export uses the live
+  boxes and flushes the debounce; an unchanged filter no longer resets the page
+  (`AiConversations.test.tsx`, +4).
+- *Lint guard* also refuses `role={'button'}` and `tabIndex="0"` / `tabIndex={'0'}`
+  (`a11yGuard.test.ts`).
+- *W6-E2E-1* addresses the target card by `li[data-suggestion-id]` and checks it against
+  `GET /suggestions?documentId=` (what the workspace panel renders). Typechecked only — **not
+  run** (e2e deferred to the owner's machine).
+
+Gates: `tsc` green; eslint + prettier green on the touched files; web unit 140 files / 954 tests.
+
 ## Y5
 
 **Base knowledge refresh from Kira's source documents.** Branch `waveY/Y5`.

@@ -39,7 +39,12 @@ function ReviewCard({
   const can = useCan();
   const me = useMe();
   const doc = useDocument(row.status === 'open' ? row.documentId : undefined);
-  const mayDecide = can('docs.publish', { category: row.category });
+  /**
+   * Wave Y review: approving publishes, which is a write — it needs every world the document
+   * spans. The queue row carries only the primary world, so the fetched document (with its full
+   * `worlds`) is the gate once it is here; the row's world is the fallback while it loads.
+   */
+  const mayDecide = can('docs.publish', doc.data ?? { category: row.category });
   /**
    * E-2 (review §4, §7 item 9). The API refuses a self-approval with 403 `SELF_APPROVAL`; the
    * queue says so before the click rather than after it. "דרוש שינויים" stays available — sending

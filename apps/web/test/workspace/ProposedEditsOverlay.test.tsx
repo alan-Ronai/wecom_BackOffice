@@ -154,4 +154,17 @@ describe('<ProposedEditsOverlay>', () => {
     expect(within(r).queryByRole('button', { name: /אשר החלטות/ })).toBeNull();
     expect(within(r).getByRole('button', { name: 'בטל' })).toBeInTheDocument();
   });
+
+  it('is read-only for an editor scoped to only one of the document’s worlds', async () => {
+    server.use(withMe({ worldScopes: ['tech'], categoryScopes: ['tech'] }));
+    render({ doc: { category: 'tech', worlds: ['tech', 'intl'] } });
+    expect(await screen.findByText('אין הרשאה להחיל עריכות במסמך המקור')).toBeInTheDocument();
+    expect(within(await region()).queryByRole('button', { name: 'קבל' })).toBeNull();
+  });
+
+  it('lets an editor holding every world of the document decide', async () => {
+    server.use(withMe({ worldScopes: ['tech', 'intl'], categoryScopes: ['tech', 'intl'] }));
+    render({ doc: { category: 'tech', worlds: ['tech', 'intl'] } });
+    expect(await accepts()).toHaveLength(2);
+  });
 });

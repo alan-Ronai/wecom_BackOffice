@@ -54,15 +54,77 @@ describe('ConversationsTab', () => {
     expect(screen.queryByLabelText('משוב')).toBeNull();
   });
 
-  it('says it is loading, not that nothing matched, while a filter change is in flight', async () => {
+  it('keeps the previous rows, not "nothing matched", while a filter change is in flight', async () => {
     renderWithProviders(<ConversationsTab />, { route: '/admin/ai?tab=conversations' });
     await screen.findByText('נועה');
     fireEvent.change(screen.getByLabelText('משתמש'), { target: { value: 'מישהו אחר' } });
-    // The user box is debounced, then the new query key has no data yet: "טוען…", never
-    // "אין שיחות תואמות." before the answer is in.
-    expect(await screen.findByText('טוען…')).toBeInTheDocument();
+    // The user box is debounced, then the new query key loads with the previous screenful still
+    // up (`keepPreviousData`): never "אין שיחות תואמות." before the answer is in.
+    await waitFor(() =>
+      expect(screen.getByRole('table', { name: 'שיחות' })).toHaveAttribute('aria-busy', 'true'),
+    );
+    expect(screen.getByText('נועה')).toBeInTheDocument();
     expect(screen.queryByText('אין שיחות תואמות.')).toBeNull();
     expect(await screen.findByText('אין שיחות תואמות.')).toBeInTheDocument();
+  });
+
+  it('says it is loading on the first fetch, not that nothing matched', async () => {
+    renderWithProviders(<ConversationsTab />, { route: '/admin/ai?tab=conversations' });
+    expect(screen.getByText('טוען…')).toBeInTheDocument();
+    expect(screen.queryByText('אין שיחות תואמות.')).toBeNull();
+    await screen.findByText('נועה');
+  });
+
+  it('wave Y review: the pager keeps the current page up while the next one loads', async () => {
+    aiAdminState.conversations = Array.from({ length: 60 }, (_, i) =>
+      sampleConversation({
+        id: `e0000000-0000-4000-8000-${String(1000 + i).padStart(12, '0')}`,
+        userName: `משתמש ${i + 1}`,
+      }),
+    );
+    renderWithProviders(<ConversationsTab />, { route: '/admin/ai?tab=conversations' });
+    const pager = await screen.findByRole('navigation', { name: 'דפדוף בשיחות' });
+    fireEvent.click(within(pager).getByRole('button', { name: 'הבא' }));
+    // Synchronously after the click: the new page is not in yet, the old one is still shown.
+    expect(screen.getByText('משתמש 1')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'דפדוף בשיחות' })).toBeInTheDocument();
+    expect(screen.queryByText('טוען…')).toBeNull();
+    expect(await screen.findByText('משתמש 51')).toBeInTheDocument();
+  });
+
+  it('wave Y review: deleting the last row of the last page goes back to the last real page', async () => {
+    aiAdminState.conversations = Array.from({ length: 51 }, (_, i) =>
+      sampleConversation({
+        id: `e0000000-0000-4000-8000-${String(1000 + i).padStart(12, '0')}`,
+        userName: `משתמש ${i + 1}`,
+      }),
+    );
+    renderWithProviders(<ConversationsTab />, { route: '/admin/ai?tab=conversations' });
+    const pager = await screen.findByRole('navigation', { name: 'דפדוף בשיחות' });
+    fireEvent.click(within(pager).getByRole('button', { name: 'הבא' }));
+    const row = (await screen.findByText('משתמש 51')).closest('tr')!;
+    // Past the filter boxes' mount-time debounce, which must not move the page by itself.
+    await new Promise((r) => setTimeout(r, 400));
+    expect(screen.getByRole('navigation', { name: 'דפדוף בשיחות' })).toHaveTextContent('עמוד 2 מתוך 2');
+    fireEvent.click(within(row).getByRole('button', { name: 'מחק' }));
+    await waitFor(() =>
+      expect(screen.getByRole('navigation', { name: 'דפדוף בשיחות' })).toHaveTextContent('עמוד 1 מתוך 1'),
+    );
+    expect(await screen.findByText('משתמש 1')).toBeInTheDocument();
+    expect(screen.queryByText('אין שיחות תואמות.')).toBeNull();
+    await waitFor(() => expect(aiAdminState.lastListQuery).not.toHaveProperty('page', '2'));
+  });
+
+  it('wave Y review: an export straight after typing uses what is typed, not the debounced copy', async () => {
+    renderWithProviders(<ConversationsTab />, { route: '/admin/ai?tab=conversations' });
+    await screen.findByText('נועה');
+    fireEvent.change(screen.getByLabelText('חיפוש בתוכן השיחות'), { target: { value: 'למזג' } });
+    fireEvent.change(screen.getByLabelText('משתמש'), { target: { value: 'נועה' } });
+    fireEvent.click(screen.getByRole('button', { name: 'ייצוא JSONL' }));
+    await waitFor(() => expect(aiAdminState.lastExportQuery).not.toBeNull());
+    expect(aiAdminState.lastExportQuery).toMatchObject({ q: 'למזג', userId: 'נועה' });
+    // …and the list is flushed to the same filter.
+    await waitFor(() => expect(aiAdminState.lastListQuery).toMatchObject({ q: 'למזג', userId: 'נועה' }));
   });
 
   it('debounces the user box into one request', async () => {

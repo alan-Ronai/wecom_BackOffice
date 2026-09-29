@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { act, screen, within, waitFor } from '@testing-library/react';
+import { Route, Routes, useNavigate } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import type { QueryClient } from '@tanstack/react-query';
 import type { LearningItem } from '@wecom/shared';
 import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
+import { LearningItemEditor } from '../../src/components/learning/manage/LearningItemEditor.js';
 import { keys } from '../../src/api/keys.js';
 import { withMe } from '../msw/handlers.js';
 import { server } from '../msw/server.js';
@@ -114,5 +116,80 @@ describe('quiz builder — draft vs refetch', () => {
     await refetch(qc, LI_QUIZ, withStem('ניסוח חדש מהשרת'));
     await waitFor(() => expect(stem()).toHaveValue('ניסוח חדש מהשרת'));
     expect(screen.getByRole('button', { name: 'שמור שאלות' })).toBeDisabled();
+  });
+});
+
+/**
+ * Wave Y review: the builders are keyed by item, so a dirty draft on item B never survives a
+ * route change back to item A (the editor stays mounted across `:id` changes).
+ */
+describe('item editor — a draft stays with its item', () => {
+  const LI_BRIEF_B = 'b0000000-0000-4000-8000-0000000000bb';
+  const Nav = () => {
+    const go = useNavigate();
+    return (
+      <>
+        <button type="button" onClick={() => go(`/learning/manage/${LI_BRIEF}`)}>
+          to A
+        </button>
+        <button type="button" onClick={() => go(`/learning/manage/${LI_BRIEF_B}`)}>
+          to B
+        </button>
+      </>
+    );
+  };
+
+  it('A→B, edit B, back to A shows A’s entries; saving writes to A', async () => {
+    asEditor();
+    const a = learningState.items.find((i) => i.id === LI_BRIEF)!;
+    learningState.items.push({
+      ...structuredClone(a),
+      id: LI_BRIEF_B,
+      title: 'תדריך ב',
+      entries: a.entries.map((e) => ({ ...e, id: crypto.randomUUID(), note: 'הערה של ב' })),
+    });
+    const puts: string[] = [];
+    server.events.on('request:start', ({ request }) => {
+      if (request.method === 'PUT' && request.url.endsWith('/entries')) puts.push(request.url);
+    });
+    const r = renderWithProviders(
+      <>
+        <Nav />
+        <Routes>
+          <Route path="/learning/manage/:id" element={<LearningItemEditor />} />
+        </Routes>
+      </>,
+      { route: `/learning/manage/${LI_BRIEF}` },
+    );
+    // The app keeps a visited item cached (default gcTime), so going back to A renders it at once
+    // with the builder still mounted — the case the key exists for. The test client's gcTime 0
+    // would unmount it on the way and hide the bug.
+    r.qc.setDefaultOptions({ queries: { retry: false, gcTime: Infinity } });
+    const note = () => within(screen.getByTestId('entries-list')).getAllByLabelText('הערה לנציג')[0]!;
+    await screen.findByRole('heading', { level: 1, name: /נדידה/ });
+    const aNote = (note() as HTMLTextAreaElement).value;
+
+    await userEvent.click(screen.getByRole('button', { name: 'to B' }));
+    await screen.findByRole('heading', { level: 1, name: /תדריך ב/ });
+    await waitFor(() => expect(note()).toHaveValue('הערה של ב'));
+    await userEvent.clear(note());
+    await userEvent.type(note(), 'טיוטה של ב');
+
+    await userEvent.click(screen.getByRole('button', { name: 'to A' }));
+    await screen.findByRole('heading', { level: 1, name: /נדידה/ });
+    await waitFor(() => expect(note()).toHaveValue(aNote));
+    expect(screen.queryByDisplayValue('טיוטה של ב')).toBeNull();
+    expect(screen.getByRole('button', { name: 'שמור פריטים' })).toBeDisabled();
+
+    await userEvent.clear(note());
+    await userEvent.type(note(), 'עריכה של א');
+    await userEvent.click(screen.getByRole('button', { name: 'שמור פריטים' }));
+    await waitFor(() =>
+      expect(learningState.items.find((i) => i.id === LI_BRIEF)!.entries[0]!.note).toBe('עריכה של א'),
+    );
+    expect(puts.length).toBeGreaterThan(0);
+    expect(puts.every((u) => u.includes(LI_BRIEF) && !u.includes(LI_BRIEF_B))).toBe(true);
+    expect(learningState.items.find((i) => i.id === LI_BRIEF_B)!.entries[0]!.note).toBe('הערה של ב');
+    server.events.removeAllListeners();
   });
 });

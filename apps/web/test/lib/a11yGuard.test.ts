@@ -43,6 +43,25 @@ describe('B-M6 lint guard', () => {
     );
   });
 
+  it('wave Y review: catches role={\'button\'} and tabIndex="0" spellings too', async () => {
+    expect(
+      await b6(`export const A = () => <span role={'button'} tabIndex={0} onClick={() => 1}>x</span>;`),
+    ).toBe(1);
+    expect(await b6(`export const A = () => <span role={"button"} onClick={() => 1}>x</span>;`)).toBe(1);
+    expect(await b6(`export const A = () => <div tabIndex="0" onClick={() => 1}>x</div>;`)).toBe(1);
+    expect(await b6(`export const A = () => <div tabIndex={'0'} onClick={() => 1}>x</div>;`)).toBe(1);
+    // Exactly one report for role={'button'} + tabIndex="0": the role rule, not the tabIndex rule too.
+    expect(
+      await b6(`export const A = () => <span role={'button'} tabIndex="0" onClick={() => 1}>x</span>;`),
+    ).toBe(1);
+    expect(
+      await b6(
+        `declare const pressKeys: () => void;
+         export const A = () => <span role={'button'} tabIndex="0" onKeyDown={pressKeys} onClick={() => 1}>x</span>;`,
+      ),
+    ).toBe(0);
+  });
+
   it('accepts a real button, onKeyDown={pressKeys}, and native controls', async () => {
     expect(await b6(`export const A = () => <button type="button" onClick={() => 1}>x</button>;`)).toBe(0);
     expect(

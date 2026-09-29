@@ -30,6 +30,8 @@ module.exports = {
        * core `no-restricted-syntax`: a `role="button"` on anything but a `<button>`, and a
        * `tabIndex={0}` + `onClick` on a non-native element, each without an `onKeyDown`. The fix
        * is a real `<button type="button">`, or `onKeyDown={pressKeys}` from `src/lib/keyboard.ts`.
+       * Both spellings of each value are caught (wave Y review): `role="button"` and
+       * `role={'button'}`, `tabIndex={0}` and `tabIndex="0"`.
        * `test/lib/a11yGuard.test.ts` proves the rule fires.
        */
       files: ['apps/web/src/**/*.tsx'],
@@ -38,13 +40,13 @@ module.exports = {
           'error',
           {
             selector:
-              "JSXOpeningElement:not([name.name='button']):has(> JSXAttribute[name.name='role'][value.value='button']):not(:has(> JSXAttribute[name.name='onKeyDown']))",
+              "JSXOpeningElement:not([name.name='button']):has(> JSXAttribute[name.name='role']:matches([value.value='button'], [value.expression.value='button'])):not(:has(> JSXAttribute[name.name='onKeyDown']))",
             message:
               'B-M6: role="button" needs Enter/Space — use a real <button type="button">, or add onKeyDown={pressKeys} (src/lib/keyboard.ts).',
           },
           {
             selector:
-              "JSXOpeningElement:not([name.name=/^(button|input|select|textarea|summary)$/]):has(> JSXAttribute[name.name='tabIndex'][value.expression.value=0]):has(> JSXAttribute[name.name='onClick']):not(:has(> JSXAttribute[name.name='onKeyDown'])):not(:has(> JSXAttribute[name.name='href'])):not(:has(> JSXAttribute[name.name='role'][value.value='button']))",
+              "JSXOpeningElement:not([name.name=/^(button|input|select|textarea|summary)$/]):has(> JSXAttribute[name.name='tabIndex']:matches([value.expression.value=0], [value.value='0'], [value.expression.value='0'])):has(> JSXAttribute[name.name='onClick']):not(:has(> JSXAttribute[name.name='onKeyDown'])):not(:has(> JSXAttribute[name.name='href'])):not(:has(> JSXAttribute[name.name='role']:matches([value.value='button'], [value.expression.value='button'])))",
             message:
               'B-M6: a focusable element with onClick needs key handling — use a native control, or add onKeyDown={pressKeys} (src/lib/keyboard.ts).',
           },

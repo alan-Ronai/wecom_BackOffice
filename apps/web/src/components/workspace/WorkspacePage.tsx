@@ -141,6 +141,7 @@ export function WorkspacePage() {
             <ProposedEditsOverlay
               key={proposed.id}
               documentId={id}
+              doc={doc.data}
               proposed={proposed}
               onDecided={() => setProposed(null)}
               onDismiss={() => setProposed(null)}

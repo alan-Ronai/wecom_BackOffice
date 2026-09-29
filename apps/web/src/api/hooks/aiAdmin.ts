@@ -6,7 +6,7 @@
  * `checked` against the `@wecom/shared` schema the route is built to. The one exception is the
  * JSONL export, which has no JSON body to parse and is read as text.
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AiSettingsSchema,
   AiSettingVersionsResponseSchema,
@@ -122,6 +122,10 @@ export const useAdminConversations = (q: AdminConversationsQuery, enabled = true
   useQuery({
     queryKey: keys.ai.conversations({ admin: true, ...q }),
     enabled,
+    // Paging and filtering keep the previous screenful up while the next one loads, rather than
+    // blanking the table (and the pager) on every step.
+    placeholderData: keepPreviousData,
+
     queryFn: async () =>
       checked(
         ConversationsResponseSchema,

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { plural, type DecideProposedEditsResult, type ProposedEdits } from '@wecom/shared';
 import { useDecideProposedEdits } from '../../api/hooks/ai.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
-import { useCan } from '../../api/hooks/me.js';
+import { useCan, type ScopedDoc } from '../../api/hooks/me.js';
 import { useToast } from '../ui/Toast.js';
 import { ApiError } from '../../api/unwrap.js';
 import { anchoredBlocks, applyOps, htmlToPlain, normalizeAnchor } from '../../lib/proposedEdits.js';
@@ -25,17 +25,23 @@ const rejectedPhrase = (n: number) => plural(n, { one: 'אחת נדחית', two:
  */
 export function ProposedEditsOverlay({
   documentId,
+  doc,
   proposed,
   onDecided,
   onDismiss,
 }: {
   documentId: string;
+  /**
+   * The document being edited, for the world gate: applying hunks is a write and needs every world
+   * the document spans (wave Y). Without it the check falls back to the bare permission.
+   */
+  doc?: ScopedDoc;
   proposed: ProposedEdits | null;
   onDecided: (result: DecideProposedEditsResult) => void;
   onDismiss: () => void;
 }) {
   const can = useCan();
-  const mayEdit = can('docs.edit') && can('ai.chat');
+  const mayEdit = can('docs.edit', doc) && can('ai.chat');
   const source = useSourceDocument(documentId);
   const decide = useDecideProposedEdits(documentId);
   const toast = useToast();

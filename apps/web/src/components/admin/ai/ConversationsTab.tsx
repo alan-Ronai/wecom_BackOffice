@@ -96,9 +96,9 @@ export function ConversationsTab() {
   const filter = (patch: Partial<AdminConversationsQuery>) =>
     setQ((cur) => {
       const next = { ...cur, ...patch, page: 1 };
-      // An unchanged value (the debounce firing on mount) keeps the same object: no refetch.
-      return (Object.keys(patch) as (keyof AdminConversationsQuery)[]).every((k) => cur[k] === next[k]) &&
-        cur.page === 1
+      // An unchanged value (the debounce firing on mount, the export's flush) keeps the same
+      // object: no refetch, and no jump back to page 1 from the page the admin is on.
+      return (Object.keys(patch) as (keyof AdminConversationsQuery)[]).every((k) => cur[k] === next[k])
         ? cur
         : next;
     });
@@ -119,6 +119,18 @@ export function ConversationsTab() {
   const list = useAdminConversations(q);
   const page = q.page ?? 1;
   const pages = list.data ? Math.max(1, Math.ceil(list.data.total / (list.data.pageSize || PAGE_SIZE))) : 1;
+  /*
+   * Wave Y review: a page past the end (the last row of the last page deleted, or the total shrunk
+   * under a refetch) is clamped back to the last real page instead of stranding the admin on an
+   * empty screen. Only against a real answer — placeholder data is the previous query's total.
+   */
+  const settledPages = list.data && !list.isPlaceholderData ? pages : null;
+  useEffect(() => {
+    if (settledPages != null && page > settledPages) setQ((cur) => ({ ...cur, page: settledPages }));
+  }, [page, settledPages]);
+  /** The live filter boxes, not their debounced copy — what the admin sees is what gets exported. */
+  const liveText = { userId: userInput.trim() || undefined, q: textInput.trim() || undefined };
+  const loading = list.isPending || (list.isPlaceholderData && !list.data?.items.length);
   const detail = useAdminConversation(openId);
   const del = useDeleteConversation();
   const modal = useModal();
@@ -163,11 +175,13 @@ export function ConversationsTab() {
         <button
           type="button"
           className="btn ghost"
-          onClick={() =>
-            void exportConversations({ ...q, page: undefined, pageSize: undefined })
+          onClick={() => {
+            // Flush the debounce so the list catches up with the export it is about to describe.
+            filter(liveText);
+            void exportConversations({ ...q, ...liveText, page: undefined, pageSize: undefined })
               .then(() => toast('הייצוא הורד', 'ok'))
-              .catch(() => toast('הייצוא נכשל', 'warn'))
-          }
+              .catch(() => toast('הייצוא נכשל', 'warn'));
+          }}
         >
           ייצוא JSONL
         </button>
@@ -175,7 +189,7 @@ export function ConversationsTab() {
 
       <div className="transcript-layout">
         <div className="transcript-list">
-          <table className="table" aria-label="שיחות">
+          <table className="table" aria-label="שיחות" aria-busy={list.isFetching}>
             <thead>
               <tr>
                 <th>מתי</th>
@@ -223,11 +237,11 @@ export function ConversationsTab() {
                 </tr>
               ))}
               {/*
-              A filter change is a new query key, so `list.data` is empty until the fetch lands.
-              Without this branch the table claimed "no matching conversations" on every keystroke
-              and every date change, before it knew.
+              A filter change is a new query key. The previous screenful stays up while it loads
+              (`keepPreviousData`); when there is none — the first load, or an empty previous
+              answer — this says "loading", never "no matching conversations" before it knows.
             */}
-              {list.isPending ? (
+              {loading ? (
                 <tr>
                   <td colSpan={6} className="muted">
                     טוען…

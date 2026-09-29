@@ -10,6 +10,8 @@ export type SourceReviewDoc = {
   sourceReviewNeeded?: boolean;
   sourceReviewReason?: string | null;
   category?: Category;
+  /** Full world membership (W1). A write needs every one of them, so the badge gates on the set. */
+  worlds?: Category[] | null;
 };
 
 /**
@@ -23,7 +25,9 @@ export function SourceReviewBadge({ doc }: { doc: SourceReviewDoc }) {
   const toast = useToast();
   const clear = useClearSourceReview();
   if (!doc.sourceReviewNeeded) return null;
-  const editable = doc.category ? can('docs.edit', { category: doc.category }) : can('docs.edit');
+  const editable = doc.category
+    ? can('docs.edit', { category: doc.category, worlds: doc.worlds ?? null })
+    : can('docs.edit');
   return (
     <span className="chip chip-amber source-review" title={doc.sourceReviewReason ?? ''}>
       ⚑ נדרשת בדיקה — המקור השתנה

@@ -162,7 +162,7 @@ export function SuggestionsPanel({
     const rows = rowsOf(payload);
     const chosen = picked[s.id] ?? new Set<string>();
     return (
-      <li key={s.id}>
+      <li key={s.id} data-suggestion-id={s.id}>
         <SuggestionCard
           suggestion={s}
           canReview={canReview}

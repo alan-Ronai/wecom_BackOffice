@@ -134,13 +134,19 @@ test('W6-E2E-1 the chat proposes a source edit, the editor accepts it, and a par
   await e.reload();
   const panel = e.getByRole('region', { name: 'הצעות' });
   /*
-   * The panel lists `GET /suggestions?sourceId=` in the order the API returns it (newest first),
-   * which can hold the first revision's card beside this one. Address the target's card by its
-   * position in that same list rather than assuming it is first.
+   * On the workspace the panel lists `GET /suggestions?documentId=` — every source linked to the
+   * document, grouped per source when there is more than one, newest first — which can hold the
+   * first revision's card beside this one. So the target's card is addressed by its id
+   * (`data-suggestion-id` on the panel's `<li>`), never by position, and its presence is checked
+   * against that same `?documentId=` list the panel renders.
    */
-  const at = (await listOf()).findIndex((s) => s.id === target.id);
-  expect(at, 'the target is in the list the panel renders').toBeGreaterThanOrEqual(0);
-  const card = panel.locator('.suggestions-panel > ul > li').nth(at);
+  const panelList = (await (await api.get(`/api/v1/suggestions?documentId=${docId}`)).json())
+    .items as Listed[];
+  expect(
+    panelList.some((s) => s.id === target.id),
+    'the target is in the list the panel renders',
+  ).toBeTruthy();
+  const card = panel.locator(`li[data-suggestion-id="${target.id}"]`);
   await expect(card.getByRole('button', { name: 'עריכה מפורטת' })).toBeVisible({ timeout: 30_000 });
   await card.getByRole('button', { name: 'עריכה מפורטת' }).click();
   const drawer = e.getByRole('dialog', { name: 'עריכת ההצעה' });

@@ -34,7 +34,9 @@ export function DocCard({
       data-nopeek=""
       onClick={onOpen}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') onOpen();
+        // Only a keypress on the card itself opens it: Enter on the star or kebab inside bubbles
+        // up here, and must do that control's job only (wave Y review).
+        if (e.key === 'Enter' && e.target === e.currentTarget && !e.defaultPrevented) onOpen();
       }}
     >
       <span
