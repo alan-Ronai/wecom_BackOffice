@@ -287,6 +287,7 @@ export class ChatOrchestrator {
             input.emit({
               type: 'proposed_edits',
               proposedEditsId: pe.id,
+              messageId: pe.messageId,
               documentId: pe.documentId,
               baseSourceVersion: pe.baseSourceVersion,
               ops: pe.ops,

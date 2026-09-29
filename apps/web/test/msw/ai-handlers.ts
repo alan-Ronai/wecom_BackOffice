@@ -105,6 +105,8 @@ export const DEFAULT_SCRIPT: ChatEvent[] = [
   {
     type: 'proposed_edits',
     proposedEditsId: PE_1,
+    /** The tool message — deliberately not the `done` frame's MSG_3 (B-M6). */
+    messageId: MSG_2,
     documentId: DOC_1,
     baseSourceVersion: BASE_SOURCE_VERSION,
     ops: sampleProposedEdits().ops,

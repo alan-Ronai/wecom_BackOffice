@@ -37,20 +37,28 @@ describe('<ChatPane>', () => {
 
   it('surfaces proposed edits as a card and hands the host the event’s own base version', async () => {
     const user = userEvent.setup();
-    const got: { id: string; baseSourceVersion: number; documentId: string }[] = [];
+    const got: { id: string; messageId: string; baseSourceVersion: number; documentId: string }[] = [];
     renderWithProviders(
       <ChatPane
         kind="workspace"
         documentId={DOC_1}
         onProposedEdits={(pe) =>
-          got.push({ id: pe.id, baseSourceVersion: pe.baseSourceVersion, documentId: pe.documentId })
+          got.push({
+            id: pe.id,
+            messageId: pe.messageId,
+            baseSourceVersion: pe.baseSourceVersion,
+            documentId: pe.documentId,
+          })
         }
       />,
     );
     await user.type(await box(), 'קצר');
     await user.keyboard('{Enter}');
     expect(await screen.findByRole('region', { name: 'עריכות מוצעות' })).toBeInTheDocument();
-    await waitFor(() => expect(got).toEqual([{ id: PE_1, baseSourceVersion: 3, documentId: DOC_1 }]));
+    // B-M6: `messageId` is the tool message the frame names (MSG_2), not the reply `done` seals (MSG_3).
+    await waitFor(() =>
+      expect(got).toEqual([{ id: PE_1, messageId: MSG_2, baseSourceVersion: 3, documentId: DOC_1 }]),
+    );
   });
 
   it('accepting one hunk posts only that op id', async () => {

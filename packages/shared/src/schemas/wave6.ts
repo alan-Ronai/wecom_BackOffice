@@ -299,6 +299,11 @@ export const ChatEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('proposed_edits'),
     proposedEditsId: IdSchema,
+    /**
+     * The *tool* message the proposal hangs off (`ai_proposed_edits.message_id`), not the reply
+     * the `done` frame names — the pane hands it on as `ProposedEdits.messageId`.
+     */
+    messageId: IdSchema,
     documentId: IdSchema,
     baseSourceVersion: z.number().int().nonnegative(),
     ops: z.array(ProposedEditOpSchema),

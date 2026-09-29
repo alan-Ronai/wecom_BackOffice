@@ -85,6 +85,23 @@ run('ai proposed edits', () => {
     expect((await sourceRow()).current_version).toBe(before.current_version);
   });
 
+  it('B-M6: the frame names the tool message the proposal hangs off, not the reply `done` seals', async () => {
+    const { frame, conversationId } = await propose((t, i) => (i === 1 ? 'גרסה אחרת.' : t));
+    const row = await fx.db.pool.query(
+      `select p.message_id, m.role, m.conversation_id from ai_proposed_edits p
+         join ai_messages m on m.id = p.message_id where p.id = $1`,
+      [frame.proposedEditsId],
+    );
+    expect(frame.messageId).toBe(row.rows[0].message_id);
+    expect(row.rows[0]).toMatchObject({ role: 'tool', conversation_id: conversationId });
+    const got = await fx.app.inject({
+      method: 'GET',
+      url: `/api/v1/ai/proposed-edits/${frame.proposedEditsId}`,
+      headers: auth(fx.editor),
+    });
+    expect(got.json().messageId).toBe(frame.messageId);
+  });
+
   it('accepting everything saves one new source version, audits it and re-ingests', async () => {
     const before = await sourceRow();
     const { frame } = await propose((t, i) => (i === 1 ? 'בדוק חסימה מהירה.' : t));

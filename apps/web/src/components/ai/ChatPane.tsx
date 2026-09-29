@@ -101,7 +101,8 @@ export function ChatPane({
     if (last.proposed && onProposedEdits)
       onProposedEdits({
         id: last.proposed.proposedEditsId,
-        messageId: last.messageId,
+        // The tool message that proposed the hunks (B-M6), not the reply the `done` frame seals.
+        messageId: last.proposed.messageId,
         documentId: last.proposed.documentId,
         // From the event. Never fabricated: the apply path sends it as `If-Match`.
         baseSourceVersion: last.proposed.baseSourceVersion,
