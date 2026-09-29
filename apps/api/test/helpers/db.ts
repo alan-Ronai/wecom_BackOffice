@@ -1,6 +1,9 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import pg from 'pg';
 import { runner } from 'node-pg-migrate';
+import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 export interface TestDb {
   pool: pg.Pool;
@@ -28,10 +31,48 @@ const migrate = async (url: string) => {
   });
 };
 
+const withDb = (external: string, name: string) => {
+  const url = new URL(external);
+  url.pathname = '/' + name;
+  return url.toString();
+};
+
+/** Migrations change → new template; the name is a hash of every migration file. */
+const templateName = () => {
+  const hash = createHash('sha1');
+  for (const f of readdirSync('migrations').sort())
+    if (f !== 'package.json') hash.update(f).update(readFileSync(join('migrations', f)));
+  return 'kbtpl_' + hash.digest('hex').slice(0, 12);
+};
+
+/**
+ * Migrate once into a template database, then clone it per test file (`create database … template`
+ * is a file copy — milliseconds instead of a full migration run). An advisory lock serialises the
+ * first build across vitest workers.
+ */
+const ensureTemplate = async (admin: pg.Client, external: string) => {
+  const tpl = templateName();
+  await admin.query('select pg_advisory_lock(771100)');
+  try {
+    const { rowCount } = await admin.query('select 1 from pg_database where datname = $1', [tpl]);
+    if (!rowCount) {
+      await admin.query(`create database ${tpl}_build`);
+      await migrate(withDb(external, `${tpl}_build`));
+      await admin.query(`alter database ${tpl}_build rename to ${tpl}`);
+      await admin.query(`alter database ${tpl} with allow_connections false`);
+    }
+  } finally {
+    await admin.query('select pg_advisory_unlock(771100)');
+  }
+  return tpl;
+};
+
 /**
  * A migrated Postgres for integration tests.
  * Defaults to a throwaway testcontainer; set `TEST_DATABASE_URL` (a superuser connection string on an
- * already-running pgvector server) to create a fresh database on it instead — much faster to iterate on.
+ * already-running pgvector server) to clone a fresh database from a migrated template on it instead —
+ * one server for the whole run, and no per-file migration. (The migration tests start their own
+ * containers and are unaffected.)
  */
 export async function startTestDb(): Promise<TestDb> {
   const external = process.env.TEST_DATABASE_URL;
@@ -39,12 +80,10 @@ export async function startTestDb(): Promise<TestDb> {
     const admin = new pg.Client({ connectionString: external });
     await admin.connect();
     const name = 'kbtest_' + Math.random().toString(36).slice(2, 10);
-    await admin.query(`create database ${name}`);
+    const tpl = await ensureTemplate(admin, external);
+    await admin.query(`create database ${name} template ${tpl}`);
     await admin.end();
-    const url = new URL(external);
-    url.pathname = '/' + name;
-    const dbUrl = url.toString();
-    await migrate(dbUrl);
+    const dbUrl = withDb(external, name);
     const pool = new pg.Pool({ connectionString: dbUrl });
     pool.on('error', () => undefined); // see plugins/db.ts — the pool is shared with the app
     return {
