@@ -13,6 +13,7 @@ import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
 import { counted, documents as nDocs, versions as nVersions } from '../../lib/count.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 const ALERT_TONE: Record<string, string> = {
   renamed: 'chip-red',
@@ -77,11 +78,11 @@ function FieldTopbar({ name, go }: { name: string; go: (to: string) => void }) {
     <div className="topbar">
       <Hamburger />
       <div className="crumb">
-        <a role="button" tabIndex={0} onClick={() => go('/data')}>
+        <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/data')}>
           נתונים
         </a>
         <span className="sep">/</span>
-        <a role="button" tabIndex={0} onClick={() => go('/fields')}>
+        <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/fields')}>
           שדות CRM
         </a>
         <span className="sep">/</span>
@@ -169,11 +170,11 @@ function FieldPageBody({ data, canEdit }: { data: FieldPageData; canEdit: boolea
       <div className="topbar">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/data')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/data')}>
             נתונים
           </a>
           <span className="sep">/</span>
-          <a role="button" tabIndex={0} onClick={() => go('/fields')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/fields')}>
             שדות CRM
           </a>
           <span className="sep">/</span>
@@ -276,6 +277,7 @@ function FieldPageBody({ data, canEdit }: { data: FieldPageData; canEdit: boolea
                         <tr
                           key={row.stepKey}
                           role="button"
+                          onKeyDown={pressKeys}
                           tabIndex={0}
                           className="rowlink"
                           onClick={() => go(`/doc/${row.documentId}/${row.stepKey}`)}

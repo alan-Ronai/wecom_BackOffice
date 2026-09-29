@@ -9,6 +9,7 @@ import { STATUS_LABEL } from '../../lib/constants.js';
 import { Html } from '../Fmt.js';
 import type { ResolvedStep } from '../../lib/steps.js';
 import type { FieldInfo } from '../../lib/format.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** Port of legacy KB.stepConnections: shared block, CRM fields, dependencies and the source §. */
 export function StepConnections({
@@ -100,6 +101,7 @@ export function StepConnections({
                       className="doc-link"
                       data-nopeek=""
                       role="button"
+                      onKeyDown={pressKeys}
                       tabIndex={0}
                       onClick={() => onOpenStep(d.key)}
                     >
@@ -115,6 +117,7 @@ export function StepConnections({
           className="c"
           style={src ? { cursor: 'pointer' } : undefined}
           role={src ? 'button' : undefined}
+          onKeyDown={pressKeys}
           tabIndex={src ? 0 : undefined}
           onClick={src ? () => go(`/sources/${src.id}`) : undefined}
         >

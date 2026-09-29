@@ -4,6 +4,7 @@ import { usePreferences, useSavePreferences } from '../../api/hooks/preferences.
 import { useModal } from '../ui/Modal.js';
 import { Fmt } from '../Fmt.js';
 import { useFields } from '../../api/hooks/content.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 const SAMPLE = [
   'ודא שה-APN מוגדר ל-WE · אם לא מוגדר → הגדר. סימון רשת: H+ / 3G / LTE / 5G.',
@@ -27,6 +28,7 @@ function Pill({
           key={o.key}
           className={o.key === value ? 'on' : ''}
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={() => onPick(o.key)}
         >

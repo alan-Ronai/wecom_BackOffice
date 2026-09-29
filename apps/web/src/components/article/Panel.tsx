@@ -14,6 +14,7 @@ import type { FieldInfo } from '../../lib/format.js';
 import { CardMap } from './CardMap.js';
 import { useDocumentLearning } from '../../api/hooks/learning.js';
 import { notes as nNotes } from '../../lib/count.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 type Tab = 'links' | 'notes' | 'versions';
 
@@ -87,6 +88,7 @@ export function Panel({
             key={k}
             className={k === tab ? 'on' : ''}
             role="button"
+            onKeyDown={pressKeys}
             tabIndex={0}
             onClick={() => setTab(k)}
           >
@@ -94,7 +96,13 @@ export function Panel({
           </span>
         ))}
         {mobileOpen ? (
-          <span style={{ flex: '0 0 44px' }} role="button" tabIndex={0} onClick={onCloseMobile}>
+          <span
+            style={{ flex: '0 0 44px' }}
+            role="button"
+            onKeyDown={pressKeys}
+            tabIndex={0}
+            onClick={onCloseMobile}
+          >
             ✕
           </span>
         ) : null}
@@ -133,6 +141,7 @@ export function Panel({
                     <li key={it.id}>
                       <a
                         role="button"
+                        onKeyDown={pressKeys}
                         tabIndex={0}
                         onClick={() => go(can('learning.manage') ? `/learning/manage/${it.id}` : '/learning')}
                       >
@@ -164,7 +173,13 @@ export function Panel({
                   blockIds.map((id) => {
                     const s = steps.find((x) => x.blockId === id);
                     return (
-                      <div key={id} role="button" tabIndex={0} onClick={() => onShowBlock(id)}>
+                      <div
+                        key={id}
+                        role="button"
+                        onKeyDown={pressKeys}
+                        tabIndex={0}
+                        onClick={() => onShowBlock(id)}
+                      >
                         <span>
                           {s?.block?.title ?? 'בלוק'} ({s?.actions.length ?? 0} פעולות)
                         </span>
@@ -233,6 +248,7 @@ export function Panel({
                       <span
                         style={{ cursor: 'pointer' }}
                         role="button"
+                        onKeyDown={pressKeys}
                         tabIndex={0}
                         onClick={() => onSelectStep(st.key)}
                       >
@@ -244,6 +260,7 @@ export function Panel({
                   <span
                     className={'like' + (n.likedByMe ? ' on' : '')}
                     role="button"
+                    onKeyDown={pressKeys}
                     tabIndex={0}
                     onClick={() => likeNote.mutate(n.id)}
                   >
@@ -263,6 +280,7 @@ export function Panel({
                     key={v.version}
                     className={'vi' + (i === 0 ? ' cur' : '')}
                     role="button"
+                    onKeyDown={pressKeys}
                     tabIndex={0}
                     onClick={() => go(`/history/${doc.id}${i === 0 ? '' : '/' + v.version}`)}
                   >

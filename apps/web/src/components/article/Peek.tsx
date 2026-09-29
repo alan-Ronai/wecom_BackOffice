@@ -5,6 +5,7 @@ import { useBlocks } from '../../api/hooks/content.js';
 import { useNav } from '../shell/navStore.js';
 import { useEntityDialogs } from '../library/dialogs.js';
 import { cat, PRI } from '../../lib/constants.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 interface PeekState {
   docId: string;
@@ -133,6 +134,7 @@ export function Peek() {
         <span
           className="p"
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={() => {
             hide(true);
@@ -143,6 +145,7 @@ export function Peek() {
         </span>
         <span
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={() => {
             hide(true);
@@ -153,6 +156,7 @@ export function Peek() {
         </span>
         <span
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={() => {
             hide(true);

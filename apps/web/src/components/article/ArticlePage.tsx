@@ -51,6 +51,7 @@ import { LearningBadge } from '../learning/LearningBadge.js';
 import { ArticleAskPane } from '../ai/ArticleAskPane.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 import type { FieldInfo } from '../../lib/format.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** Stable empty array so memoised children are not invalidated on every render (M1). */
 const EMPTY_FIELDS: FieldInfo[] = [];
@@ -486,6 +487,7 @@ export function ArticlePage() {
               key={t}
               className="chip chip-gray tag-chip"
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               title={`סנן לפי ${t}`}
               onClick={() => go(`/library?tag=${encodeURIComponent(t)}`)}
@@ -615,11 +617,11 @@ export function ArticlePage() {
       <div className="topbar h56">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/library')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/library')}>
             ספרייה
           </a>
           <span className="sep">/</span>
-          <a role="button" tabIndex={0} onClick={() => go(`/library/${doc.category}`)}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go(`/library/${doc.category}`)}>
             {cat(doc.category).label}
           </a>
           <span className="sep">/</span>
@@ -646,6 +648,7 @@ export function ArticlePage() {
             aria-label={callMode ? 'מצב שיחה פעיל · כבה' : 'מצב קריאה · הפעל מצב שיחה'}
             aria-pressed={callMode}
             role="button"
+            onKeyDown={pressKeys}
             tabIndex={0}
             onClick={() =>
               savePrefs.mutate({
@@ -668,6 +671,7 @@ export function ArticlePage() {
                 title="אפס מעקב"
                 aria-label="אפס מעקב שיחה"
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -728,7 +732,13 @@ export function ArticlePage() {
       </div>
 
       <div className="trail">
-        <a role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => go('/library')}>
+        <a
+          role="button"
+          onKeyDown={pressKeys}
+          tabIndex={0}
+          style={{ cursor: 'pointer' }}
+          onClick={() => go('/library')}
+        >
           ספרייה
         </a>
         <span>›</span>
@@ -773,6 +783,7 @@ export function ArticlePage() {
             aria-label={`שלב ${s.num} מתוך ${steps.length} · ${stripFmt(s.title)}`}
             aria-current={s.key === call.activeKey}
             role="button"
+            onKeyDown={pressKeys}
             tabIndex={0}
             onClick={() => call.setActive(s.key)}
           >
@@ -823,6 +834,7 @@ export function ArticlePage() {
                               (call.state.results[s.key] ? ' done' : s.key === call.activeKey ? ' cur' : '')
                             }
                             role="button"
+                            onKeyDown={pressKeys}
                             tabIndex={0}
                             onClick={() => call.setActive(s.key)}
                           >
@@ -868,6 +880,7 @@ export function ArticlePage() {
                       <span
                         className="summary-copy"
                         role="button"
+                        onKeyDown={pressKeys}
                         tabIndex={0}
                         onClick={() => {
                           void copy(summary);

@@ -20,6 +20,7 @@ import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
 import { DiffView } from './DiffView.js';
 import { versions as nVersions } from '../../lib/count.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** Document picker when no `:id` is in the route (legacy history view). */
 function Picker() {
@@ -30,7 +31,7 @@ function Picker() {
       <div className="topbar">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/library')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/library')}>
             ספרייה
           </a>
           <span className="sep">/</span>
@@ -51,6 +52,7 @@ function Picker() {
                 className="tcard"
                 key={d.id}
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onClick={() => go(`/history/${d.id}`)}
               >
@@ -174,6 +176,7 @@ export function HistoryPage() {
               className={'facet' + (filter === k ? ' on' : '')}
               style={{ padding: '3px 9px', fontSize: 11 }}
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               onClick={() => setFilter(k)}
             >
@@ -205,6 +208,7 @@ export function HistoryPage() {
                 className={'vi' + (isCur ? ' cur' : isCmp ? ' cmp' : '')}
                 title={isCur ? 'הגרסה הנוכחית' : 'לחץ להשוואה מול הגרסה הנוכחית'}
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onClick={() => {
                   if (!isCur) go(`/history/${id}/${x.version}`, { replace: true });

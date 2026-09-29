@@ -6,6 +6,7 @@ import type { AuditQuery } from '../../api/types.js';
 import { download, fmtDate, fmtTime } from '../../lib/format.js';
 import { Chip, LoadError } from '../ui/index.js';
 import { useFocusTrap } from '../ui/useFocusTrap.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 const ENTITY_LABEL: Record<string, string> = {
   document: 'מסמך',
@@ -172,6 +173,7 @@ export function AuditPage() {
               <span
                 key={label}
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 className={days === n ? 'on' : ''}
                 onClick={() => setDays(n)}

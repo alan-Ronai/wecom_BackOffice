@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Hamburger } from '../shell/MobileDrawer.js';
 import { NotificationList } from './NotificationList.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** The full-page notification centre (6d desktop, 6g mobile) — the same list as the bell panel. */
 export function NotificationsPage() {
@@ -10,7 +11,7 @@ export function NotificationsPage() {
       <div className="topbar">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/library')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/library')}>
             ספרייה
           </a>
           <span className="sep">/</span>

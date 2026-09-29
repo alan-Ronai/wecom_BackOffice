@@ -20,6 +20,7 @@ import { StatusChip } from '../governance/StatusChip.js';
 import { useFocusTrap } from '../ui/useFocusTrap.js';
 import type { ListDocumentsResponse } from '../../api/types.js';
 import { results as nResults } from '../../lib/count.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /**
  * Tab cycles these filters, and the key is sent verbatim as `?types=` — so the keys must be the
@@ -427,6 +428,7 @@ export function Palette() {
                 key={k}
                 className={k === type ? 'on' : ''}
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onClick={() => {
                   setType(k);
@@ -437,7 +439,7 @@ export function Palette() {
               </span>
             ))}
           </div>
-          <kbd role="button" tabIndex={0} onClick={palette.close}>
+          <kbd role="button" onKeyDown={pressKeys} tabIndex={0} onClick={palette.close}>
             Esc
           </kbd>
         </div>
@@ -466,6 +468,7 @@ export function Palette() {
                     key={row.action.id}
                     className={'ri' + (isOn ? ' on' : '')}
                     role="button"
+                    onKeyDown={pressKeys}
                     tabIndex={0}
                     onMouseEnter={() => setSel(mine)}
                     onClick={() => choose(row, false)}
@@ -485,6 +488,7 @@ export function Palette() {
                   key={`${h.type}:${h.id}`}
                   className={'ri' + (isOn ? ' on' : '')}
                   role="button"
+                  onKeyDown={pressKeys}
                   tabIndex={0}
                   // A-2: the keyboard and a screen reader get the same label the eye gets — the
                   // item type, the world and the knowledge item, not the ingest filename.

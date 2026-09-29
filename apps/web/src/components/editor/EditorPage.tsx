@@ -66,6 +66,7 @@ import { PublishFeedbackPicker } from '../feedback/PublishFeedbackPicker.js';
 import { useChangePreview } from '../../api/hooks/learning.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 import { EditorChatDock, type DraftStep } from '../ai/EditorChatDock.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /**
  * Lazy because `RichText` is the tiptap/ProseMirror stack — ~1.1 MB of source, the single largest
@@ -959,6 +960,7 @@ export function EditorPage() {
                         <span
                           className="x"
                           role="button"
+                          onKeyDown={pressKeys}
                           tabIndex={0}
                           onClick={() => {
                             const next = structuredClone(doc);

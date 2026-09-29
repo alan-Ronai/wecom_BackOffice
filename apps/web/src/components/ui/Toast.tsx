@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { pressKeys } from '../../lib/keyboard.js';
 
 export type ToastKind = '' | 'ok' | 'warn';
 interface Item {
@@ -35,6 +36,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <span
                 className="u"
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onClick={() => {
                   t.undo?.();

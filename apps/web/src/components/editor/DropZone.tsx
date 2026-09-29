@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Block } from '@wecom/shared';
+import { pressKeys } from '../../lib/keyboard.js';
 
 export type SlashCommand =
   | { kind: 'basic'; value: string }
@@ -63,7 +64,7 @@ export function DropZone({
         }}
       >
         <span>שחרר בלוק כאן · או </span>
-        <b role="button" tabIndex={0} onClick={() => setValue('/')}>
+        <b role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => setValue('/')}>
           /
         </b>
         <span> לפקודה מהירה</span>

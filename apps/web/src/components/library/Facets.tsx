@@ -1,3 +1,5 @@
+import { pressKeys } from '../../lib/keyboard.js';
+
 export interface FacetValue {
   wave: 'all' | 1 | 2 | 3;
   flag: null | 'hh' | 'month' | 'partial' | 'changed';
@@ -10,6 +12,7 @@ export function Facets({ value, onChange }: { value: FacetValue; onChange: (v: F
       key={label}
       className={'facet' + (on ? ' on' : '')}
       role="button"
+      onKeyDown={pressKeys}
       tabIndex={0}
       onClick={() => onChange(next())}
     >

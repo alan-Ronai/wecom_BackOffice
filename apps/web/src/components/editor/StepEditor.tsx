@@ -3,6 +3,7 @@ import { crmIn } from '@wecom/shared';
 import { allSteps } from '../../lib/steps.js';
 import { Fmt } from '../Fmt.js';
 import { uid } from '../../lib/editorModel.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 type Patch = (mutate: (s: Step) => void) => void;
 
@@ -102,6 +103,7 @@ export function StepEditor({
               <span
                 className="detach"
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -114,6 +116,7 @@ export function StepEditor({
                 <span
                   className="detach"
                   role="button"
+                  onKeyDown={pressKeys}
                   tabIndex={0}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -138,6 +141,7 @@ export function StepEditor({
             className="mv"
             title="העלה"
             role="button"
+            onKeyDown={pressKeys}
             tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
@@ -150,6 +154,7 @@ export function StepEditor({
             className="mv"
             title="הורד"
             role="button"
+            onKeyDown={pressKeys}
             tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
@@ -170,6 +175,7 @@ export function StepEditor({
             className="del"
             title="מחק שלב"
             role="button"
+            onKeyDown={pressKeys}
             tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
@@ -246,6 +252,7 @@ export function StepEditor({
                   <span
                     className="x"
                     role="button"
+                    onKeyDown={pressKeys}
                     tabIndex={0}
                     onClick={() => onPatch((s) => s.actions.splice(ai, 1))}
                   >
@@ -267,6 +274,7 @@ export function StepEditor({
                   className="x small muted"
                   style={{ cursor: 'pointer' }}
                   role="button"
+                  onKeyDown={pressKeys}
                   tabIndex={0}
                   onClick={() => onPatch((s) => delete s.script)}
                 >
@@ -303,6 +311,7 @@ export function StepEditor({
                     className="x muted"
                     style={{ cursor: 'pointer' }}
                     role="button"
+                    onKeyDown={pressKeys}
                     tabIndex={0}
                     onClick={() => onPatch((s) => delete s.branch)}
                   >
@@ -346,6 +355,7 @@ export function StepEditor({
                       className="x muted"
                       style={{ cursor: 'pointer' }}
                       role="button"
+                      onKeyDown={pressKeys}
                       tabIndex={0}
                       onClick={() => onPatch((s) => s.branch!.options.splice(oi, 1))}
                     >
@@ -356,6 +366,7 @@ export function StepEditor({
                 <div className="addrow">
                   <span
                     role="button"
+                    onKeyDown={pressKeys}
                     tabIndex={0}
                     onClick={() =>
                       onPatch((s) => s.branch!.options.push({ kind: 'if', label: '', text: '' }))
@@ -397,6 +408,7 @@ export function StepEditor({
             <span
               className="x"
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               onClick={() => onPatch((s) => s.outcomes.splice(oi, 1))}
             >
@@ -409,6 +421,7 @@ export function StepEditor({
           {!step.blockId ? (
             <span
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               onClick={() => onPatch((s) => s.actions.push({ id: uid('a'), text: '' }))}
             >
@@ -417,6 +430,7 @@ export function StepEditor({
           ) : null}
           <span
             role="button"
+            onKeyDown={pressKeys}
             tabIndex={0}
             onClick={() =>
               onPatch((s) => s.outcomes.push({ kind: s.outcomes.length ? 'next' : 'ok', text: '' }))
@@ -426,13 +440,18 @@ export function StepEditor({
           </span>
           {!step.blockId ? (
             <>
-              <span role="button" tabIndex={0} onClick={() => onDrop('basic:branch')}>
+              <span role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => onDrop('basic:branch')}>
                 + הסתעפות
               </span>
-              <span role="button" tabIndex={0} onClick={() => onDrop('basic:script')}>
+              <span role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => onDrop('basic:script')}>
                 + תסריט
               </span>
-              <span role="button" tabIndex={0} onClick={() => onDrop('basic:description')}>
+              <span
+                role="button"
+                onKeyDown={pressKeys}
+                tabIndex={0}
+                onClick={() => onDrop('basic:description')}
+              >
                 + תיאור
               </span>
             </>
