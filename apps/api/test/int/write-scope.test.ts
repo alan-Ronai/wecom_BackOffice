@@ -384,6 +384,128 @@ run('write scope — every world (A-M6)', () => {
     });
 
     /**
+     * Review of A-M6: an item with no world of its own spans its cited documents' worlds, so the
+     * write that changes what it cites (or clears its world) is judged on the item it leaves.
+     */
+    describe('writes that move an item into other worlds', () => {
+      let billingDoc: string;
+      let simDoc: string;
+      let mixedDoc: string;
+      const item = async (payload: Record<string, unknown>, as = half) => {
+        const r = await post('/api/v1/learning/items', { title: 'עולמות', ...payload }, as);
+        expect(r.statusCode, r.body).toBe(201);
+        return r.json().id as string;
+      };
+      const put = (id: string, what: 'entries' | 'questions', docs: string[], as = half) =>
+        app.inject({
+          method: 'PUT',
+          url: `/api/v1/learning/items/${id}/${what}`,
+          headers: auth(as),
+          payload:
+            what === 'entries'
+              ? { entries: docs.map((documentId) => ({ documentId })) }
+              : {
+                  questions: docs.map((documentId) => ({
+                    documentId,
+                    stem: 'שאלה',
+                    kind: 'single',
+                    options: [{ id: 'a', text: 'נכון', correct: true }],
+                  })),
+                },
+        });
+      const counts = async (id: string) => {
+        const r = await db.pool.query(
+          `select (select count(*)::int from briefing_entries where item_id=$1) e,
+                  (select count(*)::int from quiz_questions where item_id=$1) q,
+                  (select world_slug from learning_items where id=$1) w`,
+          [id],
+        );
+        return r.rows[0] as { e: number; q: number; w: string | null };
+      };
+
+      beforeAll(async () => {
+        billingDoc = await makeDoc('עולמות גבייה', 'billing');
+        simDoc = await makeDoc('עולמות סים', 'sim');
+        mixedDoc = await makeDoc('עולמות גבייה+סים', 'billing', ['sim']);
+      });
+
+      it('entries: a world-less briefing cannot be made to cite a document the caller cannot see', async () => {
+        const id = await item({ kind: 'briefing', worldSlug: null });
+        const r = await put(id, 'entries', [billingDoc, simDoc]);
+        expect(r.statusCode, r.body).toBe(404);
+        expect(r.body).not.toContain('עולמות סים');
+        expect((await counts(id)).e).toBe(0);
+      });
+
+      it('entries: a billing briefing cannot cite a sim-only document either (the response would leak it)', async () => {
+        const id = await item({ kind: 'briefing', worldSlug: 'billing' });
+        expect((await put(id, 'entries', [simDoc])).statusCode).toBe(404);
+        expect((await counts(id)).e).toBe(0);
+      });
+
+      it('entries: citing a readable two-world document that would make the item two-world is a 403 and rolls back', async () => {
+        const id = await item({ kind: 'briefing', worldSlug: null });
+        const r = await put(id, 'entries', [mixedDoc]);
+        expect(r.statusCode, r.body).toBe(403);
+        expect(r.json().code).toBe('SCOPE_DENIED');
+        expect((await counts(id)).e).toBe(0);
+        // A billing-only citation keeps the item in the caller's world.
+        expect((await put(id, 'entries', [billingDoc])).statusCode).toBe(200);
+        // Holding both worlds, or none of the scoping, is enough.
+        expect((await put(id, 'entries', [mixedDoc, billingDoc], whole)).statusCode).toBe(200);
+        const other = await item({ kind: 'briefing', worldSlug: null }, admin);
+        expect((await put(other, 'entries', [simDoc, billingDoc], admin)).statusCode).toBe(200);
+        expect((await counts(other)).e).toBe(2);
+      });
+
+      it('questions: the same two checks, on a world-less quiz', async () => {
+        const id = await item({ kind: 'quiz', worldSlug: null });
+        expect((await put(id, 'questions', [simDoc])).statusCode).toBe(404);
+        const r = await put(id, 'questions', [billingDoc, mixedDoc]);
+        expect(r.statusCode, r.body).toBe(403);
+        expect(r.json().code).toBe('SCOPE_DENIED');
+        expect((await counts(id)).q).toBe(0);
+        expect((await put(id, 'questions', [billingDoc, mixedDoc], whole)).statusCode).toBe(200);
+        expect((await counts(id)).q).toBe(2);
+        const other = await item({ kind: 'quiz', worldSlug: null }, admin);
+        expect((await put(other, 'questions', [simDoc], admin)).statusCode).toBe(200);
+      });
+
+      it('PATCH worldSlug:null on a billing item citing a sim document hands it to sim — 403, the world stays', async () => {
+        // A billing item may cite a readable two-world document: its own world decides.
+        const id = await item({ kind: 'briefing', worldSlug: 'billing' });
+        expect((await put(id, 'entries', [mixedDoc])).statusCode).toBe(200);
+        const patch = (payload: Record<string, unknown>, as = half) =>
+          app.inject({ method: 'PATCH', url: `/api/v1/learning/items/${id}`, headers: auth(as), payload });
+        const r = await patch({ worldSlug: null, title: 'בלי עולם' });
+        expect(r.statusCode, r.body).toBe(403);
+        expect(r.json().code).toBe('SCOPE_DENIED');
+        const row = await db.pool.query('select world_slug, title from learning_items where id=$1', [id]);
+        expect(row.rows[0]).toMatchObject({ world_slug: 'billing', title: 'עולמות' });
+        // Other patches of the same item are untouched by the rule.
+        expect((await patch({ title: 'שונה' })).statusCode).toBe(200);
+        const ok = await patch({ worldSlug: null }, whole);
+        expect(ok.statusCode, ok.body).toBe(200);
+        expect((await counts(id)).w).toBeNull();
+        expect((await patch({ worldSlug: 'billing' }, admin)).statusCode).toBe(200);
+        expect((await patch({ worldSlug: null }, admin)).statusCode).toBe(200);
+      });
+
+      it('POST and /generate do not open the same hole', async () => {
+        // Create takes no references; a world the caller does not hold is refused up front.
+        expect(
+          (await post('/api/v1/learning/items', { kind: 'quiz', title: 'x', worldSlug: 'sim' }, half))
+            .statusCode,
+        ).toBe(403);
+        // Generate saves nothing and refuses documents the caller cannot read (A-I5).
+        const id = await item({ kind: 'quiz', worldSlug: null });
+        const g = await post(`/api/v1/learning/items/${id}/generate`, { documentIds: [simDoc] }, half);
+        expect(g.statusCode).toBe(404);
+        expect((await counts(id)).q).toBe(0);
+      });
+    });
+
+    /**
      * A-M8: `canSeeById` is the lean loader the routes use; `canSee` is the one that takes an
      * assembled item. They share one rule (`seesItem`), so over every viewer × item pair here —
      * unscoped, one-world, two-world, non-manager; draft and published; with a world, derived
@@ -599,6 +721,104 @@ run('write scope — every world (A-M6)', () => {
       const res = await post(`/api/v1/sync/links/${linkId}/resolve`, { resolution: 'merged' }, whole);
       expect(res.statusCode).toBe(400);
       expect(res.json().code).toBe('MERGE_REQUIRED');
+    });
+  });
+
+  /**
+   * Review of A-M6: restoring or purging a trashed block or CRM field changes every document that
+   * uses it, so it follows `assertBlockWritable` / `assertFieldWritable` — every world of those
+   * documents. The bulk routes leave such items in the trash rather than refusing the batch.
+   */
+  describe('trash: blocks and fields', () => {
+    const draft = async (title: string, category: string, text: string, block: string | null = null) => {
+      const r = await post('/api/v1/documents', {
+        title,
+        category,
+        worlds: [],
+        wave: 1,
+        priority: 'm',
+        kind: 'steps',
+      });
+      expect(r.statusCode, r.body).toBe(201);
+      await putStructure(r.json().id as string, text, block);
+    };
+    /** The row's `deleted_at` (null once restored), or 'gone' once purged. */
+    const trashed = async (table: 'blocks' | 'crm_fields', key: string, id: string) => {
+      const r = await db.pool.query(`select deleted_at from ${table} where ${key}=$1`, [id]);
+      return r.rowCount ? (r.rows[0].deleted_at as Date | null) : 'gone';
+    };
+    const del = (url: string, as = half, headers: Record<string, string> = {}) =>
+      app.inject({ method: 'DELETE', url, headers: { ...auth(as), ...headers } });
+
+    it('a block used in billing and sim: a billing manager may not restore or purge it; bulk leaves it', async () => {
+      const b = (
+        await post('/api/v1/blocks', {
+          title: 'בלוק לסל',
+          kind: 'step',
+          actions: [{ id: 'a1', text: 'x' }],
+          outcomes: [{ kind: 'ok', text: '✓' }],
+        })
+      ).json().id as string;
+      await draft('בלוק לסל גבייה', 'billing', 'המשך', b);
+      await draft('בלוק לסל סים', 'sim', 'המשך', b);
+      expect((await del(`/api/v1/blocks/${b}`, admin)).statusCode).toBeLessThan(300);
+
+      expect((await post(`/api/v1/trash/block/${b}/restore`, {}, half)).statusCode).toBe(403);
+      expect((await del(`/api/v1/trash/block/${b}`)).statusCode).toBe(403);
+      expect((await post('/api/v1/trash/restore-all', {}, half)).statusCode).toBe(200);
+      expect(await trashed('blocks', 'id', b)).toBeInstanceOf(Date);
+      expect((await del('/api/v1/trash', half, { 'x-confirm': 'empty' })).statusCode).toBe(200);
+      expect(await trashed('blocks', 'id', b)).toBeInstanceOf(Date);
+
+      expect((await post(`/api/v1/trash/block/${b}/restore`, {}, whole)).statusCode).toBe(200);
+      expect(await trashed('blocks', 'id', b)).toBeNull();
+      // Unscoped: purge goes through.
+      expect((await del(`/api/v1/blocks/${b}`, admin)).statusCode).toBeLessThan(300);
+      expect((await del(`/api/v1/trash/block/${b}`, admin)).statusCode).toBe(204);
+      expect(await trashed('blocks', 'id', b)).toBe('gone');
+    });
+
+    it('a CRM field mentioned in billing and sim: the same rule', async () => {
+      const F = 'קוד לסל';
+      const enc = encodeURIComponent(F);
+      expect(
+        (
+          await app.inject({
+            method: 'PUT',
+            url: `/api/v1/fields/${enc}`,
+            headers: auth(admin),
+            payload: { name: F, status: 'ok', path: 'CRM > לקוח' },
+          })
+        ).statusCode,
+      ).toBe(200);
+      await draft('שדה לסל גבייה', 'billing', `בדוק את ${F}`);
+      await draft('שדה לסל סים', 'sim', `בדוק את ${F}`);
+      expect((await del(`/api/v1/fields/${enc}`, admin)).statusCode).toBeLessThan(300);
+
+      expect((await post(`/api/v1/trash/field/${enc}/restore`, {}, half)).statusCode).toBe(403);
+      expect((await del(`/api/v1/trash/field/${enc}`)).statusCode).toBe(403);
+      await post('/api/v1/trash/restore-all', {}, half);
+      await del('/api/v1/trash', half, { 'x-confirm': 'empty' });
+      expect(await trashed('crm_fields', 'name', F)).toBeInstanceOf(Date);
+
+      expect((await post(`/api/v1/trash/field/${enc}/restore`, {}, whole)).statusCode).toBe(200);
+      expect(await trashed('crm_fields', 'name', F)).toBeNull();
+      expect((await del(`/api/v1/fields/${enc}`, admin)).statusCode).toBeLessThan(300);
+      expect((await post(`/api/v1/trash/field/${enc}/restore`, {}, admin)).statusCode).toBe(200);
+    });
+
+    it("a block used only in the caller's world is theirs to restore", async () => {
+      const b = (
+        await post('/api/v1/blocks', {
+          title: 'בלוק גבייה לסל',
+          kind: 'step',
+          actions: [{ id: 'a1', text: 'x' }],
+          outcomes: [{ kind: 'ok', text: '✓' }],
+        })
+      ).json().id as string;
+      await draft('בלוק גבייה לסל מסמך', 'billing', 'המשך', b);
+      expect((await del(`/api/v1/blocks/${b}`, admin)).statusCode).toBeLessThan(300);
+      expect((await post(`/api/v1/trash/block/${b}/restore`, {}, half)).statusCode).toBe(200);
     });
   });
 });

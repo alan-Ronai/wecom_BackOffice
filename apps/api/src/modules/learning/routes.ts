@@ -28,7 +28,7 @@ import {
 import type { ModelClient } from '@wecom/model';
 import { audit } from '../../lib/audit.js';
 import { forbidden, httpError, notFound } from '../../lib/http.js';
-import { withTransaction } from '../../lib/sql.js';
+import { withTransaction, type Tx } from '../../lib/sql.js';
 import { hasAllScopes, hasScope, requireUser } from '../../lib/user.js';
 import { getDocument } from '../documents/repo.js';
 import * as repo from './repo.js';
@@ -69,6 +69,9 @@ export default async function learningRoutes(app: FastifyInstance) {
    * texts, branch labels and CRM field names back rendered as question stems and options — a
    * content read `GET /documents/:id` would refuse them. 404, not 403, for the same reason the
    * document routes do it: a 403 would confirm the document exists.
+   *
+   * Wave Y: the entries and questions PUTs run it too — a saved reference is served back in the
+   * item (and in its preview), so citing a document is reading it.
    */
   const assertDocumentsInScope = async (ids: string[], user: ReturnType<typeof requireUser>) => {
     if (user.worldScopes === null) return;
@@ -76,6 +79,21 @@ export default async function learningRoutes(app: FastifyInstance) {
       const doc = await getDocument(app.db, id);
       if (!doc || !hasScope(user, doc.worlds)) throw notFound('המסמך');
     }
+  };
+  /**
+   * Wave Y (review of A-M6): the write rule, applied to the item *as the write leaves it*.
+   *
+   * An item with no world of its own spans the worlds of the documents it cites (`worldsOfItem`),
+   * so replacing its entries or questions — or clearing its `worldSlug` — can move it into worlds
+   * the caller does not hold: a `billing` manager creating a world-less briefing and citing `tech`
+   * documents would end up owning a `tech` briefing. `assertScope` only looks at the item before
+   * the write, so this runs inside the transaction after it and the 403 rolls the write back.
+   */
+  const assertWritableAfter = async (tx: Tx, id: string, user: ReturnType<typeof requireUser>) => {
+    if (user.worldScopes === null) return;
+    const worlds = await repo.worldsOfItem(tx, id);
+    if (worlds.length && !hasAllScopes(user, worlds))
+      throw httpError(403, 'SCOPE_DENIED', 'ההרשאה שלך מוגבלת לעולמות תוכן אחרים');
   };
 
   app.get(
@@ -166,6 +184,8 @@ export default async function learningRoutes(app: FastifyInstance) {
       if (body.worldSlug && !hasAllScopes(user, body.worldSlug)) throw forbidden();
       return withTransaction(app.db, async (tx) => {
         const after = await repo.patchItem(tx, id, body, user.id);
+        // `worldSlug: null` hands the item to its cited documents' worlds.
+        if (body.worldSlug !== undefined) await assertWritableAfter(tx, id, user);
         await audit(tx, {
           actorId: user.id,
           action: 'learning.patch',
@@ -254,8 +274,13 @@ export default async function learningRoutes(app: FastifyInstance) {
       assertScope(item, user);
       if (item.kind !== 'briefing') throw httpError(400, 'WRONG_KIND', 'הפעולה מתאימה לתדריך בלבד');
       if (item.status === 'archived') throw httpError(409, 'ITEM_ARCHIVED', 'פריט בארכיון אינו ניתן לעריכה');
+      await assertDocumentsInScope(
+        body.entries.map((x) => x.documentId),
+        user,
+      );
       return withTransaction(app.db, async (tx) => {
         const after = await repo.replaceEntries(tx, id, body.entries, user.id);
+        await assertWritableAfter(tx, id, user);
         await audit(tx, {
           actorId: user.id,
           action: 'learning.entries',
@@ -290,8 +315,13 @@ export default async function learningRoutes(app: FastifyInstance) {
       assertScope(item, user);
       if (item.kind !== 'quiz') throw httpError(400, 'WRONG_KIND', 'הפעולה מתאימה לבוחן בלבד');
       if (item.status === 'archived') throw httpError(409, 'ITEM_ARCHIVED', 'פריט בארכיון אינו ניתן לעריכה');
+      await assertDocumentsInScope(
+        body.questions.map((x) => x.documentId),
+        user,
+      );
       return withTransaction(app.db, async (tx) => {
         const after = await repo.replaceQuestions(tx, id, body.questions, user.id);
+        await assertWritableAfter(tx, id, user);
         await audit(tx, {
           actorId: user.id,
           action: 'learning.questions',
