@@ -325,6 +325,8 @@ export default function aiRoutes(deps: AiRouteDeps) {
           documentId: query.documentId,
           from: query.from,
           to: query.to,
+          // Wave Y (B-M12): the export is what the browser shows, search included — unpaged.
+          ...(query.q?.trim() ? { q: query.q.trim() } : {}),
         };
         /**
          * A-I7. This streams every user's conversations, messages and feedback notes off the box

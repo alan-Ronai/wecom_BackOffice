@@ -93,6 +93,8 @@ export const sampleEvalRun = (over: Partial<EvalRun> = {}): EvalRun => ({
   hitTarget: 0.78,
   hitType: 0.85,
   contentOverlap: 0.61,
+  precision: 0.962,
+  languageFailures: 3,
   notes: '',
   ...over,
 });
@@ -191,6 +193,9 @@ export const aiAdminState = {
   exportCalls: 0,
   /** How many times the admin conversation *list* was fetched — the debounce is asserted on it. */
   listCalls: 0,
+  /** The query string the list / export last asked with (wave Y: `q` and `page` are asserted). */
+  lastListQuery: null as Record<string, string> | null,
+  lastExportQuery: null as Record<string, string> | null,
   analytics: sampleAnalytics(),
   /** The query string the analytics tab last asked with, so a filter can be asserted end to end. */
   lastAnalyticsQuery: null as Record<string, string> | null,
@@ -209,6 +214,8 @@ export const resetAiAdminState = (): void => {
   aiAdminState.lastTest = null;
   aiAdminState.exportCalls = 0;
   aiAdminState.listCalls = 0;
+  aiAdminState.lastListQuery = null;
+  aiAdminState.lastExportQuery = null;
   aiAdminState.analytics = sampleAnalytics();
   aiAdminState.lastAnalyticsQuery = null;
 };
@@ -272,8 +279,9 @@ export const aiAdminHandlers: RequestHandler[] = [
     return HttpResponse.json(aiAdminState.analytics);
   }),
   // Before `/admin/ai/conversations`, or the export path would be read as a conversation id.
-  http.get(`${B}/admin/ai/conversations/export.jsonl`, () => {
+  http.get(`${B}/admin/ai/conversations/export.jsonl`, ({ request }) => {
     aiAdminState.exportCalls += 1;
+    aiAdminState.lastExportQuery = Object.fromEntries(new URL(request.url).searchParams);
     const lines = aiAdminState.conversations
       .filter((c) => !aiAdminState.deleted.includes(c.id))
       .map((c) => JSON.stringify({ conversation: c, messages: aiAdminState.messages[c.id] ?? [] }));
@@ -287,12 +295,26 @@ export const aiAdminHandlers: RequestHandler[] = [
     // here: the real route has no such parameter, and a mock that invents one lets a UI filter
     // pass its test while doing nothing against the server (X6 fix wave — B-I3).
     aiAdminState.listCalls += 1;
+    aiAdminState.lastListQuery = Object.fromEntries(u.searchParams);
     const userId = u.searchParams.get('userId');
     const documentId = u.searchParams.get('documentId');
+    const q = u.searchParams.get('q')?.toLowerCase();
+    const page = Number(u.searchParams.get('page') ?? 1);
+    const pageSize = Number(u.searchParams.get('pageSize') ?? 50);
     let items = aiAdminState.conversations.filter((c) => !aiAdminState.deleted.includes(c.id));
     if (userId) items = items.filter((c) => c.userId === userId || c.userName.includes(userId));
     if (documentId) items = items.filter((c) => c.documentId === documentId);
-    return HttpResponse.json({ items, total: items.length, page: 1, pageSize: 50 });
+    // Wave Y (B-M12): `q` matches message bodies, as the route does.
+    if (q)
+      items = items.filter((c) =>
+        (aiAdminState.messages[c.id] ?? []).some((m) => m.content.toLowerCase().includes(q)),
+      );
+    return HttpResponse.json({
+      items: items.slice((page - 1) * pageSize, page * pageSize),
+      total: items.length,
+      page,
+      pageSize,
+    });
   }),
   http.delete(`${B}/admin/ai/conversations/:id`, ({ params }) => {
     aiAdminState.deleted.push(String(params.id));

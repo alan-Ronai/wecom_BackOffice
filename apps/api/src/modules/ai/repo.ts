@@ -21,6 +21,7 @@ import type {
   ProposedEditsStatus,
 } from '@wecom/shared';
 import type { Queryable, Tx } from '../../lib/sql.js';
+import { LIKE_ESCAPE, likeEscape } from '../../lib/sql.js';
 
 export type Q = Queryable;
 
@@ -109,6 +110,17 @@ const conversationSelect = (viewer: ConversationViewer | undefined, scopeParam: 
       }
     left join users u on u.id = c.user_id`;
 
+/**
+ * Wave Y (B-M12): "some message in conversation `c` contains the needle", case-insensitively.
+ * The needle is a bound parameter with its LIKE wildcards escaped, so `%` and `_` are literals;
+ * `ai_messages_content_trgm` (0058) serves the leading-wildcard `ilike`. It only ever narrows —
+ * the caller's own scoping stays whatever the surrounding `where` already says.
+ */
+const bodyMatches = (param: string): string =>
+  `exists (select 1 from ai_messages sm
+            where sm.conversation_id = c.id
+              and sm.content ilike '%' || ${likeEscape(param)} || '%'${LIKE_ESCAPE})`;
+
 /* ── conversations ───────────────────────────────────────────────────────── */
 
 export async function createConversation(
@@ -166,17 +178,20 @@ export async function listConversations(
       and ($2::uuid is null or c.document_id = $2)
       and ($3::text is null or c.kind = $3)
       and ($4::timestamptz is null or c.created_at >= $4)
-      and ($5::timestamptz is null or c.created_at <= $5)`;
+      and ($5::timestamptz is null or c.created_at <= $5)
+      and ($6::text is null or ${bodyMatches('$6')})`;
+  const needle = query.q?.trim();
   const params = [
     query.userId,
     query.documentId ?? null,
     query.kind ?? null,
     query.from ?? null,
     query.to ?? null,
+    needle ? needle : null,
   ];
   const total = await q.query(`select count(*)::int n from ai_conversations c ${where}`, params);
   const r = await q.query(
-    `${conversationSelect(viewer, '$8')} ${where} order by c.updated_at desc limit $6 offset $7`,
+    `${conversationSelect(viewer, '$9')} ${where} order by c.updated_at desc limit $7 offset $8`,
     [
       ...params,
       query.pageSize,
@@ -383,6 +398,8 @@ export interface ExportFilter {
   to?: string;
   userId?: string;
   documentId?: string;
+  /** Message-body search, the same predicate as `listConversations`' `q`. */
+  q?: string;
 }
 
 const EXPORT_PAGE = 100;
@@ -410,6 +427,7 @@ export async function* exportCursor(q: Q, filter: ExportFilter): AsyncIterable<E
       EXPORT_PAGE,
       after ? after.createdAt : null,
       after ? after.id : null,
+      filter.q?.trim() || null,
     ];
     const page: { rowCount: number | null; rows: { id: string; created_at: Date }[] } = await q.query(
       `select c.id, c.created_at from ai_conversations c
@@ -419,6 +437,7 @@ export async function* exportCursor(q: Q, filter: ExportFilter): AsyncIterable<E
           and ($3::timestamptz is null or c.created_at >= $3)
           and ($4::timestamptz is null or c.created_at <= $4)
           and ($6::timestamptz is null or (c.created_at, c.id) > ($6::timestamptz, $7::uuid))
+          and ($8::text is null or ${bodyMatches('$8')})
         order by c.created_at, c.id limit $5`,
       params,
     );

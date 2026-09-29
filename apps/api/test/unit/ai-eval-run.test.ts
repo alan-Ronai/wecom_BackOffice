@@ -84,4 +84,12 @@ describe('runEvalCases survives a model that throws', () => {
     expect(res.hitTarget).toBeGreaterThanOrEqual(0.875);
     expect(res.precision).toBeGreaterThanOrEqual(0.9);
   });
+
+  it('wave Y: precision is a field of its own, no longer a phrase in the notes', async () => {
+    const res = await runEvalCases(rulesModel(), cases);
+    expect(typeof res.precision).toBe('number');
+    expect(typeof res.languageFailures).toBe('number');
+    expect(res.notes).not.toMatch(/precision|כשלי שפה/);
+    expect(res.notes).toBe('');
+  });
 });

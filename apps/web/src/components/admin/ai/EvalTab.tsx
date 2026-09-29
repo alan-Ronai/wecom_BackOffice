@@ -3,6 +3,8 @@ import { fmtDate, fmtTime } from '../../../lib/format.js';
 import { useToast } from '../../ui/Toast.js';
 
 const pct = (x: number) => Math.round(x * 100) + '%';
+/** Precision is compared to three places across tiers (0.962 vs 1.000), so it is not rounded to a percent. */
+const prec = (x: number | null) => (x == null ? '—' : x.toFixed(3));
 
 /**
  * הערכה — the offline evaluation harness (spec §1.9).
@@ -35,7 +37,7 @@ export function EvalTab() {
           הרץ הערכה
         </button>
         <span className="muted small">
-          ההערכה רצה על סט המקרים המחויב במאגר ומודדת פגיעה בשלב היעד, בסוג ההצעה ובחפיפת התוכן.
+          ההערכה רצה על סט המקרים המחויב במאגר ומודדת פגיעה בשלב היעד, בסוג ההצעה, בחפיפת התוכן, בדיוק ובשפה.
         </span>
       </div>
       <table className="table" aria-label="ריצות הערכה">
@@ -49,6 +51,8 @@ export function EvalTab() {
             <th>שלב יעד</th>
             <th>סוג</th>
             <th>חפיפת תוכן</th>
+            <th>דיוק</th>
+            <th>כשלי שפה</th>
             <th>הערות</th>
           </tr>
         </thead>
@@ -65,12 +69,14 @@ export function EvalTab() {
               <td>{pct(r.hitTarget)}</td>
               <td>{pct(r.hitType)}</td>
               <td>{pct(r.contentOverlap)}</td>
+              <td dir="ltr">{r.finishedAt ? prec(r.precision) : ''}</td>
+              <td>{r.finishedAt ? (r.languageFailures ?? '—') : ''}</td>
               <td>{r.finishedAt ? r.notes : 'רץ…'}</td>
             </tr>
           ))}
           {!runs.data?.length ? (
             <tr>
-              <td colSpan={9} className="muted">
+              <td colSpan={11} className="muted">
                 עדיין לא בוצעה הערכה.
               </td>
             </tr>

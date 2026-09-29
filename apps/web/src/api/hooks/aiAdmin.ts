@@ -97,18 +97,24 @@ export interface AdminConversationsQuery {
   documentId?: string;
   from?: string;
   to?: string;
+  /** Free text over message bodies (wave Y, B-M12). Blank is not sent. */
+  q?: string;
   page?: number;
+  pageSize?: number;
 }
 
 /**
- * `page` is the tab's own state and not a `ConversationsQuerySchema` field, so it is dropped here
- * rather than sent. There is deliberately no `feedback`: the route has no such field, the list row
- * carries no message-level rating to filter on locally, and a filter that only changes the query
- * key is worse than no filter (X6 fix wave — the control was removed).
+ * Only set fields are sent. There is deliberately no `feedback`: the route has no such field, the
+ * list row carries no message-level rating to filter on locally, and a filter that only changes
+ * the query key is worse than no filter (X6 fix wave — the control was removed).
  */
-const serverQuery = (q: AdminConversationsQuery): Record<string, string> => {
-  const out: Record<string, string> = {};
+const serverQuery = (q: AdminConversationsQuery): Record<string, string | number> => {
+  const out: Record<string, string | number> = {};
   for (const k of ['userId', 'documentId', 'from', 'to'] as const) if (q[k]) out[k] = q[k]!;
+  const needle = q.q?.trim();
+  if (needle) out.q = needle;
+  if (q.page && q.page > 1) out.page = q.page;
+  if (q.pageSize) out.pageSize = q.pageSize;
   return out;
 };
 
