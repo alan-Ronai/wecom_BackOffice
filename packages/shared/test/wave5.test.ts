@@ -59,6 +59,17 @@ describe('wave5 schemas (approved spec)', () => {
     expect(s.requireApprover).toBe(false);
     expect(WORKFLOW_SETTINGS_KEY).toBe('workflow');
   });
+  it('wave Y (A-M4): the gap floors are settings keys with the old constants as defaults', () => {
+    const s = WorkflowSettingsSchema.parse({ learning: {}, gaps: {} });
+    expect(s.gaps.failedQuestionMin).toBe(5);
+    expect(s.gaps.topicViewsMin).toBe(3);
+    expect(WorkflowSettingsSchema.safeParse({ learning: {}, gaps: { failedQuestionMin: 0 } }).success).toBe(
+      false,
+    );
+    expect(WorkflowSettingsSchema.safeParse({ learning: {}, gaps: { topicViewsMin: 1.5 } }).success).toBe(
+      false,
+    );
+  });
   it('gives the web player the ids it keys on', () => {
     // The agent-web lanes key the answer map by question id and link the article banner
     // straight at the open refresh assignment, so neither may be absent from the contract.

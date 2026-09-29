@@ -327,6 +327,14 @@ export const WorkflowSettingsSchema = z.object({
     feedbackClusterMin: z.number().int().min(1).default(3),
     staleDays: z.number().int().min(30).default(180),
     failedQuestionRate: z.number().min(0.1).max(1).default(0.5),
+    /**
+     * Wave Y (A-M4 follow-up): were constants in `gaps/heuristics.ts`. How many finished answers a
+     * question needs before its fail rate means anything — read by the `failed_question` heuristic
+     * *and* the learning dashboard's failed-question tile, so the two cannot disagree again.
+     */
+    failedQuestionMin: z.number().int().min(1).max(1000).default(5),
+    /** How many views a topic needs before "no procedure covers it" is worth an operator's time. */
+    topicViewsMin: z.number().int().min(1).max(100000).default(3),
   }),
 });
 export const WorkflowSettingsPutSchema = WorkflowSettingsSchema.deepPartial();

@@ -17,7 +17,6 @@ import { httpError, notFound } from '../../../lib/http.js';
 import type { Queryable, Tx } from '../../../lib/sql.js';
 import { iso } from '../../documents/repo.js';
 import { itemWorldScopeSql } from '../repo.js';
-import { FAILED_QUESTION_MIN_ATTEMPTS } from '../../gaps/heuristics.js';
 import {
   assignmentStats,
   documentSnapshotFor,
@@ -445,6 +444,8 @@ export async function dashboard(
   q: Queryable,
   world: string | undefined,
   scopes: readonly string[] | null,
+  /** `WorkflowSettings.gaps.failedQuestionMin` — the floor the `failed_question` heuristic uses. */
+  failedQuestionMin: number,
 ): Promise<LearningDashboard> {
   const params: unknown[] = [];
   let worldTerm = '';
@@ -501,12 +502,13 @@ export async function dashboard(
     rate: (r.assigned as number) ? (r.completed as number) / (r.assigned as number) : 0,
   }));
   /**
-   * A-M4: the same floor the `failed_question` heuristic uses. This tile hardcoded 3 and
-   * `heuristics.ts` hardcoded 5, so the dashboard and the gap list disagreed about which
-   * questions were "failing" while only the *rate* came from settings. Interpolated, not bound:
-   * `params` is shared with the queries around it and a trailing unused value is a bind error.
+   * A-M4: the same floor the `failed_question` heuristic uses — `WorkflowSettings.gaps
+   * .failedQuestionMin` since wave Y. This tile hardcoded 3 and `heuristics.ts` hardcoded 5, so
+   * the dashboard and the gap list disagreed about which questions were "failing". Interpolated,
+   * not bound: `params` is shared with the queries around it and a trailing unused value is a
+   * bind error — and it is an integer the settings schema has already validated, never text.
    */
-  const failedMin = FAILED_QUESTION_MIN_ATTEMPTS;
+  const failedMin = Math.max(1, Math.trunc(Number(failedQuestionMin)) || 1);
   const failed = (
     await q.query(
       `select ans.key question_id, i.id item_id, i.title item_title, qq.stem,

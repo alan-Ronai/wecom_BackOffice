@@ -1360,7 +1360,14 @@ export const gaps: Gap[] = [
 export const workflow: WorkflowSettings = {
   requireApprover: false,
   learning: { defaultPassMark: 80, defaultMaxAttempts: null, refreshDueDays: 7, reminderDaysBefore: 2 },
-  gaps: { zeroResultMin: 3, feedbackClusterMin: 3, staleDays: 180, failedQuestionRate: 0.5 },
+  gaps: {
+    zeroResultMin: 3,
+    feedbackClusterMin: 3,
+    staleDays: 180,
+    failedQuestionRate: 0.5,
+    failedQuestionMin: 5,
+    topicViewsMin: 3,
+  },
 };
 
 export const fx = {

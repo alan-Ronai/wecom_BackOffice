@@ -313,6 +313,41 @@ run('learning tracking', () => {
     ).toBe(409);
   });
 
+  /**
+   * Wave Y (A-M4 follow-up): the failed-question floor is `WorkflowSettings.gaps.failedQuestionMin`,
+   * read by both the dashboard tile and the `failed_question` heuristic. The attempts above left
+   * question 2 with two finished answers, one wrong — a 50% fail rate over 2 attempts.
+   */
+  it('the dashboard tile and the failed-question heuristic read one settings floor', async () => {
+    const { getWorkflowSettings, putWorkflowSettings } = await import('../src/lib/workflowSettings.js');
+    const heur = await import('../src/modules/gaps/heuristics.js');
+    const q2 = quizQuestionIds[1];
+    const tile = async () =>
+      (
+        (
+          await app.inject({ method: 'GET', url: '/api/v1/learning/dashboard', headers: auth(manager) })
+        ).json().failedQuestions as { questionId: string }[]
+      ).some((f) => f.questionId === q2);
+    const heuristic = async () =>
+      (await heur.failedQuestions(db.pool, (await getWorkflowSettings(db.pool)).gaps)).some(
+        (g) => g.key === q2,
+      );
+
+    expect((await getWorkflowSettings(db.pool)).gaps.failedQuestionMin).toBe(5);
+    expect(await tile()).toBe(false);
+    expect(await heuristic()).toBe(false);
+
+    await putWorkflowSettings(db.pool as never, { gaps: { failedQuestionMin: 2 } }, null);
+    expect(await tile()).toBe(true);
+    expect(await heuristic()).toBe(true);
+
+    await putWorkflowSettings(db.pool as never, { gaps: { failedQuestionMin: 3 } }, null);
+    expect(await tile()).toBe(false);
+    expect(await heuristic()).toBe(false);
+
+    await putWorkflowSettings(db.pool as never, { gaps: { failedQuestionMin: 5 } }, null);
+  });
+
   it('a capped quiz refuses the attempt after the cap', async () => {
     const capped = await seedQuiz(db.pool, {
       documentId: docId,
