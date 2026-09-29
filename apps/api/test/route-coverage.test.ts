@@ -169,6 +169,16 @@ describe('OpenAPI route coverage', () => {
     expect(thin).toEqual([]);
   });
 
+  /**
+   * Wave Y (wave-4 parked row): the deprecated `POST /sync-links/:id/resolve` spelling is gone
+   * from the contract; `POST /sync/links/:id/resolve` is the one resolve route, and the only one
+   * the web and both e2e suites call.
+   */
+  it('carries only the one sync-link resolve route', () => {
+    expect(Object.keys(spec.paths).filter((p) => p.startsWith('/api/v1/sync-links/'))).toEqual([]);
+    expect(spec.paths['/api/v1/sync/links/{id}/resolve']?.post).toBeDefined();
+  });
+
   /** A guard on the scanner itself: if it silently stopped finding requests, everything "passes". */
   it('found a plausible number of requests in the suite', () => {
     expect(requested.size).toBeGreaterThan(100);

@@ -20,6 +20,7 @@ export const QUEUES = {
   gapsDetect: 'gaps.detect', // V3: nightly gap heuristics
   aiEval: 'ai.eval', // X1: offline evaluation run over the committed case set
   aiReindex: 'ai.reindex', // X1: re-embed every document after an EMBED_MODEL change
+  sourcesPruneDiffs: 'sources.prune-diffs', // Y2 (A-M7): nightly, counts-only diffs on old revisions
 } as const;
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 

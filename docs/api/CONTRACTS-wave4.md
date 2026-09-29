@@ -24,7 +24,7 @@ Wave 3 owns `0010`, `0011`, `0020`.
 
 Replacing a default: W1 calls `setTaxonomy(app, new PgTaxonomy(app.db))`, W3 `setNotifier(...)`, W5 `setUsage(...)` from the lane's own module `index.ts` (imported from `apps/api/src/plugins/wave4.ts`). The decorators are delegating holders, so the call works from an encapsulated module context; never reassign `app.usage = …` (it would only shadow the property in that child).
 
-Telemetry kinds `view_topic` / `search_click` are added to wave 3's `TelemetryEventSchema` by W6 after merge (W5 must not edit `stage45.ts`). W5 filters by primary world (`documents.category`) until W6 widens to `document_worlds`.
+Telemetry kinds `view_topic` / `search_click` are added to wave 3's `TelemetryEventSchema` by W6 after merge (W5 must not edit `stage45.ts`). *(Wave Y: `view_topic` was removed again — it never had a producer; `0057` narrows the check.)* W5 filters by primary world (`documents.category`) until W6 widens to `document_worlds`.
 
 ## Routes
 

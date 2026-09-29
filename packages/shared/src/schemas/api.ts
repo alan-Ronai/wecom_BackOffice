@@ -415,10 +415,6 @@ export const SyncLinkSchema = z.object({
     .nullable()
     .default(null),
 });
-export const SyncResolveBodySchema = z.object({
-  resolution: z.enum(['ours', 'theirs', 'merged']),
-  merged: DocumentSchema.optional(),
-});
 
 export const AuditQuerySchema = PaginationQuerySchema.extend({
   actorId: IdSchema.optional(),

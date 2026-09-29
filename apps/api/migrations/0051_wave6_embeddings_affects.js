@@ -5,9 +5,9 @@
  * and `plugins/model.ts` refuses to boot when the configured width disagrees with the column's
  * own `atttypmod` — so the column must follow the configuration, not a number typed here.
  *
- * The resolver below is a plain-JS mirror of `apps/api/src/lib/modelSlots.ts`'s
- * `resolveModelSlots(...).embedDimension`, which is exactly what the boot check now compares
- * against. Keeping the two identical is the whole point: a deployment that sets `MODEL_TIER=1`
+ * The resolver (`common/embedDimension.cjs`, shared with `apps/api/src/lib/modelSlots.ts`'s
+ * `resolveModelSlots(...).embedDimension`) is exactly what the boot check compares against.
+ * Keeping the two identical is the whole point: a deployment that sets `MODEL_TIER=1`
  * gets a 1024 column *and* a boot check expecting 1024, and a deployment that sets nothing keeps
  * 768 on both sides — no behaviour change on main.
  *
@@ -27,23 +27,15 @@
  * is dropped by `down`, so a full rollback still leaves an empty schema.
  */
 
-/** `MODEL_TIER_PRESETS[n].embedDimension` from `packages/shared/src/schemas/wave6.ts`. */
-const TIER_EMBED_DIMENSION = { 0: 768, 1: 1024, 2: 1024, 3: 1024, 4: 1024 };
-const LEGACY_EMBED_DIMENSION = 768;
-
-/** The same precedence `resolveModelSlots` applies: explicit env → tier preset → 768. */
-const resolveEmbedDimension = (env) => {
-  const rawDim = env.EMBED_DIMENSION;
-  const explicit = rawDim === undefined || rawDim === '' ? undefined : Number(rawDim);
-  if (explicit !== undefined && (!Number.isInteger(explicit) || explicit < 1))
-    throw new Error(`EMBED_DIMENSION must be a positive integer, got ${rawDim}`);
-  if (explicit !== undefined && explicit !== LEGACY_EMBED_DIMENSION) return explicit;
-  const rawTier = env.MODEL_TIER;
-  const tier = rawTier === undefined || rawTier === '' ? undefined : Number(rawTier);
-  if (tier !== undefined && Number.isInteger(tier) && tier >= 0 && tier <= 4)
-    return TIER_EMBED_DIMENSION[tier];
-  return explicit ?? LEGACY_EMBED_DIMENSION;
-};
+/**
+ * Wave Y (A-M5, second half): the resolver is no longer a mirror. `common/embedDimension.cjs` is
+ * the one rule, called from here over `process.env` and from `lib/modelSlots.ts` over the parsed
+ * `Config`, so the column and the boot check cannot drift.
+ */
+const {
+  LEGACY_EMBED_DIMENSION,
+  resolveEmbedDimensionFromEnv: resolveEmbedDimension,
+} = require('../common/embedDimension.cjs');
 
 const dim = resolveEmbedDimension(process.env);
 

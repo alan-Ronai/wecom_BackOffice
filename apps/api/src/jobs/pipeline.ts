@@ -11,6 +11,7 @@ import type { ProposalService } from '../modules/sources/proposal.js';
 import type { SuggestionService } from '../modules/sources/suggestions.js';
 import type { ImpactService } from '../modules/sources/impact.js';
 import { currentPromptVersion } from '../lib/aiSettings.js';
+import { pruneRevisionDiffs } from '../modules/sources/pruneDiffs.js';
 
 export interface PipelineDeps {
   revisions: SourceRevisionService;
@@ -135,6 +136,22 @@ export async function registerPipelineJobs(app: FastifyInstance, deps: PipelineD
       await app.boss.schedule(QUEUES.sourcesWatch, '*/2 * * * *');
     } catch (err) {
       app.log.warn({ err }, 'could not schedule sources.watch');
+    }
+  }
+  /**
+   * Wave Y · A-M7 (owner decision 3): old revisions keep diff counts, not diff text. Nightly at
+   * 04:15, after the 03:xx housekeeping runs; `pruneRevisionDiffs` is idempotent, so a missed or
+   * repeated night is harmless. Not scheduled under test, like every other nightly job.
+   */
+  await app.boss.work(QUEUES.sourcesPruneDiffs, async () => {
+    const n = await pruneRevisionDiffs(app.db);
+    app.log.info({ n }, 'sources.prune-diffs');
+  });
+  if (app.config.NODE_ENV !== 'test') {
+    try {
+      await app.boss.schedule(QUEUES.sourcesPruneDiffs, '15 4 * * *', {}, { tz: 'Asia/Jerusalem' });
+    } catch (err) {
+      app.log.warn({ err }, 'could not schedule sources.prune-diffs');
     }
   }
 }

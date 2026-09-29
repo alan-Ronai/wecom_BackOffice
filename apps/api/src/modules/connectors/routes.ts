@@ -443,6 +443,7 @@ const routes: FastifyPluginAsyncZod<ConnectorRoutesOptions> = async (app, opts) 
   // web calls, and the one `connectors-sync.int.test.ts` covers. The two took different bodies
   // (`SyncResolveBodySchema` vs `ResolveConflictBodySchema`), which was one resolve endpoint too
   // many; the acceptance review §6.1 marked this half for removal rather than for new tests.
+  // Wave Y removed the orphaned `SyncResolveBodySchema` from `@wecom/shared` as well.
 };
 
 export default routes;
