@@ -78,6 +78,8 @@ quiet machine, not either row above.
 
 ## Parked
 
+> **Closed in wave Y (2026-09-29)** — see `docs/waveY-acceptance.md` for the evidence: A-M6 (owner decision: writes need **every** world, reads any), A-M8 (`canSeeById`), A-M11 (owner decision: a publish keeps the source-review flag under `pending_push`/`conflict` but never raises it), the A-M4 follow-up (gap floors are `WorkflowSettings.gaps` keys), B-M5 (DocumentPicker combobox), B-M6 (every `role="button"` keyboard-operable + lint guard), B-M11 (builder draft guard) and B-M17 (e2e-only sign-in limit). The preview-omits-`correct`, change-preview, OIDC-variant and A-I3 rows stay as ruled.
+
 Each was a conscious call rather than an omission; the cost of being wrong is stated so the next
 wave can reopen it cheaply.
 

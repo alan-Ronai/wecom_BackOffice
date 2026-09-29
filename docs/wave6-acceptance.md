@@ -320,6 +320,8 @@ gate defect.
 
 ## Parked
 
+> **Closed in wave Y (2026-09-29)** — see `docs/waveY-acceptance.md` for the evidence: A-M4 (mapping in one query per batch), A-M5 second half (one embed-dimension resolver for 0051 and the API), A-M7 (owner decision: diffs pruned to the newest 20 revisions per source plus any a suggestion references), B-M6 (`proposed_edits.messageId`), B-M12 (conversation search + paging), B-M16 third part (contract text), eval precision/language failures as columns (0058) and the multi-source SuggestionsPanel. The VM eval run remains owed (`docs/pilot-readiness.md` § VM runbook).
+
 | Item | Ruling | Cost if wrong |
 |---|---|---|
 | ~~Tier 1 is the default on a dev-machine evaluation that does not support it~~ | **Resolved by the fix wave.** Tier 1 now beats tier 0 on overlap (0.977 vs 0.909), precision (1.000 vs 0.962) and language (0 vs 8 code-switched cases). `MODEL_TIER=1` stays, on evidence. The VM re-run is still owed and is the one remaining sign-off item | — |
