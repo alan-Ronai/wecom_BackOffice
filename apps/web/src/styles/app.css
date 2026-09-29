@@ -1611,9 +1611,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .question-editor .options { display: grid; gap: 6px; }
 .question-editor .option { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .doc-picker { position: relative; }
-.doc-picker .results { position: absolute; inset-inline: 0; top: 100%; z-index: 5; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow); max-height: 280px; overflow: auto; }
-.doc-picker .results button { display: block; width: 100%; text-align: start; padding: 8px 10px; background: none; border: 0; cursor: pointer; color: var(--text); }
-.doc-picker .results button:hover, .doc-picker .results button:focus-visible { background: var(--bg-2); outline: none; }
+.doc-picker .results { list-style: none; margin: 0; padding: 0; position: absolute; inset-inline: 0; top: 100%; z-index: 5; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow); max-height: 280px; overflow: auto; }
+.doc-picker .results [role='option'] { display: block; width: 100%; text-align: start; padding: 8px 10px; cursor: pointer; color: var(--text); }
+.doc-picker .results [role='option'].active { background: var(--bg-2); }
 .assign-dialog fieldset { border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; margin: 0 0 10px; }
 .assign-dialog .checks { display: flex; flex-wrap: wrap; gap: 8px 14px; }
 .gaps-page .gap-list { display: grid; gap: 10px; }
