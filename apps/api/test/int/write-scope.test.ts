@@ -3,6 +3,7 @@ import { startTestDb, integration } from '../helpers/db.js';
 import { buildTestApp } from '../helpers/app.js';
 import { makeUser, auth } from '../helpers/fixtures.js';
 import * as learning from '../../src/modules/learning/repo.js';
+import { startWpStub, type WpStub } from '../../../../packages/connectors/test/helpers/wpStub.js';
 
 const run = integration ? describe : describe.skip;
 
@@ -443,6 +444,161 @@ run('write scope — every world (A-M6)', () => {
           if (head && v.user.worldScopes !== null)
             expect(new Set(head.worlds)).toEqual(new Set(await learning.worldsOfItem(db.pool, id)));
         }
+    });
+  });
+
+  /**
+   * Coordinator ruling on Y1's "not done": the two document writers that had no world check at
+   * all. `POST /suggestions/publish` applies every accepted suggestion of a source in one
+   * transaction, so one out-of-scope target refuses the whole request and nothing is applied.
+   */
+  describe('suggestions publish', () => {
+    const seedSource = async (targets: string[]) => {
+      const src = (
+        await db.pool.query(`insert into sources(kind, title) values ('docx','מקור') returning id`)
+      ).rows[0].id as string;
+      const rev = (
+        await db.pool.query(
+          `insert into source_revisions(source_id, hash, paragraphs) values ($1,'h1','[]'::jsonb) returning id`,
+          [src],
+        )
+      ).rows[0].id as string;
+      for (const target of targets)
+        await db.pool.query(
+          `insert into suggestions(source_revision_id, anchor, type, title, target_document_id, target_step_key, payload, confidence, rationale, status)
+           values ($1,'§1','update-step','עדכון',$2,'s2',$3,0.9,'המקור עודכן','accepted')`,
+          [
+            rev,
+            target,
+            JSON.stringify({
+              type: 'update-step',
+              addActions: ['פעולה מהמקור'],
+              outcomes: [{ kind: 'ok', text: '✓ סיום' }],
+              patch: {},
+            }),
+          ],
+        );
+      return src;
+    };
+    const versionOf = async (id: string) =>
+      (await db.pool.query('select current_version v from documents where id=$1', [id])).rows[0].v as number;
+
+    it('refuses the whole publish when one target spans a world the caller does not hold', async () => {
+      const own = await makeDoc('הצעה גבייה', 'billing');
+      const shared = await makeDoc('הצעה משותף', 'billing', ['sim']);
+      const src = await seedSource([own, shared]);
+      const before = [await versionOf(own), await versionOf(shared)];
+
+      const r = await post('/api/v1/suggestions/publish', { sourceId: src }, half);
+      expect(r.statusCode, r.body).toBe(403);
+      expect(r.json()).toMatchObject({ code: 'SCOPE_DENIED', details: { worlds: ['billing', 'sim'] } });
+      // Nothing half-published: neither document moved and both suggestions are still accepted.
+      expect([await versionOf(own), await versionOf(shared)]).toEqual(before);
+      const statuses = await db.pool.query(
+        `select g.status from suggestions g join source_revisions sr on sr.id=g.source_revision_id where sr.source_id=$1`,
+        [src],
+      );
+      expect(statuses.rows.map((x) => x.status)).toEqual(['accepted', 'accepted']);
+
+      const ok = await post('/api/v1/suggestions/publish', { sourceId: src }, whole);
+      expect(ok.statusCode, ok.body).toBe(200);
+      expect(ok.json().applied).toBe(2);
+      expect(await versionOf(shared)).toBe(before[1] + 1);
+    });
+
+    it('lets a one-world manager publish a source whose targets are all in their world', async () => {
+      const own = await makeDoc('הצעה גבייה בלבד', 'billing');
+      const src = await seedSource([own]);
+      const r = await post('/api/v1/suggestions/publish', { sourceId: src }, half);
+      expect(r.statusCode, r.body).toBe(200);
+      expect(r.json().applied).toBe(1);
+    });
+
+    it('counts the world a new-card would be created in', async () => {
+      const src = (
+        await db.pool.query(`insert into sources(kind, title) values ('docx','מקור חדש') returning id`)
+      ).rows[0].id as string;
+      const rev = (
+        await db.pool.query(
+          `insert into source_revisions(source_id, hash, paragraphs) values ($1,'h2','[]'::jsonb) returning id`,
+          [src],
+        )
+      ).rows[0].id as string;
+      await db.pool.query(
+        `insert into suggestions(source_revision_id, anchor, type, title, payload, confidence, rationale, status)
+         values ($1,'§1','new-card','כרטיס חדש',$2,0.9,'חדש','accepted')`,
+        [
+          rev,
+          JSON.stringify({
+            type: 'new-card',
+            title: 'כרטיס חדש בסים',
+            description: '',
+            category: 'sim',
+            wave: 1,
+            priority: 'm',
+            phases: [],
+          }),
+        ],
+      );
+      const r = await post('/api/v1/suggestions/publish', { sourceId: src }, half);
+      expect(r.statusCode, r.body).toBe(403);
+      expect(r.json().details.worlds).toEqual(['sim']);
+    });
+  });
+
+  /** `POST /sync/links/:id/{sync,resolve}` write the linked document in either direction. */
+  describe('sync links', () => {
+    let stub: WpStub;
+    let linkId: string;
+
+    beforeAll(async () => {
+      stub = await startWpStub([]);
+      const created = await post('/api/v1/connectors', {
+        type: 'wordpress',
+        name: 'אתר תמיכה',
+        config: {
+          baseUrl: stub.url,
+          username: 'kb',
+          applicationPassword: 'pw',
+          postTypes: ['posts'],
+          categoryMap: {},
+          webhookSecret: 'topsecret1',
+        },
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      const connectorId = created.json().id as string;
+      const docId = await makeDoc('מקושר משותף', 'billing', ['sim']);
+      await app.connectors.sync.pushDocument(connectorId, docId, null);
+      linkId = (
+        await db.pool.query('select id from sync_links where connector_id=$1 and document_id=$2', [
+          connectorId,
+          docId,
+        ])
+      ).rows[0].id as string;
+    });
+    afterAll(async () => {
+      await stub?.close();
+    });
+
+    it('a one-world manager may not push, import or resolve a two-world linked document', async () => {
+      for (const direction of ['push', 'import']) {
+        const r = await post(`/api/v1/sync/links/${linkId}/sync`, { direction }, half);
+        expect(r.statusCode, direction).toBe(403);
+        expect(r.json()).toMatchObject({ code: 'SCOPE_DENIED', details: { worlds: ['billing', 'sim'] } });
+      }
+      const res = await post(`/api/v1/sync/links/${linkId}/resolve`, { resolution: 'ours' }, half);
+      expect(res.statusCode).toBe(403);
+      expect(res.json().code).toBe('SCOPE_DENIED');
+    });
+
+    it('a manager holding both worlds gets through', async () => {
+      const r = await post(`/api/v1/sync/links/${linkId}/sync`, { direction: 'push' }, whole);
+      expect(r.statusCode, r.body).toBe(200);
+      expect(r.json()).toMatchObject({ conflicts: 0, errors: [] });
+      // Past the scope gate: the request is judged on its body, not refused for its worlds.
+      const res = await post(`/api/v1/sync/links/${linkId}/resolve`, { resolution: 'merged' }, whole);
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe('MERGE_REQUIRED');
     });
   });
 });

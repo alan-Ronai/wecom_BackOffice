@@ -15,7 +15,8 @@ import {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { suggestionAnalytics } from './analytics.js';
 import { suggestionViewer, type SuggestionViewer } from './suggestionScope.js';
-import type { ReqUser } from '../../lib/user.js';
+import { hasAllScopes, type ReqUser } from '../../lib/user.js';
+import { httpError } from '../../lib/http.js';
 import { parseUpload } from './parsers.js';
 import { processRevision, type PipelineDeps } from '../../jobs/pipeline.js';
 
@@ -318,11 +319,23 @@ export default function sourcesRoutes(deps: PipelineDeps) {
         },
         config: { requires: ['suggestions.apply'] },
       },
-      async (req) =>
-        deps.suggestions.publishAccepted(req.body.sourceId, actorId(req), {
-          requestId: req.id,
-          ip: req.ip,
-        }),
+      async (req) => {
+        const user = req.user;
+        return deps.suggestions.publishAccepted(
+          req.body.sourceId,
+          actorId(req),
+          { requestId: req.id, ip: req.ip },
+          // Wave Y (A-M6): publishing writes documents, so the caller must hold every world it
+          // writes; one out-of-scope target refuses the whole publish (it is one transaction).
+          (worlds) => {
+            if (user && worlds.length && !hasAllScopes(user, worlds))
+              throw httpError(403, 'SCOPE_DENIED', 'ההרשאה שלך מוגבלת לעולמות תוכן אחרים', {
+                worlds,
+                scopes: user.worldScopes,
+              });
+          },
+        );
+      },
     );
   };
 }

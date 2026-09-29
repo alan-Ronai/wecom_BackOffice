@@ -22,7 +22,7 @@ const listOf = (worlds: string | readonly string[]): readonly string[] =>
  * the caller may read it when they hold at least one of them. null scopes = every world.
  */
 export const hasScope = (user: ScopedCaller, worlds: string | readonly string[]): boolean => {
-  if (user.worldScopes === null) return true;
+  if (user.worldScopes == null) return true;
   return listOf(worlds).some((w) => user.worldScopes!.includes(w));
 };
 
@@ -42,7 +42,7 @@ export const hasScope = (user: ScopedCaller, worlds: string | readonly string[])
  * learning handlers — so the rule is spelled once.
  */
 export const hasAllScopes = (user: ScopedCaller, worlds: string | readonly string[]): boolean => {
-  if (user.worldScopes === null) return true;
+  if (user.worldScopes == null) return true;
   const list = listOf(worlds);
   return list.length > 0 && list.every((w) => user.worldScopes!.includes(w));
 };
