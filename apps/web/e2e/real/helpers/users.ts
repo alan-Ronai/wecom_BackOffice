@@ -79,33 +79,29 @@ export async function signInAs(browser: Browser, creds: Creds, baseURL: string):
   await page.getByLabel('דוא״ל').fill(creds.email);
   await page.getByLabel('סיסמה').fill(creds.password);
   /**
-   * `POST /auth/local` is rate-limited to five attempts a minute per IP — a real defence that the
-   * gate itself runs into, because every spec here signs in as two or three fresh people from the
-   * same address and wave 5 added two more specs. A refusal is not a failed login: the form stays
-   * put and says "יותר מדי ניסיונות". So the click is retried across the window rather than
-   * asserted once, and only a genuine rejection (wrong credentials, no session) runs out the
-   * budget and fails.
+   * `POST /auth/local` is rate-limited per IP — five a minute in production — and every spec here
+   * signs in two or three fresh people from the same address. The gate's stacks raise the limit
+   * (`AUTH_LOCAL_RATE_LIMIT=60` in `scripts/e2e-real.mjs` and `deploy/e2e.env`, which the API
+   * accepts under NODE_ENV=production only with `WECOM_E2E_RUNNER=1`), so this no longer sleeps
+   * out 61-second windows inside a 150-second test budget (B-M17). If the limiter answers anyway,
+   * the stack was started without that setting: say so at once instead of timing out.
    *
    * Exact: the disclosure button also starts with "כניסה".
    */
-  const submit = page.getByRole('button', { name: 'כניסה', exact: true });
-  const LIMITED = 'יותר מדי ניסיונות';
-  for (let attempt = 0; ; attempt++) {
-    await submit.click();
-    // One of three things happens: the session lands, the limiter refuses, or the credentials are
-    // wrong. Only the middle one is worth waiting for, and a retry inside the window would just
-    // spend another attempt, so the wait is the window itself.
-    const landed = await page
-      .waitForURL(/\/library/, { timeout: 10_000 })
-      .then(() => true)
-      .catch(() => false);
-    if (landed) break;
+  await page.getByRole('button', { name: 'כניסה', exact: true }).click();
+  const landed = await page
+    .waitForURL(/\/library/, { timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!landed) {
     const limited = await page
-      .getByText(LIMITED)
+      .getByText('יותר מדי ניסיונות')
       .isVisible()
       .catch(() => false);
-    if (!limited || attempt >= 2) break;
-    await page.waitForTimeout(61_000);
+    expect(
+      limited,
+      'POST /auth/local was rate-limited: start the API with AUTH_LOCAL_RATE_LIMIT raised (the e2e runners do)',
+    ).toBe(false);
   }
   await expect(page, `signed in as ${creds.email}`).toHaveURL(/\/library/);
   // A new account usually meets the first-login tour, and it covers the library while it is

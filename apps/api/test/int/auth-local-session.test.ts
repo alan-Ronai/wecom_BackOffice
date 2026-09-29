@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import pg from 'pg';
 import { buildApp } from '../../src/app.js';
 import { startTestDb, seedUser, integration } from '../helpers/l3/db.js';
 import { hashPassword } from '../../src/modules/auth/local.js';
@@ -78,6 +79,34 @@ run('local login, sessions, palo alto fallback', () => {
         })
       ).statusCode;
     expect(last).toBe(429);
+  });
+  it('B-M17: honours AUTH_LOCAL_RATE_LIMIT outside production', async () => {
+    // Its own pool: closing an app ends the pool it was given, and the suite's app still needs one.
+    const raised = await buildApp({
+      pool: new pg.Pool({ connectionString: db.url }),
+      boss: false,
+      config: { DATABASE_URL: db.url, NODE_ENV: 'test', AUTH_LOCAL_RATE_LIMIT: 8 },
+    });
+    await raised.ready();
+    try {
+      const codes: number[] = [];
+      for (let i = 0; i < 9; i++)
+        codes.push(
+          (
+            await raised.inject({
+              method: 'POST',
+              url: '/api/v1/auth/local',
+              payload: { email: 'x@y.z', password: 'p' },
+              remoteAddress: '203.0.113.10',
+            })
+          ).statusCode,
+        );
+      // Eight refusals on the credentials, then the limiter — not the default's fifth-and-out.
+      expect(codes.slice(0, 8)).toEqual(Array(8).fill(401));
+      expect(codes[8]).toBe(429);
+    } finally {
+      await raised.close();
+    }
   });
   it('identifies a LAN user through the Palo Alto fallback and creates a session', async () => {
     const me = await app.inject({ method: 'GET', url: '/api/v1/auth/me', remoteAddress: '10.1.2.3' });
