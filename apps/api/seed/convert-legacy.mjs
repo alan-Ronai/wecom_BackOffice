@@ -9,19 +9,33 @@
  * returns them as cards with `stepCount = 0` and the frontend renders them as placeholders
  * ("כרטיס ללא מסמך"). Writing the procedure is a normal `PUT /documents/:id/structure` + publish,
  * so there is no separate table and no second code path.
+ *
+ * Order: this is the base layer. `convert-kira.mjs` overlays the Kira source documents on top of
+ * what this writes, so the committed JSON is `convert:legacy` followed by the Kira overlay — the
+ * `convert:kira` script runs both, in that order. Running this one alone writes the legacy-only
+ * library; do not commit that.
+ *
+ * Determinism: the output is committed and must regenerate byte-identically, so nothing here may
+ * read the host clock or time zone. The legacy bundle writes its version timestamps as Israel
+ * local time (`Date.parse('2025-04-14T10:00:00')`) and its one note as `Date.now() - 3 days`;
+ * the zone is pinned below and the bundle's clock is pinned to the moment the committed seed was
+ * first generated, which is what `notes.json` has always carried.
  */
+process.env.TZ = 'Asia/Jerusalem';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { DocumentSchema } from '@wecom/shared';
-
-const here = new URL('./', import.meta.url);
+import { writeSeedJson } from './json-out.mjs';
 
 // --- load the legacy bundles in a bare `window.KB` context ------------------
 const ctx = { window: {} };
 ctx.window.KB = {};
 ctx.KB = ctx.window.KB;
 vm.createContext(ctx);
+// The note's `ts: Date.now() - 3 * 864e5` must land on 2026-09-10T19:58:33.947Z, as committed.
+const LEGACY_NOW = Date.parse('2026-09-13T19:58:33.947Z');
+vm.runInContext(`Date.now = () => ${LEGACY_NOW};`, ctx);
 for (const f of ['../../../legacy/js/data.js', '../../../legacy/js/data-docs.js'])
   vm.runInContext(readFileSync(new URL(f, import.meta.url), 'utf8'), ctx);
 const KB = ctx.window.KB;
@@ -187,7 +201,7 @@ for (const [legacyId, entries] of Object.entries(KB.SEED.versions ?? {})) {
       label: e.label ?? '',
       kind: e.kind ?? 'published',
       author: e.author ?? null,
-      at: new Date(e.ts ?? Date.now()).toISOString(),
+      at: new Date(e.ts ?? LEGACY_NOW).toISOString(),
       snapshot,
     });
   }
@@ -201,20 +215,15 @@ const notes = KB.SEED.docs.flatMap((d) =>
     author: n.author ?? 'מערכת',
     text: n.text,
     likes: n.likes ?? 0,
-    at: new Date(n.ts ?? Date.now()).toISOString(),
+    at: new Date(n.ts ?? LEGACY_NOW).toISOString(),
   })),
 );
 
 // --- write ------------------------------------------------------------------
-mkdirSync(here, { recursive: true });
-const write = (name, data) => {
-  writeFileSync(new URL('./' + name, here), JSON.stringify(data, null, 1) + '\n');
-  console.log(`${name}: ${Array.isArray(data) ? data.length : 1}`);
-};
-write('documents.json', documents);
-write('cards.json', cards);
-write('blocks.json', blocks);
-write('fields.json', fields);
-write('scripts.json', scripts);
-write('versions.json', versions);
-write('notes.json', notes);
+await writeSeedJson('documents.json', documents);
+await writeSeedJson('cards.json', cards);
+await writeSeedJson('blocks.json', blocks);
+await writeSeedJson('fields.json', fields);
+await writeSeedJson('scripts.json', scripts);
+await writeSeedJson('versions.json', versions);
+await writeSeedJson('notes.json', notes);
