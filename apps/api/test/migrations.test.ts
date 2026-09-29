@@ -720,8 +720,9 @@ run('migrations', () => {
     const idx = await pool.query(`select to_regclass('ai_messages_content_trgm') r`);
     expect(idx.rows[0].r).toBe('ai_messages_content_trgm');
 
-    const from58 = (await readdir('migrations')).filter((f) => Number(/^(\d{4})_/.exec(f)?.[1] ?? NaN) >= 58)
-      .length;
+    const from58 = (await readdir('migrations')).filter(
+      (f) => Number(/^(\d{4})_/.exec(f)?.[1] ?? NaN) >= 58,
+    ).length;
     await move('down', from58);
     expect((await pool.query(`select to_regclass('ai_messages_content_trgm') r`)).rows[0].r).toBeNull();
     // Two pre-0058 rows: one whose note carries the measurement, one that never had it.
@@ -737,9 +738,18 @@ run('migrations', () => {
       `select model, precision, language_failures, notes from ai_eval_runs where id = any($1) order by model`,
       [[id('m1'), id('m2')]],
     );
-    expect(after.rows[0]).toMatchObject({ model: 'm1', language_failures: 8, notes: 'כשלו 1 מקרים — c3: timeout' });
+    expect(after.rows[0]).toMatchObject({
+      model: 'm1',
+      language_failures: 8,
+      notes: 'כשלו 1 מקרים — c3: timeout',
+    });
     expect(after.rows[0].precision).toBeCloseTo(0.962, 3);
-    expect(after.rows[1]).toMatchObject({ model: 'm2', precision: null, language_failures: null, notes: 'ידני' });
+    expect(after.rows[1]).toMatchObject({
+      model: 'm2',
+      precision: null,
+      language_failures: null,
+      notes: 'ידני',
+    });
 
     await move('down', from58);
     const back = await pool.query(`select notes from ai_eval_runs where id=$1`, [id('m1')]);

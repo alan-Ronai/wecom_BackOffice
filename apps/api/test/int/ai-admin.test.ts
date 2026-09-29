@@ -120,7 +120,9 @@ run('admin AI routes', () => {
     expect(done.precision).toBeGreaterThanOrEqual(0.9);
     expect(done.languageFailures).toBe(0);
     expect(done.notes).not.toMatch(/precision/);
-    const row = await app.db.query('select precision, language_failures from ai_eval_runs where id=$1', [runId]);
+    const row = await app.db.query('select precision, language_failures from ai_eval_runs where id=$1', [
+      runId,
+    ]);
     expect(Number(row.rows[0].precision)).toBeCloseTo(done.precision, 5);
   });
 });
