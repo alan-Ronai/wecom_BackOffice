@@ -196,12 +196,6 @@ run('gaps', () => {
         (await heur.topicsWithoutProcedure(db.pool, T)).find((c) => c.topicId === g!.topicId),
       ).toBeUndefined();
     });
-
-    it('returns no failed-question gaps while the learning tables are absent', async () => {
-      const has = await db.pool.query(`select to_regclass('public.learning_attempts') t`);
-      if (has.rows[0].t) return; // V2 merged: covered by the cross-lane test in V6
-      expect(await heur.failedQuestions(db.pool, T)).toEqual([]);
-    });
   });
 
   describe('routes', () => {

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startTestDb, integration } from './helpers/db.js';
 import { buildTestApp } from './helpers/app.js';
 import { makeUser, auth, minimalStructure } from './helpers/fixtures.js';
-import { ensureLearningTables, seedQuiz, seedBriefing } from './helpers/v2/learningStub.js';
+import { seedQuiz, seedBriefing } from './helpers/v2/learningStub.js';
 import * as port from '../src/modules/learning/tracking/itemsPort.js';
 
 const run = integration ? describe : describe.skip;
@@ -91,7 +91,6 @@ run('learning tracking', () => {
 
   beforeAll(async () => {
     db = await startTestDb();
-    await ensureLearningTables(db.pool);
     app = await buildTestApp(db.pool, db.url);
     await app.events.start(db.url);
     manager = await makeUser(db.pool, { name: 'מנהלת' });

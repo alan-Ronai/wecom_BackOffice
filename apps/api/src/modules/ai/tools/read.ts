@@ -250,12 +250,6 @@ export const readEval = defineTool({
   description: 'תוצאות ריצות ההערכה האחרונות של המודל (לאדמין בלבד).',
   args: z.object({ limit: z.number().int().min(1).max(20).optional() }),
   async run(ctx, args): Promise<ToolOutcome> {
-    /**
-     * `ai_eval_runs` is X1's table (0051). This lane must compile and run against a database
-     * that does not have it yet, so the tool reports "no runs" rather than failing the turn.
-     */
-    const present = await ctx.db.query("select to_regclass('public.ai_eval_runs') t");
-    if (!present.rows[0]?.t) return { ok: true, summary: 'אין עדיין ריצות הערכה', data: { items: [] } };
     const r = await ctx.db.query('select * from ai_eval_runs order by started_at desc limit $1', [
       args.limit ?? 5,
     ]);
