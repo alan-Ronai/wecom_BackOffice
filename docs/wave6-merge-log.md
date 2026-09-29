@@ -105,3 +105,19 @@ Filled in as each lane lands; a `MISS` here is a lane defect.
 | The scripted model matched its rules against the whole user message, which `withContext` extends with a context block — so a question from a pane never ended in `?` and never looked like a question | `apps/api/src/modules/ai/scripted.ts` |
 | The structured-edit drawer sent the display **string** for every row, while `applyStructuredEdit` substitutes a row's value verbatim (an action row is `{ id, text }`, a `new-card` `meta` row is the whole metadata object). Every row that was not plain text answered 400, so the editor could not save a `new-card` at all | `apps/web/src/lib/suggestionRows.ts` (`structuredValue`) |
 | X4a's `applyRows` was a second implementation of `applyStructuredEdit` and had diverged from it on two rules (an emptied optional list, and whether the atomic-group rule belongs to the apply) | `apps/web/src/lib/suggestionRows.ts` — now delegates to the shared function |
+
+## `wave6/gate` after the AI residual (2026-09-29)
+
+`1858816` merged the AI residual (`a70cb3e` → `e21471d`) onto the gate branch. `main` (`49ebef7`) is
+an ancestor, so there was nothing to merge. The gate on top of it found three defects, each fixed
+here with a covering test:
+
+| Commit | Defect | Covered by |
+|---|---|---|
+| `1693498` | `deploy/ollama-pull-check.sh` still expected `dictalm2.0-instruct` for tiers 1 and 2 after the aya-expanse substitution, so the check failed on `MODEL_TIER=1` | the check script (green) |
+| `ba9d7b4` | W6-E2E-1: ticked the required (locked) card-meta row, so the partial apply never enabled; took a first-revision suggestion for the edit's; depended on `feedback-loop.spec.ts` for its source document | the spec itself: 2 passed alone, 17 passed in the full `e2e:real` |
+| `15d452f` | 40P01 between `saveStructure` (documents `for update` → cascade into steps) and the background step-embedding insert (FK key share step → document) | `apps/api/test/int/step-embeddings-lock-order.test.ts` (fails with `deadlock detected` before, green after) |
+
+Results and the gates still owed are in `docs/wave6-acceptance.md` § "Gate after the AI residual".
+The run was stopped on request before the post-fix full integration run and `perf:sql`/`perf:check`.
+Those are superseded by the combined-branch gate.

@@ -235,6 +235,89 @@ editor sending display strings, and — in the specs themselves — two wrong as
 product (that "קבל הכל" leaves the decision to a second click, and that an admin may rate a
 message they did not send).
 
+The table above is the gate on the integration branch *before* the AI residual (e21471d) merged.
+
+### Gate after the AI residual (`1858816` → `15d452f`, 2026-09-29)
+
+Run on the same dev laptop (10 cores, 34 GB). It was **stopped before the end** at the owner's
+request, because the machine was needed. Load average ran 4–67 during the run: other sessions'
+stacks, and at 11:15–11:18 Docker Desktop was restarted under the run. What is below was verified
+green. Whatever is marked *superseded* is carried by the combined-branch gate that runs next.
+
+| Gate | Result | Tree |
+|---|---|---|
+| `pnpm install` · `pnpm -r build` (5 projects) · `pnpm typecheck` · `pnpm lint` | clean | `1858816` |
+| `pnpm openapi` | regenerates byte-identically (174 paths), no diff | `1858816` |
+| `apps/api/test/route-coverage.test.ts` | 4 passed | `1858816` |
+| `@wecom/shared` | 123 passed / 17 files | `1858816` |
+| `@wecom/model` | 114 passed / 14 files | `1858816` |
+| `@wecom/connectors` | 49 passed / 8 files | `1858816` |
+| `apps/api` unit | 280 passed, 491 integration-only skipped / 120 files | `15d452f` |
+| `apps/web` (`--minWorkers=1 --maxWorkers=4`) | 900 passed / 134 files | `1858816` |
+| `RUN_INTEGRATION=1 apps/api`, full run | **769 passed / 119 files**, one run, no retries | `1693498` |
+| — the same, after `15d452f` | *superseded by the combined gate.* The re-run straddled the Docker restart (every failure was `Could not find a working container runtime strategy` / `ECONNREFUSED`), and its replacement was stopped on request. `15d452f` is covered by the files it touches: the new `step-embeddings-lock-order` 2/2 (×3), with `ai-reindex`, `mapping-embeddings`, `search-embeddings`, `wave5-seams`, `wave6-seams` and `migrations` at 48/48 | `15d452f` |
+| `deploy/compose-check.sh` · `nginx-check.sh` · `smoke-check.sh` · `backup-check.sh` | green | `1858816` |
+| `deploy/ollama-pull-check.sh` | **red, then green after `1693498`** (see below) | `1693498` |
+| `pnpm e2e:real` (ports 56432/3191/4191; 55432 belonged to another session) | **17 passed** (2.4 m), after `ba9d7b4` | `ba9d7b4` |
+| `E2E_OIDC=1 pnpm e2e:real` (issuer on 9411) | **18 passed** (2.4 m) | `ba9d7b4` |
+| `pnpm e2e:compose` | **15 passed** (33.7 s) | `ba9d7b4` |
+| `pnpm --filter @wecom/api perf:sql` · `perf:check` | *superseded by the combined gate* (not started) | — |
+| Migrations | `0050`–`0054`, nothing at `0055`+ | — |
+
+**Model eval, merged tree.** 22 cases, `propose-v4`, flat schema, guards on, one pass per tier:
+
+| Run | hit-target | hit-type | overlap | precision | language failures | schema failures | median s/case |
+|---|---|---|---|---|---|---|---|
+| rules floor | 1.000 | 1.000 | 0.932 | 1.000 | 0 | 0 | <0.01 |
+| tier 0 `qwen2.5:3b-instruct-q4_K_M` + `nomic-embed-text` | 1.000 | 1.000 | 0.909 | 0.962 | 8 | 0 | 7.36 |
+| tier 1 `aya-expanse:8b-q4_K_M` + `bge-m3` | 1.000 | 1.000 | 0.977 | 1.000 | 0 | 0 | 12.06 |
+
+The scores match the fix-wave table to the third decimal on every row. The residual's CLI change
+(a crashed case scores as a schema failure) did not move them, because no case crashed. Tier 0's
+latency is 7.4 s against the fix wave's 5.2 s because it ran beside the integration suite, at load
+average 11 → 51. Tier 1 ran alone and matches (12.1 vs 12.2).
+
+### Three defects the gate found, each fixed on `wave6/gate`
+
+- **`1693498` — `deploy/ollama-pull-check.sh` still expected `dictalm` for tiers 1 and 2.** The
+  tier-1 substitution moved `MODEL_TIER_PRESETS`, `ollama-pull.sh` and `smoke.sh` but not the
+  check's expectations, so the check failed on `MODEL_TIER=1`. It now expects `aya-expanse:8b`.
+  The slot-override case now overrides with a tag that differs from the preset, so it still proves
+  the override wins. Covered by the script itself, which is green.
+- **`ba9d7b4` — W6-E2E-1 failed on three wrong assumptions of its own.** The web fix wave
+  (`f3c0cdd`) made required rows ticked-and-locked in the quick picker. The spec's
+  `checkbox.first()` on a `new-card` is the required card-meta row, so its tick was a no-op and
+  "החל חלקית" stayed disabled until the 7-minute timeout. It reproduced twice, at load 15 and at
+  load 67, so it was not a flake. Two more faults surfaced while fixing that:
+  - "Any pending suggestion" was already satisfied by the source's first revision, before the chat
+    answered.
+  - The spec relied on `feedback-loop.spec.ts` having created the source document. Run alone, it
+    died on a 204.
+
+  It now targets the pending suggestion on the latest revision carrying its stamp, addresses that
+  card by its position in the list the panel renders, ticks an optional row, and creates the source
+  document when none exists. It passes alone (2 passed) and in the full run (17 passed).
+- **`15d452f` — Postgres deadlock (40P01) between `PUT /documents/:id/structure` and the
+  background step-embedding writer.** The controller first saw it as a 500 in `wave5-seams`
+  "change-preview…". The two paths took the same locks in opposite orders:
+  - `saveStructure` locks the `documents` row `for update`, then its `delete from phases`
+    cascades into `steps`.
+  - The writer's `insert into step_embeddings` fired its FK checks the other way round: key share
+    on the step first, then on the document.
+
+  The insert now key-shares the document first (an init-plan) and the step second
+  (`for key share of s`). A step deleted meanwhile is skipped instead of tripping the FK. The
+  function now returns the rows it actually wrote. The new `step-embeddings-lock-order.test.ts`
+  builds the interleaving by hand. It failed with `deadlock detected` before the fix and passes
+  after it, on three repeat runs.
+
+**Observed, not changed:** a source that feeds a document but has no step anchored to its
+paragraphs takes the new-source path on every revision. Each unaccepted revision also adds its
+own pending `new-card` beside the last one: two identical cards for `§p-1` in W6-E2E-1's run,
+because the pipeline diffs against the last *accepted* revision and nothing supersedes older
+pending rows. This behaviour predates the residual. It is a candidate for the parked list, not a
+gate defect.
+
 ## Parked
 
 | Item | Ruling | Cost if wrong |

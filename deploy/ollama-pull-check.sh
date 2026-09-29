@@ -140,14 +140,14 @@ SLOT_SUGGEST='dictalm2.0-instruct:7b-q4_K_M' SLOT_CHAT='dictalm2.0-instruct:7b-q
 SLOT_TIER=1 \
   expect_pulls 'MODEL_TIER=1 alone pulls the tier-1 generation tag and bge-m3, not MODEL_NAME' \
   'qwen2.5:3b-instruct-q4_K_M' 'nomic-embed-text' '' \
-  'dictalm2.0-instruct:7b-q4_K_M
+  'aya-expanse:8b-q4_K_M
 bge-m3'
 
 SLOT_TIER=2 \
   expect_pulls 'MODEL_TIER=2 has two different generation slots — three tags' \
   'qwen2.5:3b-instruct-q4_K_M' 'nomic-embed-text' '' \
   'gemma3:12b-it-q4_K_M
-dictalm2.0-instruct:7b-q4_K_M
+aya-expanse:8b-q4_K_M
 bge-m3'
 
 SLOT_TIER=0 \
@@ -156,9 +156,9 @@ SLOT_TIER=0 \
   'qwen2.5:3b-instruct-q4_K_M
 nomic-embed-text'
 
-SLOT_TIER=1 SLOT_SUGGEST='aya-expanse:8b-q4_K_M' \
+SLOT_TIER=1 SLOT_SUGGEST='qwen2.5:7b-instruct-q4_K_M' \
   expect_pulls 'an explicit slot override beats the tier preset' \
   'qwen2.5:3b-instruct-q4_K_M' 'bge-m3' '' \
-  'aya-expanse:8b-q4_K_M
-dictalm2.0-instruct:7b-q4_K_M
+  'qwen2.5:7b-instruct-q4_K_M
+aya-expanse:8b-q4_K_M
 bge-m3'
