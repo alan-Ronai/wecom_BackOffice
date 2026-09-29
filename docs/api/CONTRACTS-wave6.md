@@ -74,7 +74,7 @@ The tags are X1's to confirm against the VM's Ollama library; `POST /admin/ai/mo
 | GET | `/admin/ai/settings/versions` | `?key` | `AiSettingVersionsResponseSchema` | ai.manage |
 | POST | `/admin/ai/models/test` | `ModelTestBodySchema` | `ModelTestResultSchema` | ai.manage |
 | POST | `/admin/ai/eval` | — | 202 `JobQueuedSchema` (queues `ai.eval`) | ai.manage |
-| GET | `/admin/ai/eval/runs` | — | `EvalRunsResponseSchema` | ai.manage |
+| GET | `/admin/ai/eval/runs` | — | `EvalRunsResponseSchema` — wave Y: `precision` and `languageFailures` are fields of their own (columns since 0058, `null` for a run in flight or one recorded before them), no longer a phrase in `notes` | ai.manage |
 | POST | `/admin/ai/reindex` | — | 202 `JobQueuedSchema` (queues `ai.reindex`) | ai.manage |
 
 **The `models` block is read-only and environment-derived** (fix wave, A-I5). `AiSettingsSchema.models` reports `resolveModelSlots(config)` — the same resolution `makeChatModel`, `app.model`, the boot dimension check and `reindexEmbeddings` use — not the `ai.models` row. Before the fix an admin could move the tier on `/admin/ai`, see it saved, see `POST /admin/ai/models/test` confirm the new tag, and change nothing that runs; `embedDimension` in particular could be set to a width `documents.embedding` cannot hold. So:
@@ -143,8 +143,8 @@ A row id outside `STRUCTURED_EDIT_ROW_GROUPS[type]` is a 400 (X3 widened those l
 | POST | `/ai/messages/:id/feedback` | `MessageFeedbackBodySchema` | 204 | ai.ask, own message |
 | GET | `/ai/proposed-edits/:id` | — | `ProposedEditsSchema` | ai.ask, own conversation (or ai.manage) |
 | POST | `/ai/proposed-edits/:id/decide` | `DecideProposedEditsBodySchema` | `DecideProposedEditsResultSchema` | ai.chat + docs.edit |
-| GET | `/admin/ai/conversations` | `ConversationsQuerySchema` (`userId`, `documentId`, `from`, `to`) | `ConversationsResponseSchema` | ai.manage |
-| GET | `/admin/ai/conversations/export.jsonl` | same filters | `application/x-ndjson`; audited as **`admin.ai.conversations.export`** with the filter, before the reply is hijacked (A-I7) | ai.manage |
+| GET | `/admin/ai/conversations` | `ConversationsQuerySchema` (`userId`, `documentId`, `from`, `to`, `page`, `pageSize`; wave Y: `q` — case-insensitive substring over message bodies, wildcards literal, narrows only) | `ConversationsResponseSchema` | ai.manage |
+| GET | `/admin/ai/conversations/export.jsonl` | same filters, `q` included, unpaged | `application/x-ndjson`; audited as **`admin.ai.conversations.export`** with the filter, before the reply is hijacked (A-I7) | ai.manage |
 | DELETE | `/admin/ai/conversations/:id` | — | 204 | ai.manage |
 
 Rate limit: `ai.limits.chatPerUserPerHour` (default 60) → 429 `AI_RATE_LIMITED`. Context budget: `ai.limits.maxContextChars` (default 24000), passed to the assembler as `ProposalContext.maxContextChars`.
