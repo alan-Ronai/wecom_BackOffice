@@ -13,6 +13,7 @@ import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
 import { counted, documents as nDocs } from '../../lib/count.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /**
  * `/blocks/:id` — the shared block page (design card 5d).
@@ -166,7 +167,7 @@ function BlockPageBody({
       <div className="topbar">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/blocks')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/blocks')}>
             בלוקים משותפים
           </a>
           <span className="sep">/</span>
@@ -266,6 +267,7 @@ function BlockPageBody({
                       key={u.documentId + u.stepKey}
                       className="rowlink"
                       role="button"
+                      onKeyDown={pressKeys}
                       tabIndex={0}
                       onClick={() => go(`/doc/${u.documentId}/${u.stepKey}`)}
                     >

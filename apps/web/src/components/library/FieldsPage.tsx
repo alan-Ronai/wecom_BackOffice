@@ -11,6 +11,7 @@ import { Html } from '../Fmt.js';
 import { fmtDate } from '../../lib/format.js';
 import { LoadError } from '../ui/index.js';
 import { counted, documents as nDocs } from '../../lib/count.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** Port of legacy KB.views.fields. */
 export function FieldsPage() {
@@ -55,7 +56,7 @@ export function FieldsPage() {
       <div className="topbar">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/library')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/library')}>
             ספרייה
           </a>
           <span className="sep">/</span>
@@ -97,6 +98,7 @@ export function FieldsPage() {
                       className="tcard"
                       key={f.name}
                       role="button"
+                      onKeyDown={pressKeys}
                       tabIndex={0}
                       // The card opens the field's own page now that there is one; the quick
                       // popover stays for CRM chips inline in step text, where a route change

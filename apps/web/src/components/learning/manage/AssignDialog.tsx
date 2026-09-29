@@ -68,9 +68,9 @@ export function AssignDialog({ itemId, onClose }: { itemId: string; onClose: () 
       >
         <h2>
           הקצאת פריט למידה
-          <span className="x" role="button" tabIndex={0} title="סגור (Esc)" onClick={onClose}>
+          <button type="button" className="x" title="סגור (Esc)" aria-label="סגור" onClick={onClose}>
             ✕
-          </span>
+          </button>
         </h2>
         <fieldset>
           <legend>קהל יעד (תפקידים × עולמות תוכן)</legend>

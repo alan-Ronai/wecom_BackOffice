@@ -7,6 +7,7 @@ import { Hamburger } from '../shell/MobileDrawer.js';
 import { LoadError } from '../ui/index.js';
 import { ImpactPanel } from './ImpactPanel.js';
 import { createLayout, type LayoutNode } from './layout.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 const W = 1000;
 const H = 640;
@@ -101,6 +102,7 @@ export function GraphPage() {
               className={'facet' + (on ? ' on' : '')}
               style={{ padding: '3px 9px', fontSize: 11.5 }}
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               aria-pressed={on}
               onClick={() => {
@@ -268,6 +270,7 @@ function GraphCanvas({
               }
               transform={`translate(${p.x} ${p.y})`}
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               // `Peek` delegates hover previews off `[data-doc]` anywhere in the app, so a document
               // node gets the same card preview as a document link, for free.

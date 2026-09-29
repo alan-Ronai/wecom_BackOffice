@@ -20,6 +20,7 @@ import { useToast } from '../ui/Toast.js';
 import { SuggestionsPanel } from '../workspace/SuggestionsPanel.js';
 import { LoadError } from '../ui/index.js';
 import { plural } from '@wecom/shared';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** Port of views-sources.js on the pipeline API: tracked changes plus the review panel. */
 export function SourcesPage() {
@@ -77,6 +78,7 @@ export function SourcesPage() {
         <div
           className="logo"
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           style={{ cursor: 'pointer' }}
           onClick={() => go('/library')}
@@ -90,6 +92,7 @@ export function SourcesPage() {
               key={s.id}
               className={'sdoc' + (current?.id === s.id ? ' on' : '')}
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               onClick={() => go(`/sources/${s.id}`, { replace: true })}
             >
@@ -109,6 +112,7 @@ export function SourcesPage() {
               className="src-add"
               style={{ textAlign: 'center', justifyContent: 'center' }}
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               onClick={() => fileRef.current?.click()}
             >
@@ -190,6 +194,7 @@ export function SourcesPage() {
                 className={'facet' + (viewChanges ? ' on' : '')}
                 style={{ padding: '3px 9px', fontSize: 11.5 }}
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onClick={() => setViewChanges(true)}
               >
@@ -199,6 +204,7 @@ export function SourcesPage() {
                 className={'facet' + (!viewChanges ? ' on' : '')}
                 style={{ padding: '3px 9px', fontSize: 11.5 }}
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onClick={() => setViewChanges(false)}
               >
@@ -269,6 +275,7 @@ export function SourcesPage() {
             <span
               className="all"
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               onClick={async () => {
                 for (const s of items.filter((x) => x.status === 'pending'))

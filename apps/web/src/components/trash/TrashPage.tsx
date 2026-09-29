@@ -18,6 +18,7 @@ import { LoadError } from '../ui/index.js';
 import { Fmt } from '../Fmt.js';
 import type { TrashItem } from '../../api/types.js';
 import { counted, items as nItems } from '../../lib/count.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 const TYPE_LABEL: Record<string, string> = {
   document: '',
@@ -67,7 +68,7 @@ export function TrashPage() {
       <div className="topbar">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/library')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/library')}>
             ספרייה
           </a>
           <span className="sep">/</span>
@@ -183,6 +184,7 @@ export function TrashPage() {
                     <span
                       className={'cb' + (sel.has(e.id) ? ' on' : '')}
                       role="checkbox"
+                      onKeyDown={pressKeys}
                       tabIndex={0}
                       aria-checked={sel.has(e.id)}
                       aria-label={`בחר ${e.title}`}
@@ -217,6 +219,7 @@ export function TrashPage() {
                         <span
                           className="restore"
                           role="button"
+                          onKeyDown={pressKeys}
                           tabIndex={0}
                           onClick={async () => {
                             await restore.mutateAsync({ type: e.type, id: e.id });

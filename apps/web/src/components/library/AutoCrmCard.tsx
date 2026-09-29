@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDocuments } from '../../api/hooks/documents.js';
 import { useFields } from '../../api/hooks/content.js';
 import { useEntityDialogs } from './dialogs.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** "נוצר אוטומטית · מהנתונים" — the two most-used fields and this week's changes. */
 export function AutoCrmCard() {
@@ -21,7 +22,13 @@ export function AutoCrmCard() {
   const changed = list.filter((f) => f.status !== 'ok').slice(0, 2);
 
   return (
-    <div className="tcard auto" role="button" tabIndex={0} onClick={() => nav('/fields')}>
+    <div
+      className="tcard auto"
+      role="button"
+      onKeyDown={pressKeys}
+      tabIndex={0}
+      onClick={() => nav('/fields')}
+    >
       <div className="eyebrow">נוצר אוטומטית · מהנתונים</div>
       <div className="title">שדות CRM שמשתנים השבוע</div>
       <div className="rows">

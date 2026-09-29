@@ -5,6 +5,7 @@ import type { Check } from '../../lib/editorModel.js';
 import { DocBody, type StepCtx } from '../article/StepView.js';
 import { DiffView } from '../history/DiffView.js';
 import { SourcePane } from '../source/SourcePane.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 type Tab = 'preview' | 'json' | 'diff' | 'source';
 
@@ -43,6 +44,7 @@ export function SidePane({
             key={k}
             className={k === tab ? 'on' : ''}
             role="button"
+            onKeyDown={pressKeys}
             tabIndex={0}
             onClick={() => setTab(k)}
           >

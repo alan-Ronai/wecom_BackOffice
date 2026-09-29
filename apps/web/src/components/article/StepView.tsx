@@ -6,6 +6,7 @@ import { MAX_OUTCOME_KEYS, nextHints, type NextHint } from '../../lib/nextHint.j
 import type { CallResult } from '../../lib/callState.js';
 import { Fmt } from '../Fmt.js';
 import type { DocRef, FieldInfo } from '../../lib/format.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 export interface StepCtx {
   activeKey?: string | null;
@@ -128,6 +129,7 @@ export function StepView({ step, ctx, hint }: { step: ResolvedStep; ctx: StepCtx
               className="blockbar"
               title="בלוק משותף · לחץ לפרטים"
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               onClick={(e) => {
                 e.stopPropagation();
@@ -145,6 +147,7 @@ export function StepView({ step, ctx, hint }: { step: ResolvedStep; ctx: StepCtx
                 key={bid}
                 className="blockbar ref"
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -277,6 +280,7 @@ export function StepView({ step, ctx, hint }: { step: ResolvedStep; ctx: StepCtx
                     key={`${o.label}-${i}`}
                     className={'bo' + (res?.kind === 'branch' && res.idx === i ? ' picked' : '')}
                     role="button"
+                    onKeyDown={pressKeys}
                     tabIndex={0}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -304,6 +308,7 @@ export function StepView({ step, ctx, hint }: { step: ResolvedStep; ctx: StepCtx
                       'out ' + (o.kind ?? 'next') + (res?.kind === 'out' && res.idx === i ? ' picked' : '')
                     }
                     role="button"
+                    onKeyDown={pressKeys}
                     tabIndex={0}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -325,6 +330,7 @@ export function StepView({ step, ctx, hint }: { step: ResolvedStep; ctx: StepCtx
                   <span
                     className="note-add"
                     role="button"
+                    onKeyDown={pressKeys}
                     tabIndex={0}
                     onClick={(e) => {
                       e.stopPropagation();

@@ -1,3 +1,5 @@
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+
 export const isTyping = (): boolean => {
   const a = document.activeElement as HTMLElement | null;
   return (
@@ -37,9 +39,11 @@ export const normalizeKey = (key: string): string =>
  * way a real `<button>` does, so all of those were reachable by Tab but not operable — a real
  * defect for an app whose selling point is keyboard-first call handling.
  *
- * One delegated listener implements the contract `role="button"` already promises, rather than
- * threading an `onKeyDown` through 28 files. Enter and Space both activate, Space's page-scroll
- * default is suppressed, and native controls are left alone.
+ * One delegated listener implements the contract `role="button"` already promises. Enter and Space
+ * both activate, Space's page-scroll default is suppressed, and native controls are left alone.
+ *
+ * Since B-M6 (wave Y) this is the fallback, not the mechanism: every such element also carries
+ * `onKeyDown={pressKeys}` (below), which handles the key first and marks it handled.
  *
  * Returns its own teardown so callers can unbind on unmount.
  */
@@ -48,6 +52,8 @@ export function bindRoleButtonKeys(target: Document = document): () => void {
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // The element handled the key itself (`pressKeys`, or its own onKeyDown); don't fire twice.
+    if (e.defaultPrevented) return;
     const el = target.activeElement as HTMLElement | null;
     if (!el || el.getAttribute('role') !== 'button') return;
     // A real <button>/<a href> already does this natively; don't fire twice.
@@ -58,6 +64,29 @@ export function bindRoleButtonKeys(target: Document = document): () => void {
   };
   target.addEventListener('keydown', onKeyDown as EventListener);
   return () => target.removeEventListener('keydown', onKeyDown as EventListener);
+}
+
+/**
+ * B-M6 — the per-element half of the `role="button"` contract: Enter and Space activate.
+ *
+ * `bindRoleButtonKeys` above is a document-level fallback that only works where the whole `<App>`
+ * is mounted and nothing on the way up stops the event (a focus trap, a component rendered on its
+ * own). Every non-native `role="button"` element therefore carries this as its `onKeyDown`, and a
+ * lint rule (`.eslintrc.cjs`, B-M6) refuses a new one without key handling. It marks the event
+ * handled, so the fallback does not click a second time.
+ *
+ * Keys pressed inside a nested control belong to that control, not to this one.
+ */
+export function pressKeys(e: ReactKeyboardEvent<Element>): void {
+  if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+  const el = e.currentTarget;
+  if (e.target !== el) return;
+  if (el.getAttribute('aria-disabled') === 'true') return;
+  e.preventDefault();
+  // SVG elements (the graph's nodes) have no `.click()`; a dispatched click reaches onClick all the same.
+  if (el instanceof HTMLElement) el.click();
+  else el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 }
 
 /*

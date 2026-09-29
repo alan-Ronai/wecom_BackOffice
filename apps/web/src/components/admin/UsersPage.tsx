@@ -12,6 +12,7 @@ import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { Chip, LoadError } from '../ui/index.js';
 import { users as nUsers } from '../../lib/count.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 const SOURCE_LABEL: Record<AdminUserRow['source'], string> = {
   entra: 'Entra',
@@ -338,6 +339,7 @@ export function UsersPage() {
           <span
             key={label}
             role="tab"
+            onKeyDown={pressKeys}
             tabIndex={0}
             aria-selected={i === tab}
             className={i === tab ? 'on' : ''}

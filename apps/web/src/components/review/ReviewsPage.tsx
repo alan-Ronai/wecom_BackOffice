@@ -11,6 +11,7 @@ import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
 import { items } from '../../lib/count.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 type Tab = 'open' | 'approved' | 'changes';
 const TABS: [Tab, string][] = [
@@ -66,7 +67,13 @@ function ReviewCard({
         </span>
         {doc.data ? <span className="chip chip-gray">v{doc.data.currentVersion}</span> : null}
       </div>
-      <div className="title" role="button" tabIndex={0} onClick={() => go(`/doc/${row.documentId}`)}>
+      <div
+        className="title"
+        role="button"
+        onKeyDown={pressKeys}
+        tabIndex={0}
+        onClick={() => go(`/doc/${row.documentId}`)}
+      >
         {row.title}
       </div>
       {row.note ? <div className="desc">“{row.note}”</div> : null}
@@ -162,7 +169,7 @@ export function ReviewsPage() {
       <div className="topbar">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/library')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/library')}>
             ספרייה
           </a>
           <span className="sep">/</span>

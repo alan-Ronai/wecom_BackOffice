@@ -8,6 +8,7 @@ import { useDebounced } from '../../lib/useDebounced.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
 import { StateChip, direction } from './state.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** Tabs mirror `SyncQueueResponse.counts`, so the labels and the numbers cannot drift. */
 const TABS: [label: string, state: SyncLinkState | null, count: keyof SyncCounts | null][] = [
@@ -84,6 +85,7 @@ export function SyncQueuePage() {
               <span
                 key={label}
                 role="tab"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 aria-selected={state === value}
                 className={state === value ? 'on' : ''}
