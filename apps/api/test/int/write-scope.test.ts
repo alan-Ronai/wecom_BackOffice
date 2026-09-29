@@ -193,7 +193,9 @@ run('write scope — every world (A-M6)', () => {
       ).toBe(200);
       // Listed for the one-world manager (a read) …
       const list = (await app.inject({ method: 'GET', url: '/api/v1/trash', headers: auth(half) })).json();
-      expect(list.items.some((i: { id: string }) => i.id === id)).toBe(true);
+      const row = list.items.find((i: { id: string }) => i.id === id);
+      // … with the worlds the web gates restore on …
+      expect(row).toMatchObject({ category: 'billing', worlds: ['billing', 'sim'] });
       // … but not theirs to bring back or destroy.
       expect((await post(`/api/v1/trash/document/${id}/restore`, {}, half)).statusCode).toBe(403);
       expect(

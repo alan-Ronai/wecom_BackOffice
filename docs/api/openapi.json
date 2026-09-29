@@ -13612,6 +13612,17 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "category": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "worlds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                            }
+                          },
                           "impact": {
                             "type": "object",
                             "properties": {

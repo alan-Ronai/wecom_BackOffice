@@ -164,6 +164,9 @@ export const TrashItemSchema = z.object({
   deletedBy: z.string(),
   deletedAt: IsoDateSchema,
   purgeAt: IsoDateSchema,
+  /** Document rows only: its primary world and every world it spans, for the write gate. */
+  category: CategorySchema.optional(),
+  worlds: z.array(CategorySchema).optional(),
   impact: z.object({
     brokenLinks: z.number().int(),
     documents: z.array(z.object({ id: IdSchema, title: z.string() })),

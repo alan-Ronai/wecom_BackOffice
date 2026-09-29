@@ -16,18 +16,16 @@ import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
 import { Fmt } from '../Fmt.js';
-import type { Category } from '@wecom/shared';
 import type { TrashItem } from '../../api/types.js';
 import { counted, items as nItems } from '../../lib/count.js';
 import { pressKeys } from '../../lib/keyboard.js';
 
 /**
- * A trash row as the web reads it. A document row may carry its `category` and `worlds` (wave Y);
- * when it does, restoring it is a write that needs every world, exactly as the API's
+ * A document row carries its `category` and `worlds`, so restoring it is gated like the API's
  * `hasAllScopes` rule. Blocks, fields and scripts stay server-authoritative: their worlds are the
  * live documents using them, which only the server knows.
  */
-type TrashRow = TrashItem & { category?: Category; worlds?: Category[] | null };
+type TrashRow = TrashItem;
 
 const TYPE_LABEL: Record<string, string> = {
   document: '',

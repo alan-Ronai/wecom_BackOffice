@@ -38,7 +38,9 @@ export async function listTrash(
 
   const docs = await q.query(
     `select d.id, d.title, d.category, d.doc_type, d.current_version, d.deleted_at, u.display_name deleted_by,
-            (select count(*)::int from steps s where s.document_id=d.id) steps
+            (select count(*)::int from steps s where s.document_id=d.id) steps,
+            coalesce((select array_agg(dw.world_slug order by dw.world_slug) from document_worlds dw
+                      where dw.document_id = d.id), array[d.category]) worlds
      from documents d left join users u on u.id=d.deleted_by
      where d.deleted_at is not null
        and ($1::text[] is null or exists (select 1 from document_worlds dw where dw.document_id = d.id and dw.world_slug = any($1)))
@@ -65,6 +67,8 @@ export async function listTrash(
       deletedBy: d.deleted_by ?? 'מערכת',
       deletedAt: iso(d.deleted_at)!,
       purgeAt: purgeAt(d.deleted_at, days),
+      category: d.category,
+      worlds: d.worlds,
       impact: {
         brokenLinks: links.rowCount ?? 0,
         documents: links.rows.map((x) => ({ id: x.id as string, title: x.title as string })),
