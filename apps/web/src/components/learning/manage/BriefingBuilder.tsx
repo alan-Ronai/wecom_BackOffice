@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { BriefingEntry, LearningItem } from '@wecom/shared';
 import { useDocument } from '../../../api/hooks/documents.js';
 import { usePutEntries } from '../../../api/hooks/learningManage.js';
 import { move } from '../../../lib/learning.js';
+import { useServerDraft } from '../../../lib/useServerDraft.js';
 import { useToast } from '../../ui/Toast.js';
 import { DocumentPicker } from './DocumentPicker.js';
 
@@ -35,12 +36,16 @@ export function EntryTitle({
 
 /** Ordered set of published documents with a per-item note (spec §1.1). Saved whole with "שמור פריטים". */
 export function BriefingBuilder({ item }: { item: LearningItem }) {
-  const [entries, setEntries] = useState<BriefingEntry[]>(item.entries);
+  // B-M11: a refetch never discards an unsaved draft; a newer server copy is adopted when clean.
+  const {
+    draft: entries,
+    setDraft: setEntries,
+    dirty,
+    commit,
+  } = useServerDraft<BriefingEntry[]>(item.entries);
   const [titles, setTitles] = useState<Record<string, string>>({});
   const put = usePutEntries(item.id);
   const toast = useToast();
-  useEffect(() => setEntries(item.entries), [item.entries]);
-  const dirty = JSON.stringify(entries) !== JSON.stringify(item.entries);
 
   return (
     <section aria-label="פריטי התדריך">
@@ -103,8 +108,10 @@ export function BriefingBuilder({ item }: { item: LearningItem }) {
         className="btn primary sm"
         disabled={!dirty || entries.length === 0 || put.isPending}
         onClick={() =>
-          void put
-            .mutateAsync({ entries })
+          void commit(
+            () => put.mutateAsync({ entries }),
+            (saved) => saved.entries,
+          )
             .then(() => toast('הפריטים נשמרו', 'ok'))
             .catch(() => toast('השמירה נכשלה', 'warn'))
         }

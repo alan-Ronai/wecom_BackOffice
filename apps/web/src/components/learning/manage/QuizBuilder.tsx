@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { LearningItem, QuizQuestion } from '@wecom/shared';
 import { useGenerateQuestions, usePutQuestions } from '../../../api/hooks/learningManage.js';
 import { counted, questions as questionsCount } from '../../../lib/count.js';
 import { move } from '../../../lib/learning.js';
+import { useServerDraft } from '../../../lib/useServerDraft.js';
 import { useToast } from '../../ui/Toast.js';
 import { DocumentPicker, type PickedDoc } from './DocumentPicker.js';
 import { AUTHORABLE_KINDS, QuestionEditor, newOptionId } from './QuestionEditor.js';
@@ -30,14 +31,18 @@ const normalise = (q: QuizQuestion): QuizQuestion =>
 
 /** Spec §1.2 / §5: pick documents → generate → curate → save. Nothing is saved until "שמור שאלות". */
 export function QuizBuilder({ item }: { item: LearningItem }) {
-  const [questions, setQuestions] = useState<QuizQuestion[]>(item.questions);
+  // B-M11: a refetch never discards an unsaved draft; a newer server copy is adopted when clean.
+  const {
+    draft: questions,
+    setDraft: setQuestions,
+    dirty,
+    commit,
+  } = useServerDraft<QuizQuestion[]>(item.questions);
   const [docs, setDocs] = useState<PickedDoc[]>([]);
   const [error, setError] = useState<string | null>(null);
   const gen = useGenerateQuestions(item.id);
   const put = usePutQuestions(item.id);
   const toast = useToast();
-  useEffect(() => setQuestions(item.questions), [item.questions]);
-  const dirty = JSON.stringify(questions) !== JSON.stringify(item.questions);
   const anchor = docs[0]?.id ?? item.entries[0]?.documentId ?? item.questions[0]?.documentId ?? '';
 
   const generate = async () => {
@@ -60,7 +65,10 @@ export function QuizBuilder({ item }: { item: LearningItem }) {
     }
     setError(null);
     try {
-      await put.mutateAsync({ questions: questions.map(normalise) });
+      await commit(
+        () => put.mutateAsync({ questions: questions.map(normalise) }),
+        (saved) => saved.questions,
+      );
       toast('השאלות נשמרו', 'ok');
     } catch {
       toast('השמירה נכשלה', 'warn');
