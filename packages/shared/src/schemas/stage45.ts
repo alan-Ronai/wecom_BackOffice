@@ -241,15 +241,11 @@ export const TelemetryEventSchema = z.object({
   // anyone can see in `telemetry_events` rather than only in whichever browser console was open.
   // `0043_telemetry_client_error.js` widens the check constraint to match; the row carries no
   // `documentId` when the crash is in the shell, which `recordTelemetry` already allows.
-  kind: z.enum([
-    'outcome',
-    'call_completed',
-    'palette',
-    'jump',
-    'view_topic',
-    'search_click',
-    'client_error',
-  ]),
+  //
+  // Wave Y removes `view_topic`, the one exception to append-only: it never had a producer
+  // (`telemetry_events.document_id` references `documents`, so a topic id could not land there;
+  // topic views are recorded server-side into `topic_views`), and `0057` narrows the check.
+  kind: z.enum(['outcome', 'call_completed', 'palette', 'jump', 'search_click', 'client_error']),
   documentId: IdSchema.optional(),
   stepKey: z.string().optional(),
   at: IsoDateSchema.optional(),

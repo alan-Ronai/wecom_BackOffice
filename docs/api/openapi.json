@@ -15127,7 +15127,6 @@
                             "call_completed",
                             "palette",
                             "jump",
-                            "view_topic",
                             "search_click",
                             "client_error"
                           ]
