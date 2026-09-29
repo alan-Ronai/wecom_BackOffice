@@ -44,8 +44,21 @@ test('W6-E2E-1 the chat proposes a source edit, the editor accepts it, and a par
   const docId = /\/workspace\/([0-9a-f-]+)/.exec(e.url())![1]!;
 
   const sourceOf = async () => (await api.get(`/api/v1/documents/${docId}/source`)).json();
+  /*
+   * The seed gives no document a source document; in a full run `feedback-loop.spec.ts` happens
+   * to save one on this item first. Relying on that made this spec order-dependent — alone, the
+   * GET answered 204 and the spec died parsing an empty body. So it gives the item a source
+   * document itself when there is none, through the same audited save an editor uses.
+   */
+  if ((await api.get(`/api/v1/documents/${docId}/source`)).status() === 204) {
+    const put = await api.put(`/api/v1/documents/${docId}/source`, {
+      data: { html: '<p>סף חדש: 6 מגה.</p>', label: 'e2e: מסמך מקור ראשון' },
+    });
+    expect(put.ok(), `first source save: ${put.status()}`).toBeTruthy();
+    await e.reload();
+  }
   const before = await sourceOf();
-  expect(before.version, 'the seeded document has a source document').toBeGreaterThan(0);
+  expect(before.version, 'the document has a source document').toBeGreaterThan(0);
   // The first sentence of the source, which the scripted reply is asked to rewrite.
   const quote = /<p>([^<]{6,60})/.exec(before.html as string)?.[1]?.trim();
   expect(quote, `a paragraph to edit in ${String(before.html).slice(0, 200)}`).toBeTruthy();
@@ -94,25 +107,42 @@ test('W6-E2E-1 the chat proposes a source edit, the editor accepts it, and a par
 
   /* 4. the pipeline reacts, and the suggestions carry `affects` -------------- */
   const doc = await (await api.get(`/api/v1/documents/${docId}`)).json();
-  const pendingOf = async () =>
-    (await (await api.get(`/api/v1/suggestions?sourceId=${doc.sourceId}&status=pending`)).json()).items as {
-      id: string;
-      title: string;
-      affects: unknown[];
-    }[];
-  await expect.poll(async () => (await pendingOf()).length, { timeout: 150_000 }).toBeGreaterThan(0);
-  const pending = await pendingOf();
+  type Listed = { id: string; title: string; status: string; sourceRevisionId: string; affects: unknown[] };
+  const listOf = async (query = '') =>
+    (await (await api.get(`/api/v1/suggestions?sourceId=${doc.sourceId}${query}`)).json()).items as Listed[];
+  /*
+   * The suggestion *this* edit produced — not merely "a pending one". Opening the workspace already
+   * gave the source a first revision, and that revision's own `new-card` is pending long before the
+   * chat answers, so "any pending suggestion" was satisfied without the pipeline reacting to the
+   * edit at all. The revision is identified by content: the latest one carrying the stamp.
+   */
+  const editRevision = async () => {
+    const rev = await (await api.get(`/api/v1/sources/${doc.sourceId}/revisions/latest`)).json();
+    return JSON.stringify(rev.paragraphs ?? '').includes(stamp) ? (rev.id as string) : null;
+  };
+  const fromEdit = async () => {
+    const revId = await editRevision();
+    return revId ? (await listOf('&status=pending')).find((s) => s.sourceRevisionId === revId) : undefined;
+  };
+  await expect.poll(async () => (await fromEdit())?.id ?? null, { timeout: 150_000 }).not.toBeNull();
+  const target = (await fromEdit())!;
   // `affects` is computed server-side from the graph (§1.6), so the field is always an array —
   // empty when the change really touches nothing else, which is itself the honest answer.
-  expect(Array.isArray(pending[0]!.affects)).toBeTruthy();
+  expect(Array.isArray(target.affects)).toBeTruthy();
 
   /* 5. structured edit, then a partial apply -------------------------------- */
   await e.reload();
   const panel = e.getByRole('region', { name: 'הצעות' });
-  await expect(panel.getByRole('button', { name: 'עריכה מפורטת' }).first()).toBeVisible({
-    timeout: 30_000,
-  });
-  await panel.getByRole('button', { name: 'עריכה מפורטת' }).first().click();
+  /*
+   * The panel lists `GET /suggestions?sourceId=` in the order the API returns it (newest first),
+   * which can hold the first revision's card beside this one. Address the target's card by its
+   * position in that same list rather than assuming it is first.
+   */
+  const at = (await listOf()).findIndex((s) => s.id === target.id);
+  expect(at, 'the target is in the list the panel renders').toBeGreaterThanOrEqual(0);
+  const card = panel.locator('.suggestions-panel > ul > li').nth(at);
+  await expect(card.getByRole('button', { name: 'עריכה מפורטת' })).toBeVisible({ timeout: 30_000 });
+  await card.getByRole('button', { name: 'עריכה מפורטת' }).click();
   const drawer = e.getByRole('dialog', { name: 'עריכת ההצעה' });
   // Each row is keep / edit / remove; the editable field only appears once "ערוך" is chosen,
   // which is the tri-state the structured editor is for (§1.8).
@@ -123,11 +153,10 @@ test('W6-E2E-1 the chat proposes a source edit, the editor accepts it, and a par
   await drawer.getByRole('button', { name: 'שמור עריכה' }).click();
   await expect(drawer).toBeHidden({ timeout: 30_000 });
 
-  // The panel lists pending suggestions in the order the API returns them, so the card the drawer
-  // just edited is the one the row checkboxes below belong to.
-  const target = pending[0]!;
-  await panel.getByRole('checkbox').first().check();
-  await panel.getByRole('button', { name: 'החל חלקית' }).first().click();
+  // Required rows are ticked and locked (the server refuses a `parts` set without them), so the
+  // partial pick is an *optional* row — on a `new-card` the first row is the required card meta.
+  await card.getByRole('checkbox', { disabled: false }).first().check();
+  await card.getByRole('button', { name: 'החל חלקית' }).click();
 
   // Durable: the suggestion is decided and records *what* was applied and *what changed*.
   await expect
