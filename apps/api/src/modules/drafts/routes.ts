@@ -46,7 +46,7 @@ export default async function routes(app: FastifyInstance) {
   app.put(
     '/documents/:id/draft',
     {
-      config: { requires: ['docs.edit'], scope: 'document' },
+      config: { requires: ['docs.edit'], scope: 'document:write' },
       schema: {
         tags: ['drafts'],
         params: DocParams,
@@ -65,7 +65,7 @@ export default async function routes(app: FastifyInstance) {
   app.delete(
     '/documents/:id/draft',
     {
-      config: { requires: ['docs.edit'], scope: 'document' },
+      config: { requires: ['docs.edit'], scope: 'document:write' },
       schema: { tags: ['drafts'], params: DocParams },
     },
     async (req, reply) => {

@@ -248,6 +248,22 @@ export async function assembleMany(q: Q, ids: string[]): Promise<Map<string, Doc
 export const getDocument = async (q: Q, id: string): Promise<Document | null> =>
   (await assembleMany(q, [id])).get(id) ?? null;
 
+/**
+ * The union of the worlds the given live documents belong to. This is the world set of a
+ * catalogue entry that has none of its own — a block or a CRM field spans the worlds of the
+ * documents that use it — and so what the write rule (`hasAllScopes`, wave Y A-M6) checks.
+ */
+export async function worldsOfDocuments(q: Q, ids: readonly string[]): Promise<string[]> {
+  if (!ids.length) return [];
+  const r = await q.query<{ w: string }>(
+    `select distinct dw.world_slug w from document_worlds dw
+       join documents d on d.id = dw.document_id and d.deleted_at is null
+      where dw.document_id = any($1::uuid[]) order by 1`,
+    [[...ids]],
+  );
+  return r.rows.map((x) => x.w);
+}
+
 /** `getDocument` plus the reader rule: an unpublished document is a 404 for users without `docs.read_unpublished`. */
 export async function getVisibleDocument(
   q: Q,
@@ -791,8 +807,13 @@ export async function publishDocument(
    * remote. While a sync link is `conflict` or `pending_push` the flag is not stale editorial
    * state — it is a live "the source and the item disagree" that publishing does not settle — so
    * the flag is kept and its reason restated from the current link state rather than cleared.
+   *
+   * Wave Y (owner decision on A-M11): *kept*, never *raised*. `pending_push` is durable on a
+   * read-only link, so raising a clear flag here put every publish of such a document into the
+   * source-review queue although nothing about the source had moved. A flag that was clear stays
+   * clear; one that was set stays set, with the reason restated.
    */
-  const sync = humanPublish ? await getDocumentSyncState(tx, id) : null;
+  const sync = humanPublish && before.sourceReviewNeeded ? await getDocumentSyncState(tx, id) : null;
   const keepFlag = sync !== null && sync.flagReason !== null;
   await tx.query(
     `update documents set current_version=$2, status=$3, updated_by=$4, updated_at=now(), etag=gen_random_uuid()::text,

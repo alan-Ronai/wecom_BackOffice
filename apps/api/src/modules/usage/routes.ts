@@ -8,13 +8,7 @@ import {
 } from '@wecom/shared';
 import { requireUser } from '../../lib/user.js';
 import { TtlCache } from './cache.js';
-import {
-  listSearchLog,
-  probeCapabilities,
-  usageAnalytics,
-  type SearchLogQuery,
-  type UsageQuery,
-} from './repo.js';
+import { listSearchLog, usageAnalytics, type SearchLogQuery, type UsageQuery } from './repo.js';
 
 const CACHE_MS = 60_000;
 
@@ -47,8 +41,7 @@ export default async function routes(app: FastifyInstance) {
       ]);
       const hit = cache.get(key);
       if (hit) return hit;
-      const caps = await probeCapabilities(app.db);
-      const result = await usageAnalytics(app.db, query, caps, user.worldScopes);
+      const result = await usageAnalytics(app.db, query, user.worldScopes);
       cache.set(key, result);
       return result;
     },

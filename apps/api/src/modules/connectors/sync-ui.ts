@@ -1,4 +1,5 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import type { FastifyRequest } from 'fastify';
 import { getDocumentSyncState, redactSyncState } from './document-sync-state.js';
 import { z } from 'zod';
 import {
@@ -23,7 +24,7 @@ import type { ConnectorRegistry } from '@wecom/connectors';
 import type { ConnectorsRepo } from './repo.js';
 import type { SyncService } from './sync.js';
 import { assertVisibleDocument } from '../../lib/visibility.js';
-import { requireUser } from '../../lib/user.js';
+import { hasAllScopes, requireUser } from '../../lib/user.js';
 import { describeConfigSchema } from './describe-config.js';
 import { auditOf, hasPermission, userOf } from './context.js';
 
@@ -98,6 +99,28 @@ export interface SyncUiOptions {
  * assembled document.
  */
 const routes: FastifyPluginAsyncZod<SyncUiOptions> = async (app, opts) => {
+  /**
+   * Wave Y (A-M6): importing into or pushing out a linked document, and resolving its conflict,
+   * all write that document, so the caller must hold every world it spans. The 403 body, or
+   * null when the caller may proceed. Unscoped roles are never refused here.
+   */
+  const scopeDenied = async (req: FastifyRequest, documentId: string) => {
+    const user = requireUser(req);
+    if (user.worldScopes == null) return null;
+    const worlds = (
+      await app.db.query<{ w: string }>(
+        'select world_slug w from document_worlds where document_id = $1 order by 1',
+        [documentId],
+      )
+    ).rows.map((x) => x.w);
+    if (hasAllScopes(user, worlds)) return null;
+    return {
+      code: 'SCOPE_DENIED',
+      message: 'ההרשאה שלך מוגבלת לעולמות תוכן אחרים',
+      details: { worlds, scopes: user.worldScopes },
+      requestId: req.id,
+    };
+  };
   const { repo, registry, sync } = opts;
   const audit = auditOf(app);
   const manage: { requires: Permission[] } = { requires: ['connectors.manage'] };
@@ -286,6 +309,8 @@ const routes: FastifyPluginAsyncZod<SyncUiOptions> = async (app, opts) => {
           details: { permission },
           requestId: req.id,
         });
+      const denied = await scopeDenied(req, link.document_id);
+      if (denied) return reply.status(403).send(denied);
       const actorId = userOf(req)?.id ?? null;
       try {
         const outcome = await sync.syncLink(link, req.body.direction, actorId);
@@ -341,6 +366,8 @@ const routes: FastifyPluginAsyncZod<SyncUiOptions> = async (app, opts) => {
     async (req, reply) => {
       const link = await repo.linkById(req.params.id);
       if (!link) return reply.status(404).send(missing(req, 'קישור סנכרון לא נמצא'));
+      const denied = await scopeDenied(req, link.document_id);
+      if (denied) return reply.status(403).send(denied);
       if (req.body.resolution === 'merged' && !req.body.merged)
         return reply
           .status(400)

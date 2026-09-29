@@ -5,7 +5,6 @@ import { buildTestApp } from './helpers/app.js';
 import { makeUser, auth, minimalStructure } from './helpers/fixtures.js';
 import { setNotifier, setTaxonomy } from '../src/plugins/wave4.js';
 import { PgNotifier } from '../src/modules/feedback/notifier.js';
-import { resetColumnCache } from '../src/modules/feedback/repo.js';
 
 const run = integration ? describe : describe.skip;
 
@@ -58,14 +57,13 @@ run('feedback alerts', () => {
   }, 120000);
   beforeEach(() => {
     sent.length = 0;
-    resetColumnCache();
   });
   afterAll(async () => {
     await app.close();
     await db.stop();
   });
 
-  it('a new report alerts the responsible people (updated_by fallback before W2), never the reporter', async () => {
+  it('a new report alerts the responsible people (updated_by when no owner/editor), never the reporter', async () => {
     await app.inject({
       method: 'POST',
       url: `/api/v1/documents/${docId}/feedback`,
@@ -89,17 +87,13 @@ run('feedback alerts', () => {
     expect([...sent[0].userIds].sort()).toEqual([lead.id, publisher.id].sort());
   });
 
-  it('uses owner_id / editor_id once W2 adds them', async () => {
+  it('uses owner_id / editor_id when the document has them', async () => {
     const owner = await makeUser(db.pool, { name: 'בעלת תחום' });
-    await db.pool.query(
-      'alter table documents add column if not exists owner_id uuid, add column if not exists editor_id uuid',
-    );
     await db.pool.query('update documents set owner_id=$2, editor_id=$3 where id=$1', [
       docId,
       owner.id,
       lead.id,
     ]);
-    resetColumnCache();
     await app.inject({
       method: 'POST',
       url: `/api/v1/documents/${docId}/feedback`,
@@ -107,8 +101,7 @@ run('feedback alerts', () => {
       payload: { kind: 'unclear' },
     });
     expect([...sent[0].userIds].sort()).toEqual([lead.id, owner.id].sort());
-    await db.pool.query('alter table documents drop column owner_id, drop column editor_id');
-    resetColumnCache();
+    await db.pool.query('update documents set owner_id=null, editor_id=null where id=$1', [docId]);
   });
 
   it('PgNotifier writes the wave 4 kind itself and dedupes recipients', async () => {

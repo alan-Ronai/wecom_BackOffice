@@ -82,10 +82,14 @@ describe('the client scope gate mirrors the server', () => {
       categoryScopes: scopes,
     }) as Me;
 
-  it('allows a document whose secondary world is in scope', () => {
-    // The server intersects the whole membership; checking `doc.category` alone made the client
-    // stricter than the API and silently hid the edit affordances.
-    expect(can(me(['billing']), 'docs.edit', { category: 'tech', worlds: ['tech', 'billing'] })).toBe(true);
+  it('reads a document whose secondary world is in scope, but edits it only holding every world', () => {
+    // The server intersects the whole membership for a read; checking `doc.category` alone made
+    // the client stricter than the API. Since wave Y (A-M6) a write needs every world, so the
+    // edit affordance is hidden for a document the caller holds only one world of.
+    const shared = { category: 'tech', worlds: ['tech', 'billing'] };
+    expect(can({ ...me(['billing']), permissions: ['docs.read'] } as Me, 'docs.read', shared)).toBe(true);
+    expect(can(me(['billing']), 'docs.edit', shared)).toBe(false);
+    expect(can(me(['billing', 'tech']), 'docs.edit', shared)).toBe(true);
   });
 
   it('still refuses a document in no scoped world', () => {

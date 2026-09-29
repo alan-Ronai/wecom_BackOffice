@@ -181,6 +181,33 @@ run('wave 5 seams', () => {
     ).toBe(false);
   });
 
+  /**
+   * Wave Y, owner decision on A-M11: *keeps*, never *raises*. With a durable `pending_push` (or a
+   * `conflict`) link, a human publish of a document whose flag was clear used to set it, which
+   * filled the source-review queue with documents whose only problem was a read-only connector.
+   */
+  it('A-M11: a human publish never raises a clear flag while a link is pending_push or conflict', async () => {
+    for (const state of ['pending_push', 'conflict']) {
+      const id = await makeDoc('דגל נקי ' + state);
+      await linkToRemote(id, state);
+      const before = await db.pool.query('select source_review_needed from documents where id=$1', [id]);
+      expect(before.rows[0].source_review_needed).toBe(false);
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/v1/documents/${id}/publish`,
+        headers: auth(lead),
+        payload: { label: 'v2' },
+      });
+      expect(res.statusCode, res.body).toBe(200);
+      const after = await db.pool.query(
+        'select source_review_needed, source_review_reason from documents where id=$1',
+        [id],
+      );
+      expect(after.rows[0].source_review_needed, state).toBe(false);
+      expect(after.rows[0].source_review_reason, state).toBeNull();
+    }
+  });
+
   it('tracking resolves items through V1 tables: GET /documents/:id/learning lists the quiz', async () => {
     const docId = await makeDoc('מסמך עם שאלון');
     const quizId = await seedQuiz(db.pool, {

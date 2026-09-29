@@ -12,12 +12,27 @@ import {
   makeEvent,
 } from '@wecom/shared';
 import { audit } from '../../lib/audit.js';
-import { notFound } from '../../lib/http.js';
+import { forbidden, notFound } from '../../lib/http.js';
 import { withTransaction } from '../../lib/sql.js';
-import { requireUser } from '../../lib/user.js';
+import { hasAllScopes, requireUser, type ReqUser } from '../../lib/user.js';
+import type { Tx } from '../../lib/sql.js';
+import { worldsOfDocuments } from '../documents/repo.js';
 import * as repo from './repo.js';
 
 const Params = z.object({ id: IdSchema });
+
+/**
+ * Wave Y (A-M6): a block has no world of its own — it spans the worlds of the documents that
+ * embed or reference it, and editing or deleting it rewrites every one of them. So a scoped
+ * editor may change it only when they hold every one of those worlds; a block nobody uses yet
+ * is everybody's.
+ */
+async function assertBlockWritable(tx: Tx, id: string, user: ReqUser): Promise<void> {
+  const worlds = await worldsOfDocuments(tx, [
+    ...new Set((await repo.blockUsage(tx, id)).map((u) => u.documentId)),
+  ]);
+  if (worlds.length && !hasAllScopes(user, worlds)) throw forbidden();
+}
 
 export default async function routes(app: FastifyInstance) {
   app.get(
@@ -104,6 +119,7 @@ export default async function routes(app: FastifyInstance) {
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getBlock(tx, id);
         if (!before) throw notFound('הבלוק');
+        await assertBlockWritable(tx, id, user);
         const { block, affected } = await repo.updateBlock(tx, id, body, user.id);
         await audit(tx, {
           actorId: user.id,
@@ -134,6 +150,7 @@ export default async function routes(app: FastifyInstance) {
       return withTransaction(app.db, async (tx) => {
         const before = await repo.getBlock(tx, id);
         if (!before) throw notFound('הבלוק');
+        await assertBlockWritable(tx, id, user);
         const affected = await repo.deleteBlock(tx, id, user.id);
         const auditId = await audit(tx, {
           actorId: user.id,

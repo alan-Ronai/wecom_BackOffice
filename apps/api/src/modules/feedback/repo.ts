@@ -24,23 +24,6 @@ export type FeedbackAnalyticsQuery = z.infer<typeof FeedbackAnalyticsQuerySchema
 export type Q = pg.Pool | Tx;
 const iso = (d: Date | string | null): string | null => (d ? new Date(d).toISOString() : null);
 
-/* ── schema probes (W1/W2 columns may not exist yet) ─────────────────────── */
-const columnCache = new Map<string, boolean>();
-export async function hasColumn(q: Q, table: string, column: string): Promise<boolean> {
-  const key = table + '.' + column;
-  const hit = columnCache.get(key);
-  if (hit !== undefined) return hit;
-  const r = await q.query(
-    `select 1 from information_schema.columns where table_schema='public' and table_name=$1 and column_name=$2`,
-    [table, column],
-  );
-  const ok = (r.rowCount ?? 0) > 0;
-  columnCache.set(key, ok);
-  return ok;
-}
-/** Tests that add columns mid-run can clear the memo. */
-export const resetColumnCache = () => columnCache.clear();
-
 export interface Context {
   documentVersion: number;
   worldSlug: string;
@@ -53,9 +36,8 @@ export async function captureContext(
   taxonomy: TaxonomyResolver,
   documentId: string,
 ): Promise<Context | null> {
-  const docTypeExpr = (await hasColumn(q, 'documents', 'doc_type')) ? 'doc_type' : 'null::text as doc_type';
   const r = await q.query(
-    `select title, current_version, category, ${docTypeExpr} from documents where id=$1 and deleted_at is null`,
+    `select title, current_version, category, doc_type from documents where id=$1 and deleted_at is null`,
     [documentId],
   );
   if (!r.rowCount) return null;
@@ -359,24 +341,19 @@ export async function feedbackAnalytics(
        from feedback f where ${scope} and f.decided_at is not null`,
       params,
     ),
-    // W1's tables may not exist yet: to_regclass keeps the query planner from erroring on a missing relation.
-    q.query(`select to_regclass('document_topics') dt, to_regclass('topics') t`),
-  ]);
-  let recurringByTopic: FeedbackAnalytics['recurringByTopic'] = [];
-  if (topics.rows[0].dt && topics.rows[0].t) {
-    const r = await q.query(
+    q.query(
       `select dt.topic_id, t.name topic_name, f.kind, count(*)::int count
        from feedback f join document_topics dt on dt.document_id=f.document_id join topics t on t.id=dt.topic_id
        where ${scope} group by dt.topic_id, t.name, f.kind having count(*) >= 2 order by count desc limit 20`,
       params,
-    );
-    recurringByTopic = r.rows.map((x) => ({
-      topicId: x.topic_id as string,
-      topicName: x.topic_name as string,
-      kind: x.kind as FeedbackAnalytics['recurringByTopic'][number]['kind'],
-      count: x.count as number,
-    }));
-  }
+    ),
+  ]);
+  const recurringByTopic: FeedbackAnalytics['recurringByTopic'] = topics.rows.map((x) => ({
+    topicId: x.topic_id as string,
+    topicName: x.topic_name as string,
+    kind: x.kind as FeedbackAnalytics['recurringByTopic'][number]['kind'],
+    count: x.count as number,
+  }));
   const c = closing.rows[0] as { mean_hours: string | null; closed: number; changed: number };
   return {
     from: from.toISOString(),

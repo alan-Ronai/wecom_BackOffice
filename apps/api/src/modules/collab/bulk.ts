@@ -4,7 +4,7 @@ import { BulkDocumentsBodySchema, BulkResultSchema, makeEvent, type Permission }
 import { audit } from '../../lib/audit.js';
 import { badRequest } from '../../lib/http.js';
 import { withTransaction, type Tx } from '../../lib/sql.js';
-import { hasScope, requireUser, type ReqUser } from '../../lib/user.js';
+import { hasAllScopes, hasScope, requireUser, type ReqUser } from '../../lib/user.js';
 import { softDelete } from '../documents/repo.js';
 import { leadIds, notifyMany } from './repo.js';
 
@@ -61,10 +61,22 @@ export default async function bulkRoutes(instance: FastifyInstance) {
         };
 
       return withTransaction(app.db, async (tx) => {
-        const rows = await tx.query<{ id: string; category: string; status: string; title: string }>(
-          'select id, category, status, title from documents where id = any($1::uuid[]) and deleted_at is null',
+        const rows = await tx.query<{
+          id: string;
+          category: string;
+          status: string;
+          title: string;
+          worlds: string[];
+        }>(
+          `select d.id, d.category, d.status, d.title,
+                  coalesce((select array_agg(dw.world_slug) from document_worlds dw where dw.document_id = d.id),
+                           array[d.category]) worlds
+             from documents d where d.id = any($1::uuid[]) and d.deleted_at is null`,
           [body.ids],
         );
+        // Pin is a personal bookmark (a read); every other action changes the document, and a
+        // change needs every world it spans (wave Y, A-M6) — not just its primary one.
+        const allowed = body.action === 'pin' || body.action === 'unpin' ? hasScope : hasAllScopes;
         const found = new Map(rows.rows.map((r) => [r.id, r]));
         // Hoisted out of the loop: `leadIds` reads the whole role graph, and a 200-document
         // `request-review` ran the identical query 200 times inside one transaction.
@@ -76,8 +88,8 @@ export default async function bulkRoutes(instance: FastifyInstance) {
             skipped.push({ id, reason: 'המסמך לא נמצא' });
             continue;
           }
-          if (!hasScope(user, doc.category)) {
-            skipped.push({ id, reason: `הקטגוריה ${doc.category} מחוץ להרשאה שלך` });
+          if (!allowed(user, doc.worlds)) {
+            skipped.push({ id, reason: `עולמות התוכן ${doc.worlds.join(', ')} מחוץ להרשאה שלך` });
             continue;
           }
           await apply(tx, app, req, user, body, doc, leads);

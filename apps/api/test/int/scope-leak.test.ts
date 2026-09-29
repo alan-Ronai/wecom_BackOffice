@@ -685,9 +685,12 @@ run('category scope: an out-of-scope document leaks through no route', () => {
   /**
    * I4(a): the read leak has a write counterpart. `POST /fields/:name/rename` required only
    * `fields.edit` and never consulted `categoryScopes`, so a narrowly scoped editor rewrote step
-   * text in every category. Left last in the file because it mutates the catalogue.
+   * text in every category. The first fix rewrote only the documents the caller could open; since
+   * wave Y (A-M6) a field spans the worlds of the documents referencing it, and renaming it needs
+   * every one of them — so the scoped rename is refused outright and nothing is rewritten.
+   * Left last in the file because it mutates the catalogue.
    */
-  it('I4: a scoped rename rewrites only the documents the caller can open', async () => {
+  it('I4: a scoped rename of a field used outside the caller worlds is refused and rewrites nothing', async () => {
     const field = 'קוד תעריף';
     await app.inject({
       method: 'PUT',
@@ -706,15 +709,12 @@ run('category scope: an out-of-scope document leaks through no route', () => {
       headers: auth(scoped),
       payload: { newName: 'קוד מסלול', updateReferences: true, label: 'שינוי שם' },
     });
-    expect(r.statusCode).toBe(200);
-    expect(r.json().updatedDocuments).toBe(1);
+    expect(r.statusCode).toBe(403);
 
     const textOf = async (id: string) =>
       (await app.inject({ method: 'GET', url: `/api/v1/documents/${id}`, headers: auth(admin) })).json()
         .phases[0].steps[1].actions[0].text as string;
-    expect(await textOf(tech)).toContain('קוד מסלול');
-    // Untouched: the scoped editor may not read this document, so they may not rewrite it either.
-    // The old name survives as a `renamed` tombstone, which is what tells its owners to update.
+    expect(await textOf(tech)).toContain(field);
     expect(await textOf(billing)).toContain(field);
   });
 

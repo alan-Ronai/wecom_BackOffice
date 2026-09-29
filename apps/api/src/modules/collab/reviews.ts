@@ -67,7 +67,7 @@ export default async function reviewRoutes(instance: FastifyInstance) {
   app.post(
     '/documents/:id/request-review',
     {
-      config: { requires: ['docs.edit'], scope: 'document' },
+      config: { requires: ['docs.edit'], scope: 'document:write' },
       schema: {
         tags: ['collab'],
         params: DocParams,
@@ -146,7 +146,7 @@ export default async function reviewRoutes(instance: FastifyInstance) {
   app.post(
     '/documents/:id/review-decision',
     {
-      config: { requires: ['docs.publish'], scope: 'document' },
+      config: { requires: ['docs.publish'], scope: 'document:write' },
       schema: {
         tags: ['collab'],
         params: DocParams,

@@ -163,15 +163,10 @@ export async function topicsWithoutProcedure(q: Q, t: Thresholds): Promise<GapCa
 
 /**
  * Quiz questions failed by at least `failedQuestionRate` of attempts — either the question is
- * wrong or the material behind it is. Reads V1/V2 tables, which do not exist until those lanes
- * merge, so the presence probe comes first: the nightly job must never fail on a missing table.
+ * wrong or the material behind it is. Reads the wave 5 learning tables (0046–0049).
  * `learning_attempts.answers` is `{ [questionId]: { selected, correct } }` (V2's contract).
  */
 export async function failedQuestions(q: Q, t: Thresholds): Promise<GapCandidate[]> {
-  const has = await q.query<{ a: string | null; b: string | null }>(
-    `select to_regclass('public.learning_attempts')::text a, to_regclass('public.quiz_questions')::text b`,
-  );
-  if (!has.rows[0].a || !has.rows[0].b) return [];
   const r = await q.query<{
     question_id: string;
     item_id: string;

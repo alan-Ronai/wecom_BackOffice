@@ -103,6 +103,46 @@ const nextKey = (doc: Document) =>
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
+/**
+ * Every world `publishAccepted` would write for a source's accepted suggestions — the write
+ * scope a caller must hold all of (wave Y, A-M6):
+ *
+ * - `update-step` / `new-step` / `deprecate-step`: the target document's worlds;
+ * - `new-card`: the primary world the new document is created in (`category` of the payload the
+ *   reviewer settled on);
+ * - `update-block`: the worlds of every live document embedding or referencing the block, the
+ *   same set `PUT /blocks/:id` checks;
+ * - `field-alert`: the worlds of every live document whose steps reference the field, the same
+ *   set `PUT /fields/:name` checks.
+ */
+export async function worldsWrittenBy(q: pg.PoolClient | pg.Pool, sourceId: string): Promise<string[]> {
+  const r = await q.query<{ w: string }>(
+    `with acc as (
+       select g.target_document_id, g.target_block_id, coalesce(g.edited_payload, g.payload) p
+         from suggestions g join source_revisions sr on sr.id = g.source_revision_id
+        where sr.source_id = $1 and g.status = 'accepted'),
+     docs as (
+       select target_document_id id from acc where target_document_id is not null
+       union
+       select s.document_id from acc
+         join steps s on s.block_id = acc.target_block_id or acc.target_block_id = any(s.block_refs)
+        where acc.target_block_id is not null and acc.p->>'type' = 'update-block'
+       union
+       select s.document_id from acc
+         join step_field_refs f on f.field_name = acc.p->>'fieldName'
+         join steps s on s.id = f.step_id
+        where acc.p->>'type' = 'field-alert')
+     select dw.world_slug w from docs
+       join documents d on d.id = docs.id and d.deleted_at is null
+       join document_worlds dw on dw.document_id = d.id
+     union
+     select acc.p->>'category' from acc where acc.p->>'type' = 'new-card' and acc.p->>'category' is not null
+     order by 1`,
+    [sourceId],
+  );
+  return r.rows.map((x) => x.w);
+}
+
 export class SuggestionService {
   constructor(
     private readonly pool: pg.Pool,
@@ -609,11 +649,16 @@ export class SuggestionService {
   /**
    * Applies every accepted suggestion of a source in one transaction, marks the source
    * synced and its revision accepted, then publishes the document.published events.
+   *
+   * `guard` (wave Y, A-M6) is handed every world the publish would write — see
+   * `worldsWrittenBy` — inside the transaction and before anything is applied, so a caller who
+   * may not write one of them is refused for the whole request and nothing is half-published.
    */
   async publishAccepted(
     sourceId: string,
     actorId: string,
     meta: AuditMeta = {},
+    guard?: (worlds: string[]) => void,
   ): Promise<{ applied: number; versions: string[] }> {
     const client = await this.pool.connect();
     const versions: string[] = [];
@@ -628,6 +673,7 @@ export class SuggestionService {
          where sr.source_id=$1 and g.status='accepted' order by g.created_at, g.id`,
         [sourceId],
       );
+      if (guard) guard(await worldsWrittenBy(client, sourceId));
       for (const r of acc.rows) {
         const s = row(r);
         const res = await this.applyOne(client, s, actorId, srcTitle);

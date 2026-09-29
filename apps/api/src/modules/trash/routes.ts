@@ -90,7 +90,11 @@ export default async function routes(app: FastifyInstance) {
     async (req) => {
       const user = requireUser(req);
       return withTransaction(app.db, async (tx) => {
-        const items = await repo.listTrash(tx, app.config.TRASH_DAYS, user.worldScopes);
+        const items = await repo.writableTrash(
+          tx,
+          await repo.listTrash(tx, app.config.TRASH_DAYS, user.worldScopes),
+          user.worldScopes,
+        );
         for (const i of items) await repo.restore(tx, i.type, i.id, user.id);
         await audit(tx, {
           actorId: user.id,
@@ -127,7 +131,11 @@ export default async function routes(app: FastifyInstance) {
       if (req.headers['x-confirm'] !== 'empty')
         throw httpError(428, 'CONFIRM_REQUIRED', 'ריקון סל המיחזור דורש אישור');
       return withTransaction(app.db, async (tx) => {
-        const items = await repo.listTrash(tx, app.config.TRASH_DAYS, user.worldScopes);
+        const items = await repo.writableTrash(
+          tx,
+          await repo.listTrash(tx, app.config.TRASH_DAYS, user.worldScopes),
+          user.worldScopes,
+        );
         let purged = 0;
         // A once-published item skips rather than aborting the whole empty; the operator is
         // told how many stayed behind instead of the request 409ing on the first one.
