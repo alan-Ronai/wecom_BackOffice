@@ -20,6 +20,54 @@ beforeEach(() => {
 const render = (props: Partial<Parameters<typeof SuggestionsPanel>[0]> = {}) =>
   renderWithProviders(<SuggestionsPanel documentId={DOC_1} sourceId={fx.sources[0]!.id} {...props} />);
 
+describe('<SuggestionsPanel> — a multi-source document (wave Y)', () => {
+  const OTHER_SRC = '55555555-5555-4555-8555-5555555555f9';
+  const withSources = () => {
+    const base = suggestionWithAffects();
+    state.suggestions = [
+      {
+        ...base,
+        id: 'e0000000-0000-4000-8000-0000000000a1',
+        title: 'מהמחירון',
+        sourceId: OTHER_SRC,
+        sourceTitle: 'מחירון',
+      },
+      { ...base, sourceId: fx.docBrowsing.sourceId!, sourceTitle: 'נהלי תמיכה טכנית' },
+    ];
+  };
+
+  it('asks for every source linked to the document, and groups the list by source, primary first', async () => {
+    withSources();
+    renderWithProviders(<SuggestionsPanel documentId={fx.docBrowsing.id} />);
+    const groups = await screen.findAllByRole('region', { name: /^הצעות מהמקור / });
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual([
+      'הצעות מהמקור נהלי תמיכה טכנית',
+      'הצעות מהמקור מחירון',
+    ]);
+    expect(within(groups[0]!).getByRole('heading')).toHaveTextContent('מקור ראשי');
+    expect(within(groups[1]!).getByText('מהמחירון')).toBeInTheDocument();
+    expect(state.lastSuggestionsQuery).toMatchObject({ documentId: fx.docBrowsing.id });
+    expect(state.lastSuggestionsQuery).not.toHaveProperty('sourceId');
+  });
+
+  it('draws no source headings when everything comes from one source', async () => {
+    state.suggestions = [
+      { ...suggestionWithAffects(), sourceId: fx.docBrowsing.sourceId!, sourceTitle: 'נהלי תמיכה טכנית' },
+    ];
+    renderWithProviders(<SuggestionsPanel documentId={fx.docBrowsing.id} />);
+    expect(await screen.findByText('משפיע על')).toBeInTheDocument();
+    expect(screen.queryAllByRole('region', { name: /^הצעות מהמקור / })).toHaveLength(0);
+  });
+
+  it('an explicit sourceId (the /sources page) still means that one source', async () => {
+    withSources();
+    renderWithProviders(<SuggestionsPanel sourceId={OTHER_SRC} embedded />);
+    expect(await screen.findByText('מהמחירון')).toBeInTheDocument();
+    expect(state.lastSuggestionsQuery).toMatchObject({ sourceId: OTHER_SRC });
+    expect(state.lastSuggestionsQuery).not.toHaveProperty('documentId');
+  });
+});
+
 describe('<SuggestionsPanel>', () => {
   it('shows what else the suggestion affects, and links a single document out', async () => {
     render();

@@ -74,7 +74,7 @@ The tags are X1's to confirm against the VM's Ollama library; `POST /admin/ai/mo
 | GET | `/admin/ai/settings/versions` | `?key` | `AiSettingVersionsResponseSchema` | ai.manage |
 | POST | `/admin/ai/models/test` | `ModelTestBodySchema` | `ModelTestResultSchema` | ai.manage |
 | POST | `/admin/ai/eval` | — | 202 `JobQueuedSchema` (queues `ai.eval`) | ai.manage |
-| GET | `/admin/ai/eval/runs` | — | `EvalRunsResponseSchema` | ai.manage |
+| GET | `/admin/ai/eval/runs` | — | `EvalRunsResponseSchema` — wave Y: `precision` and `languageFailures` are fields of their own (columns since 0058, `null` for a run in flight or one recorded before them), no longer a phrase in `notes` | ai.manage |
 | POST | `/admin/ai/reindex` | — | 202 `JobQueuedSchema` (queues `ai.reindex`) | ai.manage |
 
 **The `models` block is read-only and environment-derived** (fix wave, A-I5). `AiSettingsSchema.models` reports `resolveModelSlots(config)` — the same resolution `makeChatModel`, `app.model`, the boot dimension check and `reindexEmbeddings` use — not the `ai.models` row. Before the fix an admin could move the tier on `/admin/ai`, see it saved, see `POST /admin/ai/models/test` confirm the new tag, and change nothing that runs; `embedDimension` in particular could be set to a width `documents.embedding` cannot hold. So:
@@ -143,8 +143,8 @@ A row id outside `STRUCTURED_EDIT_ROW_GROUPS[type]` is a 400 (X3 widened those l
 | POST | `/ai/messages/:id/feedback` | `MessageFeedbackBodySchema` | 204 | ai.ask, own message |
 | GET | `/ai/proposed-edits/:id` | — | `ProposedEditsSchema` | ai.ask, own conversation (or ai.manage) |
 | POST | `/ai/proposed-edits/:id/decide` | `DecideProposedEditsBodySchema` | `DecideProposedEditsResultSchema` | ai.chat + docs.edit |
-| GET | `/admin/ai/conversations` | `ConversationsQuerySchema` (`userId`, `documentId`, `from`, `to`) | `ConversationsResponseSchema` | ai.manage |
-| GET | `/admin/ai/conversations/export.jsonl` | same filters | `application/x-ndjson`; audited as **`admin.ai.conversations.export`** with the filter, before the reply is hijacked (A-I7) | ai.manage |
+| GET | `/admin/ai/conversations` | `ConversationsQuerySchema` (`userId`, `documentId`, `from`, `to`, `page`, `pageSize`; wave Y: `q` — case-insensitive substring over message bodies, wildcards literal, narrows only) | `ConversationsResponseSchema` | ai.manage |
+| GET | `/admin/ai/conversations/export.jsonl` | same filters, `q` included, unpaged | `application/x-ndjson`; audited as **`admin.ai.conversations.export`** with the filter, before the reply is hijacked (A-I7) | ai.manage |
 | DELETE | `/admin/ai/conversations/:id` | — | 204 | ai.manage |
 
 Rate limit: `ai.limits.chatPerUserPerHour` (default 60) → 429 `AI_RATE_LIMITED`. Context budget: `ai.limits.maxContextChars` (default 24000), passed to the assembler as `ProposalContext.maxContextChars`.
@@ -160,7 +160,7 @@ One `ChatEventSchema` frame per SSE `data:` line, in this order: any number of `
 | `token` | `text` | The only place tokens appear; the row is written as it streams, so a dropped connection loses the rendering, not the transcript |
 | `tool_call` | `id`, `name`, `args` | `name` is an `AiToolName` the caller's permissions allow; arguments are re-validated with zod server-side before anything runs |
 | `tool_result` | `id`, `name`, `ok`, `summary`, `payload?` | `summary` is the Hebrew line the pane shows; `payload` is the structured result a pane consumes (`draft_step` → the editor dock) |
-| `proposed_edits` | `proposedEditsId`, `documentId`, `baseSourceVersion`, `ops` | Carries the base version so the diff overlay renders without a second fetch |
+| `proposed_edits` | `proposedEditsId`, `messageId`, `documentId`, `baseSourceVersion`, `ops` | Carries the base version so the diff overlay renders without a second fetch; `messageId` is the *tool* message the proposal belongs to (`ai_proposed_edits.message_id`), not the reply id `done` carries (wave Y, B-M6) |
 | `refined_suggestion` | `suggestionId`, `editedPayload` | The user still has to accept it (owner decision §1.3) |
 | `done` | `messageId`, `tokensIn`, `tokensOut`, `latencyMs` | |
 | `error` | `code`, `message` | `AI_RATE_LIMITED`, `MODEL_UNAVAILABLE`, `SOURCE_MOVED`, … |
@@ -222,7 +222,7 @@ Two web-side gates are worth stating because they are not the route's own:
 - `SuggestionAnalyticsTab` must be gated on **`suggestions.review`**, the permission `GET /suggestions/analytics` actually enforces. X4b gated it on `analytics.read` to match the other analytics surfaces; both seeded roles hold both, so the mismatch is latent, but a custom role holding one and not the other gets a tab that 403s inside itself. The contract is the route's permission (fix wave).
 - The admin transcript browser has **no** `feedback` filter. `ConversationsQuerySchema` has `userId`, `documentId`, `from` and `to` and no feedback field, and the list row carries no message-level rating to filter on in the browser either, so the control was removed in the X6 fix wave rather than left changing only the query key. A rating is shown per message inside a transcript; filtering the list by one needs the field on the route first.
 
-The workspace link ("🧭 סביבת עבודה") is shown to an `ai.chat` holder who can also edit the document, from the article topbar (and its narrow overflow menu) and the editor toolbar. There is no top-level nav entry for it: the workspace is reached from a document (spec §5).
+The workspace link ("🧭 סביבת עבודה") is gated on `ai.chat`. The editor toolbar shows it to any `ai.chat` holder (`EditorPage.tsx`); the article topbar (and its narrow overflow menu) additionally requires `docs.edit` on the document (`ArticlePage.tsx`). The gate that matters is the page's, not the link's: `WorkspacePage` refuses a caller without `ai.chat`, and inside it the source pane is read-only for a caller without `docs.edit` — every source save route requires `docs.edit` on the document, and the proposed-edits overlay hides its apply buttons (`ProposedEditsOverlay`: `docs.edit` + `ai.chat`). There is no top-level nav entry for it: the workspace is reached from a document (spec §5). *(Corrected in wave Y, B-M16: an earlier revision said the link needs `ai.chat` **and** edit rights everywhere.)*
 
 ## Deploy checklist (X1 owns)
 

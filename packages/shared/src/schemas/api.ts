@@ -219,6 +219,12 @@ export const SuggestionDecisionBodySchema = z
 export const SuggestionsQuerySchema = PaginationQuerySchema.extend({
   status: z.enum(['pending', 'accepted', 'rejected', 'applied']).optional(),
   sourceId: IdSchema.optional(),
+  /**
+   * Wave Y: every source linked to this document — its primary `documents.source_id` plus each
+   * `document_links.to_source_id` — so a multi-source item's workspace lists them all. Combines
+   * with `sourceId` as an intersection, never a union.
+   */
+  documentId: IdSchema.optional(),
 });
 
 /**

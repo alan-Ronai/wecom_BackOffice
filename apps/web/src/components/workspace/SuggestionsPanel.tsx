@@ -22,6 +22,30 @@ const pending = (n: number) =>
 const partsFor = (rows: SuggestionRow[], chosen: ReadonlySet<string>): string[] =>
   rows.filter((r) => r.required || chosen.has(r.rowId)).map((r) => r.rowId);
 
+interface SourceGroup {
+  sourceId: string;
+  title: string;
+  items: Suggestion[];
+}
+
+/**
+ * Wave Y: the list grouped by the source each suggestion came from — the document's primary
+ * source first, then the linked ones by title. Order within a group is the list's own (newest
+ * first). A row the server sent without `sourceId` (an older API) joins the primary group.
+ */
+const bySource = (items: Suggestion[], primary: string | undefined): SourceGroup[] => {
+  const map = new Map<string, SourceGroup>();
+  for (const s of items) {
+    const id = s.sourceId ?? primary ?? '';
+    const g = map.get(id) ?? { sourceId: id, title: s.sourceTitle ?? '', items: [] };
+    g.items.push(s);
+    map.set(id, g);
+  }
+  return [...map.values()].sort((a, b) =>
+    a.sourceId === primary ? -1 : b.sourceId === primary ? 1 : a.title.localeCompare(b.title, 'he'),
+  );
+};
+
 /**
  * The workspace's middle pane: the suggestions raised against this item's source document, each
  * with what else it touches, a field-level editor and a partial apply.
@@ -61,10 +85,17 @@ export function SuggestionsPanel({
   const canApply = can('suggestions.apply');
   const toast = useToast();
   const doc = useDocument(documentId);
-  const linkedSourceId = sourceId ?? doc.data?.sourceId ?? undefined;
-  // Not until the source is known: an unfiltered `/suggestions` while the document loads asks for
-  // every suggestion in the system and then throws the answer away.
-  const list = useSuggestions(linkedSourceId ? { sourceId: linkedSourceId } : {}, !!linkedSourceId);
+  const primarySourceId = sourceId ?? doc.data?.sourceId ?? undefined;
+  /*
+   * Wave Y: on a document, every source linked to it — the primary `sourceId` plus each
+   * `document_links.to_source_id` — not the primary alone, so a multi-source item shows all of its
+   * pending work. An explicit `sourceId` (the `/sources/:id` mount) still means that one source.
+   * Never unfiltered: a bare `/suggestions` asks for every suggestion in the system.
+   */
+  const list = useSuggestions(
+    sourceId ? { sourceId } : documentId ? { documentId } : {},
+    !!(sourceId || documentId),
+  );
   const decide = useDecideSuggestion();
   const edit = useEditSuggestion();
   const structured = useStructuredEdit();
@@ -85,10 +116,12 @@ export function SuggestionsPanel({
   const open = inList ?? fetched.data ?? null;
   const unavailable = !!drawerFor && !open && !fetched.isPending;
   const pendingCount = items.filter((s) => s.status === 'pending').length;
+  const groups = useMemo(() => bySource(items, primarySourceId), [items, primarySourceId]);
 
   if (list.isError) return <LoadError what="ההצעות" error={list.error} />;
-  if (doc.data && !linkedSourceId) return <Empty title="לפריט זה אין מסמך מקור מקושר" />;
   if (list.isPending) return <div className="route-loading">טוען…</div>;
+  if (!items.length && !sourceId && doc.data && !doc.data.sourceId)
+    return <Empty title="לפריט זה אין מסמך מקור מקושר" />;
   if (!items.length)
     return embedded ? null : <Empty title="אין הצעות פתוחות">כל השינויים במקור טופלו.</Empty>;
 
@@ -124,6 +157,88 @@ export function SuggestionsPanel({
     );
   };
 
+  const renderItem = (s: Suggestion) => {
+    const payload = s.editedPayload ?? s.payload;
+    const rows = rowsOf(payload);
+    const chosen = picked[s.id] ?? new Set<string>();
+    return (
+      <li key={s.id}>
+        <SuggestionCard
+          suggestion={s}
+          canReview={canReview}
+          canApply={canApply}
+          onDecide={(decision) => decide.mutate({ id: s.id, decision })}
+          onEdit={(text) => {
+            const next: SuggestionPayload =
+              payload.type === 'update-step'
+                ? { ...payload, addActions: [text] }
+                : payload.type === 'new-card'
+                  ? { ...payload, title: text }
+                  : payload;
+            edit.mutate({ id: s.id, editedPayload: next });
+          }}
+        />
+        <AffectsChips affects={s.affects} />
+        {s.status === 'pending' ? (
+          <div className="sp-actions">
+            {canReview ? (
+              <button type="button" className="btn xs" onClick={() => setDrawerFor(s.id)}>
+                עריכה מפורטת
+              </button>
+            ) : null}
+            {onAskAbout ? (
+              <button type="button" className="btn xs" onClick={() => onAskAbout(s.id)}>
+                שאל על ההצעה
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {s.status === 'pending' && canReview ? (
+          <>
+            <ul className="sug-rows">
+              {rows.map((r) => (
+                <li key={r.rowId}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={r.required || chosen.has(r.rowId)}
+                      disabled={r.required}
+                      onChange={() => toggle(s.id, rows, r)}
+                    />
+                    <span className="small muted">{r.label}: </span>
+                    {r.value}
+                    {r.required ? <span className="small muted"> · חובה</span> : null}
+                    {r.atomic ? <span className="small muted"> · קבוצה אחת</span> : null}
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="btn xs primary"
+              disabled={!chosen.size || acceptParts.isPending}
+              onClick={() =>
+                acceptParts.mutate(
+                  { id: s.id, parts: partsFor(rows, chosen) },
+                  {
+                    onSuccess: () => {
+                      toast('השורות שנבחרו הוחלו', 'ok');
+                      setPicked((p) => ({ ...p, [s.id]: new Set() }));
+                    },
+                    onError: (err: unknown) =>
+                      toast(err instanceof Error ? err.message : 'לא ניתן להחיל', 'warn'),
+                  },
+                )
+              }
+            >
+              החל חלקית
+            </button>
+          </>
+        ) : null}
+      </li>
+    );
+  };
+
   return (
     <div className="suggestions-panel" dir="rtl">
       {embedded ? null : (
@@ -145,89 +260,23 @@ export function SuggestionsPanel({
         </div>
       ) : null}
 
-      <ul className="sp-list">
-        {items.map((s) => {
-          const payload = s.editedPayload ?? s.payload;
-          const rows = rowsOf(payload);
-          const chosen = picked[s.id] ?? new Set<string>();
-          return (
-            <li key={s.id}>
-              <SuggestionCard
-                suggestion={s}
-                canReview={canReview}
-                canApply={canApply}
-                onDecide={(decision) => decide.mutate({ id: s.id, decision })}
-                onEdit={(text) => {
-                  const next: SuggestionPayload =
-                    payload.type === 'update-step'
-                      ? { ...payload, addActions: [text] }
-                      : payload.type === 'new-card'
-                        ? { ...payload, title: text }
-                        : payload;
-                  edit.mutate({ id: s.id, editedPayload: next });
-                }}
-              />
-              <AffectsChips affects={s.affects} />
-              {s.status === 'pending' ? (
-                <div className="sp-actions">
-                  {canReview ? (
-                    <button type="button" className="btn xs" onClick={() => setDrawerFor(s.id)}>
-                      עריכה מפורטת
-                    </button>
-                  ) : null}
-                  {onAskAbout ? (
-                    <button type="button" className="btn xs" onClick={() => onAskAbout(s.id)}>
-                      שאל על ההצעה
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-              {s.status === 'pending' && canReview ? (
-                <>
-                  <ul className="sug-rows">
-                    {rows.map((r) => (
-                      <li key={r.rowId}>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={r.required || chosen.has(r.rowId)}
-                            disabled={r.required}
-                            onChange={() => toggle(s.id, rows, r)}
-                          />
-                          <span className="small muted">{r.label}: </span>
-                          {r.value}
-                          {r.required ? <span className="small muted"> · חובה</span> : null}
-                          {r.atomic ? <span className="small muted"> · קבוצה אחת</span> : null}
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    type="button"
-                    className="btn xs primary"
-                    disabled={!chosen.size || acceptParts.isPending}
-                    onClick={() =>
-                      acceptParts.mutate(
-                        { id: s.id, parts: partsFor(rows, chosen) },
-                        {
-                          onSuccess: () => {
-                            toast('השורות שנבחרו הוחלו', 'ok');
-                            setPicked((p) => ({ ...p, [s.id]: new Set() }));
-                          },
-                          onError: (err: unknown) =>
-                            toast(err instanceof Error ? err.message : 'לא ניתן להחיל', 'warn'),
-                        },
-                      )
-                    }
-                  >
-                    החל חלקית
-                  </button>
-                </>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+      {groups.length > 1 ? (
+        groups.map((g) => (
+          <section key={g.sourceId} className="sp-group" aria-label={`הצעות מהמקור ${g.title}`}>
+            <h3 className="sp-group-head">
+              {g.title || 'מקור ללא שם'}
+              {g.sourceId === primarySourceId ? <span className="small muted"> · מקור ראשי</span> : null}
+              <span className="small muted">
+                {' '}
+                · {pending(g.items.filter((s) => s.status === 'pending').length)}
+              </span>
+            </h3>
+            <ul className="sp-list">{g.items.map(renderItem)}</ul>
+          </section>
+        ))
+      ) : (
+        <ul className="sp-list">{items.map(renderItem)}</ul>
+      )}
 
       {unavailable ? (
         /*

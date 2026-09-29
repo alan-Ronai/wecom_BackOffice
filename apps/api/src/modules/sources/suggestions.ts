@@ -82,6 +82,9 @@ const row = (r: Record<string, unknown>): Suggestion => ({
   promptVersion: (r.prompt_version as string | null) ?? null,
   model: (r.model as string | null) ?? null,
   createdAt: (r.created_at as Date).toISOString(),
+  // Wave Y: only the list joins the source; a bare `select g.*` has neither column.
+  ...(r.source_id ? { sourceId: r.source_id as string } : {}),
+  ...(typeof r.source_title === 'string' ? { sourceTitle: r.source_title } : {}),
 });
 
 const httpErr = (status: number, code: string, message: string) =>
@@ -247,6 +250,7 @@ export class SuggestionService {
     q: {
       status?: Status;
       sourceId?: string;
+      documentId?: string;
       page: number;
       pageSize: number;
     },
@@ -262,6 +266,16 @@ export class SuggestionService {
       params.push(q.sourceId);
       where.push(`sr.source_id=$${params.length}`);
     }
+    if (q.documentId) {
+      // Wave Y: the document's primary source and every source it links to (`sourceReview.ts`'s
+      // `documentsForSource` is the same relation read the other way round).
+      params.push(q.documentId);
+      const p = `$${params.length}`;
+      where.push(`sr.source_id in (
+        select d.source_id from documents d where d.id=${p} and d.source_id is not null
+        union
+        select l.to_source_id from document_links l where l.from_document_id=${p} and l.to_source_id is not null)`);
+    }
     if (viewer) {
       params.push(viewer.worldScopes ? [...viewer.worldScopes] : null);
       where.push(suggestionVisibleSql('g', `$${params.length}`, viewer.readUnpublished));
@@ -273,7 +287,10 @@ export class SuggestionService {
     );
     params.push(q.pageSize, (q.page - 1) * q.pageSize);
     const r = await this.pool.query(
-      `select g.* from suggestions g join source_revisions sr on sr.id=g.source_revision_id ${w}
+      `select g.*, sr.source_id, s.title source_title
+         from suggestions g
+         join source_revisions sr on sr.id=g.source_revision_id
+         join sources s on s.id=sr.source_id ${w}
        order by g.created_at desc limit $${params.length - 1} offset $${params.length}`,
       params,
     );

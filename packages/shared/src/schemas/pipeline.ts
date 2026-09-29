@@ -258,6 +258,13 @@ export const SuggestionSchema = z
      * re-queued as a pending suggestion so nothing an editor did not reject disappears (X3).
      */
     parentId: IdSchema.nullable().optional(),
+    /**
+     * Wave Y, additive: the source the suggestion's revision belongs to, and its title. Filled by
+     * the list (`GET /suggestions`), which the workspace groups by source for a multi-source item;
+     * absent on reads that do not join the source.
+     */
+    sourceId: IdSchema.optional(),
+    sourceTitle: z.string().optional(),
   })
   .refine((s) => s.payload.type === s.type, { message: 'payload.type must equal type' });
 export type Suggestion = z.infer<typeof SuggestionSchema>;

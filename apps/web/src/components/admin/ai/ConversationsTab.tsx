@@ -39,6 +39,9 @@ const toIso = (d: string, endOfDay = false): string | undefined => {
     : new Date(y, m - 1, day, 0, 0, 0, 0).toISOString();
 };
 
+/** One screenful. The route's default; the export is unpaged. */
+const PAGE_SIZE = 50;
+
 /**
  * One turn of a transcript.
  *
@@ -84,23 +87,38 @@ function Message({ m }: { m: AiMessage }) {
  * permanent and confirmed, because it removes the transcript from the export too.
  */
 export function ConversationsTab() {
-  const [q, setQ] = useState<AdminConversationsQuery>({});
+  const [q, setQ] = useState<AdminConversationsQuery>({ page: 1, pageSize: PAGE_SIZE });
   const [userInput, setUserInput] = useState('');
+  const [textInput, setTextInput] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
 
+  /** Any filter change starts over on page 1 — page 3 of a narrower result is usually empty. */
+  const filter = (patch: Partial<AdminConversationsQuery>) =>
+    setQ((cur) => {
+      const next = { ...cur, ...patch, page: 1 };
+      // An unchanged value (the debounce firing on mount) keeps the same object: no refetch.
+      return (Object.keys(patch) as (keyof AdminConversationsQuery)[]).every((k) => cur[k] === next[k]) &&
+        cur.page === 1
+        ? cur
+        : next;
+    });
+
   /*
-   * The user box is debounced: every keystroke is a new query key, and without this a five-letter
-   * name was five round trips to the transcript list.
+   * Both text boxes are debounced: every keystroke is a new query key, and without this a
+   * five-letter name was five round trips to the transcript list.
    */
   useEffect(() => {
-    const t = window.setTimeout(
-      () => setQ((cur) => ({ ...cur, userId: userInput.trim() || undefined })),
-      300,
-    );
+    const t = window.setTimeout(() => filter({ userId: userInput.trim() || undefined }), 300);
     return () => window.clearTimeout(t);
   }, [userInput]);
+  useEffect(() => {
+    const t = window.setTimeout(() => filter({ q: textInput.trim() || undefined }), 300);
+    return () => window.clearTimeout(t);
+  }, [textInput]);
 
   const list = useAdminConversations(q);
+  const page = q.page ?? 1;
+  const pages = list.data ? Math.max(1, Math.ceil(list.data.total / (list.data.pageSize || PAGE_SIZE))) : 1;
   const detail = useAdminConversation(openId);
   const del = useDeleteConversation();
   const modal = useModal();
@@ -114,24 +132,30 @@ export function ConversationsTab() {
           <input aria-label="משתמש" value={userInput} onChange={(e) => setUserInput(e.target.value)} />
         </label>
         <label>
-          מתאריך
+          חיפוש בתוכן
           <input
-            type="date"
-            aria-label="מתאריך"
-            onChange={(e) => setQ({ ...q, from: toIso(e.target.value) })}
+            type="search"
+            aria-label="חיפוש בתוכן השיחות"
+            placeholder="מילה או ביטוי מתוך ההודעות"
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
           />
+        </label>
+        <label>
+          מתאריך
+          <input type="date" aria-label="מתאריך" onChange={(e) => filter({ from: toIso(e.target.value) })} />
         </label>
         <label>
           עד תאריך
           <input
             type="date"
             aria-label="עד תאריך"
-            onChange={(e) => setQ({ ...q, to: toIso(e.target.value, true) })}
+            onChange={(e) => filter({ to: toIso(e.target.value, true) })}
           />
         </label>
         {/*
           X6 fix wave: there is no feedback filter here. `ConversationsQuerySchema` has `userId`,
-          `documentId`, `from` and `to` and nothing else, the list row carries no message-level
+          `documentId`, `from`, `to` and (wave Y) `q` — no rating — the list row carries no message-level
           rating to filter on in the browser, and the control that used to stand here only changed
           the query key. A rating is visible per message inside a transcript; filtering the *list*
           by one needs the field on the route first.
@@ -140,7 +164,7 @@ export function ConversationsTab() {
           type="button"
           className="btn ghost"
           onClick={() =>
-            void exportConversations(q)
+            void exportConversations({ ...q, page: undefined, pageSize: undefined })
               .then(() => toast('הייצוא הורד', 'ok'))
               .catch(() => toast('הייצוא נכשל', 'warn'))
           }
@@ -150,73 +174,99 @@ export function ConversationsTab() {
       </div>
 
       <div className="transcript-layout">
-        <table className="table" aria-label="שיחות">
-          <thead>
-            <tr>
-              <th>מתי</th>
-              <th>משתמש</th>
-              <th>מסמך</th>
-              <th>סוג</th>
-              <th>הודעות</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {(list.data?.items ?? []).map((c) => (
-              <tr key={c.id} className={c.id === openId ? 'sel' : ''}>
-                <td>
-                  <button type="button" className="linklike" onClick={() => setOpenId(c.id)}>
-                    {fmtDate(c.createdAt)}
-                  </button>
-                </td>
-                <td>{c.userName || c.userId}</td>
-                <td>{c.documentTitle ?? c.documentId ?? '—'}</td>
-                <td>{KIND_LABEL[c.kind]}</td>
-                <td>{countMessages(c.messageCount)}</td>
-                <td>
-                  <button
-                    type="button"
-                    className="btn xs danger"
-                    onClick={async () => {
-                      const ok = await modal.confirm(
-                        'למחוק את השיחה לצמיתות?',
-                        'המחיקה מסירה את התמליל מהמאגר ומהייצוא.',
-                      );
-                      if (!ok) return;
-                      try {
-                        await del.mutateAsync(c.id);
-                        if (openId === c.id) setOpenId(null);
-                        toast('השיחה נמחקה', 'ok');
-                      } catch {
-                        toast('המחיקה נכשלה', 'warn');
-                      }
-                    }}
-                  >
-                    מחק
-                  </button>
-                </td>
+        <div className="transcript-list">
+          <table className="table" aria-label="שיחות">
+            <thead>
+              <tr>
+                <th>מתי</th>
+                <th>משתמש</th>
+                <th>מסמך</th>
+                <th>סוג</th>
+                <th>הודעות</th>
+                <th />
               </tr>
-            ))}
-            {/*
+            </thead>
+            <tbody>
+              {(list.data?.items ?? []).map((c) => (
+                <tr key={c.id} className={c.id === openId ? 'sel' : ''}>
+                  <td>
+                    <button type="button" className="linklike" onClick={() => setOpenId(c.id)}>
+                      {fmtDate(c.createdAt)}
+                    </button>
+                  </td>
+                  <td>{c.userName || c.userId}</td>
+                  <td>{c.documentTitle ?? c.documentId ?? '—'}</td>
+                  <td>{KIND_LABEL[c.kind]}</td>
+                  <td>{countMessages(c.messageCount)}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn xs danger"
+                      onClick={async () => {
+                        const ok = await modal.confirm(
+                          'למחוק את השיחה לצמיתות?',
+                          'המחיקה מסירה את התמליל מהמאגר ומהייצוא.',
+                        );
+                        if (!ok) return;
+                        try {
+                          await del.mutateAsync(c.id);
+                          if (openId === c.id) setOpenId(null);
+                          toast('השיחה נמחקה', 'ok');
+                        } catch {
+                          toast('המחיקה נכשלה', 'warn');
+                        }
+                      }}
+                    >
+                      מחק
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {/*
               A filter change is a new query key, so `list.data` is empty until the fetch lands.
               Without this branch the table claimed "no matching conversations" on every keystroke
               and every date change, before it knew.
             */}
-            {list.isPending ? (
-              <tr>
-                <td colSpan={6} className="muted">
-                  טוען…
-                </td>
-              </tr>
-            ) : !list.data?.items.length ? (
-              <tr>
-                <td colSpan={6} className="muted">
-                  אין שיחות תואמות.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+              {list.isPending ? (
+                <tr>
+                  <td colSpan={6} className="muted">
+                    טוען…
+                  </td>
+                </tr>
+              ) : !list.data?.items.length ? (
+                <tr>
+                  <td colSpan={6} className="muted">
+                    אין שיחות תואמות.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+          {/* Wave Y (B-M12): the route always paged; the browser now lets you walk the pages. */}
+          {list.data && list.data.total > 0 ? (
+            <nav className="transcript-pager" aria-label="דפדוף בשיחות">
+              <button
+                type="button"
+                className="btn sm ghost"
+                disabled={page <= 1 || list.isFetching}
+                onClick={() => setQ((cur) => ({ ...cur, page: page - 1 }))}
+              >
+                הקודם
+              </button>
+              <span className="small muted" aria-live="polite">
+                עמוד {page} מתוך {pages} · {list.data.total} שיחות
+              </span>
+              <button
+                type="button"
+                className="btn sm ghost"
+                disabled={page >= pages || list.isFetching}
+                onClick={() => setQ((cur) => ({ ...cur, page: page + 1 }))}
+              >
+                הבא
+              </button>
+            </nav>
+          ) : null}
+        </div>
 
         {openId ? (
           <section className="transcript" aria-label="תמליל">

@@ -1644,6 +1644,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .ai-preview { white-space: pre-wrap; background: var(--surface-2); padding: 12px; border-radius: var(--r-md); max-height: 50vh; overflow: auto; font-size: 12.5px; }
 .ai-ver-text { max-width: 40ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .transcript-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.transcript-list { min-width: 0; }
+.transcript-pager { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; }
 .transcript { max-height: 70vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-md); padding: 8px 10px; background: var(--surface); }
 .transcript-msg { border-inline-start: 3px solid var(--border); padding: 6px 10px; margin-block: 8px; }
 .transcript-msg header { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
@@ -1705,6 +1707,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .sp-head { display: flex; align-items: baseline; gap: 8px; padding-bottom: 6px; }
 .sp-refined { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: var(--r-sm); padding: 6px 8px; margin-bottom: 8px; }
 .sp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.sp-group + .sp-group { margin-top: 16px; }
+.sp-group-head { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
 .sp-actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
 .affects { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0; }
 .affects-group { display: inline-block; }

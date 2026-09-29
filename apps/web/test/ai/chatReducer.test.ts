@@ -51,6 +51,7 @@ describe('chatReducer', () => {
     s = chatReducer(s, {
       type: 'proposed_edits',
       proposedEditsId: PE,
+      messageId: MSG,
       documentId: DOC,
       baseSourceVersion: 7,
       ops: [],
@@ -62,6 +63,7 @@ describe('chatReducer', () => {
     });
     expect(s.streaming?.proposed).toEqual({
       proposedEditsId: PE,
+      messageId: MSG,
       documentId: DOC,
       baseSourceVersion: 7,
       ops: [],

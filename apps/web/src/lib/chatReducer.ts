@@ -20,6 +20,8 @@ export interface ToolChip {
 
 export interface ProposedEditsView {
   proposedEditsId: string;
+  /** The tool message the proposal belongs to — from the frame, not the `done` frame's reply id. */
+  messageId: string;
   documentId: string;
   /** From the event — never fabricated; the apply path sends it as `If-Match`. */
   baseSourceVersion: number;
@@ -74,6 +76,7 @@ export function chatReducer(s: ChatViewState, e: ChatEvent): ChatViewState {
           ...cur,
           proposed: {
             proposedEditsId: e.proposedEditsId,
+            messageId: e.messageId,
             documentId: e.documentId,
             baseSourceVersion: e.baseSourceVersion,
             ops: e.ops,

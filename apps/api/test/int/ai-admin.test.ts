@@ -99,7 +99,13 @@ run('admin AI routes', () => {
     const pending = await inject('GET', '/api/v1/admin/ai/eval/runs');
     expect(pending.statusCode).toBe(200);
     const runId = pending.json().items[0].id as string;
-    expect(pending.json().items[0]).toMatchObject({ model: 'rules', finishedAt: null, cases: 0 });
+    expect(pending.json().items[0]).toMatchObject({
+      model: 'rules',
+      finishedAt: null,
+      cases: 0,
+      precision: null,
+      languageFailures: null,
+    });
     expect(pending.json().items[0].promptVersion).toMatch(new RegExp(`^${PROMPT_FAMILY}\\.`));
 
     // pg-boss is disabled in tests, so the worker body is driven directly.
@@ -110,5 +116,13 @@ run('admin AI routes', () => {
     expect(done.cases).toBeGreaterThanOrEqual(8);
     expect(done.hitTarget).toBeGreaterThan(0);
     expect(done.finishedAt).not.toBeNull();
+    // Wave Y: precision and the language count are columns, not a phrase in the note.
+    expect(done.precision).toBeGreaterThanOrEqual(0.9);
+    expect(done.languageFailures).toBe(0);
+    expect(done.notes).not.toMatch(/precision/);
+    const row = await app.db.query('select precision, language_failures from ai_eval_runs where id=$1', [
+      runId,
+    ]);
+    expect(Number(row.rows[0].precision)).toBeCloseTo(done.precision, 5);
   });
 });

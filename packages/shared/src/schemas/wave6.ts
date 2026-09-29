@@ -140,6 +140,11 @@ export const ConversationsQuerySchema = PaginationQuerySchema.extend({
   userId: IdSchema.optional(),
   from: IsoDateSchema.optional(),
   to: IsoDateSchema.optional(),
+  /**
+   * Free text over the conversation's message bodies (wave Y, B-M12). A case-insensitive
+   * substring match; blank means no filter. It narrows the caller's list — it never widens it.
+   */
+  q: z.string().max(200).optional(),
 });
 export type ConversationsQuery = z.infer<typeof ConversationsQuerySchema>;
 export const ConversationsResponseSchema = paginated(ConversationSchema);
@@ -299,6 +304,11 @@ export const ChatEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('proposed_edits'),
     proposedEditsId: IdSchema,
+    /**
+     * The *tool* message the proposal hangs off (`ai_proposed_edits.message_id`), not the reply
+     * the `done` frame names — the pane hands it on as `ProposedEdits.messageId`.
+     */
+    messageId: IdSchema,
     documentId: IdSchema,
     baseSourceVersion: z.number().int().nonnegative(),
     ops: z.array(ProposedEditOpSchema),
@@ -576,6 +586,14 @@ export const EvalRunSchema = z.object({
   hitTarget: z.number().min(0).max(1).default(0),
   hitType: z.number().min(0).max(1).default(0),
   contentOverlap: z.number().min(0).max(1).default(0),
+  /**
+   * Share of the suggestions made that were right (wave Y: a column, was a phrase in `notes`).
+   * `null` for a run still in flight, or one recorded before the column existed with no
+   * measurement in its note.
+   */
+  precision: z.number().min(0).max(1).nullable().default(null),
+  /** How many suggestions carried non-Hebrew text. `null` exactly when `precision` is. */
+  languageFailures: z.number().int().nonnegative().nullable().default(null),
   notes: z.string().default(''),
 });
 export type EvalRun = z.infer<typeof EvalRunSchema>;

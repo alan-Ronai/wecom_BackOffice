@@ -68,6 +68,71 @@ run('ai feedback, transcripts and export', () => {
     expect(items.find((c) => c.id === conversationId)?.userName).toBe(fx.editor.name);
   });
 
+  it('B-M12: `q` searches message bodies, `page` pages, and neither widens what a caller sees', async () => {
+    const other = await fx.post(
+      '/api/v1/ai/conversations',
+      { kind: 'editor', documentId: fx.techDoc },
+      fx.otherEditor,
+    );
+    const otherId = other.json().id as string;
+    await fx.app.inject({
+      method: 'POST',
+      url: `/api/v1/ai/conversations/${otherId}/messages`,
+      headers: auth(fx.otherEditor),
+      payload: { content: 'איך מאפסים נתב זברה_42%?' },
+    });
+    const list = async (qs: string, u: TestUser = fx.admin) => {
+      const r = await fx.get(`/api/v1/admin/ai/conversations?${qs}`, u);
+      expect(r.statusCode).toBe(200);
+      return r.json() as { items: { id: string }[]; total: number; page: number; pageSize: number };
+    };
+    const ids = (b: { items: { id: string }[] }) => b.items.map((c) => c.id);
+
+    // A word from a user message, and one from an assistant reply.
+    expect(ids(await list(`q=${encodeURIComponent('זברה')}`))).toEqual([otherId]);
+    const byReply = ids(await list(`q=${encodeURIComponent('זו התשובה')}`));
+    expect(byReply).toEqual(expect.arrayContaining([conversationId, otherId]));
+    // Case-insensitive, and the LIKE wildcards are literals, not wildcards.
+    expect(ids(await list(`q=${encodeURIComponent('_42%')}`))).toEqual([otherId]);
+    expect((await list(`q=${encodeURIComponent('%')}`)).items.map((c) => c.id)).toEqual([otherId]);
+    expect((await list('q=' + encodeURIComponent('אין-כזה-דבר'))).total).toBe(0);
+    // Blank is no filter.
+    expect((await list('q=%20')).total).toBe((await list('')).total);
+    // Composes with the other filters.
+    expect((await list(`q=${encodeURIComponent('זברה')}&userId=${fx.editor.id}`)).total).toBe(0);
+
+    // Paging: one row per page, disjoint pages, a stable total.
+    const all = await list('pageSize=200');
+    expect(all.total).toBeGreaterThanOrEqual(2);
+    const p1 = await list('page=1&pageSize=1');
+    const p2 = await list('page=2&pageSize=1');
+    expect(p1).toMatchObject({ page: 1, pageSize: 1, total: all.total });
+    expect(p2).toMatchObject({ page: 2, pageSize: 1, total: all.total });
+    expect(ids(p1)).toHaveLength(1);
+    expect(ids(p2)).toHaveLength(1);
+    expect(ids(p1)[0]).not.toBe(ids(p2)[0]);
+
+    // The export is what the browser shows: the same search, unpaged.
+    const exported = await fx.get(
+      `/api/v1/admin/ai/conversations/export.jsonl?q=${encodeURIComponent('זברה')}`,
+      fx.admin,
+    );
+    expect(exported.statusCode).toBe(200);
+    const lines = exported.body
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l).conversation.id as string);
+    expect(lines).toEqual([otherId]);
+
+    // The own-conversations route takes `q` too, and stays scoped to the caller.
+    const own = await fx.get(`/api/v1/ai/conversations?q=${encodeURIComponent('זברה')}`, fx.editor);
+    expect(own.statusCode).toBe(200);
+    expect(own.json().total).toBe(0);
+    const theirs = await fx.get(`/api/v1/ai/conversations?q=${encodeURIComponent('זברה')}`, fx.otherEditor);
+    expect(theirs.json().items.map((c: { id: string }) => c.id)).toEqual([otherId]);
+  });
+
   it('exports NDJSON with one line per conversation, carrying messages and feedback', async () => {
     expect((await fx.get('/api/v1/admin/ai/conversations/export.jsonl', fx.editor)).statusCode).toBe(403);
     const r = await fx.get('/api/v1/admin/ai/conversations/export.jsonl', fx.admin);

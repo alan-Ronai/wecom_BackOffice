@@ -54,19 +54,13 @@ export async function runEvalCases(model: ModelClient, cases: EvalCase[]): Promi
   }
   const total = aggregate(scores);
   /**
-   * C-I1/C-I8: `ai_eval_runs` has columns for three of the five scores. Rather than change a
-   * persisted contract (and the openapi surface that hangs off it) in a fix wave, precision and
-   * the language-failure count are recorded in `notes`, where the admin page already shows them.
-   * A dedicated column is a follow-up for whoever owns `docs/api`.
+   * Precision and the language-failure count are columns of their own since wave Y (0058); they
+   * used to be written into `notes` (C-I1/C-I8). The note now carries only the per-case failures.
    */
-  const measured = `precision ${total.precision.toFixed(3)} · כשלי שפה ${total.languageFailures}`;
   return {
     ...total,
     cases: cases.length,
-    notes: [measured, failures.length ? `כשלו ${failures.length} מקרים — ${failures.join(' · ')}` : '']
-      .filter(Boolean)
-      .join(' · ')
-      .slice(0, 2000),
+    notes: (failures.length ? `כשלו ${failures.length} מקרים — ${failures.join(' · ')}` : '').slice(0, 2000),
   };
 }
 
@@ -84,6 +78,8 @@ const row = (r: Record<string, unknown>): EvalRun => ({
   hitTarget: Number(r.hit_target),
   hitType: Number(r.hit_type),
   contentOverlap: Number(r.content_overlap),
+  precision: r.precision == null ? null : Number(r.precision),
+  languageFailures: r.language_failures == null ? null : Number(r.language_failures),
   notes: (r.notes as string) ?? '',
 });
 
@@ -102,9 +98,19 @@ export async function startEvalRun(
 /** Closes the row the worker was given. A run that never finishes keeps `finished_at` null. */
 export async function recordEvalRun(q: Queryable, runId: string, res: EvalRunResult): Promise<void> {
   await q.query(
-    `update ai_eval_runs set finished_at=now(), cases=$2, hit_target=$3, hit_type=$4, content_overlap=$5, notes=$6
+    `update ai_eval_runs set finished_at=now(), cases=$2, hit_target=$3, hit_type=$4, content_overlap=$5, notes=$6,
+            precision=$7, language_failures=$8
       where id=$1`,
-    [runId, res.cases, res.hitTarget, res.hitType, res.contentOverlap, res.notes],
+    [
+      runId,
+      res.cases,
+      res.hitTarget,
+      res.hitType,
+      res.contentOverlap,
+      res.notes,
+      res.precision,
+      res.languageFailures,
+    ],
   );
 }
 

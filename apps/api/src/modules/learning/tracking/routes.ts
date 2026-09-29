@@ -300,7 +300,12 @@ export default function trackingRoutes(deps: () => TrackingDeps) {
         },
       },
       async (req) =>
-        repo.dashboard(app.db, (req.query as { world?: string }).world, requireUser(req).worldScopes),
+        repo.dashboard(
+          app.db,
+          (req.query as { world?: string }).world,
+          requireUser(req).worldScopes,
+          (await getWorkflowSettings(app.db)).gaps.failedQuestionMin,
+        ),
     );
 
     /**
