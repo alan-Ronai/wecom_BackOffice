@@ -227,3 +227,26 @@ notes: 1 }`. SQL spot checks: all 21 Kira documents present with the doc type of
   source text and were kept verbatim.
 - **Legacy documents built from the OLD roaming set** (`pdf-004` "לקוח לא מוצא רשת בחו"ל",
   `pdf-010` "תקלת גלישה בחו"ל") and the two legacy reception scripts linked from M-10 are untouched.
+
+## Merged gate (waveY/integration, wave 6 gate + wave Y + review fixes)
+
+One run on the final tree, 2026-10-02. Integration tests ran on one Postgres server with per-file
+databases cloned from a migrated template (`test/helpers/db.ts`, `TEST_DATABASE_URL`).
+
+| Gate | Result |
+|---|---|
+| build, typecheck, lint | pass |
+| `pnpm openapi` | regenerates with no diff |
+| unit: shared / model / connectors / web | 124 / 114 / 49 / 954 |
+| api integration (126 files) | 844 / 844 in 81 s |
+| `pnpm e2e:real` | 17 / 17 (incl. W6-E2E-1 under the Kira seed) |
+| `E2E_OIDC=1 pnpm e2e:real` | 18 / 18 |
+| `pnpm e2e:compose` | 15 / 15 |
+| model eval | not re-run: nothing in wave Y touches prompts or generation; the wave 6 gate's run on 1693498 matches the fix-wave table to three decimals (rules 1.000/1.000/0.932/1.000; tier 1 1.000/1.000/0.977/1.000) |
+
+Review (two read-only reviewers, API and web): no Critical. Important findings fixed — learning
+items re-checked against their derived worlds after a write (cd8669c), trash block/field restore
+and purge follow the every-world rule (cd8669c), web write gates pass the document's worlds and
+builders are keyed per item (2368e4a), trash rows carry worlds (94d87ec), template build hardening
+(6660d99). Known noise: web unit logs MSW warnings for `GET /ai/proposed-edits/:id` (unmocked since
+wave 6; no test depends on it).
