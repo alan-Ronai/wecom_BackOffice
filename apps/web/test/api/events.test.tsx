@@ -63,6 +63,19 @@ describe('useEvents', () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: keys.sources });
   });
 
+  /** wave 6: the AI surface is one key prefix, so one event drops the transcript and the lists. */
+  it('invalidates the AI surface on ai.message', async () => {
+    const { spy } = mount();
+    const conversationId = 'e0000000-0000-4000-8000-0000000000c1';
+    FakeES.last.emit('ai.message', {
+      name: 'ai.message',
+      payload: { conversationId, messageId: 'e0000000-0000-4000-8000-0000000000c2', userId: U1 },
+      at: new Date().toISOString(),
+    });
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: keys.ai.conversation(conversationId) }));
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['ai'] });
+  });
+
   it('invalidates health and ignores malformed payloads', async () => {
     const { spy, hook } = mount();
     FakeES.last.emit('system.status', {

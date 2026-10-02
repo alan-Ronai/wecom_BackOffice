@@ -6,6 +6,7 @@ import { Fmt } from '../Fmt.js';
 import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** Port of legacy KB.views.blocks. */
 export function BlocksPage() {
@@ -38,7 +39,7 @@ export function BlocksPage() {
       <div className="topbar">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/library')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/library')}>
             ספרייה
           </a>
           <span className="sep">/</span>
@@ -76,6 +77,7 @@ export function BlocksPage() {
                 className="tcard"
                 key={b.id}
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 // The card opens the block's own page now that there is one; the popover stays
                 // for `⧉` markers inline in a document, where a route change loses the reader.

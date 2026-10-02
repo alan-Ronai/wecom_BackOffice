@@ -2,6 +2,7 @@ import type { DocumentCard } from '@wecom/shared';
 import { PRI } from '../../lib/constants.js';
 import { TypeBadge, worldShort } from '../taxonomy/TypeBadge.js';
 import { StatusChip } from '../governance/StatusChip.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** Port of legacy KB.cardFor — chips, title, description and the computed meta row. */
 export function DocCard({
@@ -33,7 +34,9 @@ export function DocCard({
       data-nopeek=""
       onClick={onOpen}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') onOpen();
+        // Only a keypress on the card itself opens it: Enter on the star or kebab inside bubbles
+        // up here, and must do that control's job only (wave Y review).
+        if (e.key === 'Enter' && e.target === e.currentTarget && !e.defaultPrevented) onOpen();
       }}
     >
       <span
@@ -42,6 +45,7 @@ export function DocCard({
         aria-label={`${card.pinned ? 'בטל הצמדה של' : 'הצמד את'} ${card.title}`}
         aria-pressed={card.pinned}
         role="button"
+        onKeyDown={pressKeys}
         tabIndex={0}
         onClick={(e) => {
           e.stopPropagation();
@@ -55,6 +59,7 @@ export function DocCard({
         title="פעולות"
         aria-label={`פעולות · ${card.title}`}
         role="button"
+        onKeyDown={pressKeys}
         tabIndex={0}
         onClick={(e) => {
           e.stopPropagation();

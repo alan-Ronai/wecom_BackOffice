@@ -3,6 +3,7 @@ import type { GraphNode, ImpactResponse } from '../../api/stage4.js';
 import { LINK_TYPE_LABEL, NODE_KINDS } from '../../lib/constants.js';
 import { useNav } from '../shell/navStore.js';
 import { LoadError } from '../ui/index.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** `doc:<uuid>` → `/doc/<uuid>`, `field:<name>` → `/fields/<name>`, and so on. */
 export function hrefForNode(id: string): string | null {
@@ -118,6 +119,7 @@ export function ImpactPanel({
                     className="rel"
                     data-nopeek=""
                     role="button"
+                    onKeyDown={pressKeys}
                     tabIndex={0}
                     onClick={() => go(`/doc/${row.documentId}${row.stepKey ? '/' + row.stepKey : ''}`)}
                   >

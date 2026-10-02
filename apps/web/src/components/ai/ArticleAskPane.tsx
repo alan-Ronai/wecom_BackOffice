@@ -1,0 +1,61 @@
+import { useId, useMemo, useState } from 'react';
+import { useCan } from '../../api/hooks/me.js';
+import { ChatPane } from './ChatPane.js';
+
+export const ASK_TITLE = 'שאל את המערכת';
+
+/**
+ * The agent's read-only Q&A on the article page (spec §5 "Article page").
+ *
+ * Collapsed by default and deliberately small: the article is what an agent is reading mid-call,
+ * and a chat box that opens itself would push the step they are standing on off the screen. The
+ * answer set is `ai.ask` — no write tools reach it, and every read tool applies the visibility
+ * rule, so nothing unpublished can be quoted back.
+ *
+ * `stepIndex` (step number → step key) is what turns "שלב 3א" in an answer into a link to that
+ * step; without it a citation still renders, it just points at the number.
+ *
+ * X6: the pane is **not** `readOnly`. "Read-only Q&A" in the spec is about the tool set — an
+ * `ai.ask` caller gets no write tools — not about the composer; `readOnly` on `ChatPane` disables
+ * sending outright, which would leave an agent a pane with nothing to ask with. `kind="article"`
+ * is what lets an `ai.ask`-only caller send.
+ */
+export function ArticleAskPane({
+  documentId,
+  stepKey,
+  stepIndex,
+}: {
+  documentId: string;
+  stepKey?: string;
+  stepIndex?: Record<string, string>;
+}) {
+  const can = useCan();
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  /*
+   * Stable identity: `ChatPane` copies `context` into state whenever the prop's identity changes,
+   * so a fresh `{ stepKey }` per article render would keep re-pinning the step and silently undo
+   * the reader's "הסר הקשר". The article re-renders on every call-mode keystroke.
+   */
+  const context = useMemo(() => (stepKey ? { stepKey } : undefined), [stepKey]);
+  if (!can('ai.ask')) return null;
+  return (
+    <section className="ask-pane" aria-label={ASK_TITLE}>
+      <button
+        type="button"
+        className="btn sm ask-toggle"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {ASK_TITLE}
+      </button>
+      {open ? (
+        <div id={id} className="ask-body">
+          <ChatPane kind="article" documentId={documentId} context={context} stepIndex={stepIndex} compact />
+          <p className="muted small">התשובות מבוססות על התוכן שפורסם בלבד ומצטטות מספרי שלבים.</p>
+        </div>
+      ) : null}
+    </section>
+  );
+}

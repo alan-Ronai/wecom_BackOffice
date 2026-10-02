@@ -9,6 +9,7 @@ import { MappingService } from '../../src/modules/sources/mapping.js';
 import { ProposalService } from '../../src/modules/sources/proposal.js';
 import { SuggestionService } from '../../src/modules/sources/suggestions.js';
 import { processRevision, scanWatchDir, type PipelineDeps } from '../../src/jobs/pipeline.js';
+import { ImpactService } from '../../src/modules/sources/impact.js';
 import { parseText } from '../../src/modules/sources/text.js';
 import { buildDocx } from './fixtures/docx-builder.js';
 import { RuleBasedModel } from '@wecom/model';
@@ -27,6 +28,7 @@ const makeDeps = (pool: pg.Pool): PipelineDeps => {
     mapping,
     proposal: new ProposalService(pool, mapping, contentStub),
     suggestions: new SuggestionService(pool, contentStub, { publish: () => undefined }),
+    impact: new ImpactService(pool),
   };
 };
 

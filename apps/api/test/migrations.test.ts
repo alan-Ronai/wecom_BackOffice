@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { readdir } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import pg from 'pg';
 import { runner } from 'node-pg-migrate';
 import { DEFAULT_ROLES, PERMISSIONS } from '@wecom/shared';
@@ -555,6 +556,207 @@ run('migrations', () => {
     expect(kept.rows[0].updated_by).toBeNull();
     await pool.query(`delete from ai_setting_versions where key='ai.brief'`);
   });
+
+  it('0053 adds the structured-edit columns and indexes to suggestions', async () => {
+    const cols = await pool.query(
+      `select column_name, data_type, is_nullable from information_schema.columns
+        where table_name='suggestions' and column_name in ('edit_diff','applied_parts','parent_id') order by 1`,
+    );
+    expect(cols.rows).toEqual([
+      { column_name: 'applied_parts', data_type: 'jsonb', is_nullable: 'YES' },
+      { column_name: 'edit_diff', data_type: 'jsonb', is_nullable: 'YES' },
+      { column_name: 'parent_id', data_type: 'uuid', is_nullable: 'YES' },
+    ]);
+    const idx = await pool.query(
+      `select indexname from pg_indexes where tablename='suggestions' and indexname in ('suggestions_status_decided_idx','suggestions_parent_idx') order by 1`,
+    );
+    expect(idx.rows.map((r) => r.indexname)).toEqual([
+      'suggestions_parent_idx',
+      'suggestions_status_decided_idx',
+    ]);
+    // `on delete set null`: purging a parent suggestion must not cascade into an editor's
+    // pending remainder — the remainder simply loses its link.
+    const fk = await pool.query(
+      `select confdeltype from pg_constraint where conrelid='suggestions'::regclass and contype='f'
+         and conkey = array[(select attnum from pg_attribute where attrelid='suggestions'::regclass and attname='parent_id')]`,
+    );
+    expect(fk.rows[0]?.confdeltype).toBe('n');
+  });
+
+  it('0052: creates the AI chat tables with their constraints', async () => {
+    const t = await pool.query(
+      "select table_name from information_schema.tables where table_schema='public' and table_name like 'ai\\_%' order by 1",
+    );
+    // X6: `ai_eval_runs` is X1's 0051 and `ai_setting_versions` X0's 0050 — both match `ai\_%`
+    // once the whole wave is on one branch, so the list is the wave's tables, not only 0052's.
+    expect(t.rows.map((r) => r.table_name)).toEqual([
+      'ai_conversations',
+      'ai_eval_runs',
+      'ai_message_feedback',
+      'ai_messages',
+      'ai_proposed_edits',
+      'ai_setting_versions',
+    ]);
+    const u = await pool.query(
+      "select conname from pg_constraint where conrelid='ai_messages'::regclass and contype='u'",
+    );
+    expect(u.rows.map((r) => r.conname)).toContain('ai_messages_conversation_id_seq_key');
+    await expect(
+      pool.query("insert into ai_conversations(kind, user_id) values ('nope', gen_random_uuid())"),
+    ).rejects.toThrow(/ai_conversations_kind_check|violates/);
+  });
+
+  it('0051 rebuilds documents.embedding to the resolved width, adds step_embeddings, suggestion provenance and ai_eval_runs', async () => {
+    // The same resolver the migration and `resolveModelSlots` use: explicit env → tier → 768.
+    const require = createRequire(import.meta.url);
+    const { resolveEmbedDimension } = require('../migrations/0051_wave6_embeddings_affects.js') as {
+      resolveEmbedDimension: (env: NodeJS.ProcessEnv) => number;
+    };
+    const dim = resolveEmbedDimension(process.env);
+    const col = await pool.query(
+      `select atttypmod from pg_attribute where attrelid='documents'::regclass and attname='embedding' and not attisdropped`,
+    );
+    expect(col.rows[0].atttypmod).toBe(dim);
+    const se = await pool.query(
+      `select atttypmod from pg_attribute where attrelid='step_embeddings'::regclass and attname='embedding' and not attisdropped`,
+    );
+    expect(se.rows[0].atttypmod).toBe(dim);
+    const cols = await pool.query(
+      `select column_name, column_default from information_schema.columns where table_name='suggestions' and column_name in ('affects','prompt_version','model') order by 1`,
+    );
+    expect(cols.rows.map((r) => r.column_name)).toEqual(['affects', 'model', 'prompt_version']);
+    expect(cols.rows[0].column_default).toContain("'[]'");
+    const runs = await pool.query(`select to_regclass('ai_eval_runs') r`);
+    expect(runs.rows[0].r).toBe('ai_eval_runs');
+    const idx = await pool.query(`select indexname from pg_indexes where tablename='step_embeddings'`);
+    expect(idx.rows.map((r) => r.indexname)).toContain('step_embeddings_document_idx');
+  });
+
+  /**
+   * A-M5. Two things had no coverage: 0051 has a `down` at all, and that `down` restores the
+   * width the column actually had rather than a hardcoded 768. On a tier-1 install the old
+   * `down` narrowed a 1024 column to 768 and a re-`up` widened it again — every vector dropped
+   * twice for one round trip, with only the reindex job to recover.
+   */
+  it('0051 down restores the recorded embedding width, and re-up is idempotent', async () => {
+    const require = createRequire(import.meta.url);
+    const m = require('../migrations/0051_wave6_embeddings_affects.js') as {
+      resolveEmbedDimension: (env: NodeJS.ProcessEnv) => number;
+      NOTES_TABLE: string;
+      EMBEDDING_WIDTH_KEY: string;
+    };
+    const dim = m.resolveEmbedDimension(process.env);
+    const width = async () =>
+      Number(
+        (
+          await pool.query(
+            `select substring(format_type(a.atttypid, a.atttypmod) from '[(]([0-9]+)[)]') w
+               from pg_attribute a
+              where a.attrelid='documents'::regclass and a.attname='embedding' and not a.attisdropped`,
+          )
+        ).rows[0].w,
+      );
+    // `up` wrote down what 0003 left behind, before it rebuilt the column.
+    const noted = await pool.query(`select value from ${m.NOTES_TABLE} where key=$1`, [
+      m.EMBEDDING_WIDTH_KEY,
+    ]);
+    expect(noted.rows[0].value).toBe('768');
+    expect(await width()).toBe(dim);
+
+    const move = (direction: 'up' | 'down', count?: number) =>
+      runner({
+        databaseUrl: c.getConnectionUri(),
+        dir: 'migrations',
+        direction,
+        count,
+        migrationsTable: 'pgmigrations',
+        ignorePattern: 'package\\.json',
+        log: () => undefined,
+      });
+    const fromWave6 = (await readdir('migrations')).filter((f) => {
+      const n = Number(/^(\d{4})_/.exec(f)?.[1] ?? NaN);
+      return n >= 51;
+    }).length;
+
+    // A pre-0051 install that was *not* 768: the note is what `down` must honour.
+    await pool.query(`update ${m.NOTES_TABLE} set value='384' where key=$1`, [m.EMBEDDING_WIDTH_KEY]);
+    await move('down', fromWave6);
+    expect(await width()).toBe(384);
+    // The notes table is 0051's own, so a rollback leaves nothing behind.
+    expect((await pool.query(`select to_regclass('${m.NOTES_TABLE}') r`)).rows[0].r).toBeNull();
+    // Everything 0051 added is gone too — a `down` that left the columns would still pass a
+    // "the schema is empty afterwards" check, because 0051's tables are dropped either way.
+    expect((await pool.query(`select to_regclass('step_embeddings') r`)).rows[0].r).toBeNull();
+    expect((await pool.query(`select to_regclass('ai_eval_runs') r`)).rows[0].r).toBeNull();
+    expect(
+      (
+        await pool.query(
+          `select column_name from information_schema.columns
+            where table_name='suggestions' and column_name in ('affects','prompt_version','model')`,
+        )
+      ).rowCount,
+    ).toBe(0);
+
+    await move('up');
+    expect(await width()).toBe(dim);
+    // And `up` re-recorded the width it found this time, not the one from the first pass.
+    expect(
+      (await pool.query(`select value from ${m.NOTES_TABLE} where key=$1`, [m.EMBEDDING_WIDTH_KEY])).rows[0]
+        .value,
+    ).toBe('384');
+  }, 120000);
+
+  it('0058 indexes message bodies for search and lifts eval precision out of the note (and back)', async () => {
+    const move = (direction: 'up' | 'down', count?: number) =>
+      runner({
+        databaseUrl: c.getConnectionUri(),
+        dir: 'migrations',
+        direction,
+        count,
+        migrationsTable: 'pgmigrations',
+        ignorePattern: 'package\\.json',
+        log: () => undefined,
+      });
+    const idx = await pool.query(`select to_regclass('ai_messages_content_trgm') r`);
+    expect(idx.rows[0].r).toBe('ai_messages_content_trgm');
+
+    const from58 = (await readdir('migrations')).filter(
+      (f) => Number(/^(\d{4})_/.exec(f)?.[1] ?? NaN) >= 58,
+    ).length;
+    await move('down', from58);
+    expect((await pool.query(`select to_regclass('ai_messages_content_trgm') r`)).rows[0].r).toBeNull();
+    // Two pre-0058 rows: one whose note carries the measurement, one that never had it.
+    const ins = await pool.query(
+      `insert into ai_eval_runs(model, prompt_version, notes) values
+         ('m1','p', 'precision 0.962 · כשלי שפה 8 · כשלו 1 מקרים — c3: timeout'),
+         ('m2','p', 'ידני')
+       returning id, model`,
+    );
+    const id = (m: string) => ins.rows.find((r) => r.model === m).id as string;
+    await move('up');
+    const after = await pool.query(
+      `select model, precision, language_failures, notes from ai_eval_runs where id = any($1) order by model`,
+      [[id('m1'), id('m2')]],
+    );
+    expect(after.rows[0]).toMatchObject({
+      model: 'm1',
+      language_failures: 8,
+      notes: 'כשלו 1 מקרים — c3: timeout',
+    });
+    expect(after.rows[0].precision).toBeCloseTo(0.962, 3);
+    expect(after.rows[1]).toMatchObject({
+      model: 'm2',
+      precision: null,
+      language_failures: null,
+      notes: 'ידני',
+    });
+
+    await move('down', from58);
+    const back = await pool.query(`select notes from ai_eval_runs where id=$1`, [id('m1')]);
+    expect(back.rows[0].notes).toBe('precision 0.962 · כשלי שפה 8 · כשלו 1 מקרים — c3: timeout');
+    await move('up');
+    await pool.query(`delete from ai_eval_runs where id = any($1)`, [[id('m1'), id('m2')]]);
+  }, 120000);
 
   it('rolls back cleanly', async () => {
     await runner({

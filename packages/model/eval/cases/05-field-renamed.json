@@ -1,0 +1,58 @@
+{
+  "id": "05-field-renamed",
+  "title": "שם שדה CRM שונה בטקסט המקור",
+  "source": {
+    "title": "נהלי SIM"
+  },
+  "diffs": [
+    {
+      "ref": "2.7",
+      "kind": "changed",
+      "before": "עדכן את השדה \"sim block lbl\" לערך \"לא חסום\".",
+      "after": "עדכן את השדה \"sim status\" לערך \"לא חסום\".",
+      "similarity": 0.88
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "22222222-2222-4222-8222-222222222222",
+      "documentTitle": "אין קליטה",
+      "stepKey": "s7",
+      "stepNum": "7",
+      "stepTitle": "עדכון סטטוס SIM ב-CRM",
+      "anchor": "2.7",
+      "actions": ["CRM ← sim block lbl ← לא חסום"]
+    }
+  ],
+  "blocks": [],
+  "fields": [
+    {
+      "name": "sim block lbl",
+      "status": "ok"
+    }
+  ],
+  "impact": {
+    "documents": [],
+    "blocks": [],
+    "fields": [
+      {
+        "name": "sim block lbl",
+        "usedBy": 4
+      }
+    ],
+    "topics": [],
+    "related": []
+  },
+  "expected": [
+    {
+      "type": "field-alert",
+      "targetDocumentId": "22222222-2222-4222-8222-222222222222",
+      "targetStepKey": "s7",
+      "mustContain": ["sim status"],
+      "mustContainAny": [["sim block lbl"]]
+    }
+  ],
+  "notes": "C-I5: prompt.ts's superRefine documents that a field-alert needs no target, and it does not - but detectFieldAlerts fills the document and step from the linkedStep on the same anchor, so asserting them is fair. The paragraph's only material change is the field name, so the field-alert is the WHOLE answer: maxItems 1 fails an engine that also raises an update-step for the same fact.",
+  "maxItems": 1,
+  "latencyBudgetMs": 30000
+}

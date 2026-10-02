@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Block } from '@wecom/shared';
 import { PRESETS } from '../../lib/constants.js';
 import type { BasicType } from '../../lib/editorModel.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 const BASICS: { type: BasicType; label: string; ic: string; cls: string }[] = [
   { type: 'step', label: 'שלב', ic: '1', cls: 'round' },
@@ -72,6 +73,7 @@ export function BlockLibrary({
                 draggable
                 title="גרור לטופס או לחץ להוספה"
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onDragStart={(e) => {
                   e.dataTransfer.setData('text/kb', 'basic:' + b.type);
@@ -117,6 +119,7 @@ export function BlockLibrary({
               className={'blk' + (used >= 3 ? ' shared' : '')}
               draggable
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               onDragStart={(e) => {
                 e.dataTransfer.setData('text/kb', 'shared:' + b.id);
@@ -136,6 +139,7 @@ export function BlockLibrary({
           className="blk"
           style={{ borderStyle: 'dashed', justifyContent: 'center', color: 'var(--muted)' }}
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={onNewBlock}
         >
@@ -156,6 +160,7 @@ export function BlockLibrary({
                   draggable
                   title="הוסף כפעולה לשלב הנבחר"
                   role="button"
+                  onKeyDown={pressKeys}
                   tabIndex={0}
                   onDragStart={(e) => e.dataTransfer.setData('text/kb', 'preset:' + t)}
                   onClick={() => onPreset(t)}

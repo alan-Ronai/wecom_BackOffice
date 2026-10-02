@@ -11,6 +11,7 @@ import { useModal } from '../ui/Modal.js';
 import { useToast } from '../ui/Toast.js';
 import { LoadError } from '../ui/index.js';
 import { items } from '../../lib/count.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 type Tab = 'open' | 'approved' | 'changes';
 const TABS: [Tab, string][] = [
@@ -38,7 +39,12 @@ function ReviewCard({
   const can = useCan();
   const me = useMe();
   const doc = useDocument(row.status === 'open' ? row.documentId : undefined);
-  const mayDecide = can('docs.publish', { category: row.category });
+  /**
+   * Wave Y review: approving publishes, which is a write — it needs every world the document
+   * spans. The queue row carries only the primary world, so the fetched document (with its full
+   * `worlds`) is the gate once it is here; the row's world is the fallback while it loads.
+   */
+  const mayDecide = can('docs.publish', doc.data ?? { category: row.category });
   /**
    * E-2 (review §4, §7 item 9). The API refuses a self-approval with 403 `SELF_APPROVAL`; the
    * queue says so before the click rather than after it. "דרוש שינויים" stays available — sending
@@ -66,7 +72,13 @@ function ReviewCard({
         </span>
         {doc.data ? <span className="chip chip-gray">v{doc.data.currentVersion}</span> : null}
       </div>
-      <div className="title" role="button" tabIndex={0} onClick={() => go(`/doc/${row.documentId}`)}>
+      <div
+        className="title"
+        role="button"
+        onKeyDown={pressKeys}
+        tabIndex={0}
+        onClick={() => go(`/doc/${row.documentId}`)}
+      >
         {row.title}
       </div>
       {row.note ? <div className="desc">“{row.note}”</div> : null}
@@ -162,7 +174,7 @@ export function ReviewsPage() {
       <div className="topbar">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/library')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/library')}>
             ספרייה
           </a>
           <span className="sep">/</span>

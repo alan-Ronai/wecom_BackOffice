@@ -5,6 +5,7 @@ import { SESSION_COOKIE, cookieOptions, shouldSlide } from '../lib/session.js';
 import { HttpError, unauthenticated, forbidden } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { withTransaction } from '../lib/sql.js';
+import { hasAllScopes, hasScope } from '../lib/user.js';
 import { resolvePermissions, type AuthUser } from '../modules/auth/permissions.js';
 import { SessionStore } from '../modules/auth/session-store.js';
 
@@ -16,7 +17,12 @@ declare module 'fastify' {
   }
   interface FastifyContextConfig {
     requires?: Permission[];
-    scope?: 'document';
+    /**
+     * `'document'` — the caller must be able to *read* the `:id` document (any world overlap).
+     * `'document:write'` — edit, publish, delete, status, ownership: the caller must hold *every*
+     * world the document spans (wave Y, A-M6). Both answer 404 for a missing document.
+     */
+    scope?: 'document' | 'document:write';
     public?: boolean;
   }
   interface FastifyInstance {
@@ -50,12 +56,6 @@ const CACHE_TTL_MS = 60_000;
  * names only, never data. Drop it from this set if the API is ever exposed wider.
  */
 const PUBLIC_PATHS = new Set(['/api/v1/system/health', '/api/docs/json']);
-
-export function checkScope(user: AuthUser, worlds: string | readonly string[]): boolean {
-  if (user.worldScopes == null) return true;
-  const list = typeof worlds === 'string' ? [worlds] : worlds;
-  return list.some((w) => user.worldScopes!.includes(w));
-}
 
 export default fp(async (app) => {
   const sessions = new SessionStore(app.db);
@@ -130,7 +130,7 @@ export default fp(async (app) => {
     if (cfg.public || PUBLIC_PATHS.has(req.routeOptions.url ?? '')) return;
     if (!req.user) throw unauthenticated();
     for (const p of cfg.requires ?? []) if (!req.user.permissions.has(p)) throw forbidden(p);
-    if (cfg.scope === 'document') {
+    if (cfg.scope === 'document' || cfg.scope === 'document:write') {
       const id = (req.params as { id?: string }).id;
       const r = await app.db.query<{ worlds: string[] | null }>(
         `select (select array_agg(dw.world_slug order by (dw.world_slug = d.category) desc, dw.world_slug)
@@ -140,7 +140,8 @@ export default fp(async (app) => {
       );
       if (!r.rows[0]) throw new HttpError(404, 'NOT_FOUND', 'המסמך לא נמצא');
       const worlds = r.rows[0].worlds ?? [];
-      if (!checkScope(req.user, worlds))
+      const allowed = cfg.scope === 'document:write' ? hasAllScopes : hasScope;
+      if (!allowed(req.user, worlds))
         throw new HttpError(403, 'SCOPE_DENIED', 'ההרשאה שלך מוגבלת לעולמות תוכן אחרים', {
           worlds,
           scopes: req.user.worldScopes,

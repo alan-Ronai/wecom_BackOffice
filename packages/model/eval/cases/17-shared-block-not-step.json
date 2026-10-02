@@ -1,0 +1,60 @@
+{
+  "id": "17-shared-block-not-step",
+  "title": "בלוק משותף ב-9 מסמכים — update-block ולא update-step",
+  "notes": "The block is embedded in nine documents. The answer is ONE update-block; an update-step beside it would ask an editor to fix the same text nine times. maxItems 1 is what fails an engine that emits both.",
+  "source": {
+    "title": "נהלי SIM"
+  },
+  "diffs": [
+    {
+      "ref": "2.3",
+      "kind": "changed",
+      "before": "בצע ריענון SIM בקונסולה והמתן דקה.",
+      "after": "בצע ריענון SIM בקונסולה והמתן 120 שניות לפני בדיקה חוזרת.",
+      "similarity": 0.65
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "22222222-2222-4222-8222-222222222222",
+      "documentTitle": "אין קליטה",
+      "stepKey": "s3",
+      "stepNum": "3",
+      "stepTitle": "ריענון SIM",
+      "anchor": "2.3",
+      "actions": ["בצע ריענון SIM בקונסולה", "המתן דקה"],
+      "blockId": "44444444-4444-4444-8444-444444444444"
+    }
+  ],
+  "blocks": [
+    {
+      "id": "44444444-4444-4444-8444-444444444444",
+      "title": "ריענון SIM",
+      "actions": ["בצע ריענון SIM בקונסולה", "המתן דקה"]
+    }
+  ],
+  "fields": [],
+  "impact": {
+    "documents": [],
+    "blocks": [
+      {
+        "id": "44444444-4444-4444-8444-444444444444",
+        "title": "ריענון SIM",
+        "usedBy": 9
+      }
+    ],
+    "fields": [],
+    "topics": [],
+    "related": []
+  },
+  "expected": [
+    {
+      "type": "update-block",
+      "targetBlockId": "44444444-4444-4444-8444-444444444444",
+      "mustContain": ["120"],
+      "mustContainAny": [["בלוק", "משותף", "9 מסמכים"]]
+    }
+  ],
+  "maxItems": 1,
+  "latencyBudgetMs": 30000
+}

@@ -40,12 +40,18 @@ export default fp(async (app) => {
     : new OllamaModel({
         url: app.config.MODEL_URL,
         model: slots.suggestModel,
-        embedModel: app.config.EMBED_MODEL,
+        embedModel: slots.embedModel,
         timeoutMs: CALL_TIMEOUT_MS,
         fallback: rules,
       });
-  const columnDimension = await assertEmbeddingDimension(app.db, app.config.EMBED_DIMENSION);
-  const tracker = new EmbedStatusTracker(app.config.EMBED_MODEL, app.config.EMBED_DIMENSION);
+  /**
+   * Wave 6 (X1): the number held against the column is the *resolved* one, not the raw
+   * `EMBED_DIMENSION`, because a tier selects the embedder and its width together — and
+   * migration 0051 builds the column with the very same resolution. With `MODEL_TIER` unset
+   * this is `config.EMBED_DIMENSION`, so nothing on main changes.
+   */
+  const columnDimension = await assertEmbeddingDimension(app.db, slots.embedDimension);
+  const tracker = new EmbedStatusTracker(slots.embedModel, slots.embedDimension);
   const model = instrumentEmbedding(base, tracker, app.log);
   app.decorate('model', model);
   app.decorate('embedStatus', tracker);
@@ -55,8 +61,8 @@ export default fp(async (app) => {
       tier: slots.tier,
       suggestModel: slots.suggestModel,
       chatModel: slots.chatModel,
-      embedModel: app.config.EMBED_MODEL,
-      embedDimension: app.config.EMBED_DIMENSION,
+      embedModel: slots.embedModel,
+      embedDimension: slots.embedDimension,
       // null when the database could not be asked — see `readEmbeddingDimension`.
       embeddingColumn: columnDimension,
     },

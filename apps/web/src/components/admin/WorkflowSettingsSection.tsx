@@ -210,6 +210,23 @@ export function WorkflowSettingsSection() {
           value={draft.gaps.failedQuestionRate}
           onChange={(n) => edit({ ...draft, gaps: { ...draft.gaps, failedQuestionRate: n } })}
         />
+        {/* Wave Y (A-M4): were constants in the gap heuristics; the dashboard tile reads the first too. */}
+        <NumField
+          label="מינימום ניסיונות לשאלה בעייתית"
+          min={1}
+          max={1000}
+          disabled={!mayEdit}
+          value={draft.gaps.failedQuestionMin}
+          onChange={(n) => edit({ ...draft, gaps: { ...draft.gaps, failedQuestionMin: n } })}
+        />
+        <NumField
+          label="מינימום צפיות בנושא ללא נוהל"
+          min={1}
+          max={100000}
+          disabled={!mayEdit}
+          value={draft.gaps.topicViewsMin}
+          onChange={(n) => edit({ ...draft, gaps: { ...draft.gaps, topicViewsMin: n } })}
+        />
         {mayEdit ? (
           <button
             type="button"

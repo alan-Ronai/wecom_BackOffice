@@ -66,11 +66,14 @@ chmod +x "$tmp/recording-ollama"
 
 # expect_pulls <what> <MODEL_NAME> <EMBED_MODEL> <tags already present> <tags that must be pulled>
 # The last two are newline-separated lists; the pulled list is compared in order.
+# Wave 6 (X1): $SLOT_TIER / $SLOT_SUGGEST / $SLOT_CHAT are read from the environment, so the slot
+# cases below set them around a call without changing every existing one.
 expect_pulls() {
   local what=$1 model=$2 embed=$3 present=$4 want=$5 got
   : >"$tmp/pulled"
   PRESENT="$present" PULLED="$tmp/pulled" \
     OLLAMA_HOST=http://127.0.0.1:11497 MODEL_NAME="$model" EMBED_MODEL="$embed" \
+    MODEL_TIER="${SLOT_TIER:-}" SUGGEST_MODEL="${SLOT_SUGGEST:-}" CHAT_MODEL="${SLOT_CHAT:-}" \
     OLLAMA_BIN="$tmp/recording-ollama" bash ollama-pull.sh >/dev/null
   got=$(cat "$tmp/pulled")
   if [ "$got" != "$want" ]; then
@@ -109,3 +112,53 @@ expect_pulls 'EMBED_MODEL unset pulls MODEL_NAME alone' \
 expect_pulls 'EMBED_MODEL equal to MODEL_NAME pulls it once' \
   'qwen2.5:0.5b-instruct-q4_K_M' 'qwen2.5:0.5b-instruct-q4_K_M' '' \
   'qwen2.5:0.5b-instruct-q4_K_M'
+
+# ── wave 6 (X1): the tier and the two generation slots ────────────────────────────────────────
+# `MODEL_TIER` and the per-slot overrides decide which tags the API will *ask* Ollama for, so this
+# script has to fetch the same ones. A clean install at a tier that pulled MODEL_NAME instead
+# would look fine here and answer 404 on every generation call — the wave-6 shape of W-3.
+
+SLOT_SUGGEST='dictalm2.0-instruct:7b-q4_K_M' SLOT_CHAT='qwen2.5:0.5b-instruct-q4_K_M' \
+  expect_pulls 'three distinct slots pull three tags, in slot order' \
+  'qwen2.5:3b-instruct-q4_K_M' 'bge-m3' \
+  '' \
+  'dictalm2.0-instruct:7b-q4_K_M
+qwen2.5:0.5b-instruct-q4_K_M
+bge-m3'
+
+SLOT_SUGGEST='qwen2.5:0.5b-instruct-q4_K_M' \
+  expect_pulls 'SUGGEST_MODEL equal to MODEL_NAME with CHAT_MODEL unset pulls once' \
+  'qwen2.5:0.5b-instruct-q4_K_M' '' '' \
+  'qwen2.5:0.5b-instruct-q4_K_M'
+
+SLOT_SUGGEST='dictalm2.0-instruct:7b-q4_K_M' SLOT_CHAT='dictalm2.0-instruct:7b-q4_K_M' \
+  expect_pulls 'an embed tag shared with the chat slot is pulled once' \
+  'qwen2.5:0.5b-instruct-q4_K_M' 'dictalm2.0-instruct:7b-q4_K_M' '' \
+  'dictalm2.0-instruct:7b-q4_K_M'
+
+# The tier is resolved here exactly as `resolveModelSlots` resolves it, or the tags diverge.
+SLOT_TIER=1 \
+  expect_pulls 'MODEL_TIER=1 alone pulls the tier-1 generation tag and bge-m3, not MODEL_NAME' \
+  'qwen2.5:3b-instruct-q4_K_M' 'nomic-embed-text' '' \
+  'aya-expanse:8b-q4_K_M
+bge-m3'
+
+SLOT_TIER=2 \
+  expect_pulls 'MODEL_TIER=2 has two different generation slots — three tags' \
+  'qwen2.5:3b-instruct-q4_K_M' 'nomic-embed-text' '' \
+  'gemma3:12b-it-q4_K_M
+aya-expanse:8b-q4_K_M
+bge-m3'
+
+SLOT_TIER=0 \
+  expect_pulls 'MODEL_TIER=0 is the legacy pair — the CI/e2e configuration' \
+  'qwen2.5:3b-instruct-q4_K_M' 'nomic-embed-text' '' \
+  'qwen2.5:3b-instruct-q4_K_M
+nomic-embed-text'
+
+SLOT_TIER=1 SLOT_SUGGEST='qwen2.5:7b-instruct-q4_K_M' \
+  expect_pulls 'an explicit slot override beats the tier preset' \
+  'qwen2.5:3b-instruct-q4_K_M' 'bge-m3' '' \
+  'qwen2.5:7b-instruct-q4_K_M
+aya-expanse:8b-q4_K_M
+bge-m3'

@@ -6,7 +6,8 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "prompts"
+    "prompts",
+    "eval/cases"
   ],
   "exports": {
     ".": "./dist/index.js"
@@ -14,7 +15,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "//pretest": "This package resolves @wecom/shared through its built dist, so a schema this package's tests depend on is invisible until shared is rebuilt. `pnpm -r test` builds first; a bare `pnpm --filter @wecom/model test` did not, and failed with errors that looked like this package's fault.",
+    "pretest": "pnpm --filter @wecom/shared build",
+    "pretypecheck": "pnpm --filter @wecom/shared build",
+    "preeval": "pnpm --filter @wecom/shared build",
+    "test": "vitest run",
+    "eval": "tsx eval/run.ts"
   },
   "dependencies": {
     "@wecom/shared": "workspace:*",
@@ -23,6 +29,7 @@
   "devDependencies": {
     "@types/node": "^22.20.2",
     "typescript": "^5.6.2",
-    "vitest": "^2.1.1"
+    "vitest": "^2.1.1",
+    "tsx": "^4.19.2"
   }
 }

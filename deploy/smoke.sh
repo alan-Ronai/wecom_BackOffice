@@ -94,12 +94,109 @@ env_value() {
 #      Ollama has no published port, by design.
 # None of the three available (no docker, a remote host) is a *note*, not a failure: the check
 # cannot be performed, and saying "smoke FAILED" for that would be a lie about the stack.
+# ── wave 6 (X1): the tier and the two generation slots ────────────────────────────────────────
+# `MODEL_TIER=n` picks the suggestion model, the chat model, the embedder and its width in one
+# number, and `deploy/ollama-pull.sh` resolves it the same way. This mirrors that resolution once
+# more so the smoke test asserts the tags the *api* will ask for, not the ones someone typed —
+# the three copies (api, pull, smoke) all mirror `MODEL_TIER_PRESETS`. Change them together.
+tier_slot() { # <tier> <suggest|chat|embed>
+  case "$1:$2" in
+    0:suggest|0:chat) echo 'qwen2.5:3b-instruct-q4_K_M' ;;
+    0:embed) echo 'nomic-embed-text' ;;
+    1:suggest|1:chat) echo 'aya-expanse:8b-q4_K_M' ;;
+    2:suggest) echo 'gemma3:12b-it-q4_K_M' ;;
+    2:chat) echo 'aya-expanse:8b-q4_K_M' ;;
+    3:suggest) echo 'gemma3:27b-it-q4_K_M' ;;
+    3:chat) echo 'gemma3:12b-it-q4_K_M' ;;
+    4:suggest|4:chat) echo 'gemma3:27b-it-q4_K_M' ;;
+    [1-4]:embed) echo 'bge-m3' ;;
+    *) echo '' ;;
+  esac
+}
+# The effective tag for one slot: explicit env → tier preset → MODEL_NAME (generation) / the
+# configured EMBED_MODEL. Empty is a real answer for `embed` (no embedding model configured).
+resolved_slot() { # <suggest|chat|embed>
+  local slot=$1 tier explicit name
+  tier=${MODEL_TIER:-$(env_value MODEL_TIER)}
+  case "$slot" in
+    suggest) explicit=${SUGGEST_MODEL:-$(env_value SUGGEST_MODEL)} ;;
+    chat) explicit=${CHAT_MODEL:-$(env_value CHAT_MODEL)} ;;
+    embed) explicit=${EMBED_MODEL:-$(env_value EMBED_MODEL)} ;;
+  esac
+  if [ "$slot" = embed ]; then
+    if [ -n "$tier" ] && { [ -z "$explicit" ] || [ "$explicit" = 'nomic-embed-text' ]; }; then
+      local t; t=$(tier_slot "$tier" embed); [ -n "$t" ] && explicit=$t
+    fi
+    printf '%s' "$explicit"
+    return 0
+  fi
+  [ -n "$explicit" ] && { printf '%s' "$explicit"; return 0; }
+  if [ -n "$tier" ]; then
+    local t; t=$(tier_slot "$tier" "$slot")
+    [ -n "$t" ] && { printf '%s' "$t"; return 0; }
+  fi
+  name=${MODEL_NAME:-$(env_value MODEL_NAME)}
+  printf '%s' "$name"
+}
+
+# Is one tag in Ollama's listing? → yes | no | unknown ("could not be asked", which is a note
+# rather than a failure: no docker on this host, or a remote deployment). Two sources, in order:
+# `$SMOKE_OLLAMA_TAGS_URL` for a stack that publishes Ollama's port, then `docker compose exec`,
+# which is how the shipped stack is reachable — Ollama has no published port, by design.
+: "${SMOKE_OLLAMA_TAGS_URL:=}"
+tag_present() { # <tag> → yes|no|unknown
+  local tag=$1 listing compose_file
+  listing=""
+  if [ -n "$SMOKE_OLLAMA_TAGS_URL" ]; then
+    listing=$(curl -ksS -m 10 "$SMOKE_OLLAMA_TAGS_URL" 2>/dev/null || true)
+  elif command -v docker >/dev/null 2>&1; then
+    compose_file="$(dirname "$0")/docker-compose.yml"
+    # No --env-file: compose reads deploy/.env from the compose file's own directory, which is the
+    # same file this script is standing next to.
+    listing=$(docker compose -f "$compose_file" exec -T ollama ollama list 2>/dev/null || true)
+  fi
+  [ -n "$listing" ] || { echo unknown; return 0; }
+  # One matcher for both shapes: /api/tags' JSON `"name":"<tag>"` and `ollama list`'s first column.
+  if printf '%s' "$listing" | grep -Eq "\"name\"[[:space:]]*:[[:space:]]*\"$tag\"" ||
+     printf '%s\n' "$listing" | awk 'NR>1{print $1}' | grep -Fxq "$tag"; then
+    echo yes
+  else
+    echo no
+  fi
+}
+
+# Prints the resolved tier line, and — when a generation slot resolves to something other than the
+# tag `/system/health` already asserted — checks that Ollama has it too. A tiered install whose
+# chat slot was never pulled answers `model: true` and 404s on every chat turn.
+slot_check() { # <the generation tag health reported>
+  local reported=$1 tier suggest chat embed dims
+  tier=${MODEL_TIER:-$(env_value MODEL_TIER)}
+  suggest=$(resolved_slot suggest); chat=$(resolved_slot chat); embed=$(resolved_slot embed)
+  dims=${EMBED_DIMENSION:-$(env_value EMBED_DIMENSION)}
+  echo "models: tier=${tier:-legacy} suggest=${suggest:-?} chat=${chat:-?} embed=${embed:-none} (dims ${dims:-768})"
+  local tag
+  for tag in "$suggest" "$chat"; do
+    [ -n "$tag" ] || continue
+    [ "$tag" = "$reported" ] && continue
+    case "$(tag_present "$tag")" in
+      yes) echo "slot ok: '$tag' is pulled" ;;
+      unknown) echo "slot '$tag': not verified — Ollama could not be asked" ;;
+      *)
+        echo "smoke FAILED: the resolved generation tag '$tag' is not in Ollama." >&2
+        echo "  /system/health only asserts MODEL_NAME, so a tiered install would 404 on every" >&2
+        echo "  generation call with nothing else to say so. Pull it:" >&2
+        echo "    docker compose -f deploy/docker-compose.yml up -d ollama-pull" >&2
+        exit 1 ;;
+    esac
+  done
+}
+
 : "${SMOKE_OLLAMA_TAGS_URL:=}"
 embed_check() { # <health body> <the generation tag health reported>
   local body=$1 model=$2 embed present listing compose_file
   [ "$SMOKE_REQUIRE_EMBED" = "true" ] || { echo "embedding model check skipped (SMOKE_REQUIRE_EMBED=false)"; return 0; }
 
-  embed=${EMBED_MODEL:-$(env_value EMBED_MODEL)}
+  embed=$(resolved_slot embed)
   if [ -z "$embed" ]; then
     echo "embedding model: none configured (EMBED_MODEL is empty) — search ranks lexically"
     return 0
@@ -123,28 +220,17 @@ embed_check() { # <health body> <the generation tag health reported>
   fi
 
   # 2/3. Ollama itself.
-  listing=""
-  if [ -n "$SMOKE_OLLAMA_TAGS_URL" ]; then
-    listing=$(curl -ksS -m 10 "$SMOKE_OLLAMA_TAGS_URL" 2>/dev/null || true)
-  elif command -v docker >/dev/null 2>&1; then
-    compose_file="$(dirname "$0")/docker-compose.yml"
-    # No --env-file: compose reads deploy/.env from the compose file's own directory, which is the
-    # same file this script is standing next to.
-    listing=$(docker compose -f "$compose_file" exec -T ollama ollama list 2>/dev/null || true)
-  fi
-  if [ -z "$listing" ]; then
-    echo "embedding model '$embed': not verified — neither /system/health nor Ollama could be asked"
-    echo "  (Ollama has no published port; this check needs docker on this host, or"
-    echo "   SMOKE_OLLAMA_TAGS_URL pointing at its /api/tags). Confirm by hand with:"
-    echo "    docker compose -f deploy/docker-compose.yml exec ollama ollama list"
-    return 0
-  fi
-  # One matcher for both shapes: /api/tags' JSON `"name":"<tag>"` and `ollama list`'s first column.
-  if printf '%s' "$listing" | grep -Eq "\"name\"[[:space:]]*:[[:space:]]*\"$embed\"" ||
-     printf '%s\n' "$listing" | awk 'NR>1{print $1}' | grep -Fxq "$embed"; then
-    echo "embed ok: '$embed' is pulled"
-    return 0
-  fi
+  case "$(tag_present "$embed")" in
+    unknown)
+      echo "embedding model '$embed': not verified — neither /system/health nor Ollama could be asked"
+      echo "  (Ollama has no published port; this check needs docker on this host, or"
+      echo "   SMOKE_OLLAMA_TAGS_URL pointing at its /api/tags). Confirm by hand with:"
+      echo "    docker compose -f deploy/docker-compose.yml exec ollama ollama list"
+      return 0 ;;
+    yes)
+      echo "embed ok: '$embed' is pulled"
+      return 0 ;;
+  esac
   echo "smoke FAILED: EMBED_MODEL is '$embed' and Ollama does not have that tag." >&2
   echo "  Nothing else would have told you: health reports on MODEL_NAME, no log line mentions the" >&2
   echo "  missing one, and search would rank lexically for the life of this deployment. Pull it:" >&2
@@ -278,6 +364,7 @@ for i in $(seq 1 60); do
         sleep 5; continue
       fi
       echo "model ok: '$model_name' is pulled"
+      slot_check "$model_name"
       embed_check "$body" "$model_name"
     fi
     echo "health ok: $body"

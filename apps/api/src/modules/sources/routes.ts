@@ -1,15 +1,22 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
+  AcceptSuggestionBodySchema,
   IdSchema,
   SourceRevisionSchema,
   SourceSchema,
+  SuggestionAnalyticsQuerySchema,
+  SuggestionAnalyticsSchema,
   SuggestionDecisionBodySchema,
   SuggestionSchema,
   SuggestionsQuerySchema,
   paginated,
 } from '@wecom/shared';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { suggestionAnalytics } from './analytics.js';
+import { suggestionViewer, type SuggestionViewer } from './suggestionScope.js';
+import { hasAllScopes, type ReqUser } from '../../lib/user.js';
+import { httpError } from '../../lib/http.js';
 import { parseUpload } from './parsers.js';
 import { processRevision, type PipelineDeps } from '../../jobs/pipeline.js';
 
@@ -19,6 +26,16 @@ const err = (statusCode: number, code: string, message: string) =>
 const actorId = (req: { user?: { id: string } | null }): string => {
   if (!req.user) throw err(401, 'UNAUTHENTICATED', 'נדרשת התחברות');
   return req.user.id;
+};
+
+/**
+ * A-I6. The review queue is world-scoped like every other reader, so every suggestion route that
+ * addresses a row by id — the two reads and the `before` snapshot the decision routes audit
+ * against — resolves it through the caller's reach. A row outside it answers 404.
+ */
+const viewer = (req: { user?: ReqUser | null }): SuggestionViewer => {
+  if (!req.user) throw err(401, 'UNAUTHENTICATED', 'נדרשת התחברות');
+  return suggestionViewer(req.user);
 };
 
 /**
@@ -148,13 +165,91 @@ export default function sourcesRoutes(deps: PipelineDeps) {
         config: { requires: ['suggestions.review'] },
       },
       async (req) => {
-        const { items, total } = await deps.suggestions.list(req.query);
+        // A-I6: the queue is world-scoped like every other reader.
+        const { items, total } = await deps.suggestions.list(req.query, viewer(req));
         return { items, total, page: req.query.page, pageSize: req.query.pageSize };
       },
     );
 
+    /**
+     * X6 seam. Spec §4.2 and `CONTRACTS-wave6.md` both document `GET /suggestions/:id` as the
+     * read that now carries `affects`, `promptVersion`, `model`, `editDiff` and `appliedParts`,
+     * but no lane shipped it: X4a's structured-edit drawer was reading it through a mock. It is
+     * declared before `/suggestions/:id/*` for clarity only — Fastify routes by path, not by
+     * registration order, so `/suggestions/analytics` is unaffected either way.
+     */
+    app.get(
+      '/suggestions/:id',
+      {
+        schema: {
+          tags: ['suggestions'],
+          params: z.object({ id: IdSchema }),
+          response: { 200: SuggestionSchema },
+        },
+        config: { requires: ['suggestions.review'] },
+      },
+      async (req) => deps.suggestions.get(req.params.id, viewer(req)),
+    );
+
+    /**
+     * `accept` takes an optional `{ parts }` — the row ids of `rowsOf(payload)` to apply now.
+     * An absent body, or one without `parts`, is the whole suggestion, exactly as before; with
+     * `parts` the rows left out come back as a pending remainder suggestion (`parentId`).
+     */
+    app.post(
+      '/suggestions/:id/accept',
+      {
+        schema: {
+          tags: ['suggestions'],
+          params: z.object({ id: IdSchema }),
+          // `nullish`, not `optional`: a POST with no body at all reaches validation as `null`,
+          // and "accept the whole suggestion" is exactly what an empty body has always meant.
+          body: AcceptSuggestionBodySchema.nullish(),
+          response: { 200: SuggestionSchema },
+        },
+        config: { requires: ['suggestions.review'] },
+      },
+      async (req) => {
+        const before = await deps.suggestions.get(req.params.id, viewer(req));
+        const parts = req.body?.parts;
+        const s = parts?.length
+          ? (await deps.suggestions.acceptParts(req.params.id, parts, actorId(req))).accepted
+          : await deps.suggestions.decide(req.params.id, 'accepted', actorId(req));
+        await app.audit(
+          req,
+          'suggestions.review',
+          'suggestion',
+          s.id,
+          { status: before.status },
+          {
+            status: s.status,
+            type: s.type,
+            targetDocumentId: s.targetDocumentId,
+            ...(parts?.length ? { parts } : {}),
+          },
+        );
+        return s;
+      },
+    );
+
+    /**
+     * Acceptance analytics (spec §1.9). A distinct path, so its registration order against
+     * `/suggestions/:id/*` does not matter. Cached 60 s in `analytics.ts`.
+     */
+    app.get(
+      '/suggestions/analytics',
+      {
+        schema: {
+          tags: ['suggestions'],
+          querystring: SuggestionAnalyticsQuerySchema,
+          response: { 200: SuggestionAnalyticsSchema },
+        },
+        config: { requires: ['suggestions.review'] },
+      },
+      async (req) => suggestionAnalytics(app.db, req.query),
+    );
+
     for (const [action, status] of [
-      ['accept', 'accepted'],
       ['reject', 'rejected'],
       ['reset', 'pending'],
     ] as const)
@@ -169,7 +264,7 @@ export default function sourcesRoutes(deps: PipelineDeps) {
           config: { requires: ['suggestions.review'] },
         },
         async (req) => {
-          const before = await deps.suggestions.get(req.params.id);
+          const before = await deps.suggestions.get(req.params.id, viewer(req));
           const s = await deps.suggestions.decide(req.params.id, status, actorId(req));
           await app.audit(
             req,
@@ -195,16 +290,18 @@ export default function sourcesRoutes(deps: PipelineDeps) {
         config: { requires: ['suggestions.review'] },
       },
       async (req) => {
-        if (!req.body.editedPayload) throw err(400, 'VALIDATION', 'חסר editedPayload');
-        const before = await deps.suggestions.get(req.params.id);
-        const s = await deps.suggestions.edit(req.params.id, req.body.editedPayload, actorId(req));
+        const before = await deps.suggestions.get(req.params.id, viewer(req));
+        // The body schema's refine guarantees exactly one of the two is present.
+        const s = req.body.structuredEdit
+          ? await deps.suggestions.editStructured(req.params.id, req.body.structuredEdit, actorId(req))
+          : await deps.suggestions.edit(req.params.id, req.body.editedPayload!, actorId(req));
         await app.audit(
           req,
           'suggestions.edit',
           'suggestion',
           s.id,
           { payload: before.editedPayload ?? before.payload },
-          { payload: s.editedPayload },
+          { payload: s.editedPayload, diff: s.editDiff, structured: !!req.body.structuredEdit },
         );
         return s;
       },
@@ -222,11 +319,23 @@ export default function sourcesRoutes(deps: PipelineDeps) {
         },
         config: { requires: ['suggestions.apply'] },
       },
-      async (req) =>
-        deps.suggestions.publishAccepted(req.body.sourceId, actorId(req), {
-          requestId: req.id,
-          ip: req.ip,
-        }),
+      async (req) => {
+        const user = req.user;
+        return deps.suggestions.publishAccepted(
+          req.body.sourceId,
+          actorId(req),
+          { requestId: req.id, ip: req.ip },
+          // Wave Y (A-M6): publishing writes documents, so the caller must hold every world it
+          // writes; one out-of-scope target refuses the whole publish (it is one transaction).
+          (worlds) => {
+            if (user && worlds.length && !hasAllScopes(user, worlds))
+              throw httpError(403, 'SCOPE_DENIED', 'ההרשאה שלך מוגבלת לעולמות תוכן אחרים', {
+                worlds,
+                scopes: user.worldScopes,
+              });
+          },
+        );
+      },
     );
   };
 }

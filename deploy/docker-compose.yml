@@ -51,10 +51,18 @@ services:
     # embedding model deploy/.env.example configures was never pulled on any install and search
     # silently ranked lexically for ever. `:-` because an empty value is a real configuration
     # (no embedding model) and must not become an interpolation error.
+    #
+    # Wave 6 (X1): and the tier plus the two generation slots, because `ollama-pull.sh` resolves
+    # them exactly as `resolveModelSlots` does. Without these an install at `MODEL_TIER=1` would
+    # pull `MODEL_NAME` while the api asked Ollama for the tier-1 tag — the same class of silent
+    # misconfiguration as W-3, one wave later.
     environment:
       OLLAMA_HOST: "http://ollama:11434"
       MODEL_NAME: "${MODEL_NAME}"
       EMBED_MODEL: "${EMBED_MODEL:-}"
+      MODEL_TIER: "${MODEL_TIER:-}"
+      SUGGEST_MODEL: "${SUGGEST_MODEL:-}"
+      CHAT_MODEL: "${CHAT_MODEL:-}"
     volumes: ["./ollama-pull.sh:/ollama-pull.sh:ro"]
     depends_on: { ollama: { condition: service_healthy } }
     logging: *logging

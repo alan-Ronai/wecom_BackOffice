@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Suggestion, SuggestionPayload } from '@wecom/shared';
 import { cat } from '../../lib/constants.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 const TAG: Record<Suggestion['type'], { label: string; tone: string }> = {
   'update-step': { label: 'עדכון שלב', tone: 'amber' },
@@ -103,13 +104,19 @@ export function SuggestionCard({
             <span>· יעד: {suggestion.targetStepKey ? `שלב ${suggestion.targetStepKey}` : 'כרטיס חדש'}</span>
             {canReview ? (
               <span className="bt">
-                <span role="button" tabIndex={0} onClick={() => onDecide('reject')}>
+                <span role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => onDecide('reject')}>
                   דחה
                 </span>
-                <span role="button" tabIndex={0} onClick={() => setEditing(true)}>
+                <span role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => setEditing(true)}>
                   ערוך
                 </span>
-                <span className="p" role="button" tabIndex={0} onClick={() => onDecide('accept')}>
+                <span
+                  className="p"
+                  role="button"
+                  onKeyDown={pressKeys}
+                  tabIndex={0}
+                  onClick={() => onDecide('accept')}
+                >
                   אשר
                 </span>
               </span>
@@ -131,7 +138,13 @@ export function SuggestionCard({
                 : '✕ נדחה — המנוע ילמד מזה'}
           </span>
           {canApply && suggestion.status !== 'applied' ? (
-            <span className="undo" role="button" tabIndex={0} onClick={() => onDecide('reset')}>
+            <span
+              className="undo"
+              role="button"
+              onKeyDown={pressKeys}
+              tabIndex={0}
+              onClick={() => onDecide('reset')}
+            >
               בטל
             </span>
           ) : null}

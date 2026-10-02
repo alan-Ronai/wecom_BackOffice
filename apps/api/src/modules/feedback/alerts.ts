@@ -1,7 +1,6 @@
 import type pg from 'pg';
 import type { FastifyBaseLogger } from 'fastify';
 import { FEEDBACK_KIND_LABELS, type FeedbackRow, type Notifier, type TaxonomyResolver } from '@wecom/shared';
-import { hasColumn } from './repo.js';
 
 export interface AlertDeps {
   db: pg.Pool;
@@ -10,16 +9,9 @@ export interface AlertDeps {
   log: FastifyBaseLogger;
 }
 
-/** Owner + responsible editor (W2 columns) or, before W2, whoever last touched the document. */
+/** Owner + responsible editor or, for a document that has neither, whoever last touched it. */
 export async function recipientsFor(db: pg.Pool, documentId: string): Promise<string[]> {
-  const hasOwner = await hasColumn(db, 'documents', 'owner_id');
-  const hasEditor = await hasColumn(db, 'documents', 'editor_id');
-  const cols = [
-    hasOwner ? 'owner_id' : 'null::uuid as owner_id',
-    hasEditor ? 'editor_id' : 'null::uuid as editor_id',
-    'updated_by',
-  ];
-  const r = await db.query(`select ${cols.join(', ')} from documents where id=$1`, [documentId]);
+  const r = await db.query(`select owner_id, editor_id, updated_by from documents where id=$1`, [documentId]);
   if (!r.rowCount) return [];
   const row = r.rows[0] as { owner_id: string | null; editor_id: string | null; updated_by: string | null };
   const ids = [row.owner_id, row.editor_id].filter((x): x is string => !!x);
@@ -27,8 +19,9 @@ export async function recipientsFor(db: pg.Pool, documentId: string): Promise<st
   return [...new Set(ids)];
 }
 
-/** Everyone who may publish in the item's world; falls back to all leads before W1 lands. */
 /**
+ * Everyone who may publish in the item's world.
+ *
  * B-M12: the `leadIds(db, null)` fallback was written as a pre-W1 stub and is a live path now.
  * A world with no scoped publisher would make every `process_fails` report and window alert
  * notify every `docs.publish` holder in the tenant, item title included. An empty answer is

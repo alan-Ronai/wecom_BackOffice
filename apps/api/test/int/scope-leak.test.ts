@@ -4,7 +4,10 @@ import { startTestDb, integration } from '../helpers/db.js';
 import { buildTestApp } from '../helpers/app.js';
 import { makeUser, auth } from '../helpers/fixtures.js';
 import { seedQuiz } from '../helpers/v2/learningStub.js';
+import { chatResult, fakeChat } from '../helpers/ai/fakeChat.js';
 import { withTransaction } from '../../src/lib/sql.js';
+import { aiChatHolder } from '../../src/modules/ai/chatModel.js';
+import { parseSseFrames } from '../../src/modules/ai/sse.js';
 
 const run = integration ? describe : describe.skip;
 
@@ -40,6 +43,10 @@ run('category scope: an out-of-scope document leaks through no route', () => {
   let trashedBilling: string;
   let billingSource: string;
   let billingRevision: string;
+  /** A-I6: a suggestion on the billing document — the queue is world-scoped like every reader. */
+  let billingSuggestion: string;
+  /** A-I2: a suggestion with **no** target document, scoped only through its source's worlds. */
+  let billingNullSuggestion: string;
 
   const post = (url: string, payload: unknown, u = admin) =>
     app.inject({ method: 'POST', url, headers: auth(u), payload });
@@ -200,6 +207,31 @@ run('category scope: an out-of-scope document leaks through no route', () => {
         [billingSource],
       )
     ).rows[0].id as string;
+    /**
+     * Wave 6 fix wave. Two suggestions on the billing revision: one targeting the billing
+     * document (A-I6 — the review queue had no scope at all), and one with a **null** target
+     * (A-I2 — `list_suggestions` and `refine_suggestion` skipped their check entirely for these,
+     * and `new-card`/`field-alert` are exactly the types that have no target). Inserted directly:
+     * what is under test is the read filter, not the proposal pipeline.
+     */
+    billingSuggestion = (
+      await db.pool.query(
+        `insert into suggestions(source_revision_id, anchor, type, title, target_document_id, target_step_key, payload, confidence, rationale)
+         values ($1, '§1', 'deprecate-step', $2, $3, 's2', $4, 0.8, $2) returning id`,
+        [billingRevision, SECRET, billingDoc, JSON.stringify({ type: 'deprecate-step', reason: SECRET })],
+      )
+    ).rows[0].id as string;
+    billingNullSuggestion = (
+      await db.pool.query(
+        `insert into suggestions(source_revision_id, anchor, type, title, payload, confidence, rationale)
+         values ($1, '§2', 'field-alert', $2, $3, 0.8, $2) returning id`,
+        [
+          billingRevision,
+          SECRET,
+          JSON.stringify({ type: 'field-alert', fieldName: SECRET, issue: 'unknown' }),
+        ],
+      )
+    ).rows[0].id as string;
   }, 180000);
 
   afterAll(async () => {
@@ -232,6 +264,9 @@ run('category scope: an out-of-scope document leaks through no route', () => {
     `/api/v1/feedback/analytics`,
     // Wave 5 V3: a knowledge gap names the document it is about, in its key and in its title.
     `/api/v1/gaps?pageSize=100`,
+    // A-I6: the review queue. Both the targeted and the null-target suggestion carry the secret
+    // in their title and payload, and `SuggestionService.list` had no scope handling at all.
+    `/api/v1/suggestions?pageSize=100`,
   ];
 
   // One `it` rather than `it.each`: the urls are built from ids `beforeAll` assigns, and
@@ -386,11 +421,276 @@ run('category scope: an out-of-scope document leaks through no route', () => {
   });
 
   /**
+   * Wave 6 (X2): the copilot is a new read surface over every other one, and a model is an
+   * unusually persuasive way to ask for something. Three things have to hold: a conversation
+   * cannot be opened on an out-of-scope document, a tool call the model makes on one returns
+   * nothing (not a 403 body, not a title — "לא נמצא"), and the transcript the admin exports
+   * still carries what the admin was allowed to see, so this is a filter and not a break.
+   */
+  it('X2: the chat opens on no out-of-scope document and its tools leak none of one', async () => {
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/v1/ai/conversations',
+          headers: auth(scoped),
+          payload: { kind: 'article', documentId: billingDoc },
+        })
+      ).statusCode,
+    ).toBe(404);
+
+    // The model asks for the out-of-scope document by id and searches for its title.
+    aiChatHolder.swap(
+      fakeChat(({ messages }) =>
+        messages.some((m) => m.role === 'tool')
+          ? chatResult('לא מצאתי.')
+          : chatResult('', [
+              { id: 't1', name: 'read_document', args: { documentId: billingDoc } },
+              { id: 't2', name: 'search_kb', args: { q: 'סודי' } },
+            ]),
+      ),
+    );
+    const turn = async (u: typeof scoped) => {
+      const c = await app.inject({
+        method: 'POST',
+        url: '/api/v1/ai/conversations',
+        headers: auth(u),
+        payload: { kind: 'editor', documentId: techDoc },
+      });
+      expect(c.statusCode, c.body).toBe(201);
+      const r = await app.inject({
+        method: 'POST',
+        url: `/api/v1/ai/conversations/${c.json().id}/messages`,
+        headers: auth(u),
+        payload: { content: 'ספר לי על המסמך השני' },
+      });
+      return { body: r.body, frames: parseSseFrames(r.body) };
+    };
+
+    const mine = await turn(scoped);
+    expect(mine.body).not.toContain(SECRET);
+    expect(mine.body).not.toContain(SECRET_TAG);
+    expect(mine.frames.filter((e) => e.type === 'tool_result' && e.name === 'read_document')).toMatchObject([
+      { ok: false },
+    ]);
+
+    // The unrestricted user does get it, so the filter is a filter.
+    const theirs = await turn(admin);
+    expect(theirs.body).toContain(SECRET);
+
+    const exported = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/ai/conversations/export.jsonl',
+      headers: auth(admin),
+    });
+    expect(exported.statusCode).toBe(200);
+    expect(exported.body).toContain(SECRET);
+  });
+
+  /**
+   * Wave 6 fix wave. Four holes the X2 row above did not reach, all in the same shape: a read
+   * that narrowed by the *target document* and therefore did nothing at all when there was no
+   * target, or did not narrow by world in the first place.
+   *
+   * - **A-I1** `read_impact` scoped only the inbound-link walk; the embedding-neighbour query
+   *   filtered on status and nothing else.
+   * - **A-I2** `list_suggestions` / `refine_suggestion` let every null-target row through, and
+   *   `list_suggestions` with no arguments was the 30 most recent suggestions on the instance.
+   * - **A-I6** `GET /suggestions/:id` (the X6 seam route) and `GET /suggestions` applied no scope.
+   */
+  it('A-I1/A-I2/A-I6: the wave 6 impact tool, suggestion tools and review queue are all scoped', async () => {
+    // The queue: both suggestions are the billing document's, one by target and one by source.
+    for (const id of [billingSuggestion, billingNullSuggestion]) {
+      const mine = await get(`/api/v1/suggestions/${id}`);
+      expect(mine.statusCode, mine.body).toBe(404);
+      const theirs = await get(`/api/v1/suggestions/${id}`, admin);
+      expect(theirs.statusCode, theirs.body).toBe(200);
+      expect(theirs.body).toContain(SECRET);
+    }
+    // And a decision route resolves the same way, so the write half cannot reach past the read.
+    const reject = await app.inject({
+      method: 'POST',
+      url: `/api/v1/suggestions/${billingSuggestion}/reject`,
+      headers: auth(scoped),
+    });
+    expect(reject.statusCode, reject.body).toBe(404);
+
+    // The tools. One turn asks for all four at once; none of them may name the secret.
+    aiChatHolder.swap(
+      fakeChat(({ messages }) =>
+        messages.some((m) => m.role === 'tool')
+          ? chatResult('לא מצאתי.')
+          : chatResult('', [
+              { id: 'i1', name: 'read_impact', args: { documentId: techDoc } },
+              { id: 'l1', name: 'list_suggestions', args: { sourceRevisionId: billingRevision } },
+              { id: 'l2', name: 'list_suggestions', args: {} },
+              {
+                id: 'r1',
+                name: 'refine_suggestion',
+                args: { suggestionId: billingNullSuggestion, instruction: 'שפר' },
+              },
+            ]),
+      ),
+    );
+    const c = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ai/conversations',
+      headers: auth(scoped),
+      payload: { kind: 'editor', documentId: techDoc },
+    });
+    expect(c.statusCode, c.body).toBe(201);
+    const r = await app.inject({
+      method: 'POST',
+      url: `/api/v1/ai/conversations/${c.json().id}/messages`,
+      headers: auth(scoped),
+      payload: { content: 'מה ההצעות ומה ההשפעה?' },
+    });
+    expect(r.body).not.toContain(SECRET);
+    const frames = parseSseFrames(r.body);
+    const result = (id: string) =>
+      frames.find((e) => e.type === 'tool_result' && e.id === id) as
+        { ok: boolean; payload?: { items?: unknown[]; documents?: { id: string }[] } } | undefined;
+    // `read_impact` answers — the tech document is the caller's — but names no billing neighbour.
+    expect(result('i1')).toMatchObject({ ok: true });
+    expect(result('i1')?.payload?.documents?.some((d) => d.id === billingDoc)).toBe(false);
+    // The revision is the billing source's, so the list is empty rather than a leak.
+    expect(result('l1')).toMatchObject({ ok: true });
+    expect(result('l1')?.payload?.items).toEqual([]);
+    // A-I2: no document and no revision is no longer "everything".
+    expect(result('l2')).toMatchObject({ ok: false });
+    // A-I2: a null-target suggestion is not refinable by someone who cannot see its source.
+    expect(result('r1')).toMatchObject({ ok: false });
+  });
+
+  /**
+   * Re-review of the fix wave. The A-I6 predicate, read plainly, made two classes of row
+   * unreachable by **anyone**; both are carve-outs now, and both need the pair of states asserted
+   * or the carve-out quietly becomes "visible to everybody, always".
+   *
+   * 1. A source that feeds no live document has no worlds to scope its null-target rows by — and
+   *    `new-card` is the suggestion that gives a source its first document. Scoping through the
+   *    empty set meant only an unscoped user could bootstrap a fresh import.
+   * 2. `deleted_at is null` sat outside the scope branch, so soft-deleting a document took every
+   *    suggestion against it out of the queue and out of the dashboard counts — for admins too,
+   *    leaving rows that could be neither rejected nor restored.
+   */
+  it('a null-target row on a source with no documents is reviewable; once the source is linked, scope applies', async () => {
+    // A brand-new import: a source, a revision, and a `new-card` that would create its first
+    // document. Nothing links the source to a world yet, because nothing derives from it.
+    const freshSource = (
+      await db.pool.query(`insert into sources(kind, title) values ('text','ייבוא חדש') returning id`)
+    ).rows[0].id as string;
+    const freshRevision = (
+      await db.pool.query(
+        `insert into source_revisions(source_id, hash, paragraphs) values ($1,'fresh','[]') returning id`,
+        [freshSource],
+      )
+    ).rows[0].id as string;
+    const newCard = (
+      await db.pool.query(
+        `insert into suggestions(source_revision_id, anchor, type, title, payload, confidence, rationale)
+         values ($1, '§1', 'new-card', 'כרטיס חדש', $2, 0.75, 'r') returning id`,
+        [
+          freshRevision,
+          JSON.stringify({
+            type: 'new-card',
+            title: 'כרטיס חדש',
+            description: '',
+            category: 'billing', // deliberately a world the reviewer does NOT hold
+            wave: 1,
+            priority: 'm',
+            phases: [],
+          }),
+        ],
+      )
+    ).rows[0].id as string;
+
+    // The scoped reviewer can see it — the source belongs to no world, so it belongs to the queue.
+    // The payload's own `category` is not the test: a proposed card is not a document yet, and
+    // the reviewer is the person who decides whether it becomes one.
+    const seen = await get(`/api/v1/suggestions/${newCard}`);
+    expect(seen.statusCode, seen.body).toBe(200);
+    expect(seen.json().type).toBe('new-card');
+    expect((await get('/api/v1/suggestions?pageSize=100')).body).toContain(newCard);
+    // …and can act on it, so the write half is reachable too.
+    const accepted = await app.inject({
+      method: 'POST',
+      url: `/api/v1/suggestions/${newCard}/accept`,
+      headers: auth(scoped),
+    });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(accepted.json().status).toBe('accepted');
+
+    // The paired state: the same reviewer, a null-target row whose source feeds a document in a
+    // world they do not hold. `billingSource` feeds `billingDoc`, so the carve-out is spent and
+    // the world scope is what answers.
+    expect((await get(`/api/v1/suggestions/${billingNullSuggestion}`)).statusCode).toBe(404);
+    expect((await get('/api/v1/suggestions?pageSize=100')).body).not.toContain(billingNullSuggestion);
+    // And the admin sees both, so this is a filter and not a break.
+    expect((await get(`/api/v1/suggestions/${billingNullSuggestion}`, admin)).statusCode).toBe(200);
+    expect((await get(`/api/v1/suggestions/${newCard}`, admin)).statusCode).toBe(200);
+
+    // The carve-out really is spent once the source feeds something: link the fresh source to the
+    // billing document and the scoped reviewer loses the row they could read a moment ago.
+    await db.pool.query('update documents set source_id=$1 where id=$2', [freshSource, billingDoc]);
+    try {
+      expect((await get(`/api/v1/suggestions/${newCard}`)).statusCode).toBe(404);
+      expect((await get(`/api/v1/suggestions/${newCard}`, admin)).statusCode).toBe(200);
+    } finally {
+      await db.pool.query('update documents set source_id=$1 where id=$2', [billingSource, billingDoc]);
+    }
+  });
+
+  it('a suggestion whose target document was soft-deleted stays visible to an unscoped reviewer', async () => {
+    // A tech document the scoped reviewer *can* see, so the only thing the delete changes is the
+    // `deleted_at` axis — not the world one.
+    const doomed = await makeDoc('מסמך שיימחק', 'tech');
+    const rev = (
+      await db.pool.query(
+        `insert into source_revisions(source_id, hash, paragraphs) values ($1,'doomed','[]') returning id`,
+        [billingSource],
+      )
+    ).rows[0].id as string;
+    const sug = (
+      await db.pool.query(
+        `insert into suggestions(source_revision_id, anchor, type, title, target_document_id, target_step_key, payload, confidence, rationale)
+         values ($1, '§9', 'deprecate-step', 'להסיר שלב', $2, 's2', $3, 0.7, 'r') returning id`,
+        [rev, doomed, JSON.stringify({ type: 'deprecate-step', reason: 'לא רלוונטי' })],
+      )
+    ).rows[0].id as string;
+
+    // Alive: both see it, because the target is a tech document.
+    expect((await get(`/api/v1/suggestions/${sug}`)).statusCode).toBe(200);
+    expect((await get(`/api/v1/suggestions/${sug}`, admin)).statusCode).toBe(200);
+    const before = (await get('/api/v1/dashboards', admin)).json().pipeline.pending as number;
+
+    await app.inject({ method: 'DELETE', url: `/api/v1/documents/${doomed}`, headers: auth(admin) });
+
+    // Deleted: the admin keeps the row — it is theirs to reject, or to restore the document for —
+    // and it keeps counting on the dashboard. The scoped reviewer loses it, because a deleted
+    // document has no world left to check them against.
+    const asAdmin = await get(`/api/v1/suggestions/${sug}`, admin);
+    expect(asAdmin.statusCode, asAdmin.body).toBe(200);
+    expect((await get(`/api/v1/suggestions/${sug}`)).statusCode).toBe(404);
+    expect((await get('/api/v1/dashboards', admin)).json().pipeline.pending).toBe(before);
+    // The admin can still decide it, which is the point of keeping it.
+    const rejected = await app.inject({
+      method: 'POST',
+      url: `/api/v1/suggestions/${sug}/reject`,
+      headers: auth(admin),
+    });
+    expect(rejected.statusCode, rejected.body).toBe(200);
+  });
+
+  /**
    * I4(a): the read leak has a write counterpart. `POST /fields/:name/rename` required only
    * `fields.edit` and never consulted `categoryScopes`, so a narrowly scoped editor rewrote step
-   * text in every category. Left last in the file because it mutates the catalogue.
+   * text in every category. The first fix rewrote only the documents the caller could open; since
+   * wave Y (A-M6) a field spans the worlds of the documents referencing it, and renaming it needs
+   * every one of them — so the scoped rename is refused outright and nothing is rewritten.
+   * Left last in the file because it mutates the catalogue.
    */
-  it('I4: a scoped rename rewrites only the documents the caller can open', async () => {
+  it('I4: a scoped rename of a field used outside the caller worlds is refused and rewrites nothing', async () => {
     const field = 'קוד תעריף';
     await app.inject({
       method: 'PUT',
@@ -409,15 +709,12 @@ run('category scope: an out-of-scope document leaks through no route', () => {
       headers: auth(scoped),
       payload: { newName: 'קוד מסלול', updateReferences: true, label: 'שינוי שם' },
     });
-    expect(r.statusCode).toBe(200);
-    expect(r.json().updatedDocuments).toBe(1);
+    expect(r.statusCode).toBe(403);
 
     const textOf = async (id: string) =>
       (await app.inject({ method: 'GET', url: `/api/v1/documents/${id}`, headers: auth(admin) })).json()
         .phases[0].steps[1].actions[0].text as string;
-    expect(await textOf(tech)).toContain('קוד מסלול');
-    // Untouched: the scoped editor may not read this document, so they may not rewrite it either.
-    // The old name survives as a `renamed` tombstone, which is what tells its owners to update.
+    expect(await textOf(tech)).toContain(field);
     expect(await textOf(billing)).toContain(field);
   });
 

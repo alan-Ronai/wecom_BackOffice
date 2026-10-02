@@ -2841,6 +2841,18 @@
                           "minimum": 0.1,
                           "maximum": 1,
                           "default": 0.5
+                        },
+                        "failedQuestionMin": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000,
+                          "default": 5
+                        },
+                        "topicViewsMin": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000,
+                          "default": 3
                         }
                       },
                       "additionalProperties": false
@@ -2926,6 +2938,18 @@
                         "minimum": 0.1,
                         "maximum": 1,
                         "default": 0.5
+                      },
+                      "failedQuestionMin": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000,
+                        "default": 5
+                      },
+                      "topicViewsMin": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100000,
+                        "default": 3
                       }
                     },
                     "additionalProperties": false
@@ -3002,6 +3026,18 @@
                           "minimum": 0.1,
                           "maximum": 1,
                           "default": 0.5
+                        },
+                        "failedQuestionMin": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000,
+                          "default": 5
+                        },
+                        "topicViewsMin": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000,
+                          "default": 3
                         }
                       },
                       "additionalProperties": false
@@ -3010,6 +3046,746 @@
                   "required": [
                     "learning",
                     "gaps"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/settings": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "brief": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "default": 0
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    },
+                    "style": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "default": 0
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    },
+                    "models": {
+                      "type": "object",
+                      "properties": {
+                        "tier": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "enum": [
+                                0
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                2
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                3
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                4
+                              ]
+                            }
+                          ],
+                          "default": 1
+                        },
+                        "suggestModel": {
+                          "type": "string",
+                          "default": "aya-expanse:8b-q4_K_M"
+                        },
+                        "chatModel": {
+                          "type": "string",
+                          "default": "aya-expanse:8b-q4_K_M"
+                        },
+                        "embedModel": {
+                          "type": "string",
+                          "default": "bge-m3"
+                        },
+                        "embedDimension": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "default": 1024
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    },
+                    "limits": {
+                      "type": "object",
+                      "properties": {
+                        "chatPerUserPerHour": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000,
+                          "default": 60
+                        },
+                        "maxContextChars": {
+                          "type": "integer",
+                          "minimum": 1000,
+                          "maximum": 1000000,
+                          "default": 24000
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "brief": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "style": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "models": {
+                    "type": "object",
+                    "properties": {
+                      "tier": {
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "enum": [
+                              0
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              1
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              2
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              3
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              4
+                            ]
+                          }
+                        ],
+                        "default": 1
+                      },
+                      "suggestModel": {
+                        "type": "string",
+                        "default": "aya-expanse:8b-q4_K_M"
+                      },
+                      "chatModel": {
+                        "type": "string",
+                        "default": "aya-expanse:8b-q4_K_M"
+                      },
+                      "embedModel": {
+                        "type": "string",
+                        "default": "bge-m3"
+                      },
+                      "embedDimension": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 1024
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "limits": {
+                    "type": "object",
+                    "properties": {
+                      "chatPerUserPerHour": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000,
+                        "default": 60
+                      },
+                      "maxContextChars": {
+                        "type": "integer",
+                        "minimum": 1000,
+                        "maximum": 1000000,
+                        "default": 24000
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "brief": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "default": 0
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    },
+                    "style": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "default": 0
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    },
+                    "models": {
+                      "type": "object",
+                      "properties": {
+                        "tier": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "enum": [
+                                0
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                2
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                3
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                4
+                              ]
+                            }
+                          ],
+                          "default": 1
+                        },
+                        "suggestModel": {
+                          "type": "string",
+                          "default": "aya-expanse:8b-q4_K_M"
+                        },
+                        "chatModel": {
+                          "type": "string",
+                          "default": "aya-expanse:8b-q4_K_M"
+                        },
+                        "embedModel": {
+                          "type": "string",
+                          "default": "bge-m3"
+                        },
+                        "embedDimension": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "default": 1024
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    },
+                    "limits": {
+                      "type": "object",
+                      "properties": {
+                        "chatPerUserPerHour": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000,
+                          "default": 60
+                        },
+                        "maxContextChars": {
+                          "type": "integer",
+                          "minimum": 1000,
+                          "maximum": 1000000,
+                          "default": 24000
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": {}
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/settings/versions": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "key",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "enum": [
+                              "ai.brief",
+                              "ai.style",
+                              "ai.models",
+                              "ai.limits"
+                            ]
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "value": {},
+                          "updatedBy": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "updatedByName": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "version",
+                          "updatedBy",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/models/test": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "slot": {
+                    "type": "string",
+                    "enum": [
+                      "suggest",
+                      "chat",
+                      "embed"
+                    ]
+                  }
+                },
+                "required": [
+                  "slot"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "slot": {
+                      "type": "string",
+                      "enum": [
+                        "suggest",
+                        "chat",
+                        "embed"
+                      ]
+                    },
+                    "tag": {
+                      "type": "string"
+                    },
+                    "reachable": {
+                      "type": "boolean"
+                    },
+                    "sizeBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "dims": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
+                    "tokensPerSec": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "slot",
+                    "tag",
+                    "reachable"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/reindex": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "since": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "additionalProperties": false,
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "queued": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "jobId": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "queued",
+                    "jobId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/eval": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "useRules": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "additionalProperties": false,
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "queued": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "jobId": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "queued",
+                    "jobId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/eval/runs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "promptVersion": {
+                            "type": "string"
+                          },
+                          "embedModel": {
+                            "type": "string"
+                          },
+                          "startedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "finishedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "cases": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "hitTarget": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "default": 0
+                          },
+                          "hitType": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "default": 0
+                          },
+                          "contentOverlap": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "default": 0
+                          },
+                          "precision": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "nullable": true,
+                            "default": null
+                          },
+                          "languageFailures": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "nullable": true,
+                            "default": null
+                          },
+                          "notes": {
+                            "type": "string",
+                            "default": ""
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "model",
+                          "promptVersion",
+                          "embedModel",
+                          "startedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
                   ],
                   "additionalProperties": false
                 }
@@ -12836,6 +13612,17 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "category": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                          },
+                          "worlds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                            }
+                          },
                           "impact": {
                             "type": "object",
                             "properties": {
@@ -14400,7 +15187,6 @@
                             "call_completed",
                             "palette",
                             "jump",
-                            "view_topic",
                             "search_click",
                             "client_error"
                           ]
@@ -27404,6 +28190,1209 @@
         }
       }
     },
+    "/api/v1/ai/conversations": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "workspace",
+                      "editor",
+                      "article"
+                    ]
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "sourceRevisionId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "workspace",
+                        "editor",
+                        "article"
+                      ]
+                    },
+                    "documentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true,
+                      "default": null
+                    },
+                    "documentTitle": {
+                      "type": "string",
+                      "nullable": true,
+                      "default": null
+                    },
+                    "sourceRevisionId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true,
+                      "default": null
+                    },
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "userName": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "title": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "model": {
+                      "type": "string",
+                      "nullable": true,
+                      "default": null
+                    },
+                    "promptVersion": {
+                      "type": "string",
+                      "nullable": true,
+                      "default": null
+                    },
+                    "messageCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "default": 0
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "userId",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "in": "query",
+            "name": "pageSize",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "query",
+            "name": "documentId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "workspace",
+                "editor",
+                "article"
+              ]
+            },
+            "in": "query",
+            "name": "kind",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "mine",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "query",
+            "name": "userId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "from",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "to",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "in": "query",
+            "name": "q",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "workspace",
+                              "editor",
+                              "article"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "documentTitle": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "sourceRevisionId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "userName": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "title": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "model": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "promptVersion": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "messageCount": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "userId",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "pageSize": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "page",
+                    "pageSize"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/conversations/{id}": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "conversation": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "workspace",
+                            "editor",
+                            "article"
+                          ]
+                        },
+                        "documentId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true,
+                          "default": null
+                        },
+                        "documentTitle": {
+                          "type": "string",
+                          "nullable": true,
+                          "default": null
+                        },
+                        "sourceRevisionId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true,
+                          "default": null
+                        },
+                        "userId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "userName": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "title": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "model": {
+                          "type": "string",
+                          "nullable": true,
+                          "default": null
+                        },
+                        "promptVersion": {
+                          "type": "string",
+                          "nullable": true,
+                          "default": null
+                        },
+                        "messageCount": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "default": 0
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "kind",
+                        "userId",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "seq": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "assistant",
+                              "tool",
+                              "system"
+                            ]
+                          },
+                          "content": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "toolCalls": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "args": {
+                                  "type": "object",
+                                  "additionalProperties": {},
+                                  "default": {}
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "default": []
+                          },
+                          "toolResults": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "ok": {
+                                  "type": "boolean"
+                                },
+                                "summary": {
+                                  "type": "string",
+                                  "default": ""
+                                },
+                                "payload": {}
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "ok"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "default": []
+                          },
+                          "proposedEditsId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "refinedSuggestionId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "tokensIn": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "tokensOut": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "latencyMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "model": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "promptVersion": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "feedback": {
+                            "type": "string",
+                            "enum": [
+                              "up",
+                              "down"
+                            ],
+                            "nullable": true,
+                            "default": null
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "seq",
+                          "role",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    }
+                  },
+                  "required": [
+                    "conversation"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/messages/{id}/feedback": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rating": {
+                    "type": "string",
+                    "enum": [
+                      "up",
+                      "down"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "rating"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/ai/proposed-edits/{id}": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "messageId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "documentId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "baseSourceVersion": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "ops": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "anchor": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "replace",
+                              "insert",
+                              "delete"
+                            ]
+                          },
+                          "before": {
+                            "type": "string"
+                          },
+                          "after": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "anchor",
+                          "kind",
+                          "before",
+                          "after"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "proposed",
+                        "accepted",
+                        "rejected",
+                        "partially_accepted"
+                      ]
+                    },
+                    "decidedBy": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "decidedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "resultingSourceVersion": {
+                      "type": "integer",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "messageId",
+                    "documentId",
+                    "baseSourceVersion",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/proposed-edits/{id}/decide": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accept": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "all"
+                        ]
+                      }
+                    ],
+                    "default": []
+                  },
+                  "reject": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "all"
+                        ]
+                      }
+                    ],
+                    "default": []
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "proposed",
+                        "accepted",
+                        "rejected",
+                        "partially_accepted"
+                      ]
+                    },
+                    "resultingSourceVersion": {
+                      "type": "integer",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "resultingSourceVersion"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/conversations": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "in": "query",
+            "name": "pageSize",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "query",
+            "name": "documentId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "workspace",
+                "editor",
+                "article"
+              ]
+            },
+            "in": "query",
+            "name": "kind",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "mine",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "query",
+            "name": "userId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "from",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "to",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "in": "query",
+            "name": "q",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "workspace",
+                              "editor",
+                              "article"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "documentTitle": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "sourceRevisionId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "userName": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "title": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "model": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "promptVersion": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                          },
+                          "messageCount": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "userId",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "pageSize": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "page",
+                    "pageSize"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/conversations/export.jsonl": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "in": "query",
+            "name": "pageSize",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "query",
+            "name": "documentId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "workspace",
+                "editor",
+                "article"
+              ]
+            },
+            "in": "query",
+            "name": "kind",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "mine",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "query",
+            "name": "userId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "from",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "to",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "in": "query",
+            "name": "q",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ai/conversations/{id}": {
+      "delete": {
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/v1/sources": {
       "get": {
         "tags": [
@@ -27820,6 +29809,15 @@
             },
             "in": "query",
             "name": "sourceId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "query",
+            "name": "documentId",
             "required": false
           }
         ],
@@ -29248,6 +31246,18 @@
                               "type": "string"
                             },
                             "nullable": true
+                          },
+                          "parentId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "sourceId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "sourceTitle": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -29293,8 +31303,8 @@
         }
       }
     },
-    "/api/v1/suggestions/{id}/accept": {
-      "post": {
+    "/api/v1/suggestions/{id}": {
+      "get": {
         "tags": [
           "suggestions"
         ],
@@ -30729,6 +32739,18 @@
                         "type": "string"
                       },
                       "nullable": true
+                    },
+                    "parentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "sourceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "sourceTitle": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -30745,6 +32767,1769 @@
                     "rationale",
                     "status",
                     "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/suggestions/{id}/accept": {
+      "post": {
+        "tags": [
+          "suggestions"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "parts": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "nullable": true
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "sourceRevisionId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "anchor": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "update-step",
+                        "new-card",
+                        "new-step",
+                        "update-block",
+                        "deprecate-step",
+                        "field-alert"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "targetDocumentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "targetStepKey": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "targetBlockId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "payload": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "update-step"
+                              ]
+                            },
+                            "addActions": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "default": []
+                            },
+                            "replaceActions": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "branch": {
+                              "type": "object",
+                              "properties": {
+                                "q": {
+                                  "type": "string"
+                                },
+                                "options": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "if",
+                                          "then"
+                                        ]
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      },
+                                      "text": {
+                                        "type": "string"
+                                      },
+                                      "goto": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "label",
+                                      "text"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "minItems": 1
+                                }
+                              },
+                              "required": [
+                                "q",
+                                "options"
+                              ],
+                              "additionalProperties": false,
+                              "nullable": true
+                            },
+                            "outcomes": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ok",
+                                      "next",
+                                      "alert"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "goto": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "patch": {
+                              "type": "object",
+                              "additionalProperties": {},
+                              "default": {}
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "new-card"
+                              ]
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string",
+                              "default": ""
+                            },
+                            "category": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                            },
+                            "wave": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "enum": [
+                                    1
+                                  ]
+                                },
+                                {
+                                  "type": "number",
+                                  "enum": [
+                                    2
+                                  ]
+                                },
+                                {
+                                  "type": "number",
+                                  "enum": [
+                                    3
+                                  ]
+                                }
+                              ]
+                            },
+                            "priority": {
+                              "type": "string",
+                              "enum": [
+                                "hh",
+                                "h",
+                                "m",
+                                "l"
+                              ]
+                            },
+                            "phases": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "default": ""
+                                  },
+                                  "note": {
+                                    "type": "string"
+                                  },
+                                  "route": {
+                                    "type": "string"
+                                  },
+                                  "steps": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "key": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "num": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "title": {
+                                          "type": "string"
+                                        },
+                                        "description": {
+                                          "type": "string"
+                                        },
+                                        "hint": {
+                                          "type": "string"
+                                        },
+                                        "tone": {
+                                          "type": "string",
+                                          "enum": [
+                                            "alert"
+                                          ]
+                                        },
+                                        "blockId": {
+                                          "type": "string",
+                                          "format": "uuid"
+                                        },
+                                        "blockRefs": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                          },
+                                          "default": []
+                                        },
+                                        "script": {
+                                          "type": "string"
+                                        },
+                                        "sourceRef": {
+                                          "type": "string"
+                                        },
+                                        "deps": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          },
+                                          "default": []
+                                        },
+                                        "actions": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "id": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "text": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "default": []
+                                        },
+                                        "outcomes": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "ok",
+                                                  "next",
+                                                  "alert"
+                                                ]
+                                              },
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "goto": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "default": []
+                                        },
+                                        "branch": {
+                                          "type": "object",
+                                          "properties": {
+                                            "q": {
+                                              "type": "string"
+                                            },
+                                            "options": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "kind": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "if",
+                                                      "then"
+                                                    ]
+                                                  },
+                                                  "label": {
+                                                    "type": "string"
+                                                  },
+                                                  "text": {
+                                                    "type": "string"
+                                                  },
+                                                  "goto": {
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "kind",
+                                                  "label",
+                                                  "text"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              "minItems": 1
+                                            }
+                                          },
+                                          "required": [
+                                            "q",
+                                            "options"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "extras": {
+                                          "type": "object",
+                                          "properties": {
+                                            "signals": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "label": {
+                                                    "type": "string"
+                                                  },
+                                                  "tone": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "red",
+                                                      "blue"
+                                                    ]
+                                                  },
+                                                  "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                      "type": "string"
+                                                    }
+                                                  }
+                                                },
+                                                "required": [
+                                                  "label",
+                                                  "items"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "pillars": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "label": {
+                                                    "type": "string"
+                                                  },
+                                                  "text": {
+                                                    "type": "string"
+                                                  },
+                                                  "tone": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "ok",
+                                                      "warn",
+                                                      "red",
+                                                      "gray"
+                                                    ]
+                                                  }
+                                                },
+                                                "required": [
+                                                  "label",
+                                                  "text"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "stages": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "label": {
+                                                    "type": "string"
+                                                  },
+                                                  "script": {
+                                                    "type": "string"
+                                                  },
+                                                  "actions": {
+                                                    "type": "array",
+                                                    "items": {
+                                                      "type": "string"
+                                                    }
+                                                  }
+                                                },
+                                                "required": [
+                                                  "label"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "objection": {
+                                              "type": "object",
+                                              "properties": {
+                                                "q": {
+                                                  "type": "string"
+                                                },
+                                                "a": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "q",
+                                                "a"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "principles": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "icon": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "key",
+                                        "num",
+                                        "title"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "default": []
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "title",
+                            "category",
+                            "wave",
+                            "priority",
+                            "phases"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "new-step"
+                              ]
+                            },
+                            "afterStepKey": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "actions": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "outcomes": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ok",
+                                      "next",
+                                      "alert"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "goto": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "default": []
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "afterStepKey",
+                            "title",
+                            "actions"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "update-block"
+                              ]
+                            },
+                            "actions": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "script": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "actions"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "deprecate-step"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "field-alert"
+                              ]
+                            },
+                            "fieldName": {
+                              "type": "string"
+                            },
+                            "issue": {
+                              "type": "string",
+                              "enum": [
+                                "unknown",
+                                "renamed",
+                                "retired"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "fieldName",
+                            "issue"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "editedPayload": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "update-step"
+                              ]
+                            },
+                            "addActions": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "default": []
+                            },
+                            "replaceActions": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "branch": {
+                              "type": "object",
+                              "properties": {
+                                "q": {
+                                  "type": "string"
+                                },
+                                "options": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "if",
+                                          "then"
+                                        ]
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      },
+                                      "text": {
+                                        "type": "string"
+                                      },
+                                      "goto": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "label",
+                                      "text"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "minItems": 1
+                                }
+                              },
+                              "required": [
+                                "q",
+                                "options"
+                              ],
+                              "additionalProperties": false,
+                              "nullable": true
+                            },
+                            "outcomes": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ok",
+                                      "next",
+                                      "alert"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "goto": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "patch": {
+                              "type": "object",
+                              "additionalProperties": {},
+                              "default": {}
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "new-card"
+                              ]
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string",
+                              "default": ""
+                            },
+                            "category": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,40}$"
+                            },
+                            "wave": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "enum": [
+                                    1
+                                  ]
+                                },
+                                {
+                                  "type": "number",
+                                  "enum": [
+                                    2
+                                  ]
+                                },
+                                {
+                                  "type": "number",
+                                  "enum": [
+                                    3
+                                  ]
+                                }
+                              ]
+                            },
+                            "priority": {
+                              "type": "string",
+                              "enum": [
+                                "hh",
+                                "h",
+                                "m",
+                                "l"
+                              ]
+                            },
+                            "phases": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "default": ""
+                                  },
+                                  "note": {
+                                    "type": "string"
+                                  },
+                                  "route": {
+                                    "type": "string"
+                                  },
+                                  "steps": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "key": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "num": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "title": {
+                                          "type": "string"
+                                        },
+                                        "description": {
+                                          "type": "string"
+                                        },
+                                        "hint": {
+                                          "type": "string"
+                                        },
+                                        "tone": {
+                                          "type": "string",
+                                          "enum": [
+                                            "alert"
+                                          ]
+                                        },
+                                        "blockId": {
+                                          "type": "string",
+                                          "format": "uuid"
+                                        },
+                                        "blockRefs": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                          },
+                                          "default": []
+                                        },
+                                        "script": {
+                                          "type": "string"
+                                        },
+                                        "sourceRef": {
+                                          "type": "string"
+                                        },
+                                        "deps": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          },
+                                          "default": []
+                                        },
+                                        "actions": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "id": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "text": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "default": []
+                                        },
+                                        "outcomes": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "ok",
+                                                  "next",
+                                                  "alert"
+                                                ]
+                                              },
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "goto": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "default": []
+                                        },
+                                        "branch": {
+                                          "type": "object",
+                                          "properties": {
+                                            "q": {
+                                              "type": "string"
+                                            },
+                                            "options": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "kind": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "if",
+                                                      "then"
+                                                    ]
+                                                  },
+                                                  "label": {
+                                                    "type": "string"
+                                                  },
+                                                  "text": {
+                                                    "type": "string"
+                                                  },
+                                                  "goto": {
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "kind",
+                                                  "label",
+                                                  "text"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              "minItems": 1
+                                            }
+                                          },
+                                          "required": [
+                                            "q",
+                                            "options"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "extras": {
+                                          "type": "object",
+                                          "properties": {
+                                            "signals": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "label": {
+                                                    "type": "string"
+                                                  },
+                                                  "tone": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "red",
+                                                      "blue"
+                                                    ]
+                                                  },
+                                                  "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                      "type": "string"
+                                                    }
+                                                  }
+                                                },
+                                                "required": [
+                                                  "label",
+                                                  "items"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "pillars": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "label": {
+                                                    "type": "string"
+                                                  },
+                                                  "text": {
+                                                    "type": "string"
+                                                  },
+                                                  "tone": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "ok",
+                                                      "warn",
+                                                      "red",
+                                                      "gray"
+                                                    ]
+                                                  }
+                                                },
+                                                "required": [
+                                                  "label",
+                                                  "text"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "stages": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "label": {
+                                                    "type": "string"
+                                                  },
+                                                  "script": {
+                                                    "type": "string"
+                                                  },
+                                                  "actions": {
+                                                    "type": "array",
+                                                    "items": {
+                                                      "type": "string"
+                                                    }
+                                                  }
+                                                },
+                                                "required": [
+                                                  "label"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "objection": {
+                                              "type": "object",
+                                              "properties": {
+                                                "q": {
+                                                  "type": "string"
+                                                },
+                                                "a": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "q",
+                                                "a"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "principles": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "icon": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "key",
+                                        "num",
+                                        "title"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "default": []
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "title",
+                            "category",
+                            "wave",
+                            "priority",
+                            "phases"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "new-step"
+                              ]
+                            },
+                            "afterStepKey": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "actions": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "outcomes": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ok",
+                                      "next",
+                                      "alert"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "goto": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "default": []
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "afterStepKey",
+                            "title",
+                            "actions"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "update-block"
+                              ]
+                            },
+                            "actions": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "script": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "actions"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "deprecate-step"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "field-alert"
+                              ]
+                            },
+                            "fieldName": {
+                              "type": "string"
+                            },
+                            "issue": {
+                              "type": "string",
+                              "enum": [
+                                "unknown",
+                                "renamed",
+                                "retired"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "fieldName",
+                            "issue"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ],
+                      "nullable": true
+                    },
+                    "confidence": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "rationale": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "accepted",
+                        "rejected",
+                        "applied"
+                      ]
+                    },
+                    "decidedBy": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "decidedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "appliedVersionId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "affects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document",
+                              "block",
+                              "field",
+                              "topic"
+                            ]
+                          },
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "why": {
+                            "type": "string",
+                            "default": ""
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "id",
+                          "title"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    },
+                    "promptVersion": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "model": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "editDiff": {
+                      "type": "object",
+                      "properties": {
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "rowId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "op": {
+                                "type": "string",
+                                "enum": [
+                                  "keep",
+                                  "edit",
+                                  "remove"
+                                ]
+                              },
+                              "before": {
+                                "type": "string"
+                              },
+                              "after": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "rowId",
+                              "op"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "default": []
+                        }
+                      },
+                      "additionalProperties": false,
+                      "nullable": true
+                    },
+                    "appliedParts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "nullable": true
+                    },
+                    "parentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "sourceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "sourceTitle": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "sourceRevisionId",
+                    "anchor",
+                    "type",
+                    "title",
+                    "targetDocumentId",
+                    "targetStepKey",
+                    "targetBlockId",
+                    "payload",
+                    "confidence",
+                    "rationale",
+                    "status",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/suggestions/analytics": {
+      "get": {
+        "tags": [
+          "suggestions"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "from",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "in": "query",
+            "name": "to",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "query",
+            "name": "sourceId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "update-step",
+                "new-card",
+                "new-step",
+                "update-block",
+                "deprecate-step",
+                "field-alert"
+              ]
+            },
+            "in": "query",
+            "name": "type",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "byType": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "total": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "accepted": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "edited": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "rejected": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "pending": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "total"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    },
+                    "bySource": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "total": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "accepted": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "edited": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "rejected": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "pending": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "total"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    },
+                    "byModel": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "total": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "accepted": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "edited": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "rejected": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "pending": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "total"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    },
+                    "byPromptVersion": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "total": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "accepted": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "edited": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "rejected": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          },
+                          "pending": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "total"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    },
+                    "rates": {
+                      "type": "object",
+                      "properties": {
+                        "accepted": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "default": 0
+                        },
+                        "edited": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "default": 0
+                        },
+                        "rejected": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "default": 0
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "meanMinutesToDecision": {
+                      "type": "number",
+                      "minimum": 0,
+                      "nullable": true,
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "total",
+                    "rates"
                   ],
                   "additionalProperties": false
                 }
@@ -32190,6 +35975,18 @@
                         "type": "string"
                       },
                       "nullable": true
+                    },
+                    "parentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "sourceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "sourceTitle": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -33651,6 +37448,18 @@
                         "type": "string"
                       },
                       "nullable": true
+                    },
+                    "parentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "sourceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "sourceTitle": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -34307,6 +38116,262 @@
                           "type",
                           "fieldName",
                           "issue"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "structuredEdit": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "update-step"
+                            ]
+                          },
+                          "rows": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "rowId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "op": {
+                                  "type": "string",
+                                  "enum": [
+                                    "keep",
+                                    "edit",
+                                    "remove"
+                                  ]
+                                },
+                                "value": {}
+                              },
+                              "required": [
+                                "rowId",
+                                "op"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "default": []
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "new-card"
+                            ]
+                          },
+                          "rows": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "rowId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "op": {
+                                  "type": "string",
+                                  "enum": [
+                                    "keep",
+                                    "edit",
+                                    "remove"
+                                  ]
+                                },
+                                "value": {}
+                              },
+                              "required": [
+                                "rowId",
+                                "op"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "default": []
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "new-step"
+                            ]
+                          },
+                          "rows": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "rowId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "op": {
+                                  "type": "string",
+                                  "enum": [
+                                    "keep",
+                                    "edit",
+                                    "remove"
+                                  ]
+                                },
+                                "value": {}
+                              },
+                              "required": [
+                                "rowId",
+                                "op"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "default": []
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "update-block"
+                            ]
+                          },
+                          "rows": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "rowId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "op": {
+                                  "type": "string",
+                                  "enum": [
+                                    "keep",
+                                    "edit",
+                                    "remove"
+                                  ]
+                                },
+                                "value": {}
+                              },
+                              "required": [
+                                "rowId",
+                                "op"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "default": []
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "deprecate-step"
+                            ]
+                          },
+                          "rows": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "rowId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "op": {
+                                  "type": "string",
+                                  "enum": [
+                                    "keep",
+                                    "edit",
+                                    "remove"
+                                  ]
+                                },
+                                "value": {}
+                              },
+                              "required": [
+                                "rowId",
+                                "op"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "default": []
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "field-alert"
+                            ]
+                          },
+                          "rows": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "rowId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "op": {
+                                  "type": "string",
+                                  "enum": [
+                                    "keep",
+                                    "edit",
+                                    "remove"
+                                  ]
+                                },
+                                "value": {}
+                              },
+                              "required": [
+                                "rowId",
+                                "op"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "default": []
+                          }
+                        },
+                        "required": [
+                          "type"
                         ],
                         "additionalProperties": false
                       }
@@ -35749,6 +39814,18 @@
                         "type": "string"
                       },
                       "nullable": true
+                    },
+                    "parentId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "sourceId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "sourceTitle": {
+                      "type": "string"
                     }
                   },
                   "required": [

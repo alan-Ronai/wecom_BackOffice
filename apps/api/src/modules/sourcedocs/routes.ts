@@ -118,7 +118,7 @@ export default async function routes(app: FastifyInstance) {
   app.put(
     '/documents/:id/source',
     {
-      config: { requires: ['docs.edit'], scope: 'document' },
+      config: { requires: ['docs.edit'], scope: 'document:write' },
       schema: {
         tags: ['sourcedocs'],
         params: Params,
@@ -167,7 +167,7 @@ export default async function routes(app: FastifyInstance) {
   app.put(
     '/documents/:id/source/draft',
     {
-      config: { requires: ['docs.edit'], scope: 'document' },
+      config: { requires: ['docs.edit'], scope: 'document:write' },
       schema: { tags: ['sourcedocs'], params: Params, body: PutSourceDraftBodySchema },
     },
     async (req, reply) => {
@@ -187,7 +187,7 @@ export default async function routes(app: FastifyInstance) {
   app.delete(
     '/documents/:id/source/draft',
     {
-      config: { requires: ['docs.edit'], scope: 'document' },
+      config: { requires: ['docs.edit'], scope: 'document:write' },
       schema: { tags: ['sourcedocs'], params: Params },
     },
     async (req, reply) => {
@@ -239,7 +239,7 @@ export default async function routes(app: FastifyInstance) {
   app.post(
     '/documents/:id/source/restore/:v',
     {
-      config: { requires: ['docs.edit'], scope: 'document' },
+      config: { requires: ['docs.edit'], scope: 'document:write' },
       schema: {
         tags: ['sourcedocs'],
         params: VersionParams,
@@ -259,7 +259,7 @@ export default async function routes(app: FastifyInstance) {
   app.post(
     '/documents/:id/source/import',
     {
-      config: { requires: ['docs.edit'], scope: 'document' },
+      config: { requires: ['docs.edit'], scope: 'document:write' },
       schema: { tags: ['sourcedocs'], params: Params, response: { 200: SourceDocumentSchema } },
     },
     async (req, reply) => {

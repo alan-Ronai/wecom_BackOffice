@@ -145,7 +145,7 @@ export default async function authRoutes(instance: FastifyInstance) {
   app.post(
     '/local',
     {
-      config: { public: true, rateLimit: { max: 5, timeWindow: '1 minute' } },
+      config: { public: true, rateLimit: { max: app.config.AUTH_LOCAL_RATE_LIMIT, timeWindow: '1 minute' } },
       schema: {
         tags: ['auth'],
         body: z.object({ email: z.string().min(3), password: z.string().min(1) }),

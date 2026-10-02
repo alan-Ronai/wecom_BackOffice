@@ -80,6 +80,9 @@ const boolEnv = (def: boolean) =>
     .default(def)
     .transform((v) => (typeof v === 'boolean' ? v : v === 'true' || v === '1' || v === 'yes'));
 
+/** Five local sign-ins a minute per IP — the production ceiling for `AUTH_LOCAL_RATE_LIMIT`. */
+export const AUTH_LOCAL_RATE_LIMIT_DEFAULT = 5;
+
 export const BaseConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   /**
@@ -106,6 +109,13 @@ export const BaseConfigSchema = z.object({
    * and a test has no host at all without this.
    */
   OIDC_GRAPH_URL: z.string().url().optional(),
+  /**
+   * B-M17: `POST /auth/local` sign-ins per minute per IP. The break-glass account's brute-force
+   * defence, so production may tighten it but never raise it above the default (see the guard
+   * below) — except on the e2e runner (`WECOM_E2E_RUNNER=1`), whose gate signs in a dozen fresh
+   * people from one address and otherwise spends minutes asleep in the limiter.
+   */
+  AUTH_LOCAL_RATE_LIMIT: z.coerce.number().int().positive().default(AUTH_LOCAL_RATE_LIMIT_DEFAULT),
   AUTH_FALLBACK: z.enum(['none', 'paloalto']).default('none'),
   PALOALTO_HOST: z.string().optional(),
   PALOALTO_API_KEY: z.string().optional(),
@@ -243,6 +253,12 @@ export const ConfigSchema = BaseConfigSchema.superRefine((c, ctx) => {
       path: ['WECOM_E2E_STACK'],
       message:
         'WECOM_E2E_STACK=1 is set: this is the e2e configuration (deploy/e2e.env — committed secrets, stubbed firewall), not a deployment. A killed `pnpm e2e:compose` run leaves it at deploy/.env; restore deploy/.env from deploy/.env.before-e2e (or rewrite it from deploy/.env.example) before starting the stack',
+    });
+  if (c.AUTH_LOCAL_RATE_LIMIT > AUTH_LOCAL_RATE_LIMIT_DEFAULT && c.WECOM_E2E_RUNNER?.trim() !== '1')
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['AUTH_LOCAL_RATE_LIMIT'],
+      message: `AUTH_LOCAL_RATE_LIMIT=${c.AUTH_LOCAL_RATE_LIMIT} raises the local sign-in limit above ${AUTH_LOCAL_RATE_LIMIT_DEFAULT} a minute per IP — the break-glass account's brute-force defence. It exists for the e2e gate only; remove it (or set ${AUTH_LOCAL_RATE_LIMIT_DEFAULT} or less)`,
     });
   const sessionIssue = weakSessionSecret(c.SESSION_SECRET);
   if (sessionIssue)

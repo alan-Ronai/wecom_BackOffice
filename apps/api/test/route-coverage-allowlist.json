@@ -1,4 +1,3 @@
 {
-  "POST /api/v1/suggestions/{id}/reset": "Reaching it needs a pipeline-produced suggestion in the 'accepted' state, which only the stubbed source harness (test/sources/routes.test.ts) builds; the accept/reject/apply path it reverses is covered there and in int/wiring.test.ts. Cover it when that harness gains a reusable fixture.",
-  "PUT /api/v1/suggestions/{id}/edit": "Same fixture cost as the reset above: it edits a pending suggestion's payload before acceptance, and only the stubbed source harness produces one. The accept path that consumes the edited payload is covered in int/wiring.test.ts."
+  "POST /api/v1/suggestions/{id}/reset": "Reaching it needs a pipeline-produced suggestion in the 'accepted' state, which only the stubbed source harness (test/sources/routes.test.ts) builds; the accept/reject/apply path it reverses is covered there and in int/wiring.test.ts. Cover it when that harness gains a reusable fixture."
 }

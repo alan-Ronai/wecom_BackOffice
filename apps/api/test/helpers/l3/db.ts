@@ -1,35 +1,10 @@
-import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import pg from 'pg';
-import { runner } from 'node-pg-migrate';
+import { startTestDb as start } from '../db.js';
 
 export const integration = process.env.RUN_INTEGRATION === '1';
 
-export async function startTestDb() {
-  const c = await new PostgreSqlContainer('pgvector/pgvector:pg16').start();
-  const url = c.getConnectionUri();
-  await runner({
-    databaseUrl: url,
-    dir: 'migrations',
-    direction: 'up',
-    migrationsTable: 'pgmigrations',
-    ignorePattern: 'package\\.json',
-    log: () => undefined,
-  });
-  const pool = new pg.Pool({ connectionString: url });
-  return {
-    pool,
-    url,
-    stop: async () => {
-      // buildApp({ pool }) closes the pool on app.close(); ending twice throws.
-      try {
-        await pool.end();
-      } catch {
-        /* already ended by the app under test */
-      }
-      await c.stop();
-    },
-  };
-}
+/** The shared helper (template clone under `TEST_DATABASE_URL`, a testcontainer otherwise). */
+export const startTestDb = start;
 
 export async function seedUser(
   pool: pg.Pool,

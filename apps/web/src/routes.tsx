@@ -94,6 +94,8 @@ const AnalyticsPage = () =>
   import('./components/analytics/AnalyticsPage.js').then((m) => ({ default: m.AnalyticsPage }));
 const TaxonomyPage = () =>
   import('./components/admin/TaxonomyPage.js').then((m) => ({ default: m.TaxonomyPage }));
+/** Wave 6 (X4b): the AI console — five tabs, all of them behind `ai.manage`. */
+const AiPage = () => import('./components/admin/AiPage.js').then((m) => ({ default: m.AiPage }));
 
 /** Wave 5 (V4a): the agent's learning screens are reached deliberately, not mid-call. */
 const MyLearningPage = () =>
@@ -115,6 +117,13 @@ const LearningItemEditor = () =>
     default: m.LearningItemEditor,
   }));
 const GapsPage = () => import('./components/gaps/GapsPage.js').then((m) => ({ default: m.GapsPage }));
+
+/**
+ * Wave 6 (X4a). The AI workspace is a writing surface reached deliberately — and it carries the
+ * source editor's TipTap bundle plus the chat — so it stays out of the entry chunk.
+ */
+const WorkspacePage = () =>
+  import('./components/workspace/WorkspacePage.js').then((m) => ({ default: m.WorkspacePage }));
 
 /**
  * One boundary around the whole lazy area rather than one per route.
@@ -212,6 +221,8 @@ export const routeObjects: RouteObject[] = [
       { path: 'learning/manage/:id', element: split(LearningItemEditor) },
       { path: 'learning/:assignmentId', element: split(AssignmentPage) },
       { path: 'gaps', element: split(GapsPage) },
+      // wave 6 (X4a) — the combined source / suggestions / chat workspace.
+      { path: 'workspace/:id', element: split(WorkspacePage) },
       {
         path: 'admin',
         element: split(AdminLayout),
@@ -228,6 +239,7 @@ export const routeObjects: RouteObject[] = [
           { path: 'connectors/new', element: split(ConnectorWizard) },
           { path: 'connectors/:id', element: split(ConnectorWizard) },
           { path: 'taxonomy', element: split(TaxonomyPage) },
+          { path: 'ai', element: split(AiPage) },
           { path: 'system', element: split(SystemPage) },
         ],
       },

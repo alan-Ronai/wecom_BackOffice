@@ -245,7 +245,13 @@ export function LearningItemEditor() {
                 />
               </label>
               <IntroField value={it.description} onCommit={(html) => void save({ description: html })} />
-              {it.kind === 'briefing' ? <BriefingBuilder item={it} /> : <QuizBuilder item={it} />}
+              {/* Keyed by item: the builders hold an unsaved draft, which must never follow the
+                  manager to another item when the route's `:id` changes under a mounted editor. */}
+              {it.kind === 'briefing' ? (
+                <BriefingBuilder key={it.id} item={it} />
+              ) : (
+                <QuizBuilder key={it.id} item={it} />
+              )}
             </div>
             <aside className="side">
               <label>

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { pressKeys } from '../../lib/keyboard.js';
 
 export interface MenuItem {
   label: string;
@@ -53,6 +54,7 @@ export function CardMenu({
         <div
           key={it.label}
           role="menuitem"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={() => {
             onClose();

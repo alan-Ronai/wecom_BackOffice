@@ -376,11 +376,7 @@ run('source documents', () => {
     expect(r.body).toContain('<h1>נוהל מיובא</h1>');
   });
 
-  it('marks the document for source review when W2 is present', async () => {
-    const col = await db.pool.query(
-      "select 1 from information_schema.columns where table_name='documents' and column_name='source_review_needed'",
-    );
-    if (!col.rowCount) return; // W2 not merged yet
+  it('marks the document for source review on a source edit', async () => {
     await app.inject({
       method: 'PUT',
       url: `/api/v1/documents/${docId}/source`,

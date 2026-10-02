@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { DEV_CONNECTOR_KEY, DEV_SESSION_SECRET, loadConfig } from '../../src/config.js';
+import {
+  AUTH_LOCAL_RATE_LIMIT_DEFAULT,
+  DEV_CONNECTOR_KEY,
+  DEV_SESSION_SECRET,
+  loadConfig,
+} from '../../src/config.js';
 
 const base = { DATABASE_URL: 'postgres://kb:pw@db:5432/kb' } as const;
 const prod = {
@@ -92,6 +97,33 @@ describe('ConfigSchema', () => {
     expect(() =>
       loadConfig({ ...base, NODE_ENV: 'test', CONNECTOR_HOST_ALLOWLIST: '', TRUST_PROXY: '' }),
     ).not.toThrow();
+  });
+
+  it('B-M17: refuses a raised local sign-in rate limit in production, except on the e2e runner', () => {
+    expect(loadConfig(prod).AUTH_LOCAL_RATE_LIMIT).toBe(AUTH_LOCAL_RATE_LIMIT_DEFAULT);
+    expect(AUTH_LOCAL_RATE_LIMIT_DEFAULT).toBe(5);
+    // A deployment cannot loosen the brute-force defence on the break-glass account.
+    expect(() => loadConfig({ ...prod, AUTH_LOCAL_RATE_LIMIT: '60' as never })).toThrow(
+      /AUTH_LOCAL_RATE_LIMIT/,
+    );
+    expect(() => loadConfig({ ...prod, AUTH_LOCAL_RATE_LIMIT: '6' as never })).toThrow(
+      /AUTH_LOCAL_RATE_LIMIT/,
+    );
+    // Tightening it, or restating the default, is fine.
+    expect(loadConfig({ ...prod, AUTH_LOCAL_RATE_LIMIT: '3' as never }).AUTH_LOCAL_RATE_LIMIT).toBe(3);
+    expect(loadConfig({ ...prod, AUTH_LOCAL_RATE_LIMIT: '5' as never }).AUTH_LOCAL_RATE_LIMIT).toBe(5);
+    // The e2e stacks run NODE_ENV=production; the runner key is what marks them.
+    expect(
+      loadConfig({ ...prod, AUTH_LOCAL_RATE_LIMIT: '60' as never, WECOM_E2E_RUNNER: '1' })
+        .AUTH_LOCAL_RATE_LIMIT,
+    ).toBe(60);
+    // Outside production it is a plain setting.
+    expect(
+      loadConfig({ ...base, NODE_ENV: 'test', AUTH_LOCAL_RATE_LIMIT: '60' as never }).AUTH_LOCAL_RATE_LIMIT,
+    ).toBe(60);
+    // Nonsense is a start-up error, not a silent default.
+    expect(() => loadConfig({ ...base, AUTH_LOCAL_RATE_LIMIT: '0' as never })).toThrow();
+    expect(() => loadConfig({ ...base, AUTH_LOCAL_RATE_LIMIT: 'lots' as never })).toThrow();
   });
 
   it('reads MODEL_DISABLED as a real boolean', () => {

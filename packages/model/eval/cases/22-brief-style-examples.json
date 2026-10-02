@@ -1,0 +1,64 @@
+{
+  "id": "22-brief-style-examples",
+  "title": "תדריך, סגנון בית ודוגמה מאושרת — התשובה חייבת לחקות אותם",
+  "notes": "C-M3. The harness never set brief, style, examples or maxContextChars, so four of the wave's features were untested by the thing that exists to test them. The style rule here is one action per line and no English, which is also what the language check measures.",
+  "source": {
+    "title": "נהלי שימור"
+  },
+  "brief": "wecom היא מפעילה סלולרית ישראלית. הנציגים עובדים מול CRM פנימי ומול קונסולת רשת.",
+  "style": "פעולה אחת בכל שורה. לשון ציווי. בלי אנגלית פרט לשמות מוצר.",
+  "examples": [
+    {
+      "diff": "§8.1 changed: המתן 20 שניות → המתן 40 שניות",
+      "suggestion": {
+        "anchor": "§8.1",
+        "type": "update-step",
+        "title": "זמן המתנה: 20 → 40 שניות",
+        "targetDocumentId": "11111111-1111-4111-8111-111111111111",
+        "targetStepKey": "s2",
+        "targetBlockId": null,
+        "payload": {
+          "type": "update-step",
+          "addActions": ["המתן 40 שניות לפני המשך הטיפול"],
+          "patch": {}
+        },
+        "confidence": 0.85,
+        "rationale": "זמן ההמתנה בפסקה 8.1 הוכפל."
+      }
+    }
+  ],
+  "maxContextChars": 20000,
+  "diffs": [
+    {
+      "ref": "8.3",
+      "kind": "changed",
+      "before": "הצע ללקוח הטבה של 10 שקלים לחודש.",
+      "after": "הצע ללקוח הטבה של 15 שקלים לחודש למשך 6 חודשים.",
+      "similarity": 0.7
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "11111111-1111-4111-8111-111111111111",
+      "documentTitle": "איטיות גלישה",
+      "stepKey": "s19",
+      "stepNum": "19",
+      "stepTitle": "הצעת הטבה",
+      "anchor": "8.3",
+      "actions": ["הצע הטבה של 10 שקלים"]
+    }
+  ],
+  "blocks": [],
+  "fields": [],
+  "expected": [
+    {
+      "type": "update-step",
+      "targetDocumentId": "11111111-1111-4111-8111-111111111111",
+      "targetStepKey": "s19",
+      "mustContain": ["15"],
+      "mustContainAny": [["6 חודשים", "חודשים"]]
+    }
+  ],
+  "maxItems": 1,
+  "latencyBudgetMs": 30000
+}

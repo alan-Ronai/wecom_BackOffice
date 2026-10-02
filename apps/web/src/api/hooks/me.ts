@@ -38,14 +38,23 @@ export type ScopedDoc = { category: Category; worlds?: Category[] | null };
  * intersects the lot (`list.some(w => user.worldScopes.includes(w))`). Checking only
  * `doc.category` made the client stricter than the API it mirrors — a scoped editor lost the edit
  * affordances on a document their world was a secondary member of, with no error to chase.
+ *
+ * Wave Y (A-M6): reads stay "any overlap", but a **write** — edit, publish, delete, restore,
+ * status — needs every world the document spans, as the API's `hasAllScopes` does. So a scoped
+ * editor holding one of a document's two worlds reads it and is not shown the buttons the server
+ * would 403.
  */
+const READ_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(['docs.read', 'docs.read_unpublished']);
+
 export function can(me: Me | undefined, permission: Permission, doc?: ScopedDoc): boolean {
   if (!me) return false;
   if (!me.permissions.includes(permission)) return false;
   if (doc && permission.startsWith('docs.')) {
     const scopes = me.worldScopes ?? me.categoryScopes;
     const worlds = doc.worlds?.length ? doc.worlds : [doc.category];
-    if (scopes && !worlds.some((w) => scopes.includes(w))) return false;
+    if (!scopes) return true;
+    const held = (w: Category) => scopes.includes(w);
+    return READ_PERMISSIONS.has(permission) ? worlds.some(held) : worlds.every(held);
   }
   return true;
 }

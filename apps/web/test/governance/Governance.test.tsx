@@ -90,6 +90,29 @@ describe('governance components', () => {
     );
   });
 
+  it('SourceReviewBadge hides the clear control from an editor missing one of the doc’s worlds', async () => {
+    const { server } = await import('../msw/server.js');
+    const { withMe } = await import('../msw/handlers.js');
+    server.use(withMe({ worldScopes: ['intl'], categoryScopes: ['intl'] }));
+    const doc = { id: D_INTL, sourceReviewNeeded: true, category: 'intl' as const };
+    // The same scope clears a single-world document — so the absence below is the worlds rule.
+    renderWithProviders(
+      <>
+        <div data-testid="single">
+          <SourceReviewBadge doc={{ ...doc, worlds: ['intl'] }} />
+        </div>
+        <div data-testid="shared">
+          <SourceReviewBadge doc={{ ...doc, worlds: ['intl', 'tech'] }} />
+        </div>
+      </>,
+    );
+    const single = within(screen.getByTestId('single'));
+    const shared = within(screen.getByTestId('shared'));
+    expect(await single.findByRole('button', { name: 'סמן כנבדק' })).toBeInTheDocument();
+    expect(shared.getByText(/נדרשת בדיקה/)).toBeInTheDocument();
+    expect(shared.queryByRole('button', { name: 'סמן כנבדק' })).not.toBeInTheDocument();
+  });
+
   it('SourceReviewBadge renders nothing when the flag is down', () => {
     renderWithProviders(<SourceReviewBadge doc={{ id: fx.docBrowsing.id, sourceReviewNeeded: false }} />);
     expect(screen.queryByText(/נדרשת בדיקה/)).not.toBeInTheDocument();

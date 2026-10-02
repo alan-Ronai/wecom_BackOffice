@@ -37,6 +37,7 @@ describe('wave 6 chat events', () => {
       {
         type: 'proposed_edits',
         proposedEditsId: id,
+        messageId: other,
         documentId: other,
         baseSourceVersion: 4,
         ops: [{ id: 'op1', anchor: '4.8', kind: 'replace', before: 'א', after: 'ב' }],

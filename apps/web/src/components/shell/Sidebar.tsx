@@ -17,6 +17,7 @@ import { usePalette } from '../palette/paletteStore.js';
 import { useSettings } from '../settings/SettingsDialog.js';
 import { NotificationBell } from '../notifications/NotificationBell.js';
 import { useFocusTrap } from '../ui/useFocusTrap.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** Port of legacy renderSidebar: brand, search trigger, nav counts, source files, categories, user. */
 export function Sidebar({
@@ -56,6 +57,8 @@ export function Sidebar({
     ['זהות וכניסה', '/admin/identity', 'system.admin'],
     ['מחברים', '/admin/connectors', 'connectors.manage'],
     ['מצב מערכת', '/admin/system', 'system.admin'],
+    // wave 6 (X4b): the brief/style editor, the model slots, the eval runs and the transcripts.
+    ['בינה מלאכותית', '/admin/ai', 'ai.manage'],
   ];
   const visibleAdmin = adminLinks.filter(([, , needs]) => can(needs));
   const maySync = can('sources.manage') || can('suggestions.apply');
@@ -133,7 +136,13 @@ export function Sidebar({
   };
 
   const item = (label: string, to: string, count?: number | null, badge?: boolean) => (
-    <div className={'snav' + (on(to) ? ' on' : '')} role="button" tabIndex={0} onClick={() => go(to)}>
+    <div
+      className={'snav' + (on(to) ? ' on' : '')}
+      role="button"
+      onKeyDown={pressKeys}
+      tabIndex={0}
+      onClick={() => go(to)}
+    >
       <span className="dot" />
       {label}
       {count != null ? <span className={'cnt' + (badge ? ' badge' : '')}>{String(count)}</span> : null}
@@ -153,16 +162,31 @@ export function Sidebar({
       role={drawerOpen ? 'dialog' : undefined}
     >
       <div className="rail-only">
-        <span className="rail-logo" title="ספרייה" role="button" tabIndex={0} onClick={() => go('/library')}>
+        <span
+          className="rail-logo"
+          title="ספרייה"
+          role="button"
+          onKeyDown={pressKeys}
+          tabIndex={0}
+          onClick={() => go('/library')}
+        >
           w.
         </span>
-        <span className="rail-btn" title="הרחב תפריט" role="button" tabIndex={0} onClick={onExpand}>
+        <span
+          className="rail-btn"
+          title="הרחב תפריט"
+          role="button"
+          onKeyDown={pressKeys}
+          tabIndex={0}
+          onClick={onExpand}
+        >
           ☰
         </span>
         <span
           className={'rail-btn' + (on('/pinned') ? ' on' : '')}
           title="מוצמדים"
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={() => go('/pinned')}
         >
@@ -172,6 +196,7 @@ export function Sidebar({
           className={'rail-btn' + (on('/recent') ? ' on' : '')}
           title="נצפו לאחרונה"
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={() => go('/recent')}
         >
@@ -181,6 +206,7 @@ export function Sidebar({
           className={'rail-btn' + (on('/sources') ? ' on' : '')}
           title="מסמכי מקור"
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={() => go('/sources')}
         >
@@ -190,6 +216,7 @@ export function Sidebar({
           className={'rail-btn' + (on('/graph') ? ' on' : '')}
           title="גרף קשרים"
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={() => go('/graph')}
         >
@@ -199,6 +226,7 @@ export function Sidebar({
           className="rail-btn"
           title="חיפוש · Ctrl K"
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={() => palette.open()}
         >
@@ -208,6 +236,7 @@ export function Sidebar({
           className="rail-btn bottom"
           title="מצב כהה · Ctrl D"
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={toggleTheme}
         >
@@ -216,7 +245,13 @@ export function Sidebar({
       </div>
 
       <div className="brand">
-        <span className="logo" role="button" tabIndex={0} onClick={() => go('/library')}>
+        <span
+          className="logo"
+          role="button"
+          onKeyDown={pressKeys}
+          tabIndex={0}
+          onClick={() => go('/library')}
+        >
           wecom.
         </span>
         <span className="tag">מאגר ידע פנימי</span>
@@ -228,6 +263,7 @@ export function Sidebar({
             style={{ width: 28, height: 28 }}
             title="כווץ"
             role="button"
+            onKeyDown={pressKeys}
             tabIndex={0}
             onClick={onCollapse}
           >
@@ -239,6 +275,7 @@ export function Sidebar({
       <div
         className="search-trigger"
         role="button"
+        onKeyDown={pressKeys}
         tabIndex={0}
         onClick={() => {
           onNavigate();
@@ -304,6 +341,7 @@ export function Sidebar({
                 key={src.id}
                 className="src-row"
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onClick={() => {
                   onNavigate();
@@ -320,7 +358,13 @@ export function Sidebar({
               </div>
             );
           })}
-          <div className="src-add" role="button" tabIndex={0} onClick={() => go('/data')}>
+          <div
+            className="src-add"
+            role="button"
+            onKeyDown={pressKeys}
+            tabIndex={0}
+            onClick={() => go('/data')}
+          >
             + הוסף מקור (JSON / CSV)
           </div>
         </div>
@@ -335,6 +379,7 @@ export function Sidebar({
                   key={to}
                   className={'snav' + (on(to) ? ' on' : '')}
                   role="button"
+                  onKeyDown={pressKeys}
                   tabIndex={0}
                   onClick={() => go(to)}
                 >
@@ -353,6 +398,7 @@ export function Sidebar({
               <div
                 className={'cat-row' + (loc.pathname === `/library/${w.slug}` ? ' on' : '')}
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onClick={() => {
                   setOpenWorld((cur) => (cur === w.slug ? null : w.slug));
@@ -371,6 +417,7 @@ export function Sidebar({
                       key={t.id}
                       className={'cat-row sub' + (loc.pathname === `/topic/${t.id}` ? ' on' : '')}
                       role="button"
+                      onKeyDown={pressKeys}
                       tabIndex={0}
                       style={{ paddingInlineStart: 22 }}
                       onClick={() => go(`/topic/${t.id}`)}
@@ -383,7 +430,13 @@ export function Sidebar({
             </div>
           ))}
           {can('taxonomy.manage') ? (
-            <div className="src-add" role="button" tabIndex={0} onClick={() => go('/admin/taxonomy')}>
+            <div
+              className="src-add"
+              role="button"
+              onKeyDown={pressKeys}
+              tabIndex={0}
+              onClick={() => go('/admin/taxonomy')}
+            >
               ⚙ ניהול עולמות ונושאים
             </div>
           ) : null}
@@ -395,6 +448,7 @@ export function Sidebar({
         <div
           className="who"
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           style={{ cursor: 'pointer' }}
           title="הגדרות"
@@ -407,6 +461,7 @@ export function Sidebar({
           className={'toggle' + (dark ? ' on' : '')}
           title="מצב כהה · Ctrl D"
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={toggleTheme}
         />

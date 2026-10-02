@@ -1,5 +1,6 @@
 import type { Document } from '@wecom/shared';
 import type { ResolvedStep } from '../../lib/steps.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** Port of the legacy "מפת הכרטיס" card. */
 export function CardMap({
@@ -38,6 +39,7 @@ export function CardMap({
               key={p.id}
               className={(p.route ? 'in' : '') + (here ? ' here' : '')}
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               onClick={() => onSelect(p.steps[0].key)}
             >

@@ -48,6 +48,25 @@ describe('<TrashPage>', () => {
     await waitFor(() => expect(state.trash.length).toBe(0));
   });
 
+  it('offers per-row restore of a document only to a caller holding every one of its worlds', async () => {
+    state.trash = state.trash.map((t) => ({ ...t, category: 'tech', worlds: ['tech', 'intl'] }));
+    server.use(withMe({ worldScopes: ['tech'], categoryScopes: ['tech'] }));
+    renderWithProviders(<App />, { route: '/trash' });
+    await screen.findByText('2 קישורים שבורים');
+    // `רוקן סל` renders once `/auth/me` has answered, so the absence below is the worlds rule.
+    await screen.findByRole('button', { name: 'רוקן סל' });
+    expect(screen.queryByRole('button', { name: 'שחזר' })).toBeNull();
+    await userEvent.click(screen.getByRole('checkbox'));
+    expect(screen.queryByRole('button', { name: /שחזר 1 נבחרים/ })).toBeNull();
+  });
+
+  it('keeps per-row restore for a caller holding all the document’s worlds', async () => {
+    state.trash = state.trash.map((t) => ({ ...t, category: 'tech', worlds: ['tech', 'intl'] }));
+    server.use(withMe({ worldScopes: ['tech', 'intl'], categoryScopes: ['tech', 'intl'] }));
+    renderWithProviders(<App />, { route: '/trash' });
+    expect(await screen.findByRole('button', { name: 'שחזר' })).toBeInTheDocument();
+  });
+
   it('hides restore and purge without docs.restore', async () => {
     server.use(withMe({ permissions: ['docs.read'] }));
     renderWithProviders(<App />, { route: '/trash' });

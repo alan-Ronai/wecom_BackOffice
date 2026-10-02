@@ -48,8 +48,10 @@ import { SourcePane } from '../source/SourcePane.js';
 import { SyncStateBadge } from '../source/SyncStateBadge.js';
 import { RefreshBanner } from '../learning/RefreshBanner.js';
 import { LearningBadge } from '../learning/LearningBadge.js';
+import { ArticleAskPane } from '../ai/ArticleAskPane.js';
 import { useSourceDocument } from '../../api/hooks/sourcedocs.js';
 import type { FieldInfo } from '../../lib/format.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** Stable empty array so memoised children are not invalidated on every render (M1). */
 const EMPTY_FIELDS: FieldInfo[] = [];
@@ -95,6 +97,12 @@ export function ArticlePage() {
 
   const doc = docQ.data;
   const steps = useMemo(() => resolvedSteps(doc, blocks.data), [doc, blocks.data]);
+  /**
+   * wave 6: step *number* → step *key*, for the ask pane's citations. An answer says "שלב 3א";
+   * the article's own deep link is `/doc/:id/:stepKey`, so the number has to be translated before
+   * it can become a link.
+   */
+  const stepIndex = useMemo(() => Object.fromEntries(steps.map((s) => [s.num, s.key])), [steps]);
   // Stable identity: a fresh `[]` on every render busts <Fmt>'s useMemo for every step.
   const fields: FieldInfo[] = useMemo(() => fieldsQ.data ?? EMPTY_FIELDS, [fieldsQ.data]);
   // I10: resolved from this document's own links/related, not from page 1 of the library.
@@ -479,6 +487,7 @@ export function ArticlePage() {
               key={t}
               className="chip chip-gray tag-chip"
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               title={`סנן לפי ${t}`}
               onClick={() => go(`/library?tag=${encodeURIComponent(t)}`)}
@@ -536,6 +545,10 @@ export function ArticlePage() {
       {/* wave 5 (V4a): the reader's own refresh obligation for *this* document. The component
           gates itself on `learning.read` and renders nothing when nothing is owed. */}
       <RefreshBanner documentId={doc.id} />
+      {/* wave 6 (X4b): the agent's read-only Q&A, collapsed until asked for. It gates itself on
+          `ai.ask` and lives inside the work view only, never in the print frame. `stepIndex` maps
+          a cited step *number* to its key, which is what the `/doc/:id/:stepKey` link needs. */}
+      <ArticleAskPane documentId={doc.id} stepKey={call.activeKey ?? undefined} stepIndex={stepIndex} />
       {paneBody}
     </>
   );
@@ -591,6 +604,9 @@ export function ArticlePage() {
       run: () => togglePin.mutate({ id: doc.id, pinned: !pinned }),
     },
     ...(can('docs.edit', doc) ? [{ label: '✏️ ערוך', run: () => go(`/edit/${doc.id}`) }] : []),
+    ...(can('ai.chat') && can('docs.edit', doc)
+      ? [{ label: '🧭 סביבת עבודה', run: () => go(`/workspace/${doc.id}`) }]
+      : []),
     { label: `🕓 v${doc.currentVersion}`, run: () => go(`/history/${doc.id}`) },
     { label: 'קשרים', run: () => setPanelMobile((v) => !v) },
   ];
@@ -601,11 +617,11 @@ export function ArticlePage() {
       <div className="topbar h56">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/library')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/library')}>
             ספרייה
           </a>
           <span className="sep">/</span>
-          <a role="button" tabIndex={0} onClick={() => go(`/library/${doc.category}`)}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go(`/library/${doc.category}`)}>
             {cat(doc.category).label}
           </a>
           <span className="sep">/</span>
@@ -632,6 +648,7 @@ export function ArticlePage() {
             aria-label={callMode ? 'מצב שיחה פעיל · כבה' : 'מצב קריאה · הפעל מצב שיחה'}
             aria-pressed={callMode}
             role="button"
+            onKeyDown={pressKeys}
             tabIndex={0}
             onClick={() =>
               savePrefs.mutate({
@@ -654,6 +671,7 @@ export function ArticlePage() {
                 title="אפס מעקב"
                 aria-label="אפס מעקב שיחה"
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -696,6 +714,12 @@ export function ArticlePage() {
                   ✏️ ערוך
                 </button>
               ) : null}
+              {/* wave 6 (X4a): the combined source + suggestions + chat workspace. */}
+              {can('ai.chat') && can('docs.edit', doc) ? (
+                <button className="btn sm" onClick={() => go(`/workspace/${doc.id}`)}>
+                  🧭 סביבת עבודה
+                </button>
+              ) : null}
               <button className="btn sm" title="H" onClick={() => go(`/history/${doc.id}`)}>
                 🕓 v{doc.currentVersion}
               </button>
@@ -708,7 +732,13 @@ export function ArticlePage() {
       </div>
 
       <div className="trail">
-        <a role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => go('/library')}>
+        <a
+          role="button"
+          onKeyDown={pressKeys}
+          tabIndex={0}
+          style={{ cursor: 'pointer' }}
+          onClick={() => go('/library')}
+        >
           ספרייה
         </a>
         <span>›</span>
@@ -753,6 +783,7 @@ export function ArticlePage() {
             aria-label={`שלב ${s.num} מתוך ${steps.length} · ${stripFmt(s.title)}`}
             aria-current={s.key === call.activeKey}
             role="button"
+            onKeyDown={pressKeys}
             tabIndex={0}
             onClick={() => call.setActive(s.key)}
           >
@@ -803,6 +834,7 @@ export function ArticlePage() {
                               (call.state.results[s.key] ? ' done' : s.key === call.activeKey ? ' cur' : '')
                             }
                             role="button"
+                            onKeyDown={pressKeys}
                             tabIndex={0}
                             onClick={() => call.setActive(s.key)}
                           >
@@ -848,6 +880,7 @@ export function ArticlePage() {
                       <span
                         className="summary-copy"
                         role="button"
+                        onKeyDown={pressKeys}
                         tabIndex={0}
                         onClick={() => {
                           void copy(summary);

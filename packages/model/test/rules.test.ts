@@ -57,16 +57,30 @@ const ctx: ProposalContext = {
 };
 
 describe('RuleBasedModel', () => {
-  it('maps changed paragraph with a linked step to update-step, added paragraph to new-card, block-linked to update-block', async () => {
+  it('maps changed paragraph with a linked step to update-step, a new paragraph beside mapped ones to new-step, block-linked to update-block', async () => {
     const out = await new RuleBasedModel().proposeChanges(ctx);
+    /**
+     * §4.14 is a new paragraph in a source whose other paragraphs are already mapped, so it is a
+     * new *step* in that document. Filing it as a `new-card` created a one-step card next to the
+     * document it belonged in; `propose-v4` rule 5 says the same thing to the model.
+     */
     expect(out.map((s) => [s.anchor, s.type])).toEqual([
       ['§4.8', 'update-step'],
-      ['§4.14', 'new-card'],
+      ['§4.14', 'new-step'],
       ['§4.11', 'update-block'],
     ]);
+    expect(out[1].targetDocumentId).toBe(D);
     const upd = out[0];
     if (upd.payload.type !== 'update-step') throw new Error();
-    expect(upd.payload.addActions).toEqual(['יש לוודא שהלקוח מנותק מ-Wi-Fi לפני הבדיקה.']);
+    /**
+     * Both the sentence whose value changed (5 → 6) and the wholly new one. The changed sentence
+     * is the fix for the engine's old empty-`addActions` answer: a suggestion that names no
+     * action scored 1/1/**0** on case `01` and told an editor nothing.
+     */
+    expect(upd.payload.addActions).toEqual([
+      'מעל 6 מגה – תקין.',
+      'יש לוודא שהלקוח מנותק מ-Wi-Fi לפני הבדיקה.',
+    ]);
     expect(upd.targetStepKey).toBe('s8');
     expect(upd.confidence).toBeGreaterThan(0.5);
   });

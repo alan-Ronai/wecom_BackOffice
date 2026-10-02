@@ -20,6 +20,8 @@ knowledge-refresh prompts; the approver *role* beyond the `approver_id` field an
 
 ## Parked
 
+> **Closed in wave Y (2026-09-29)** — see `docs/waveY-acceptance.md` for the evidence: A-M14 (world_scope integrity, 0055), B-M1 (schema probes removed), B-M15 (asset_refs — already in 0045, learning owners in 0056), the `view_topic` telemetry kind (dropped, 0057) and the deprecated `POST /sync-links/:id/resolve` (route gone; leftover schema removed). TopicPage's eager import and the per-process dashboard cache stay as ruled.
+
 Each of these was a conscious call rather than an omission; the cost of being wrong is stated so
 the next wave can reopen it cheaply.
 

@@ -23,6 +23,24 @@ describe('WorkflowSettingsSection', () => {
     expect(learningState.workflow.learning.defaultPassMark).toBe(80);
   });
 
+  it('wave Y (A-M4): edits the failed-question and topic-views floors', async () => {
+    server.use(withMe({ roles: ['admin'], permissions: ['system.admin', 'docs.read'] }));
+    renderWithProviders(<WorkflowSettingsSection />);
+    const failedMin = await screen.findByLabelText('מינימום ניסיונות לשאלה בעייתית');
+    const viewsMin = screen.getByLabelText('מינימום צפיות בנושא ללא נוהל');
+    // The schema defaults, the same numbers the heuristics used to hardcode.
+    expect(failedMin).toHaveValue(5);
+    expect(viewsMin).toHaveValue(3);
+    await userEvent.clear(failedMin);
+    await userEvent.type(failedMin, '8');
+    await userEvent.clear(viewsMin);
+    await userEvent.type(viewsMin, '10');
+    await userEvent.click(screen.getByRole('button', { name: 'שמור הגדרות' }));
+    await waitFor(() => expect(learningState.workflow.gaps.failedQuestionMin).toBe(8));
+    expect(learningState.workflow.gaps.topicViewsMin).toBe(10);
+    expect(learningState.workflow.gaps.staleDays).toBe(180);
+  });
+
   it('renders read-only without system.admin', async () => {
     server.use(withMe({ roles: ['lead'], permissions: ['docs.read'] }));
     renderWithProviders(<WorkflowSettingsSection />);

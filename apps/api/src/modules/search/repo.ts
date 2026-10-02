@@ -5,6 +5,7 @@ import { getDocument, recomputeDerived, type Q } from '../documents/repo.js';
 import { htmlToText } from '../scripts/html.js';
 import { LIKE_ESCAPE, likeEscape, withTransaction } from '../../lib/sql.js';
 import { visibleWhere } from '../../lib/visibility.js';
+import { refreshStepEmbeddings } from '../sources/embeddings.js';
 
 /** Hebrew category labels, mirroring the legacy `KB.CATS`. */
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -399,17 +400,17 @@ async function rerank(q: Q, hits: SearchHit[], text: string, model: ModelClient)
  * a title/description/step-text summary and comfortably under typical embedding-model
  * context limits.
  */
-export async function updateEmbedding(
-  q: Q,
-  id: string,
-  model: ModelClient | null | undefined,
-): Promise<boolean> {
-  if (!model?.embed) return false;
+/**
+ * The exact text `updateEmbedding` embeds for a document. Exported (wave 6, X1) so `ai.reindex`
+ * re-embeds with the same input rather than a second, drifting copy of this assembly — the whole
+ * point of that job is that every vector in the column came from one definition.
+ */
+export async function documentEmbeddingText(q: Q, id: string): Promise<string | null> {
   const r = await q.query(
     "select title, coalesce(description,'') description, coalesce(search_text,'') search_text from documents where id=$1 and deleted_at is null",
     [id],
   );
-  if (!r.rowCount) return false;
+  if (!r.rowCount) return null;
   const {
     title,
     description,
@@ -420,6 +421,16 @@ export async function updateEmbedding(
     search_text: string;
   };
   const text = [title, description, searchText].filter(Boolean).join('\n').slice(0, 8000);
+  return text || null;
+}
+
+export async function updateEmbedding(
+  q: Q,
+  id: string,
+  model: ModelClient | null | undefined,
+): Promise<boolean> {
+  if (!model?.embed) return false;
+  const text = await documentEmbeddingText(q, id);
   if (!text) return false;
   try {
     const vec = await model.embed(text);
@@ -462,6 +473,9 @@ export async function reindexAll(pool: pg.Pool, model?: ModelClient | null): Pro
     n++;
     // On the pool, after the commit: the text it embeds is the text that was just written.
     await updateEmbedding(pool, id, model);
+    // Wave 6 (X1): the same pass keeps `step_embeddings` (0051) current, which is what
+    // paragraph→step mapping reads. Unchanged steps are skipped by their text hash.
+    await refreshStepEmbeddings(pool, id, model);
   }
   return n;
 }

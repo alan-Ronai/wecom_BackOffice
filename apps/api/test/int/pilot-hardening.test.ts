@@ -144,16 +144,20 @@ run('0045 — user_role_worlds (A-M14)', () => {
 
   /**
    * Post-pilot H3. The mirror trigger joins `worlds`, so a scope naming a world that does not
-   * exist yet produces no row — and `world_scope` is never written again, so it never produces
-   * one. The grant was dead forever while `GET /admin/users` went on echoing it back.
+   * exist yet produced no row — and `world_scope` is never written again, so it never produced
+   * one. 0045 answered with `worlds_created`, which re-attaches such a waiting scope when the
+   * world arrives. Since wave Y's 0055 (A-M14) the array rejects an unknown slug outright, like the
+   * foreign key it stands in for, so a scope can no longer wait: the grant is refused up front.
    */
-  it('re-attaches a waiting scope when the world it names is created later', async () => {
-    await pool.query(`update user_roles set world_scope=$1 where user_id=$2`, [['tech', 'later'], U]);
-    // Nothing to mirror yet: `later` names nothing.
+  it('refuses a scope naming a world that does not exist yet (0055), rather than letting it wait', async () => {
+    await expect(
+      pool.query(`update user_roles set world_scope=$1 where user_id=$2`, [['tech', 'later'], U]),
+    ).rejects.toMatchObject({ code: '23503' });
     expect(await slugs()).toEqual(['tech']);
+    // Once the world exists the same grant goes through and is mirrored at once.
     await pool.query(`insert into worlds(slug, name, position) values ('later','מאוחר',98)`);
+    await pool.query(`update user_roles set world_scope=$1 where user_id=$2`, [['tech', 'later'], U]);
     expect(await slugs()).toEqual(['later', 'tech']);
-    // Which is the point: the user can now see the world they were granted.
     expect((await resolvePermissions(pool, U)).worldScopes).toEqual(['later', 'tech']);
     await pool.query(`delete from worlds where slug='later'`);
   });

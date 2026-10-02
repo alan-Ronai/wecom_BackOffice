@@ -7,6 +7,7 @@ import { Fmt, Html } from '../Fmt.js';
 import { fmtDate, copy } from '../../lib/format.js';
 import { useToast } from '../ui/Toast.js';
 import { documents as nDocs } from '../../lib/count.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** "שדה CRM" popover — status, path and the documents that reference it. */
 function FieldBody({
@@ -51,6 +52,7 @@ function FieldBody({
               className="rel"
               data-nopeek=""
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               onClick={() => onOpen(d.documentId)}
             >
@@ -117,6 +119,7 @@ function BlockBody({
             className="rel"
             data-nopeek=""
             role="button"
+            onKeyDown={pressKeys}
             tabIndex={0}
             onClick={() => onOpen(u.documentId, u.stepKey)}
           >

@@ -232,9 +232,10 @@ const escapeReplacement = (s: string) => s.replace(/\\/g, '\\\\');
  *
  * `scopes` is the caller's `user.worldScopes`. A rename is a *write* counterpart to the
  * read leak C1 fixed: `fields.edit` alone used to let a narrowly scoped editor rewrite step
- * text in every category. The rewrite now covers only documents the caller can open; the
- * catalogue rename itself is global, because a field is one object and leaving it renamed for
- * some readers and not others would be worse than either answer.
+ * text in every category. Since wave Y (A-M6) the route refuses a scoped caller who does not hold
+ * every world the field's documents span (`assertFieldWritable`), so by the time this runs the
+ * scope filter no longer narrows anything; it stays as a second line. The catalogue rename itself
+ * is global, because a field is one object.
  *
  * A document that was not published stays unpublished. The old code ran `publishDocument` over
  * every affected document regardless of status, so a rename silently published drafts and

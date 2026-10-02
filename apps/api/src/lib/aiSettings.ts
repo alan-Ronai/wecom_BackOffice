@@ -2,7 +2,7 @@
  * Wave 6 (X0) — the one reader/writer for the admin-editable AI settings. Mirrors wave 5's
  * `workflowSettings.ts`: the stored JSON is a *patch*, never the full object, so every key a
  * later lane adds to `AiSettingsSchema` reads back as its default with no migration and no
- * backfill. X1 reads `brief`/`style`/`limits` to assemble the v3 prompt, X2 reads `limits`
+ * backfill. X1 reads `brief`/`style`/`limits` to assemble the system prompt, X2 reads `limits`
  * for the rate limit and the context budget, X4b serves `/admin/ai`.
  *
  * Unlike `workflow`, this lives in **four** `app_settings` rows (`ai.brief`, `ai.style`,
@@ -12,13 +12,17 @@
  * stamps onto each suggestion and each message. Without it, "the model got worse" is an
  * unanswerable question.
  */
+import { PROMPT_VERSION } from '@wecom/model';
 import {
   AI_SETTINGS_KEYS,
   AiSettingsSchema,
+  type AiModelsSettings,
   type AiSettings,
   type AiSettingsKey,
   type AiSettingsPut,
 } from '@wecom/shared';
+import { httpError } from './http.js';
+import type { ModelSlots } from './modelSlots.js';
 import type { Queryable, Tx } from './sql.js';
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
@@ -56,19 +60,59 @@ const readRows = async (
   return out;
 };
 
-/** Effective AI settings: the four stored patches with schema defaults filling every gap. */
-export async function getAiSettings(q: Queryable): Promise<AiSettings> {
-  return effective(await readRows(q));
+/**
+ * A-I5 — the `models` block is **derived, not stored**.
+ *
+ * Everything that actually runs resolves its model from the environment: `makeChatModel`,
+ * `app.model`, the boot dimension check and `reindexEmbeddings`' expected width all call
+ * `resolveModelSlots(config)`. The stored `ai.models` row was read by nothing but the slot probe
+ * and the eval job, so an admin could move the tier on `/admin/ai`, see it saved, see
+ * `/models/test` confirm the new tag — and change nothing about the running system.
+ *
+ * Rather than teach four readers to consult settings-then-env (and then decide what a change
+ * means to a process that has already sized `documents.embedding`), the block is now a
+ * projection of `resolveModelSlots`. `PUT /admin/ai/settings` refuses a `models` patch with
+ * 400 `MODELS_ENV_ONLY`; the tier moves by `MODEL_TIER` plus a restart and a reindex, which is
+ * what spec §6 always said it was.
+ */
+export const modelsFromSlots = (slots: ModelSlots): AiModelsSettings => ({
+  // `tier: null` is "no MODEL_TIER configured" — the slots then come from `MODEL_NAME` and
+  // `EMBED_MODEL` directly. The wire type is a tier number, so it reports 0 and the three tags
+  // below say what is actually loaded.
+  tier: slots.tier ?? 0,
+  suggestModel: slots.suggestModel,
+  chatModel: slots.chatModel,
+  embedModel: slots.embedModel,
+  embedDimension: slots.embedDimension,
+});
+
+/**
+ * Effective AI settings: the four stored patches with schema defaults filling every gap.
+ *
+ * Pass `slots` (`resolveModelSlots(app.config)`) wherever the caller has a config — the `models`
+ * block then reports what the process is really running rather than what a row remembers.
+ */
+export async function getAiSettings(q: Queryable, slots?: ModelSlots): Promise<AiSettings> {
+  const settings = effective(await readRows(q));
+  return slots ? { ...settings, models: modelsFromSlots(slots) } : settings;
 }
 
 /**
- * The prompt version every suggestion and every message records: `v3.<brief>.<style>`.
- * v3 is the wave 6 system prompt itself (spec §1.7); the two numbers are what an admin
- * changed since. A prompt-quality regression is then attributable to a row in
+ * `propose-v4` → `v4`: the stamp carries the prompt *family*, not the file name. Derived from
+ * `PROMPT_VERSION` rather than written out, because the literal `v3` outlived the v3 prompt —
+ * the fix wave shipped `propose-v4` and every suggestion kept recording provenance for a prompt
+ * that no longer runs, which is exactly the question the stamp exists to answer.
+ */
+export const PROMPT_FAMILY = PROMPT_VERSION.slice(PROMPT_VERSION.lastIndexOf('-') + 1);
+
+/**
+ * The prompt version every suggestion and every message records: `v4.<brief>.<style>`.
+ * The prefix is the wave 6 system prompt itself (spec §1.7, now `propose-v4`); the two numbers
+ * are what an admin changed since. A prompt-quality regression is then attributable to a row in
  * `ai_setting_versions` rather than to a hunch.
  */
 export const currentPromptVersion = (settings: AiSettings): string =>
-  `v3.${settings.brief.version}.${settings.style.version}`;
+  `${PROMPT_FAMILY}.${settings.brief.version}.${settings.style.version}`;
 
 /**
  * Deep-merges `patch` into the stored rows and upserts the ones that changed, returning the
@@ -83,6 +127,14 @@ export async function putAiSettings(
   patch: AiSettingsPut,
   actorId: string | null,
 ): Promise<AiSettings> {
+  // A-I5: the models block is environment-derived; a PUT that names it is refused rather than
+  // quietly accepted into a row nothing reads.
+  if (patch.models && Object.keys(patch.models).length)
+    throw httpError(
+      400,
+      'MODELS_ENV_ONLY',
+      'הגדרות המודל נקבעות בסביבת ההרצה (MODEL_TIER ו-*_MODEL) ואינן ניתנות לעריכה מכאן',
+    );
   const stored = await readRows(tx, true);
   const merged = {} as Record<keyof AiSettings, Record<string, unknown>>;
   const changed: AiSettingsKey[] = [];

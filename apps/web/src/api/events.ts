@@ -110,6 +110,16 @@ function invalidate(qc: QueryClient, ev: Event): void {
   } else if (ev.name === 'gap.detected') {
     void qc.invalidateQueries({ queryKey: ['gaps'] });
     void qc.invalidateQueries({ queryKey: ['notifications'] });
+  } else if (ev.name === 'ai.message') {
+    /*
+     * wave 6. Every AI key starts with `'ai'` (`keys.ai.*`), so one prefix drops the whole
+     * surface — the open transcript, the conversation list and the admin browser. The named
+     * conversation is invalidated first so the pane the user is looking at refetches before the
+     * lists behind it.
+     */
+    const { conversationId } = ev.payload as { conversationId?: string };
+    if (conversationId) void qc.invalidateQueries({ queryKey: keys.ai.conversation(conversationId) });
+    void qc.invalidateQueries({ queryKey: ['ai'] });
   } else if (ev.name === 'taxonomy.changed') {
     // The sidebar, the facets and the topic pages all read these three roots.
     void qc.invalidateQueries({ queryKey: ['worlds'] });

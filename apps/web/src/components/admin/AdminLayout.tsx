@@ -17,6 +17,8 @@ const LINKS: [to: string, label: string, needs: Permission][] = [
   ['identity', 'זהות וכניסה', 'system.admin'],
   ['connectors', 'מחברים', 'connectors.manage'],
   ['system', 'מצב מערכת', 'system.admin'],
+  // wave 6 (X4b): `/admin/ai`.
+  ['ai', 'בינה מלאכותית', 'ai.manage'],
 ];
 
 export function AdminLayout() {
@@ -26,7 +28,8 @@ export function AdminLayout() {
     can('roles.manage') ||
     can('audit.read') ||
     can('system.admin') ||
-    can('connectors.manage');
+    can('connectors.manage') ||
+    can('ai.manage');
   if (!allowed)
     return (
       <div className="empty">

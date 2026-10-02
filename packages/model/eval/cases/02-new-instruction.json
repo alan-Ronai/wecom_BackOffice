@@ -1,0 +1,39 @@
+{
+  "id": "02-new-instruction",
+  "title": "הוראה חדשה נוספה לפסקה ממופה",
+  "source": {
+    "title": "נהלי תמיכה טכנית"
+  },
+  "diffs": [
+    {
+      "ref": "4.9",
+      "kind": "changed",
+      "before": "הרץ בדיקת מהירות מול השרת הקרוב.",
+      "after": "הרץ בדיקת מהירות מול השרת הקרוב. ודא שהלקוח מנותק מרשת ה-Wi-Fi הביתית לפני הבדיקה.",
+      "similarity": 0.72
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "11111111-1111-4111-8111-111111111111",
+      "documentTitle": "איטיות גלישה",
+      "stepKey": "s9",
+      "stepNum": "9",
+      "stepTitle": "בדיקת מהירות מול שרת",
+      "anchor": "4.9",
+      "actions": ["הרץ בדיקת מהירות מול השרת הקרוב"]
+    }
+  ],
+  "blocks": [],
+  "fields": [],
+  "expected": [
+    {
+      "type": "update-step",
+      "targetDocumentId": "11111111-1111-4111-8111-111111111111",
+      "targetStepKey": "s9",
+      "mustContain": ["Wi-Fi"]
+    }
+  ],
+  "maxItems": 1,
+  "latencyBudgetMs": 30000
+}

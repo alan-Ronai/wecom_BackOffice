@@ -85,3 +85,5 @@ PRD-bullet-to-test matrix is `docs/wave5-acceptance.md`.
 | X6 Integration | `2026-09-15-X6-integration.md` | X1–X4b merged | mounts, seams (0054), real e2e flows, the tier-1 evaluation run on the VM, acceptance matrix |
 
 Run order: X0 alone on `main`; X1–X4b in parallel worktrees branched after X0 lands; X6 last. Shared-file rules, the migration numbers, the SSE contract and the deploy checklist are in X0's contract document.
+
+**Status: X0–X4b and X6 are all done**, merged onto `wave6/integration` (migrations 0050–0054). What the integration found and decided is in `docs/wave6-merge-log.md`; what each of spec §1's ten decisions is proven by, the tier 0 vs tier 1 evaluation and the parked rows are in `docs/wave6-acceptance.md`. The tier-1 run was done on a dev machine, not the VM — the VM run is the one item still owed.

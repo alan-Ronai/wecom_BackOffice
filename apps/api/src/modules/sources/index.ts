@@ -2,6 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { SourceRevisionService } from './revisions.js';
 import { MappingService } from './mapping.js';
 import { ProposalService } from './proposal.js';
+import { ImpactService } from './impact.js';
+import { getAiSettings } from '../../lib/aiSettings.js';
+import { resolveModelSlots } from '../../lib/modelSlots.js';
 import { SuggestionService, type EventSink } from './suggestions.js';
 import { resolveContentApi } from './content-api.js';
 import { registerPipelineJobs, type PipelineDeps } from '../../jobs/pipeline.js';
@@ -41,12 +44,22 @@ export async function registerSourcesModule(app: FastifyInstance): Promise<Pipel
     },
   );
   app.decorate('revisions', revisions); // W4: the sourcedocs module ingests through the same service
-  const mapping = new MappingService(app.db);
+  /**
+   * Wave 6 (X1): the mapping service gets the model so paragraph→step matching can use
+   * embeddings (spec §1.10), and the proposal service gets the impact reader and the AI
+   * settings so the prompt is briefed and impact-aware (spec §1.6/§1.7). Both degrade to the
+   * pre-wave-6 behaviour when the model has no `embed` and nothing is configured.
+   */
+  const mapping = new MappingService(app.db, app.model);
+  const impact = new ImpactService(app.db);
   const deps: PipelineDeps = {
     revisions,
     mapping,
-    proposal: new ProposalService(app.db, mapping, content),
+    proposal: new ProposalService(app.db, mapping, content, impact, () =>
+      getAiSettings(app.db, resolveModelSlots(app.config)),
+    ),
     suggestions: new SuggestionService(app.db, content, eventSink(app)),
+    impact,
   };
   await app.register(sourcesRoutes(deps));
   await registerPipelineJobs(app, deps);

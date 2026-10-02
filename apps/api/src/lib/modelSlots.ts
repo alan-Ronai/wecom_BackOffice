@@ -21,10 +21,12 @@
  * `documents.embedding`'s own width at boot, and X1's 0051 is what moves both together.
  */
 import { MODEL_TIER_PRESETS, type ModelTier } from '@wecom/shared';
+import { LEGACY_EMBED_DIMENSION, resolveEmbedDimension } from '../../common/embedDimension.cjs';
 
 /** Today's embedder, from `0003_content.js`'s `vector(768)` and `deploy/.env.example`. */
 export const LEGACY_EMBED_MODEL = 'nomic-embed-text';
-export const LEGACY_EMBED_DIMENSION = 768;
+/** Wave Y (A-M5): the width rule lives in `common/embedDimension.cjs`, shared with 0051. */
+export { LEGACY_EMBED_DIMENSION };
 
 /** The slice of `Config` this reads — structural, so a unit test needs no whole config. */
 export interface ModelSlotsConfig {
@@ -59,9 +61,10 @@ export function resolveModelSlots(config: ModelSlotsConfig): ModelSlots {
       config.EMBED_MODEL !== LEGACY_EMBED_MODEL
         ? config.EMBED_MODEL
         : (preset?.embedModel ?? config.EMBED_MODEL),
-    embedDimension:
-      config.EMBED_DIMENSION !== LEGACY_EMBED_DIMENSION
-        ? config.EMBED_DIMENSION
-        : (preset?.embedDimension ?? config.EMBED_DIMENSION),
+    // The same function migration 0051 sizes the column with, so the two cannot drift.
+    embedDimension: resolveEmbedDimension({
+      embedDimension: config.EMBED_DIMENSION,
+      tier: tier ?? undefined,
+    }),
   };
 }

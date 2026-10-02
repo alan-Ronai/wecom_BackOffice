@@ -45,9 +45,15 @@ export const useUploadSource = () =>
     return unwrap(await apiUpload<UploadSourceResult>('/sources/upload', body));
   });
 
-export const useSuggestions = (q: SuggestionsQuery = {}) =>
+/**
+ * `enabled` is how a caller that is still resolving its filter avoids asking for *everything*:
+ * the workspace panel knows its `sourceId` only once the document has loaded, and an unfiltered
+ * list request in the meantime pulls every suggestion in the system to throw it away.
+ */
+export const useSuggestions = (q: SuggestionsQuery = {}, enabled = true) =>
   useQuery({
     queryKey: keys.suggestions(q),
+    enabled,
     queryFn: async () => unwrap(await api.GET('/suggestions', { params: { query: q } })),
   });
 

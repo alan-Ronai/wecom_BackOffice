@@ -11,7 +11,7 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../render.js';
 import { App } from '../../src/App.js';
 import { server } from '../msw/server.js';
-import { withMe } from '../msw/handlers.js';
+import { state, withMe } from '../msw/handlers.js';
 import { D_BROWSING, D_INTL, fx } from '../msw/fixtures.js';
 import { stage45State } from '../msw/stage45.js';
 
@@ -87,6 +87,27 @@ describe('<ReviewsPage> — the lead’s decision', () => {
     await screen.findByRole('heading', { name: /סקירות/ });
     await screen.findByText(fx.docIntl.title);
     expect(screen.queryByLabelText(/^אשר ופרסם/)).not.toBeInTheDocument();
+  });
+
+  /**
+   * Wave Y review: approving publishes, a write, so it needs every world the document spans. The
+   * queue row carries only the primary world; the gate must use the fetched document's `worlds`.
+   */
+  it('hides approve from a lead scoped to only one of the document’s worlds', async () => {
+    state.documents.set(D_INTL, { ...fx.docIntl, worlds: ['intl', 'tech'] });
+    server.use(withMe({ worldScopes: ['intl'], categoryScopes: ['intl'] }));
+    renderWithProviders(<App />, { route: '/reviews' });
+    await screen.findByText(fx.docIntl.title);
+    await screen.findByText(`v${fx.docIntl.currentVersion}`);
+    await waitFor(() => expect(screen.queryByLabelText(`אשר ופרסם את ${fx.docIntl.title}`)).toBeNull());
+  });
+
+  it('offers approve to a lead holding every world of the document', async () => {
+    state.documents.set(D_INTL, { ...fx.docIntl, worlds: ['intl', 'tech'] });
+    server.use(withMe({ worldScopes: ['intl', 'tech'], categoryScopes: ['intl', 'tech'] }));
+    renderWithProviders(<App />, { route: '/reviews' });
+    await screen.findByText(`v${fx.docIntl.currentVersion}`);
+    expect(await screen.findByLabelText(`אשר ופרסם את ${fx.docIntl.title}`)).toBeInTheDocument();
   });
 
   /**

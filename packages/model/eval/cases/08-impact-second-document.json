@@ -1,0 +1,59 @@
+{
+  "id": "08-impact-second-document",
+  "title": "שינוי שמשפיע גם על מסמך שמפנה אליו ב-goto",
+  "source": {
+    "title": "נהלי תמיכה טכנית"
+  },
+  "diffs": [
+    {
+      "ref": "6.1",
+      "kind": "changed",
+      "before": "אם הבעיה נמשכת, העבר את הפנייה לטכנאי שטח.",
+      "after": "אם הבעיה נמשכת מעל 24 שעות, העבר את הפנייה לטכנאי שטח וצרף צילום מסך של הבדיקה.",
+      "similarity": 0.61
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "11111111-1111-4111-8111-111111111111",
+      "documentTitle": "איטיות גלישה",
+      "stepKey": "s14",
+      "stepNum": "14",
+      "stepTitle": "העברה לטכנאי שטח",
+      "anchor": "6.1",
+      "actions": ["פתח קריאת שירות לטכנאי שטח"]
+    }
+  ],
+  "blocks": [],
+  "fields": [],
+  "impact": {
+    "documents": [
+      {
+        "id": "33333333-3333-4333-8333-333333333333",
+        "title": "ניתוקים חוזרים",
+        "why": "מעבר (goto) לשלב"
+      }
+    ],
+    "blocks": [],
+    "fields": [],
+    "topics": [
+      {
+        "id": "55555555-5555-4555-8555-555555555555",
+        "name": "תשתית"
+      }
+    ],
+    "related": []
+  },
+  "expected": [
+    {
+      "type": "update-step",
+      "targetDocumentId": "11111111-1111-4111-8111-111111111111",
+      "targetStepKey": "s14",
+      "mustContain": ["24"],
+      "mustContainAny": [["ניתוקים חוזרים", "ניתוקים"]]
+    }
+  ],
+  "notes": "Spec 1.6: the rationale must name the other document the change reaches.",
+  "maxItems": 1,
+  "latencyBudgetMs": 30000
+}

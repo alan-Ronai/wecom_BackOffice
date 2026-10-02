@@ -22,4 +22,36 @@ module.exports = {
      */
     'react/no-unstable-nested-components': 'error',
   },
+  overrides: [
+    {
+      /**
+       * B-M6 (wave 5) — a focusable non-native control must answer the keyboard, not only the
+       * mouse. `jsx-a11y` is not a dependency, so the two shapes the review found are refused with
+       * core `no-restricted-syntax`: a `role="button"` on anything but a `<button>`, and a
+       * `tabIndex={0}` + `onClick` on a non-native element, each without an `onKeyDown`. The fix
+       * is a real `<button type="button">`, or `onKeyDown={pressKeys}` from `src/lib/keyboard.ts`.
+       * Both spellings of each value are caught (wave Y review): `role="button"` and
+       * `role={'button'}`, `tabIndex={0}` and `tabIndex="0"`.
+       * `test/lib/a11yGuard.test.ts` proves the rule fires.
+       */
+      files: ['apps/web/src/**/*.tsx'],
+      rules: {
+        'no-restricted-syntax': [
+          'error',
+          {
+            selector:
+              "JSXOpeningElement:not([name.name='button']):has(> JSXAttribute[name.name='role']:matches([value.value='button'], [value.expression.value='button'])):not(:has(> JSXAttribute[name.name='onKeyDown']))",
+            message:
+              'B-M6: role="button" needs Enter/Space — use a real <button type="button">, or add onKeyDown={pressKeys} (src/lib/keyboard.ts).',
+          },
+          {
+            selector:
+              "JSXOpeningElement:not([name.name=/^(button|input|select|textarea|summary)$/]):has(> JSXAttribute[name.name='tabIndex']:matches([value.expression.value=0], [value.value='0'], [value.expression.value='0'])):has(> JSXAttribute[name.name='onClick']):not(:has(> JSXAttribute[name.name='onKeyDown'])):not(:has(> JSXAttribute[name.name='href'])):not(:has(> JSXAttribute[name.name='role']:matches([value.value='button'], [value.expression.value='button'])))",
+            message:
+              'B-M6: a focusable element with onClick needs key handling — use a native control, or add onKeyDown={pressKeys} (src/lib/keyboard.ts).',
+          },
+        ],
+      },
+    },
+  ],
 };

@@ -1,0 +1,69 @@
+{
+  "id": "18-two-suggestions",
+  "title": "שינוי הוראה בפסקה אחת ושדה CRM ששמו שונה בפסקה אחרת",
+  "notes": "Two paragraphs, two decisions, two people: the instruction change is an editor call and the CRM rename is an integration call. Tests that the model neither merges them into one suggestion nor duplicates either.",
+  "source": {
+    "title": "נהלי SIM"
+  },
+  "diffs": [
+    {
+      "ref": "2.5",
+      "kind": "changed",
+      "before": "המתן 30 שניות לפני בדיקה חוזרת.",
+      "after": "המתן 45 שניות לפני בדיקה חוזרת.",
+      "similarity": 0.9
+    },
+    {
+      "ref": "2.7",
+      "kind": "changed",
+      "before": "עדכן את השדה \"sim block lbl\" לערך \"לא חסום\".",
+      "after": "עדכן את השדה \"sim state\" לערך \"לא חסום\".",
+      "similarity": 0.9
+    }
+  ],
+  "linkedSteps": [
+    {
+      "documentId": "22222222-2222-4222-8222-222222222222",
+      "documentTitle": "אין קליטה",
+      "stepKey": "s5",
+      "stepNum": "5",
+      "stepTitle": "המתנה לפני בדיקה חוזרת",
+      "anchor": "2.5",
+      "actions": ["המתן 30 שניות"]
+    },
+    {
+      "documentId": "22222222-2222-4222-8222-222222222222",
+      "documentTitle": "אין קליטה",
+      "stepKey": "s7",
+      "stepNum": "7",
+      "stepTitle": "עדכון סטטוס SIM ב-CRM",
+      "anchor": "2.7",
+      "actions": ["CRM ← sim block lbl ← לא חסום"]
+    }
+  ],
+  "blocks": [],
+  "fields": [
+    {
+      "name": "sim block lbl",
+      "status": "ok"
+    }
+  ],
+  "expected": [
+    {
+      "type": "update-step",
+      "targetDocumentId": "22222222-2222-4222-8222-222222222222",
+      "targetStepKey": "s5",
+      "mustContain": ["45"],
+      "mustContainAny": []
+    },
+    {
+      "type": "field-alert",
+      "targetDocumentId": "22222222-2222-4222-8222-222222222222",
+      "targetStepKey": "s7",
+      "mustContain": ["sim state"],
+      "mustContainAny": []
+    }
+  ],
+  "maxItems": 2,
+  "latencyBudgetMs": 45000
+}

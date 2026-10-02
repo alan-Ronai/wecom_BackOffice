@@ -9,12 +9,17 @@ import type { SourceRevisionService } from '../modules/sources/revisions.js';
 import type { MappingService } from '../modules/sources/mapping.js';
 import type { ProposalService } from '../modules/sources/proposal.js';
 import type { SuggestionService } from '../modules/sources/suggestions.js';
+import type { ImpactService } from '../modules/sources/impact.js';
+import { currentPromptVersion } from '../lib/aiSettings.js';
+import { pruneRevisionDiffs } from '../modules/sources/pruneDiffs.js';
 
 export interface PipelineDeps {
   revisions: SourceRevisionService;
   mapping: MappingService;
   proposal: ProposalService;
   suggestions: SuggestionService;
+  /** Wave 6 (X1): the blast-radius reader, also what X2's `read_impact` tool calls. */
+  impact: ImpactService;
 }
 
 /** A watched file is skipped while it may still be being written. */
@@ -41,12 +46,32 @@ export async function processRevision(
       const props = await deps.mapping.proposeInitialMapping(rev.sourceId, rev.paragraphs);
       if (props.length) await deps.mapping.confirmMapping(rev.sourceId, props);
     }
+    /**
+     * Wave 6 (X1): the diffs that produced this batch are stored on the revision, so a later
+     * run's few-shot bank can show the model the *change* an accepted suggestion answered and
+     * not only the suggestion. Only the non-`same` entries — the rest are noise.
+     */
+    await pool.query(
+      `update source_revisions set meta = coalesce(meta,'{}'::jsonb) || jsonb_build_object('diffs', $2::jsonb) where id=$1`,
+      [revisionId, JSON.stringify(diffs.filter((d) => d.kind !== 'same'))],
+    );
     const ctx = await deps.proposal.buildContext(rev, diffs);
     const items = diffs.some((d) => d.kind !== 'same') ? await model.proposeChanges(ctx) : [];
     await pool.query(`delete from suggestions where source_revision_id=$1 and status='pending'`, [
       revisionId,
     ]);
-    const created = await deps.suggestions.createFromProposals(revisionId, items);
+    /**
+     * Wave 6 (X1) provenance. `affects` is computed here, from the impact set the context was
+     * built with, for *both* the Ollama path and the rule-based fallback: the e2e gate runs
+     * with `MODEL_DISABLED=true`, and a suggestion with no `affects` there would mean the
+     * impact chips only ever appear when a language model happened to be reachable.
+     */
+    const settings = await deps.proposal.currentSettings();
+    const created = await deps.suggestions.createFromProposals(revisionId, items, {
+      promptVersion: currentPromptVersion(settings),
+      model: model.name,
+      affects: ctx.impact ? (s) => deps.proposal.impactService.affectsFor(ctx.impact!, s) : undefined,
+    });
     await pool.query(`update sources set sync_state=$2 where id=$1`, [
       rev.sourceId,
       created.length ? 'pending' : 'synced',
@@ -111,6 +136,22 @@ export async function registerPipelineJobs(app: FastifyInstance, deps: PipelineD
       await app.boss.schedule(QUEUES.sourcesWatch, '*/2 * * * *');
     } catch (err) {
       app.log.warn({ err }, 'could not schedule sources.watch');
+    }
+  }
+  /**
+   * Wave Y · A-M7 (owner decision 3): old revisions keep diff counts, not diff text. Nightly at
+   * 04:15, after the 03:xx housekeeping runs; `pruneRevisionDiffs` is idempotent, so a missed or
+   * repeated night is harmless. Not scheduled under test, like every other nightly job.
+   */
+  await app.boss.work(QUEUES.sourcesPruneDiffs, async () => {
+    const n = await pruneRevisionDiffs(app.db);
+    app.log.info({ n }, 'sources.prune-diffs');
+  });
+  if (app.config.NODE_ENV !== 'test') {
+    try {
+      await app.boss.schedule(QUEUES.sourcesPruneDiffs, '15 4 * * *', {}, { tz: 'Asia/Jerusalem' });
+    } catch (err) {
+      app.log.warn({ err }, 'could not schedule sources.prune-diffs');
     }
   }
 }

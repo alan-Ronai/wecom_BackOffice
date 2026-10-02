@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "convert:kira": "node seed/convert-legacy.mjs && node seed/convert-kira.mjs",
     "convert:legacy": "node seed/convert-legacy.mjs",
     "create-admin": "tsx src/cli/create-admin.ts",
     "dev": "tsx watch src/server.ts",

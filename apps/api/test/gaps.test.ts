@@ -92,8 +92,8 @@ run('gaps', () => {
   });
 
   describe('heuristics', () => {
-    // A-M4: `failedQuestionMin` and `topicViewsMin` are settings now, not two hardcoded numbers
-    // that disagreed with the dashboard and with nothing at all respectively.
+    // A-M4: `failedQuestionMin` and `topicViewsMin` are `WorkflowSettings.gaps` keys (wave Y), not
+    // two hardcoded numbers that disagreed with the dashboard and with nothing at all respectively.
     const T = {
       zeroResultMin: 3,
       feedbackClusterMin: 2,
@@ -183,6 +183,17 @@ run('gaps', () => {
         worldSlug: 'tech',
         suggestedAction: 'create',
       });
+      // Wave Y: `topicViewsMin` is the settings floor — the topic has 4 views, so a floor of 5 hides it.
+      expect(
+        (await heur.topicsWithoutProcedure(db.pool, { ...T, topicViewsMin: 5 })).find(
+          (c) => c.topicId === g!.topicId,
+        ),
+      ).toBeUndefined();
+      expect(
+        (await heur.topicsWithoutProcedure(db.pool, { ...T, topicViewsMin: 4 })).find(
+          (c) => c.topicId === g!.topicId,
+        ),
+      ).toBeDefined();
       // Adding a published R item to the topic clears it.
       const r = await db.pool.query(
         `insert into documents(slug, title, description, category, wave, priority, kind, status, doc_type, current_version)
@@ -195,12 +206,6 @@ run('gaps', () => {
       expect(
         (await heur.topicsWithoutProcedure(db.pool, T)).find((c) => c.topicId === g!.topicId),
       ).toBeUndefined();
-    });
-
-    it('returns no failed-question gaps while the learning tables are absent', async () => {
-      const has = await db.pool.query(`select to_regclass('public.learning_attempts') t`);
-      if (has.rows[0].t) return; // V2 merged: covered by the cross-lane test in V6
-      expect(await heur.failedQuestions(db.pool, T)).toEqual([]);
     });
   });
 

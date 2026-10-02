@@ -21,6 +21,8 @@ import { initialTaxonomy, taxonomyHandlers, type TaxonomyState } from './taxonom
 import { feedbackHandlers, resetFeedbackState } from './feedback-handlers.js';
 import { learningHandlers, resetLearningState } from './learning-handlers.js';
 import { learningManageHandlers, resetLearningState as resetLearningManageState } from './learning-manage.js';
+import { aiAdminHandlers, resetAiAdminState } from './ai-admin.js';
+import { aiHandlers, resetAiState } from './ai-handlers.js';
 import type { TrashItem } from '../../src/api/types.js';
 
 const B = '/api/v1';
@@ -29,6 +31,8 @@ interface State extends TaxonomyState {
   pins: Set<string>;
   notes: Note[];
   suggestions: Suggestion[];
+  /** The query string `GET /suggestions` was last asked with (wave Y: `documentId`). */
+  lastSuggestionsQuery: Record<string, string> | null;
   drafts: Map<string, unknown>;
   published: { id: string; label: string }[];
   trash: TrashItem[];
@@ -62,6 +66,7 @@ const initial = (): State => ({
   pins: new Set([fx.docBrowsing.id]),
   notes: fx.notes.map((n) => ({ ...n })),
   suggestions: fx.suggestions.map((s) => ({ ...s })),
+  lastSuggestionsQuery: null,
   drafts: new Map(),
   published: [],
   trash: fx.trash.map((t) => ({ ...t })),
@@ -92,6 +97,8 @@ export function resetState(): void {
   resetFeedbackState();
   resetLearningState();
   resetLearningManageState();
+  resetAiAdminState();
+  resetAiState();
 }
 
 const notFound = () => HttpResponse.json({ code: 'NOT_FOUND', message: 'לא נמצא' }, { status: 404 });
@@ -127,6 +134,13 @@ export const handlers: RequestHandler[] = [
   // two lanes stub the same path, the agent's view is the one `CONTRACTS-wave5.md` describes.
   ...learningHandlers,
   ...learningManageHandlers,
+  // wave 6 (X4b) — `/suggestions/analytics` and `/admin/ai/*` before the generic `:id` routes.
+  ...aiAdminHandlers,
+  // wave 6 (X4a) — before the stage-1 suggestion routes, so `GET /suggestions/:id`,
+  // `PATCH /suggestions/:id/edit` and the wave 6 `POST /suggestions/:id/accept` win for the ids
+  // this group owns. Its accept resolver returns `undefined` for any other id, which msw treats
+  // as "try the next handler", so the stage-1 fixtures keep their behaviour.
+  ...aiHandlers,
   http.get(`${B}/auth/me`, () => HttpResponse.json({ ...fx.me, preferences: { ...state.preferences } })),
   // Bare provider ids plus a fallback — not `{ id, label }` objects.
   http.get(`${B}/auth/providers`, () =>
@@ -527,14 +541,23 @@ export const handlers: RequestHandler[] = [
   }),
   http.get(`${B}/sources/:id/revisions/:rev`, () => HttpResponse.json(fx.revision)),
 
-  http.get(`${B}/suggestions`, () =>
-    HttpResponse.json({
-      items: state.suggestions,
-      total: state.suggestions.length,
-      page: 1,
-      pageSize: 50,
-    }),
-  ),
+  http.get(`${B}/suggestions`, ({ request }) => {
+    const q = Object.fromEntries(new URL(request.url).searchParams);
+    state.lastSuggestionsQuery = q;
+    /*
+     * `sourceId` narrows to rows that name their source; rows that do not (older fixtures) are the
+     * primary source's. `documentId` (wave Y) is the document's primary source plus its linked
+     * ones — the mock has no link table, so a row naming a source counts as linked, and a row
+     * naming none counts only when the document has a primary source at all.
+     */
+    const doc = q.documentId ? state.documents.get(q.documentId) : undefined;
+    const items = state.suggestions.filter(
+      (s) =>
+        (!q.sourceId || !s.sourceId || s.sourceId === q.sourceId) &&
+        (!q.documentId || !!s.sourceId || !!doc?.sourceId),
+    );
+    return HttpResponse.json({ items, total: items.length, page: 1, pageSize: 50 });
+  }),
   // Three concrete routes, not one templated `:decision` segment.
   ...(['accept', 'reject', 'reset'] as const).map((decision) =>
     http.post(`${B}/suggestions/:id/${decision}`, ({ params }) => {

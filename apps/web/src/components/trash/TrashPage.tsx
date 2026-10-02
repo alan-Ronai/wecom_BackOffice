@@ -18,6 +18,14 @@ import { LoadError } from '../ui/index.js';
 import { Fmt } from '../Fmt.js';
 import type { TrashItem } from '../../api/types.js';
 import { counted, items as nItems } from '../../lib/count.js';
+import { pressKeys } from '../../lib/keyboard.js';
+
+/**
+ * A document row carries its `category` and `worlds`, so restoring it is gated like the API's
+ * `hasAllScopes` rule. Blocks, fields and scripts stay server-authoritative: their worlds are the
+ * live documents using them, which only the server knows.
+ */
+type TrashRow = TrashItem;
 
 const TYPE_LABEL: Record<string, string> = {
   document: '',
@@ -40,10 +48,14 @@ export function TrashPage() {
   const empty = useEmptyTrash();
   const [sel, setSel] = useState<Set<string>>(new Set());
 
-  const items = [...(trash.data?.items ?? [])].sort(
+  const items: TrashRow[] = [...(trash.data?.items ?? [])].sort(
     (a, b) => Date.parse(a.deletedAt) - Date.parse(b.deletedAt),
   );
   const mayRestore = can('docs.restore');
+  const mayRestoreRow = (e: TrashRow) =>
+    e.type === 'document' && e.category
+      ? can('docs.restore', { category: e.category, worlds: e.worlds ?? null })
+      : mayRestore;
   const toggle = (id: string) =>
     setSel((s) => {
       const next = new Set(s);
@@ -67,7 +79,7 @@ export function TrashPage() {
       <div className="topbar">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/library')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/library')}>
             ספרייה
           </a>
           <span className="sep">/</span>
@@ -84,7 +96,7 @@ export function TrashPage() {
               </span>
             </h2>
             <div className="btns">
-              {mayRestore && selected.length ? (
+              {mayRestore && selected.length && selected.every(mayRestoreRow) ? (
                 <button
                   className="btn sm navy"
                   onClick={async () => {
@@ -183,6 +195,7 @@ export function TrashPage() {
                     <span
                       className={'cb' + (sel.has(e.id) ? ' on' : '')}
                       role="checkbox"
+                      onKeyDown={pressKeys}
                       tabIndex={0}
                       aria-checked={sel.has(e.id)}
                       aria-label={`בחר ${e.title}`}
@@ -213,10 +226,11 @@ export function TrashPage() {
                     </div>
                     <div className="imp">
                       {impactOf(e)}
-                      {mayRestore ? (
+                      {mayRestoreRow(e) ? (
                         <span
                           className="restore"
                           role="button"
+                          onKeyDown={pressKeys}
                           tabIndex={0}
                           onClick={async () => {
                             await restore.mutateAsync({ type: e.type, id: e.id });

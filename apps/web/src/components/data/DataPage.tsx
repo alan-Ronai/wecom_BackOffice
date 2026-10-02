@@ -15,6 +15,7 @@ import { Hamburger } from '../shell/MobileDrawer.js';
 import { LoadError } from '../ui/index.js';
 import { useToast } from '../ui/Toast.js';
 import { MappingEditor } from './MappingEditor.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 const ICON: Record<DataFile['kind'], string> = { json: '📄', csv: '📊' };
 
@@ -43,7 +44,7 @@ export function DataPage() {
   return (
     <div className="data-layout">
       <aside className="src-side">
-        <div className="logo" role="button" tabIndex={0} onClick={() => go('/library')}>
+        <div className="logo" role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/library')}>
           wecom.
         </div>
         <div className="sec-title">קבצי נתונים · {list.length}</div>
@@ -57,6 +58,7 @@ export function DataPage() {
                 key={f.sourceId}
                 className={'sdoc' + (current?.sourceId === f.sourceId ? ' on' : '')}
                 role="button"
+                onKeyDown={pressKeys}
                 tabIndex={0}
                 onClick={() => go(`/data/${f.sourceId}`, { replace: true })}
               >
@@ -87,6 +89,7 @@ export function DataPage() {
               className="src-add"
               style={{ textAlign: 'center', justifyContent: 'center' }}
               role="button"
+              onKeyDown={pressKeys}
               tabIndex={0}
               onClick={() => fileRef.current?.click()}
             >
@@ -167,7 +170,7 @@ function DataFileView({
       <div className="topbar h56">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/data')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/data')}>
             נתונים
           </a>
           <span className="sep">/</span>

@@ -31,6 +31,7 @@ import { DocList } from './DocList.js';
 import { BulkBar } from './BulkBar.js';
 import type { ListDocumentsQuery } from '../../api/types.js';
 import { counted, items as nItems } from '../../lib/count.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 export type LibraryMode = 'library' | 'pinned' | 'recent' | 'drafts';
 
@@ -396,7 +397,7 @@ export function LibraryPage({ mode }: { mode: LibraryMode }) {
       <div className="topbar">
         <Hamburger />
         <div className="crumb">
-          <a role="button" tabIndex={0} onClick={() => go('/library')}>
+          <a role="button" onKeyDown={pressKeys} tabIndex={0} onClick={() => go('/library')}>
             ספרייה
           </a>
           {cat || mode !== 'library' ? <span className="sep">/</span> : null}

@@ -233,8 +233,10 @@ run('embedding dimension: the mismatch is visible, the matching case is proven',
       // Not closed for the same reason as above: the pool is shared.
       await app.ready();
     };
+    // Both numbers and the migration that owns the column's width — 0051 since wave 6, which is
+    // the file an operator has to re-run, not the 0003 that first created it.
     await expect(boot()).rejects.toThrow(
-      /EMBED_DIMENSION is 384 but documents\.embedding is vector\(768\).*0003_content\.js/s,
+      /EMBED_DIMENSION is 384 but documents\.embedding is vector\(768\).*0051_wave6_embeddings_affects\.js/s,
     );
   });
 });

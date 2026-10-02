@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useNav } from './navStore.js';
 import { usePalette } from '../palette/paletteStore.js';
+import { pressKeys } from '../../lib/keyboard.js';
 
 /** Port of legacy renderTabs — open documents, back/forward and the split toggle. */
 export function TabStrip() {
@@ -22,6 +23,7 @@ export function TabStrip() {
           className={'tab' + (t.docId === activeDocId ? ' on' : '')}
           title={t.title}
           role="button"
+          onKeyDown={pressKeys}
           tabIndex={0}
           onClick={() => {
             nav.setActiveTab(i);
@@ -40,6 +42,7 @@ export function TabStrip() {
             title="סגור (W)"
             aria-label={`סגור לשונית · ${t.title}`}
             role="button"
+            onKeyDown={pressKeys}
             tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
@@ -55,6 +58,7 @@ export function TabStrip() {
         title="לשונית חדשה · Alt T"
         aria-label="לשונית חדשה"
         role="button"
+        onKeyDown={pressKeys}
         tabIndex={0}
         onClick={() => palette.open({ mode: 'newtab' })}
       >

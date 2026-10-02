@@ -28,8 +28,8 @@ import {
 import type { ModelClient } from '@wecom/model';
 import { audit } from '../../lib/audit.js';
 import { forbidden, httpError, notFound } from '../../lib/http.js';
-import { withTransaction } from '../../lib/sql.js';
-import { hasScope, requireUser } from '../../lib/user.js';
+import { withTransaction, type Tx } from '../../lib/sql.js';
+import { hasAllScopes, hasScope, requireUser } from '../../lib/user.js';
 import { getDocument } from '../documents/repo.js';
 import * as repo from './repo.js';
 import { generateQuestions } from './generate.js';
@@ -39,17 +39,27 @@ const Params = z.object({ id: IdSchema });
 const NOT_FOUND = 'פריט הלמידה';
 
 export default async function learningRoutes(app: FastifyInstance) {
-  /** The item, or a 404 for anyone who may not see it. */
+  /**
+   * The item's head (row + worlds, not the assembled item — A-M8), or a 404 for anyone who may
+   * not see it. Handlers that need entries, questions or source versions load them themselves.
+   */
   const visible = async (id: string, user: ReturnType<typeof requireUser>) => {
+    const head = await repo.canSeeById(app.db, id, repo.viewerOf(user));
+    if (!head) throw notFound(NOT_FOUND);
+    return head;
+  };
+  /**
+   * Wave Y (A-M6): a world-scoped manager may only change an item whose *every* world they hold —
+   * a briefing citing one `billing` and four `tech` documents is readable by a `billing` manager
+   * and writable by nobody short of `billing` + `tech`. An item with no world is everybody's.
+   */
+  const assertScope = (head: repo.ItemHead, user: ReturnType<typeof requireUser>) => {
+    if (head.worlds.length && !hasAllScopes(user, head.worlds)) throw forbidden();
+  };
+  const loadItem = async (id: string) => {
     const item = await repo.getItem(app.db, id);
     if (!item) throw notFound(NOT_FOUND);
-    if (!(await repo.canSee(app.db, item, repo.viewerOf(user)))) throw notFound(NOT_FOUND);
     return item;
-  };
-  /** A world-scoped manager may only author inside their own worlds. */
-  const assertScope = async (id: string, user: ReturnType<typeof requireUser>) => {
-    const worlds = await repo.worldsOfItem(app.db, id);
-    if (worlds.length && !hasScope(user, worlds)) throw forbidden();
   };
   /**
    * A-I5: the documents a generate call may read.
@@ -59,6 +69,9 @@ export default async function learningRoutes(app: FastifyInstance) {
    * texts, branch labels and CRM field names back rendered as question stems and options — a
    * content read `GET /documents/:id` would refuse them. 404, not 403, for the same reason the
    * document routes do it: a 403 would confirm the document exists.
+   *
+   * Wave Y: the entries and questions PUTs run it too — a saved reference is served back in the
+   * item (and in its preview), so citing a document is reading it.
    */
   const assertDocumentsInScope = async (ids: string[], user: ReturnType<typeof requireUser>) => {
     if (user.worldScopes === null) return;
@@ -66,6 +79,21 @@ export default async function learningRoutes(app: FastifyInstance) {
       const doc = await getDocument(app.db, id);
       if (!doc || !hasScope(user, doc.worlds)) throw notFound('המסמך');
     }
+  };
+  /**
+   * Wave Y (review of A-M6): the write rule, applied to the item *as the write leaves it*.
+   *
+   * An item with no world of its own spans the worlds of the documents it cites (`worldsOfItem`),
+   * so replacing its entries or questions — or clearing its `worldSlug` — can move it into worlds
+   * the caller does not hold: a `billing` manager creating a world-less briefing and citing `tech`
+   * documents would end up owning a `tech` briefing. `assertScope` only looks at the item before
+   * the write, so this runs inside the transaction after it and the 403 rolls the write back.
+   */
+  const assertWritableAfter = async (tx: Tx, id: string, user: ReturnType<typeof requireUser>) => {
+    if (user.worldScopes === null) return;
+    const worlds = await repo.worldsOfItem(tx, id);
+    if (worlds.length && !hasAllScopes(user, worlds))
+      throw httpError(403, 'SCOPE_DENIED', 'ההרשאה שלך מוגבלת לעולמות תוכן אחרים');
   };
 
   app.get(
@@ -99,7 +127,7 @@ export default async function learningRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const user = requireUser(req);
       const body = req.body as z.infer<typeof LearningItemCreateSchema>;
-      if (body.worldSlug && !hasScope(user, body.worldSlug)) throw forbidden();
+      if (body.worldSlug && !hasAllScopes(user, body.worldSlug)) throw forbidden();
       const item = await withTransaction(app.db, async (tx) => {
         const created = await repo.createItem(tx, body, user.id);
         await audit(tx, {
@@ -127,7 +155,9 @@ export default async function learningRoutes(app: FastifyInstance) {
     },
     async (req) => {
       const user = requireUser(req);
-      const item = await visible((req.params as z.infer<typeof Params>).id, user);
+      const { id } = req.params as z.infer<typeof Params>;
+      await visible(id, user);
+      const item = await loadItem(id);
       // A-C1: a non-manager reads the authoring view through the player projection — no answer
       // key, no explanation, no model provenance. Managers see the item they are building.
       return repo.viewerOf(user).manage ? item : repo.projectForLearner(item);
@@ -150,10 +180,12 @@ export default async function learningRoutes(app: FastifyInstance) {
       const { id } = req.params as z.infer<typeof Params>;
       const body = req.body as z.infer<typeof LearningItemPatchSchema>;
       const before = await visible(id, user);
-      await assertScope(id, user);
-      if (body.worldSlug && !hasScope(user, body.worldSlug)) throw forbidden();
+      assertScope(before, user);
+      if (body.worldSlug && !hasAllScopes(user, body.worldSlug)) throw forbidden();
       return withTransaction(app.db, async (tx) => {
         const after = await repo.patchItem(tx, id, body, user.id);
+        // `worldSlug: null` hands the item to its cited documents' worlds.
+        if (body.worldSlug !== undefined) await assertWritableAfter(tx, id, user);
         await audit(tx, {
           actorId: user.id,
           action: 'learning.patch',
@@ -189,7 +221,7 @@ export default async function learningRoutes(app: FastifyInstance) {
       const user = requireUser(req);
       const { id } = req.params as z.infer<typeof Params>;
       const item = await visible(id, user);
-      await assertScope(id, user);
+      assertScope(item, user);
       // A published item has learners against its snapshot, so it is archived rather than
       // deleted; a draft nobody ever saw is soft-deleted; an archived item is already there.
       if (item.status !== 'archived')
@@ -239,17 +271,22 @@ export default async function learningRoutes(app: FastifyInstance) {
       const { id } = req.params as z.infer<typeof Params>;
       const body = req.body as z.infer<typeof PutEntriesBodySchema>;
       const item = await visible(id, user);
-      await assertScope(id, user);
+      assertScope(item, user);
       if (item.kind !== 'briefing') throw httpError(400, 'WRONG_KIND', 'הפעולה מתאימה לתדריך בלבד');
       if (item.status === 'archived') throw httpError(409, 'ITEM_ARCHIVED', 'פריט בארכיון אינו ניתן לעריכה');
+      await assertDocumentsInScope(
+        body.entries.map((x) => x.documentId),
+        user,
+      );
       return withTransaction(app.db, async (tx) => {
         const after = await repo.replaceEntries(tx, id, body.entries, user.id);
+        await assertWritableAfter(tx, id, user);
         await audit(tx, {
           actorId: user.id,
           action: 'learning.entries',
           entityType: 'learning_item',
           entityId: id,
-          before: { count: item.entries.length },
+          before: { count: item.entryCount },
           after: { count: after.entries.length },
           requestId: req.id,
           ip: req.ip,
@@ -275,17 +312,22 @@ export default async function learningRoutes(app: FastifyInstance) {
       const { id } = req.params as z.infer<typeof Params>;
       const body = req.body as z.infer<typeof PutQuestionsBodySchema>;
       const item = await visible(id, user);
-      await assertScope(id, user);
+      assertScope(item, user);
       if (item.kind !== 'quiz') throw httpError(400, 'WRONG_KIND', 'הפעולה מתאימה לבוחן בלבד');
       if (item.status === 'archived') throw httpError(409, 'ITEM_ARCHIVED', 'פריט בארכיון אינו ניתן לעריכה');
+      await assertDocumentsInScope(
+        body.questions.map((x) => x.documentId),
+        user,
+      );
       return withTransaction(app.db, async (tx) => {
         const after = await repo.replaceQuestions(tx, id, body.questions, user.id);
+        await assertWritableAfter(tx, id, user);
         await audit(tx, {
           actorId: user.id,
           action: 'learning.questions',
           entityType: 'learning_item',
           entityId: id,
-          before: { count: item.questions.length },
+          before: { count: item.questionCount },
           after: { count: after.questions.length },
           requestId: req.id,
           ip: req.ip,
@@ -311,7 +353,7 @@ export default async function learningRoutes(app: FastifyInstance) {
       const { id } = req.params as z.infer<typeof Params>;
       const body = req.body as z.infer<typeof GenerateQuestionsBodySchema>;
       const item = await visible(id, user);
-      await assertScope(id, user);
+      assertScope(item, user);
       if (item.kind !== 'quiz') throw httpError(400, 'WRONG_KIND', 'הפעולה מתאימה לבוחן בלבד');
       await assertDocumentsInScope(body.documentIds, user);
       // `app.model` is read at call time: the plugin decorates it on this scope, and tests swap it.
@@ -336,8 +378,7 @@ export default async function learningRoutes(app: FastifyInstance) {
       const user = requireUser(req);
       const { id } = req.params as z.infer<typeof Params>;
       const body = req.body as z.infer<typeof LearningPublishBodySchema>;
-      await visible(id, user);
-      await assertScope(id, user);
+      assertScope(await visible(id, user), user);
       return withTransaction(app.db, async (tx) => {
         const { item, version } = await repo.publishItem(tx, id, body.label, user.id);
         await audit(tx, {
@@ -378,12 +419,13 @@ export default async function learningRoutes(app: FastifyInstance) {
     async (req) => {
       const user = requireUser(req);
       const { id } = req.params as z.infer<typeof Params>;
-      const live = await visible(id, user);
+      await visible(id, user);
       // A manager previews what they are building; everyone else previews the published
       // snapshot, which is exactly what a learner would be served.
       const viewer = repo.viewerOf(user);
-      let item = live;
-      if (!viewer.manage) {
+      let item: Awaited<ReturnType<typeof loadItem>>;
+      if (viewer.manage) item = await loadItem(id);
+      else {
         const published = await repo.getPublishedItem(app.db, id);
         if (!published) throw notFound(NOT_FOUND);
         item = published.item;

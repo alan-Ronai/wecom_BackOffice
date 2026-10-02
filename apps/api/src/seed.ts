@@ -18,7 +18,18 @@ export interface SeedCounts {
   notes: number;
 }
 
-type SeedDocument = Document & { _author: string | null; _topicId: number | null };
+/**
+ * `_topicName` names the topic this document creates when it is the first of its topic (default:
+ * the document's own title); `_extraTopicIds` are further topics it is a member of. Both come
+ * from the Kira overlay (`seed/convert-kira.mjs`), which files the domestic-reception documents
+ * under one topic "בעיות קליטה בארץ".
+ */
+type SeedDocument = Document & {
+  _author: string | null;
+  _topicId: number | null;
+  _topicName?: string;
+  _extraTopicIds?: number[];
+};
 interface SeedCard {
   topicId: number;
   id: string;
@@ -215,7 +226,7 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
         `insert into topics(world_id, slug, name, description, position)
          select w.id, $1, $2, $3, $4 from worlds w where w.slug = $5
            and not exists (select 1 from topics t where t.slug = $1) returning id`,
-        [`topic-${d._topicId}`, d.title, d.description, d._topicId, d.category],
+        [`topic-${d._topicId}`, d._topicName ?? d.title, d.description, d._topicId, d.category],
       );
       if (ins.rowCount) counts.topics++;
     }
@@ -249,6 +260,7 @@ export async function runSeed(pool: pg.Pool): Promise<SeedCounts> {
         counts.documents++;
         fresh.push(d);
         await membership(tx, d.id, d.category, d._topicId == null ? null : `topic-${d._topicId}`);
+        for (const t of d._extraTopicIds ?? []) await membership(tx, d.id, d.category, `topic-${t}`);
       }
     }
 

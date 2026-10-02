@@ -10,23 +10,14 @@ export interface Thresholds {
   staleDays: number;
   failedQuestionRate: number;
   /**
-   * A-M4, both optional so `WorkflowSettings.gaps` still satisfies this interface as it stands.
-   *
-   * `failedQuestionMin` was hardcoded 5 here and 3 in the manager dashboard's failed-question
-   * tile, so the two surfaces disagreed about which questions were "failing" while only the
-   * *rate* came from settings; `topicViewsMin` did not exist at all, so one view on one topic
-   * produced a gap and `topicsWithoutProcedure` was the one heuristic taking no thresholds.
-   * Constants rather than settings keys: promoting them would mean a field on the admin workflow
-   * form, which is the web side's to add — parked in `docs/wave5-acceptance.md`.
+   * A-M4: `failedQuestionMin` was hardcoded 5 here and 3 in the manager dashboard's
+   * failed-question tile, so the two surfaces disagreed about which questions were "failing";
+   * `topicViewsMin` did not exist at all. Wave Y promoted both to `WorkflowSettings.gaps` keys
+   * (defaults 5 and 3), edited on the admin workflow form; the dashboard reads the same setting.
    */
-  failedQuestionMin?: number;
-  topicViewsMin?: number;
+  failedQuestionMin: number;
+  topicViewsMin: number;
 }
-
-/** How many finished answers a question needs before its fail rate means anything (A-M4). */
-export const FAILED_QUESTION_MIN_ATTEMPTS = 5;
-/** How many views a topic needs before "no procedure covers it" is worth an operator's time. */
-export const TOPIC_VIEWS_MIN = 3;
 
 /** Zero-result searches in the last 7 days, clustered by normalised stem (the stem is not SQL-expressible). */
 export async function zeroResultClusters(q: Q, t: Thresholds): Promise<GapCandidate[]> {
@@ -146,7 +137,7 @@ export async function topicsWithoutProcedure(q: Q, t: Thresholds): Promise<GapCa
        )
      group by t.id, t.name, w.slug
      having sum(tv.count) >= $1`,
-    [t.topicViewsMin ?? TOPIC_VIEWS_MIN],
+    [t.topicViewsMin],
   );
   return r.rows.map((x) => ({
     kind: 'topic_without_procedure' as const,
@@ -163,15 +154,10 @@ export async function topicsWithoutProcedure(q: Q, t: Thresholds): Promise<GapCa
 
 /**
  * Quiz questions failed by at least `failedQuestionRate` of attempts — either the question is
- * wrong or the material behind it is. Reads V1/V2 tables, which do not exist until those lanes
- * merge, so the presence probe comes first: the nightly job must never fail on a missing table.
+ * wrong or the material behind it is. Reads the wave 5 learning tables (0046–0049).
  * `learning_attempts.answers` is `{ [questionId]: { selected, correct } }` (V2's contract).
  */
 export async function failedQuestions(q: Q, t: Thresholds): Promise<GapCandidate[]> {
-  const has = await q.query<{ a: string | null; b: string | null }>(
-    `select to_regclass('public.learning_attempts')::text a, to_regclass('public.quiz_questions')::text b`,
-  );
-  if (!has.rows[0].a || !has.rows[0].b) return [];
   const r = await q.query<{
     question_id: string;
     item_id: string;
@@ -189,8 +175,8 @@ export async function failedQuestions(q: Q, t: Thresholds): Promise<GapCandidate
             count(*) filter (where not p.correct) failed
      from per p join quiz_questions qq on qq.id = p.question_id
      group by p.question_id, qq.item_id, qq.document_id, qq.stem
-     having count(*) >= 5 and (count(*) filter (where not p.correct))::float / count(*) >= $1`,
-    [t.failedQuestionRate],
+     having count(*) >= $2 and (count(*) filter (where not p.correct))::float / count(*) >= $1`,
+    [t.failedQuestionRate, t.failedQuestionMin],
   );
   return r.rows.map((x) => ({
     kind: 'failed_question' as const,

@@ -1,20 +1,15 @@
-import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import pg from 'pg';
-import { runMigrations } from '../../../src/migrate.js';
+import { startTestDb } from '../db.js';
 
 export const integration = process.env.RUN_INTEGRATION === '1';
 
-/** Spins up a migrated throwaway Postgres for one test and always tears it down. */
+/** A migrated throwaway Postgres for one test, always torn down (see `startTestDb`). */
 export async function withDb(fn: (pool: pg.Pool, uri: string) => Promise<void>): Promise<void> {
-  const container = await new PostgreSqlContainer('pgvector/pgvector:pg16').start();
-  const uri = container.getConnectionUri();
-  const pool = new pg.Pool({ connectionString: uri });
+  const db = await startTestDb();
   try {
-    await runMigrations(uri);
-    await fn(pool, uri);
+    await fn(db.pool, db.url);
   } finally {
-    // buildApp's db plugin ends the pool it was handed on app.close(), so this may be a no-op.
-    await pool.end().catch(() => undefined);
-    await container.stop();
+    // buildApp's db plugin ends the pool it was handed on app.close(); `stop` tolerates that.
+    await db.stop();
   }
 }

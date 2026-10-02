@@ -1,8 +1,18 @@
 import type pg from 'pg';
 import type { TrashItem } from '@wecom/shared';
-import { httpError } from '../../lib/http.js';
+import { forbidden, httpError } from '../../lib/http.js';
 import type { Tx } from '../../lib/sql.js';
-import { getDocument, hasPublishedVersion, iso, recomputeDerived, type Q } from '../documents/repo.js';
+import { hasAllScopes, hasScope } from '../../lib/user.js';
+import { blockUsage } from '../blocks/repo.js';
+import {
+  getDocument,
+  hasPublishedVersion,
+  iso,
+  recomputeDerived,
+  worldsOfDocuments,
+  type Q,
+} from '../documents/repo.js';
+import { documentsMentioning } from '../fields/repo.js';
 import { CATEGORY_LABELS, sourceFile } from '../search/repo.js';
 
 export type TrashType = TrashItem['type'];
@@ -28,7 +38,9 @@ export async function listTrash(
 
   const docs = await q.query(
     `select d.id, d.title, d.category, d.doc_type, d.current_version, d.deleted_at, u.display_name deleted_by,
-            (select count(*)::int from steps s where s.document_id=d.id) steps
+            (select count(*)::int from steps s where s.document_id=d.id) steps,
+            coalesce((select array_agg(dw.world_slug order by dw.world_slug) from document_worlds dw
+                      where dw.document_id = d.id), array[d.category]) worlds
      from documents d left join users u on u.id=d.deleted_by
      where d.deleted_at is not null
        and ($1::text[] is null or exists (select 1 from document_worlds dw where dw.document_id = d.id and dw.world_slug = any($1)))
@@ -55,6 +67,8 @@ export async function listTrash(
       deletedBy: d.deleted_by ?? 'מערכת',
       deletedAt: iso(d.deleted_at)!,
       purgeAt: purgeAt(d.deleted_at, days),
+      category: d.category,
+      worlds: d.worlds,
       impact: {
         brokenLinks: links.rowCount ?? 0,
         documents: links.rows.map((x) => ({ id: x.id as string, title: x.title as string })),
@@ -123,8 +137,10 @@ const TABLE: Record<TrashType, { table: string; key: string }> = {
  * restored or purged. 404 rather than 403, and the same answer as a genuinely missing id, so the
  * route cannot be used to confirm that an out-of-scope item exists.
  *
- * Blocks and fields are catalogue entries with no world of their own; `listTrash` does not filter
- * them either, so neither does this.
+ * Blocks and fields are catalogue entries with no world of their own; `listTrash` does not hide
+ * them, so they are never a 404 here — but restoring or purging one changes every document that
+ * uses it, so the write rule applies to them as it does in `assertBlockWritable` /
+ * `assertFieldWritable`: a 403 unless the caller holds every world those documents span.
  */
 export async function assertTrashScope(
   q: Q,
@@ -132,14 +148,67 @@ export async function assertTrashScope(
   id: string,
   worldScopes: readonly string[] | null,
 ): Promise<void> {
-  if (!worldScopes || (type !== 'document' && type !== 'script')) return;
-  const r = await q.query(
-    `select 1 from documents d
-      where d.id = $1 and d.deleted_at is not null
-        and exists (select 1 from document_worlds dw where dw.document_id = d.id and dw.world_slug = any($2))`,
-    [id, [...worldScopes]],
+  if (!worldScopes) return;
+  const caller = { worldScopes };
+  if (type === 'block' || type === 'field') {
+    const worlds = await catalogueWorlds(q, type, id);
+    if (worlds.length && !hasAllScopes(caller, worlds)) throw forbidden();
+    return;
+  }
+  const worlds = (await deletedDocumentWorlds(q, [id])).get(id);
+  if (!worlds || !hasScope(caller, worlds)) throw httpError(404, 'NOT_FOUND', 'הפריט לא נמצא בסל המיחזור');
+  // Wave Y (A-M6): restoring or purging changes the document, so it needs every world it spans.
+  if (!hasAllScopes(caller, worlds)) throw forbidden();
+}
+
+/**
+ * Wave Y: the worlds a trashed block or CRM field spans — those of the live documents using it,
+ * the set the block and field write routes check. Nothing uses it: no world, everybody's.
+ *
+ * A deleted block keeps its `steps.block_id` / `block_refs` until purged, so `blockUsage` still
+ * finds them. A deleted field's `step_field_refs` are dropped by `deleteField`, so its users are
+ * the documents that still mention it — `documentsMentioning`, the set `restore` re-derives.
+ */
+async function catalogueWorlds(q: Q, type: 'block' | 'field', id: string): Promise<string[]> {
+  const docIds =
+    type === 'block' ? (await blockUsage(q, id)).map((u) => u.documentId) : await documentsMentioning(q, id);
+  return worldsOfDocuments(q, [...new Set(docIds)]);
+}
+
+/** Worlds of soft-deleted documents, by id. An id that is not a deleted document is absent. */
+async function deletedDocumentWorlds(q: Q, ids: string[]): Promise<Map<string, string[]>> {
+  if (!ids.length) return new Map();
+  const r = await q.query<{ id: string; worlds: string[] }>(
+    `select d.id, coalesce((select array_agg(dw.world_slug) from document_worlds dw where dw.document_id = d.id),
+                           array[d.category]) worlds
+       from documents d where d.id = any($1::uuid[]) and d.deleted_at is not null`,
+    [ids],
   );
-  if (!r.rowCount) throw httpError(404, 'NOT_FOUND', 'הפריט לא נמצא בסל המיחזור');
+  return new Map(r.rows.map((x) => [x.id, x.worlds]));
+}
+
+/**
+ * The bulk half of the write rule: `restore-all` and the trash empty act on what `listTrash`
+ * shows (any overlap), minus the documents — and the blocks and fields — the caller does not hold
+ * every world of. Those stay in the trash for someone who does, rather than 403ing the whole batch.
+ */
+export async function writableTrash(
+  q: Q,
+  items: TrashItem[],
+  worldScopes: readonly string[] | null,
+): Promise<TrashItem[]> {
+  if (!worldScopes) return items;
+  const caller = { worldScopes };
+  const docIds = items.filter((i) => i.type === 'document' || i.type === 'script').map((i) => i.id);
+  const worlds = await deletedDocumentWorlds(q, docIds);
+  const out: TrashItem[] = [];
+  for (const i of items) {
+    if (i.type === 'block' || i.type === 'field') {
+      const w = await catalogueWorlds(q, i.type, i.id);
+      if (!w.length || hasAllScopes(caller, w)) out.push(i);
+    } else if (hasAllScopes(caller, worlds.get(i.id) ?? [])) out.push(i);
+  }
+  return out;
 }
 
 export async function restore(tx: Tx, type: TrashType, id: string, userId: string): Promise<void> {

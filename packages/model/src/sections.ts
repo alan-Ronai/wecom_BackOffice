@@ -1,6 +1,7 @@
 import type { Paragraph, Phase, Step } from '@wecom/shared';
 import { paragraphText } from '@wecom/shared';
 import type { ProposalContext, ProposedSuggestion } from './contract.js';
+import { confidenceFor } from './calibration.js';
 
 /**
  * Section grouping for the "new source, no matching document" path.
@@ -200,7 +201,8 @@ const card = (o: {
       priority: 'm',
       phases: o.phases,
     },
-    confidence: Math.min(0.85, 0.5 + steps * 0.05),
+    // Wave 6 (X1): the same scale as every other suggestion type (`calibration.ts`).
+    confidence: confidenceFor('new-card', Math.min(0.85, 0.5 + steps * 0.05)),
     rationale: o.rationale,
   };
 };
